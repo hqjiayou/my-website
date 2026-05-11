@@ -1,0 +1,16 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: admin-service
+  datasource:
+    url: ${BUSINESS_DB_URL:jdbc:postgresql://localhost:5432/my_website}
+    username: ${BUSINESS_DB_USERNAME:postgres}
+    password: ${BUSINESS_DB_PASSWORD:postgres}
+    hikari:
+      initialization-fail-timeout: -1
+      maximum-pool-size: 5
+  sql:
+    init:
+      mode: never

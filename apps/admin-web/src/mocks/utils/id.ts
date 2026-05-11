@@ -1,0 +1,4 @@
+export function createMockId(prefix: string): string {
+  const randomPart = Math.random().toString(36).slice(2, 8)
+  return `${prefix}-${Date.now()}-${randomPart}`
+}

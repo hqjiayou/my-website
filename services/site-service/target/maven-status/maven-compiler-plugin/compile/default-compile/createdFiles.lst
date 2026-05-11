@@ -1,0 +1,9 @@
+com\mywebsite\MyWebsiteApplication.class
+com\mywebsite\modules\analytics\package-info.class
+com\mywebsite\modules\ai\package-info.class
+com\mywebsite\modules\reservation\package-info.class
+com\mywebsite\modules\user\package-info.class
+com\mywebsite\modules\file\package-info.class
+com\mywebsite\modules\site\package-info.class
+com\mywebsite\common\HealthController.class
+com\mywebsite\modules\template\package-info.class
