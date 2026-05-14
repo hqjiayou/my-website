@@ -2,10 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, Outlet, useParams } from 'react-router-dom'
 
-import { siteApi } from '@/api/site-api'
+import { siteApi } from '@/api'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/route-paths'
-import type { Site, SiteStatus } from '@/api/site-api'
+import type { Site, SiteStatus } from '@/api'
 
 export interface SiteWorkspaceOutletContext {
   site: Site

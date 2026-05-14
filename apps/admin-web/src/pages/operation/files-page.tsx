@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
-import { fileApi } from '@/api/file-api'
+import { fileApi } from '@/api'
 import { PageHeader } from '@/components/page'
 
 export function OperationFilesPage() {

@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import { AlertTriangle, Code2, Palette, Settings2, SquareStack } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { systemApi } from '@/api/system-api'
+import { systemApi } from '@/api'
 import { PageHeader } from '@/components/page'
 
 type DeveloperCardKey = 'codeConsole' | 'moduleScaffold' | 'templateDebug' | 'apiPlayground'

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
-import { aiApi } from '@/api/ai-api'
+import { aiApi } from '@/api'
 import { PageHeader } from '@/components/page'
 
 export function AiSettingsPage() {

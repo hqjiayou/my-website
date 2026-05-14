@@ -3,11 +3,11 @@ import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { siteApi } from '@/api/site-api'
+import { siteApi } from '@/api'
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/route-paths'
-import type { SiteStatus } from '@/api/site-api'
+import type { SiteStatus } from '@/api'
 
 function statusClassName(status: SiteStatus) {
   switch (status) {

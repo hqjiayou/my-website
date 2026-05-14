@@ -1,4 +1,5 @@
 export * from './services/ai.mock'
+export * from './services/appearance.mock'
 export * from './services/analytics.mock'
 export * from './services/content.mock'
 export * from './services/file.mock'

@@ -3,7 +3,7 @@ import { CheckCircle2, Circle, Settings } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useOutletContext } from 'react-router-dom'
 
-import { siteApi } from '@/api/site-api'
+import { siteApi } from '@/api'
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/route-paths'

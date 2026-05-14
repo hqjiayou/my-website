@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 
-import { templateApi, type TemplateStatus } from '@/api/template-api'
+import { templateApi, type TemplateStatus } from '@/api'
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/route-paths'

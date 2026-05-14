@@ -5,8 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useParams } from 'react-router-dom'
 
-import { contentApi, type ContentStatus, type ContentType } from '@/api/content-api'
-import { siteApi } from '@/api/site-api'
+import { contentApi, siteApi, type ContentStatus, type ContentType } from '@/api'
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
 

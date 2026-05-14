@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
-import { reservationApi } from '@/api/reservation-api'
+import { reservationApi } from '@/api'
 import { PageHeader } from '@/components/page'
 
 export function OperationReservationsPage() {

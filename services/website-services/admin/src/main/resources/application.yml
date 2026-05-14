@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: admin-service
+  profiles:
+    default: local
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
+
+server:
+  port: 8081

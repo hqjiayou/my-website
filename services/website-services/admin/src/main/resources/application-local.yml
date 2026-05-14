@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/my_website_dev}
+    username: ${DB_USERNAME:mywebsite}
+    password: ${DB_PASSWORD:CHANGE_ME}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:CHANGE_ME}
+
+storage:
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:CHANGE_ME}
+    secret-key: ${MINIO_SECRET_KEY:CHANGE_ME}
+    bucket: ${MINIO_BUCKET:uploads}
+    secure: ${MINIO_SECURE:false}

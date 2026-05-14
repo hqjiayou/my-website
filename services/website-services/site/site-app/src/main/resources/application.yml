@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: site-service
+  profiles:
+    default: local
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
+
+server:
+  port: 8082

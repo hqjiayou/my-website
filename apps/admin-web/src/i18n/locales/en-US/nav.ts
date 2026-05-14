@@ -23,7 +23,7 @@ export default {
     siteReservations: 'Reservations & Inquiries',
     siteAi: 'AI Settings',
     siteFiles: 'File Resources',
-    styleSettings: 'Brand & style',
+    styleSettings: 'Style Settings',
     contents: 'Page Contents',
     reservations: 'Reservations',
     files: 'File Assets',

@@ -1,22 +1,91 @@
-# Node / pnpm
-node_modules/
-
-# Build output
-dist/
-coverage/
-
-# Logs
-*.log
-npm-debug.log*
-pnpm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# IDE / OS
+# =========================
+# OS
+# =========================
 .DS_Store
 Thumbs.db
+
+# =========================
+# IDE / Editor
+# =========================
 .idea/
 .vscode/
+*.iml
+*.ipr
+*.iws
 
-# Java
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Env files
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Frontend - Node
+# =========================
+node_modules/
+.pnpm-store/
+.yarn/
+.npm/
+
+# Build outputs
+dist/
+build/
+coverage/
+
+# Umi / Ant Design Pro
+.umi/
+.umi-production/
+src/.umi/
+src/.umi-production/
+
+# Vite / cache
+.vite/
+.cache/
+.temp/
+tmp/
+
+# =========================
+# Java / Maven
+# =========================
+target/
+**/target/
 services/admin-service/target/
+
+# Spring Boot local runtime
+*.pid
+
+# =========================
+# Test / Coverage
+# =========================
+junit/
+allure-results/
+allure-report/
+
+# =========================
+# Local infrastructure data
+# =========================
+infra/local-stack/postgres/data/
+infra/local-stack/redis/data/
+infra/local-stack/minio/data/
+infra/local-stack/aistor/data/
+
+# If local-stack is outside the repository, these rules are harmless.
+# Keep adding local Docker data directories here if they move under services or other paths.
+
+# =========================
+# Temporary files
+# =========================
+*.tmp
+*.swp
+*.swo
