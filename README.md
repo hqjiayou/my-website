@@ -1,115 +1,122 @@
 # my-website
 
-一个“多站点网站合集平台”代码仓库骨架（各子项目独立维护）。  
-第一阶段聚焦日本风格汽车维修工厂模板，后续可扩展到美容院、诊所、中古车店、行政书士事务所等行业站点。
+一个“多站点网站合集平台”代码仓库骨架。第一阶段聚焦汽车维修与蛋糕烘焙站点模板，后续可扩展到美容院、诊所、中古车店、行政书士事务所等行业站点。
 
 ## 项目定位
 
 - 用一套平台同时承载多个行业站点，不是单个官网。
-- `site-web` 是前台子站点集合目录，内部按行业拆分独立站点。
-- `car-web` 负责汽车维修场景的前台展示和咨询/预约入口。
-- `cake-web` 负责烘焙蛋糕场景的前台展示和咨询/预约入口（当前可作为模板基础继续扩展）。
-- `admin-web` 负责总后台与站点后台管理。
-- `agent-service` 负责 AI/Agent 编排层（问答、SSE、Prompt、模型调用、转调业务服务）。
-- `site-service` 负责真实业务域（站点、模板、预约、知识库、文件、统计等）。
+- `apps/site-web` 是前台子站点集合目录，内部按行业拆分独立站点。
+- `apps/admin-web` 负责总后台与站点后台管理。
+- `services/website-services` 是当前 Java 后端主干，包含统一网关、后台 API、前台 API、基础设施接入与后续业务模块骨架。
+- `services/agent-services` 是 Node.js + Fastify 的 AI/Agent 编排服务骨架，当前仍以 mock 能力为主。
 
 ## 目录结构
 
 ```text
 my-website/
-  apps/
-    site-web/
-      car-web/
-      cake-web/
-    admin-web/
-
-  services/
-    agent-service/
-    site-service/
+├── apps
+│   ├── admin-web
+│   └── site-web
+│       ├── car-web
+│       └── cake-web
+├── services
+│   ├── agent-services
+│   └── website-services
+└── doc
+    ├── admin-web
+    ├── website-services
+    ├── WSL与Docker环境配置说明.md
+    └── 整体架构说明.md
 ```
 
 ## 子项目职责
 
 ### apps/site-web
 
-- 子网站聚合目录，用于承载多个行业前台站点。
-- 当前包含：
-  - `car-web`
-  - `cake-web`
+前台站点集合目录，当前包含：
 
-### apps/site-web/car-web
+- `car-web`：汽车维修行业站点
+- `cake-web`：蛋糕烘焙行业站点
 
-- 前台站点渲染应用，用于展示不同客户网站。
-- 当前内置“日本风格汽车维修工厂”首页模板，包含：
-  - 服务介绍区域
-  - 维修案例区域
-  - 预约咨询按钮
-  - AI 咨询入口占位区域
-
-### apps/site-web/cake-web
-
-- 前台站点渲染应用（蛋糕行业子站）。
-- 当前可复用与 `car-web` 相同的工程骨架，后续替换为蛋糕行业页面与内容。
+前台站点后续优先通过 `website-services/gateway` 访问前台 API。
 
 ### apps/admin-web
 
-- 后台管理系统（总后台 + 站点运营能力）。
-- **整体架构与目录约定**见仓库文档：[doc/admin-web/整体架构设计.md](doc/admin-web/整体架构设计.md)。
-- 技术要点摘要：React + Vite + Tailwind v4、分组侧栏与路由壳、全局 i18n（`common` / `layout` / `nav`）+ 各 `pages/*/locales` 模块文案、默认语言日语（`ja-JP`）。
+后台管理系统，负责多站点平台的管理界面。当前包含站点、模板、内容、AI、运营、系统等管理页面骨架。
 
-### services/agent-service
+专项文档：
 
-- Node.js + Fastify + TypeScript 服务，默认端口 `3001`。
-- 当前提供接口：
-  - `GET /health`
-  - `GET /api/site/:domain/config`
-  - `POST /api/site/:siteId/reservations`
-  - `POST /api/site/:siteId/ai/chat`
-- 当前均为 mock 响应，不接真实 AI SDK、不接认证。
+- `doc/admin-web/架构设计.md`
+- `doc/admin-web/API设计.md`
 
-### services/site-service
+### services/website-services
 
-- Java Spring Boot + Maven 服务，默认端口 `8080`。
-- 当前提供接口：
-  - `GET /health`
-- 数据库为 PostgreSQL 预配置（通过环境变量注入连接信息），暂未实现复杂业务逻辑。
+Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。
 
-## 调用关系说明
+核心运行模块：
 
-- `site-web`（`car-web` / `cake-web`）主要调用 `agent-service`：
-  - AI 咨询
-  - 前台预约
-  - 站点公开配置
+- `gateway`：统一 API 网关，端口 `8080`
+- `admin`：后台管理 API，端口 `8081`
+- `site/site-app`：前台站点 API，端口 `8082`
 
-- `admin-web` 主要调用 `site-service`：
-  - 站点管理
-  - 模板管理
-  - 预约管理
-  - AI 知识库管理
-  - 数据统计
+基础与预留模块：
 
-- `agent-service` 后续调用 `site-service`：
-  - 获取站点配置
-  - 获取知识库
-  - 保存预约
-  - 保存 AI 聊天记录
+- `common`：通用响应、错误码、异常、分页等基础模型
+- `infra`：PostgreSQL、Redis、MinIO / S3 接入
+- `auth`：公共认证基础能力，不承载具体用户表
+- `agent`：未来对接 AI/Agent 运行服务的 Java 客户端层
+- `config`：网站配置业务能力预留
+- `site/site-core`：前台站点核心能力与统一 site 用户体系预留
+- `site/site-car`、`site/site-cake`：行业业务模块骨架，当前不实现具体业务
 
-## 启动命令（各项目独立）
+专项文档：
 
-启动 `car-web`：
+- `doc/website-services/架构设计.md`
+- `services/website-services/README.md`
 
-```bash
-cd apps/site-web/car-web
-pnpm install
-pnpm dev
+### services/agent-services
+
+Node.js + Fastify + TypeScript 的 AI/Agent 编排服务，默认端口 `3001`。
+
+当前提供 mock 接口：
+
+- `GET /health`
+- `GET /api/site/:domain/config`
+- `POST /api/site/:siteId/reservations`
+- `POST /api/site/:siteId/ai/chat`
+
+## 后端调用关系
+
+推荐请求路径：
+
+```text
+admin-web ─┐
+           ├──> website-services/gateway:8080 ──> admin:8081
+site-web  ─┘                                └──> site-app:8082
 ```
 
-启动 `cake-web`：
+内部后续关系：
+
+```text
+admin / site-app
+├── infra  -> PostgreSQL / Redis / MinIO
+├── auth   -> 公共认证基础能力
+├── config -> 网站配置能力
+└── agent  -> services/agent-services
+```
+
+当前阶段不引入注册中心、服务发现、消息队列或复杂网关鉴权。`gateway` 只做统一入口、CORS、基础 request-id 与路由。
+
+## 启动命令
+
+启动本地基础设施后，启动 `website-services`：
 
 ```bash
-cd apps/site-web/cake-web
-pnpm install
-pnpm dev
+cd services/website-services
+mvn clean install -DskipTests
+mvn -pl admin -am spring-boot:run
+mvn -pl site/site-app -am spring-boot:run
+mvn -pl gateway -am spring-boot:run
 ```
 
 启动 `admin-web`：
@@ -120,25 +127,35 @@ pnpm install
 pnpm dev
 ```
 
-启动 `agent-service`：
+启动前台站点：
 
 ```bash
-cd services/agent-service
+cd apps/site-web/car-web
 pnpm install
 pnpm dev
 ```
 
-启动 `site-service`：
-
 ```bash
-cd services/site-service
-mvn spring-boot:run
+cd apps/site-web/cake-web
+pnpm install
+pnpm dev
 ```
 
-## PostgreSQL 环境变量（site-service）
+启动 `agent-services`：
 
-可选设置（默认值见 `application.yml`）：
+```bash
+cd services/agent-services
+pnpm install
+pnpm dev
+```
 
-- `BUSINESS_DB_URL`（默认：`jdbc:postgresql://localhost:5432/my_website`）
-- `BUSINESS_DB_USERNAME`（默认：`postgres`）
-- `BUSINESS_DB_PASSWORD`（默认：`postgres`）
+## 本地基础设施
+
+本地后端依赖 WSL + Docker 中的基础设施：
+
+- PostgreSQL：`localhost:5432`
+- Redis：`localhost:6379`
+- MinIO / AIStor API：`http://localhost:9000`
+- MinIO / AIStor Console：`http://localhost:9001`
+
+更多说明见 `doc/WSL与Docker环境配置说明.md`。

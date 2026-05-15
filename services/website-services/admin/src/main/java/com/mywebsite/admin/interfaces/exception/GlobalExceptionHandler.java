@@ -1,4 +1,4 @@
-package com.mywebsite.admin.exception;
+package com.mywebsite.admin.interfaces.exception;
 
 import com.mywebsite.common.api.ApiResponse;
 import com.mywebsite.common.enums.ErrorCode;

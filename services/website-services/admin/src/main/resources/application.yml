@@ -15,3 +15,15 @@ management:
 
 server:
   port: 8081
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+security:
+  jwt:
+    issuer: my-website
+    access-token-ttl: 30m
+    refresh-token-ttl: 14d

@@ -3,6 +3,8 @@ spring:
     name: site-service
   profiles:
     default: local
+  flyway:
+    enabled: ${SITE_APP_FLYWAY_ENABLED:false}
 
 management:
   endpoints:
@@ -15,3 +17,15 @@ management:
 
 server:
   port: 8082
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+security:
+  jwt:
+    issuer: my-website
+    access-token-ttl: 30m
+    refresh-token-ttl: 14d

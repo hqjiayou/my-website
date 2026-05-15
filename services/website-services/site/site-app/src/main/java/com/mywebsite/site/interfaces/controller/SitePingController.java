@@ -1,4 +1,4 @@
-package com.mywebsite.admin.controller;
+package com.mywebsite.site.interfaces.controller;
 
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.common.api.ApiResponse;
@@ -8,19 +8,19 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin")
-public class AdminPingController {
+@RequestMapping("/api/site")
+public class SitePingController {
 
     private final AgentClient agentClient;
 
-    public AdminPingController(AgentClient agentClient) {
+    public SitePingController(AgentClient agentClient) {
         this.agentClient = agentClient;
     }
 
     @GetMapping("/ping")
     public ApiResponse<Map<String, String>> ping() {
         return ApiResponse.success(Map.of(
-                "message", "admin service ready",
+                "message", "site service ready",
                 "agent", agentClient.ping()
         ));
     }
