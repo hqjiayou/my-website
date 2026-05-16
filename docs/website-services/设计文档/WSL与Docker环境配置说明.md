@@ -235,7 +235,7 @@ curl http://localhost:8082/actuator/health
 
 常见原因：
 
-- PostgreSQL 未启动或数据库名不存在。
+- PostgreSQL 未启动或数据库名不存在（详见 **§6.3**）。
 - Redis 未启动或密码不一致。
 - `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` 未注入到当前终端。
 - `REDIS_PASSWORD` 与本地 Redis 配置不一致。
@@ -246,7 +246,25 @@ curl http://localhost:8082/actuator/health
 - 再确认启动应用的终端中已经设置正确环境变量。
 - 最后查看应用日志中的具体连接错误。
 
-### 6.3 Gateway 返回 502 或连接失败
+### 6.3 报错：`database "my_website_dev" does not exist`
+
+含义：PostgreSQL 服务可达，但 **`my_website_dev`** 尚未创建；Flyway / DataSource 会在连接阶段失败。
+
+**使用仓库 `docker-compose.yml` 时**
+
+- 正常情况下 **`POSTGRES_DB=my_website_dev`** 会在 **数据目录首次初始化** 时自动建库。
+- 若 volume 已是旧数据目录（从未包含该库），或曾经手动删库，需要在容器内执行一次建库（不删数据）：
+
+```bash
+cd services/website-services
+docker compose exec postgres psql -U mywebsite -d postgres -c "CREATE DATABASE my_website_dev OWNER mywebsite ENCODING 'UTF8';"
+```
+
+若报错「already exists」，说明库已存在，请核对 **`DB_URL`** 是否指向 **`jdbc:postgresql://…:5432/my_website_dev`**。
+
+更多场景（本机 PostgreSQL、重置 volume）见：`services/website-services/scripts/README.md`。
+
+### 6.4 Gateway 返回 502 或连接失败
 
 `gateway` 只负责转发，不承载业务逻辑。出现 502 时先确认目标服务是否启动：
 
@@ -254,7 +272,7 @@ curl http://localhost:8082/actuator/health
 - `site/site-app` 是否运行在 `8082`。
 - 请求路径是否以 `/api/admin/` 或 `/api/site/` 开头。
 
-### 6.4 MinIO / AIStor 文件接口失败
+### 6.5 MinIO / AIStor 文件接口失败
 
 排查顺序：
 
@@ -272,6 +290,7 @@ curl http://localhost:8082/actuator/health
 
 ## 8. 相关文档
 
-- 总体架构：`../整体架构说明.md`
-- 后端架构：本文档（`docs/website-services/架构设计.md`）
+- 总体架构：`./整体架构说明.md`
+- 后端架构：`./架构设计.md`
 - 后端工程说明：`services/website-services/README.md`
+- 本地库缺失补救：`services/website-services/scripts/README.md`

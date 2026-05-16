@@ -5,7 +5,7 @@ spring:
     # 与 services/website-services/docker-compose.yml 中 Postgres 约定一致；本机自建库请设置 DB_PASSWORD
     password: ${DB_PASSWORD:devpass}
   flyway:
-    # 与 admin 共用同一库时须避免双应用各跑一套 migration；脚本集中由 admin 执行
+    # 与 admin 共用同一库时须避免双应用各跑一套 migration；DDL 脚本由 infra 模块 classpath:db/migration 单一维护，默认仍建议仅由 admin 执行迁移
     enabled: ${SITE_APP_FLYWAY_ENABLED:false}
     locations: classpath:db/migration
     baseline-on-migrate: true

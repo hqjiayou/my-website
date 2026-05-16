@@ -187,7 +187,7 @@ Flyway 是唯一数据库结构迁移机制。后续任何表结构变更必须�
 
 **执行策略（阶段 2B 起）：**
 
-- **脚本目录（唯一来源）**：`admin/src/main/resources/db/migration`
+- **脚本目录（唯一来源）**：`infra/src/main/resources/db/migration`
 - **`site-app` 默认不执行 Flyway**（环境变量 `SITE_APP_FLYWAY_ENABLED`，默认 `false`），避免与 `admin` 共用同一库时出现重复 migration / `flyway_schema_history` 冲突。
 - 本地联调建议：**先启动 `admin`** 完成迁移，再启动 `site-app`。说明见 `site/site-app/src/main/resources/db/README.md`。
 - `admin` 侧开关：`FLYWAY_ENABLED`（默认 `true`）。
@@ -228,6 +228,8 @@ migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 
 ## 本地运行依赖
 
+**`docker-compose.yml`（本目录）当前仅包含 PostgreSQL 与 Redis**。**MinIO / AIStor 暂不并入 Compose**，需在 Docker/WSL 中 **另行部署**（或使用既有实例）。**阶段 4B Admin 认证**实现的主线依赖为 **PostgreSQL + Redis**，不因对象存储增加 Compose 启动负担。**MinIO** 计划在 **媒体资源与文件上传阶段**再纳入业务主线。
+
 本地开发前请先启动 WSL + Docker 中的基础设施：
 
 - PostgreSQL：`localhost:5432`
@@ -243,12 +245,14 @@ migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 - `MINIO_ENDPOINT`，默认 `http://localhost:9000`
 - `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MINIO_BUCKET`
 
-在 `services/website-services/` 目录创建 `.env`（已在仓库根 `.gitignore` 中忽略，**勿提交**）。`docker compose` 会自动读取同级 `.env`。**变量名范本**（与本文档前文 `application-local.yml` 占位一致）：`POSTGRES_*`（Compose 拉起库）、`DB_URL` / `DB_USERNAME` / `DB_PASSWORD`、`REDIS_*`、`MINIO_*`、`FLYWAY_ENABLED` / `SITE_APP_FLYWAY_ENABLED`。详细可复制段落见 [`docs/website-services/WSL与Docker环境配置说明.md`](../../docs/website-services/WSL与Docker环境配置说明.md) §3.0。
+在 `services/website-services/` 目录创建 `.env`（已在仓库根 `.gitignore` 中忽略，**勿提交**）。`docker compose` 会自动读取同级 `.env`。**变量名范本**（与本文档前文 `application-local.yml` 占位一致）：`POSTGRES_*`（Compose 拉起库）、`DB_URL` / `DB_USERNAME` / `DB_PASSWORD`、`REDIS_*`、`MINIO_*`、`FLYWAY_ENABLED` / `SITE_APP_FLYWAY_ENABLED`。详细可复制段落见 [`docs/website-services/设计文档/WSL与Docker环境配置说明.md`](../../docs/website-services/设计文档/WSL与Docker环境配置说明.md) §3.0。
 
 Flyway 相关：
 
 - `FLYWAY_ENABLED`：是否由 **admin** 执行迁移（默认 `true`）。
 - `SITE_APP_FLYWAY_ENABLED`：是否由 **site-app** 执行迁移（默认 `false`，建议保持关闭）。
+
+若日志出现 **`database "my_website_dev" does not exist`**：Compose 仅在 Postgres **首次初始化数据目录**时根据 `POSTGRES_DB` 建库；旧 volume 需手动建库或重置 volume，步骤见 [`scripts/README.md`](./scripts/README.md)。
 
 ## 构建顺序
 
@@ -265,6 +269,16 @@ mvn clean install -DskipTests
 ```bash
 mvn test
 ```
+
+### 持久层真实 PostgreSQL 回归验证（可选）
+
+在变更 Flyway、首批 Entity/Mapper 或持久层约定后，可在本地 Postgres **专用验证库**上运行 Mapper + Flyway 联通性回归（详见 **[持久层真实 PostgreSQL 验证说明](../../docs/website-services/数据文档/持久层真实PostgreSQL验证说明.md)**）。
+
+```bash
+mvn clean test -Ppersistence-verify-pg -pl admin,site/site-app -am
+```
+
+默认 **`mvn test`** 不包含上述验证（JUnit Tag **`verifyPg`** 由 Surefire 默认排除）。
 
 ## 推荐启动顺序
 
@@ -349,7 +363,7 @@ mvn clean install -DskipTests
 
 ### 文档归档约定（必读）
 
-后端说明文档权威路径：**`docs/website-services/`**（仓库根目录）。数据库数据字典权威路径：**`docs/数据字典/`**。不要在 `services/website-services/docs/` 撰写或存放权威正文（该目录仅保留跳转 [`README`](docs/README.md)）。
+后端说明文档：**设计类正文**权威路径为 **`docs/website-services/设计文档/`**（架构、数据库模型、持久层 Java 约定、环境说明等）；**`docs/website-services/`** 根目录下同名 `.md` 多为 **跳转入口**，勿与 `设计文档/` **并行维护两份正文**。数据库数据字典权威路径：**`docs/数据字典/`**。不要在 `services/website-services/docs/` 撰写或存放权威正文（该目录仅保留跳转 [`README`](docs/README.md)）。
 
 ### Java 持久层（阶段 3A / 3B）
 
@@ -364,6 +378,7 @@ mvn clean install -DskipTests
 | 文档 | 职责 |
 | --- | --- |
 | [数据库模型设计 V1](../../docs/website-services/数据库模型设计V1.md) | 规范、蓝图、多站点与 RBAC 边界、暂缓表与阶段说明（含 Flyway §8） |
+| [持久层真实 PostgreSQL 验证说明](../../docs/website-services/数据文档/持久层真实PostgreSQL验证说明.md) | Flyway + Mapper 本地专用验证库、`persistence-verify-pg` Profile、`mvn clean` 与重复 migration 排查 |
 | [数据字典索引](../../docs/数据字典/README.md) | 已落地表的 **字段 / 索引 / 唯一约束 / 外键** 可查手册（按业务域拆分） |
 
 数据字典分册（首批 8 表）：
@@ -377,5 +392,5 @@ mvn clean install -DskipTests
 ### 其他
 
 - 总体架构：[整体架构说明](../../docs/整体架构说明.md)
-- 后端架构：[架构设计](../../docs/website-services/架构设计.md)
+- 后端架构：[架构设计](../../docs/website-services/架构设计.md)（入口；正文：[设计文档/架构设计](../../docs/website-services/设计文档/架构设计.md)）
 - WSL/Docker：[WSL 与 Docker 环境配置说明](../../docs/website-services/WSL与Docker环境配置说明.md)

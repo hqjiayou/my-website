@@ -2,7 +2,7 @@
 
 本文档描述 **后台管理 RBAC 与管理员账号** 相关已落地表。表结构已建，**本轮不实现登录、鉴权业务逻辑，不写入角色/权限种子数据**。
 
-**对应 Flyway**：`services/website-services/admin/src/main/resources/db/migration/V1__init_platform_core_tables.sql`
+**对应 Flyway**：`services/website-services/infra/src/main/resources/db/migration/V1__init_platform_core_tables.sql`
 
 **多站点说明**：Admin 体系为 **平台级**，表 **不含 `site_id`**，与前台 `site_user` 隔离。
 

@@ -2,7 +2,7 @@
 
 本文档描述 **前台站点统一用户** 相关已落地表。用户按 **`site_id` 归属站点**（不用 `tenant_id`）；car/cake 等行业不拆用户表。
 
-**对应 Flyway**：`services/website-services/admin/src/main/resources/db/migration/V1__init_platform_core_tables.sql`
+**对应 Flyway**：`services/website-services/infra/src/main/resources/db/migration/V1__init_platform_core_tables.sql`
 
 **未落地**：`site_user_auth`（多登录方式）暂不建表，后续认证阶段再评估。
 

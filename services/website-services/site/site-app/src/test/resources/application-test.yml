@@ -1,4 +1,8 @@
 # 测试 Profile：内存 H2，仅用于 Spring 与 MyBatis-Plus / Mapper Bean 冒烟；不执行 Flyway、不跑真实 CRUD 用例。
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
 spring:
   datasource:
     url: jdbc:h2:mem:site_app_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1

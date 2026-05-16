@@ -22,7 +22,7 @@
 ## 2. 当前前置条件
 
 - PostgreSQL，`bigint identity`，`deleted` 软删除，`version` 乐观锁，`TIMESTAMPTZ` 审计时间。
-- Flyway 脚本：`services/website-services/admin/src/main/resources/db/migration/V1__init_platform_core_tables.sql`。
+- Flyway 脚本：`services/website-services/infra/src/main/resources/db/migration/V1__init_platform_core_tables.sql`（打包路径 `classpath:db/migration`）。
 - 首批 8 表：`site`、`admin_*`、`site_user`、`site_user_profile`。
 - `created_at` / `updated_at`：**以数据库 `DEFAULT now()` + `fn_touch_updated_at` 触发器为最终事实来源**；**MetaObjectHandler 不填充**（见 §4.4、§6）。
 
@@ -289,6 +289,8 @@
 - **依赖**：**已** `site-core` → `infra`；**未** `admin` → `site-core`。
 - **测试**：`admin`、`site-app` 的 **`src/test/resources/application-test.yml`**（H2 + 关闭 Flyway + 占位 MinIO 配置）+ **`@ActiveProfiles("test")`**，断言 **`MybatisPlusInterceptor`**、**`AuditMetaObjectHandler`**、全部 **`Mapper`** Bean。
 
+**核验记录**：与本清单逐项对照的结论见 **[`阶段3B-持久层落地核验记录.md`](./阶段3B-持久层落地核验记录.md)**。
+
 ---
 
 ## 11. 与数据字典 / DDL 的关系
@@ -315,8 +317,9 @@
 | 文档 / 动作 | 说明 |
 | --- | --- |
 | 本文档 | **3A / 3B** 权威口径；**3B 已实现项**见 §10 小节 |
-| `docs/website-services/架构设计.md` §7 | 引用本文 |
+| `docs/website-services/架构设计.md`（入口） / [`设计文档/架构设计.md`](../../docs/website-services/设计文档/架构设计.md) §7 | 引用本文 |
 | `services/website-services/README.md` | 文档索引导向本文（见「相关文档」表） |
+| `阶段3B-持久层落地核验记录.md` | 与本节 §10 清单对照的核验结果与观测项 |
 
 **TODO（3C 及以后）**：持久层最小真实查询验证、首个业务接口上线前补齐 Repository 门面与 `deletedAt` 删除语义测试。
 

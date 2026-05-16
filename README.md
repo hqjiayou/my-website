@@ -73,10 +73,10 @@ Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。
 
 专项文档：
 
-- `docs/website-services/架构设计.md`
-- `docs/website-services/Java持久层设计V1.md`（MyBatis-Plus / PO / Mapper 约定；阶段 3A）
-- `docs/数据字典/`（表级字典，与 Flyway 对齐）
-- `services/website-services/README.md`
+- [`docs/website-services/架构设计.md`](docs/website-services/架构设计.md)（入口页；正文：[设计文档/架构设计.md](docs/website-services/设计文档/架构设计.md)）
+- [`docs/website-services/Java持久层设计V1.md`](docs/website-services/Java持久层设计V1.md)（入口页；正文：[设计文档/Java持久层设计V1.md](docs/website-services/设计文档/Java持久层设计V1.md)）
+- [`docs/数据字典/`](docs/数据字典/)（表级字典，与 Flyway 对齐）
+- [`services/website-services/README.md`](services/website-services/README.md)
 
 ### services/agent-services
 
