@@ -1,6 +1,6 @@
 # website-services
 
-`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。当前阶段进入企业级基础框架 V1：统一网关入口、后台应用、前台站点应用、基础设施模块、JWT 认证骨架、MyBatis-Plus、Flyway、OpenAPI 与轻量 DDD 分层规范。
+`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。当前阶段进入企业级基础框架 V1：统一网关入口、后台应用、前台站点应用、基础设施模块、JWT 认证骨架、MyBatis-Plus、Flyway、OpenAPI 与 **按 Maven 边界 + 模块内常规 Spring Boot 包结构**（见 [`架构设计`](../../docs/website-services/架构设计.md) §8）。
 
 ## 快速理解
 
@@ -55,7 +55,7 @@ website-services/
 - 端口：`8081`
 - 依赖 `common`、`infra`、`agent`、`auth`、`config`
 - 当前提供 `GET /api/admin/ping`
-- 后续承载后台用户与权限体系，例如 `admin_user`、`admin_role`、`admin_permission`
+- **阶段 3B**：首批后台 RBAC 表 **`AdminUserEntity` 等 5 个 Entity + 5 Mapper**（见 [`Java 持久层设计 V1`](../../docs/website-services/Java持久层设计V1.md)；**未**依赖 `site-core`）
 
 ### site
 
@@ -71,7 +71,7 @@ website-services/
 - `site/site-core`
   - 前台站点公共核心能力
   - 承载 `SiteContext`、当前站点上下文、站点配置读取能力
-  - 后续承载统一前台用户体系：`site_user`、`site_user_profile`
+  - **阶段 3B**：首批站点域 **`SiteEntity` / `SiteUserEntity` / `SiteUserProfileEntity`** 及对应 **`Mapper`**（依赖 **`infra`** 基类；见 [`Java 持久层设计 V1`](../../docs/website-services/Java持久层设计V1.md)）
 - `site/site-car`
   - 汽车站点业务模块骨架
   - 当前只保留清晰包结构，不实现具体业务
@@ -96,9 +96,13 @@ website-services/
 - PostgreSQL：通过 Spring Boot DataSource 自动配置
 - Redis：通过 Spring Data Redis 自动配置
 - MinIO / S3：提供 `MinioClient` Bean
-- MyBatis-Plus：默认持久层框架，保留自定义 Mapper / XML SQL 能力
-- Flyway：数据库迁移机制，所有表结构变更必须走 migration
-- 不放业务逻辑、DAO、Mapper 或业务实体
+- MyBatis-Plus：全局插件与基类（见 [`Java 持久层设计 V1`](../../docs/website-services/Java持久层设计V1.md)）
+  - **`com.mywebsite.infra.entity.AbstractAuditableEntity`**（`@TableLogic`、`@Version`、公共审计列）
+  - **`MybatisPlusInterceptor`** + **`OptimisticLockerInnerInterceptor`**（**`MybatisPlusInfraConfig`**）
+  - **`AuditMetaObjectHandler`**（仅 `createdBy` / `updatedBy`；**`infra.handler`**）
+  - **`StorageConfig`**（MinIO `MinioClient`，**`infra.config`**）
+- Flyway：数据库迁移机制由可启动应用（如 `admin`）执行；脚本目录见下方「Flyway」
+- 不承载业务用例逻辑；具体 **`XxxEntity` / `Mapper`** 放在 **`admin`** / **`site-core`** 等模块
 
 ### auth
 
@@ -148,7 +152,7 @@ auth          -> common
 agent         -> common
 config        -> common, infra
 
-site-core     -> common, auth, config
+site-core     -> common, infra, auth, config
 site-car      -> site-core
 site-cake     -> site-core
 site-app      -> common, infra, agent, auth, config, site-core, site-car, site-cake
@@ -172,10 +176,10 @@ admin         -> common, infra, agent, auth, config
 
 约定：
 
-- 默认 Mapper 放在各业务模块的 `infrastructure/mapper` 包下，并使用 `@Mapper` 标注。
+- **企业级约定（基类、逻辑删除、乐观锁、审计填充、8 表归属）**：见 **[`Java 持久层设计 V1`](../../docs/website-services/Java持久层设计V1.md)**。**阶段 3B** 已落地首批 **8 表 `entity` + `mapper`**（无业务 CRUD、无 XML）。
+- 默认 Mapper 放在各业务模块的 **`mapper`** 包下，并使用 `@Mapper` 标注。
 - 复杂查询允许使用自定义 Mapper 方法与 XML SQL。
 - XML Mapper 默认扫描 `classpath*:/mapper/**/*.xml`。
-- 本阶段只完成基础接入，不创建业务表，不实现 CRUD。
 
 ### Flyway
 
@@ -188,7 +192,7 @@ Flyway 是唯一数据库结构迁移机制。后续任何表结构变更必须�
 - 本地联调建议：**先启动 `admin`** 完成迁移，再启动 `site-app`。说明见 `site/site-app/src/main/resources/db/README.md`。
 - `admin` 侧开关：`FLYWAY_ENABLED`（默认 `true`）。
 
-首批已落地脚本：`V1__init_platform_core_tables.sql`（8 张表，无种子数据）。执行策略与设计边界见 `docs/数据库模型设计V1.md` §8；**字段级定义见 `docs/数据字典/`**。
+首批已落地脚本：`V1__init_platform_core_tables.sql`（8 张表，无种子数据）。执行策略与设计边界见 [`docs/website-services/数据库模型设计V1.md`](../../docs/website-services/数据库模型设计V1.md) §8；**字段级定义见 [`docs/数据字典/`](../../docs/数据字典/)**。
 
 migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 
@@ -218,31 +222,9 @@ migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 - Site Swagger UI：<http://localhost:8082/swagger-ui/index.html>
 - Site OpenAPI JSON：<http://localhost:8082/v3/api-docs>
 
-### 轻量 DDD 分层
+### 模块内 Java 包结构
 
-后续业务模块采用轻量 DDD 分层目录，不引入重型领域事件或复杂聚合根体系。
-
-推荐结构：
-
-```text
-interfaces/
-  controller/
-
-application/
-  service/
-  dto/
-
-domain/
-  model/
-  service/
-
-infrastructure/
-  repository/
-  mapper/
-  converter/
-```
-
-当前已有的 ping controller 与全局异常处理放在 `interfaces` 层，OpenAPI、MyBatis 等技术配置放在 `infrastructure` 层。没有业务代码的模块不为了填目录而创建无意义类。
+主要边界由 Maven 多模块承担；模块内采用 **Spring Boot 常规包名**（`config`、`controller`、`handler`、`mapper`、`entity`、`dto`、`exception` 等），数据库映射统一 **`XxxEntity`**，配置类统一 **`XxxConfig`**；**不**再使用 `interfaces` / `application` / `domain` / `infrastructure` / `po` 作为一级分层包。详见 [`架构设计`](../../docs/website-services/架构设计.md) §8。
 
 ## 本地运行依赖
 
@@ -261,7 +243,7 @@ infrastructure/
 - `MINIO_ENDPOINT`，默认 `http://localhost:9000`
 - `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MINIO_BUCKET`
 
-环境变量示例见 `.env.example`。真实密码只放在本机环境变量、IDE Run Configuration 或未提交的本地 `.env` 文件中。
+在 `services/website-services/` 目录创建 `.env`（已在仓库根 `.gitignore` 中忽略，**勿提交**）。`docker compose` 会自动读取同级 `.env`。**变量名范本**（与本文档前文 `application-local.yml` 占位一致）：`POSTGRES_*`（Compose 拉起库）、`DB_URL` / `DB_USERNAME` / `DB_PASSWORD`、`REDIS_*`、`MINIO_*`、`FLYWAY_ENABLED` / `SITE_APP_FLYWAY_ENABLED`。详细可复制段落见 [`docs/website-services/WSL与Docker环境配置说明.md`](../../docs/website-services/WSL与Docker环境配置说明.md) §3.0。
 
 Flyway 相关：
 
@@ -365,25 +347,35 @@ mvn clean install -DskipTests
 
 ## 相关文档
 
-### 数据库与数据文档（必读约定）
+### 文档归档约定（必读）
+
+后端说明文档权威路径：**`docs/website-services/`**（仓库根目录）。数据库数据字典权威路径：**`docs/数据字典/`**。不要在 `services/website-services/docs/` 撰写或存放权威正文（该目录仅保留跳转 [`README`](docs/README.md)）。
+
+### Java 持久层（阶段 3A / 3B）
+
+| 文档 | 职责 |
+| --- | --- |
+| [Java 持久层设计 V1](../../docs/website-services/Java持久层设计V1.md) | **`XxxEntity`** 命名、**`AbstractAuditableEntity`**、MyBatis-Plus、审计/逻辑删除/乐观锁、Mapper 边界、8 表归属、包结构（**`entity` / `mapper` / `config` / `handler`**） |
+
+### 数据库与数据文档
 
 数据库相关维护 **双线**：
 
 | 文档 | 职责 |
 | --- | --- |
-| [数据库模型设计 V1](docs/数据库模型设计V1.md) | 规范、蓝图、多站点与 RBAC 边界、暂缓表与阶段说明（含 Flyway §8） |
-| [数据字典索引](docs/数据字典/README.md) | 已落地表的 **字段 / 索引 / 唯一约束 / 外键** 可查手册（按业务域拆分） |
+| [数据库模型设计 V1](../../docs/website-services/数据库模型设计V1.md) | 规范、蓝图、多站点与 RBAC 边界、暂缓表与阶段说明（含 Flyway §8） |
+| [数据字典索引](../../docs/数据字典/README.md) | 已落地表的 **字段 / 索引 / 唯一约束 / 外键** 可查手册（按业务域拆分） |
 
 数据字典分册（首批 8 表）：
 
-- [平台与站点](docs/数据字典/平台与站点数据字典.md)（`site`）
-- [Admin 认证授权](docs/数据字典/Admin认证授权数据字典.md)（`admin_*` RBAC）
-- [Site 用户](docs/数据字典/Site用户数据字典.md)（`site_user`、`site_user_profile`）
+- [平台与站点](../../docs/数据字典/平台与站点数据字典.md)（`site`）
+- [Admin 认证授权](../../docs/数据字典/Admin认证授权数据字典.md)（`admin_*` RBAC）
+- [Site 用户](../../docs/数据字典/Site用户数据字典.md)（`site_user`、`site_user_profile`）
 
-**约定**：凡新增或变更表结构（含字段、索引、唯一约束、外键）或新增 Flyway migration，**必须同步更新**对应数据字典条目及设计文档中有字段口径的章节，禁止仅写代码或仅改 SQL。详见 `docs/数据字典/README.md` 与 `docs/数据库模型设计V1.md` §9。
+**约定**：凡新增或变更表结构（含字段、索引、唯一约束、外键）或新增 Flyway migration，**必须同步更新** [`docs/数据字典/`](../../docs/数据字典/) 对应条目及 [`数据库模型设计 V1`](../../docs/website-services/数据库模型设计V1.md) 中有字段口径的章节，禁止仅写代码或仅改 SQL。详见 [`docs/数据字典/README.md`](../../docs/数据字典/README.md) 与设计文档 §9。
 
 ### 其他
 
-- 总体架构：`doc/整体架构说明.md`
-- 后端架构：`doc/website-services/架构设计.md`
-- 基础架构查漏补缺：`docs/foundation-gap-review.md`
+- 总体架构：[整体架构说明](../../docs/整体架构说明.md)
+- 后端架构：[架构设计](../../docs/website-services/架构设计.md)
+- WSL/Docker：[WSL 与 Docker 环境配置说明](../../docs/website-services/WSL与Docker环境配置说明.md)

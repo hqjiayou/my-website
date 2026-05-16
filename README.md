@@ -19,15 +19,17 @@ my-website/
 │   └── site-web
 │       ├── car-web
 │       └── cake-web
+├── docs
+│   ├── website-services    # Java 后端：架构、数据库模型、环境说明等（权威）
+│   ├── 数据字典             # 表级数据字典（权威）
+│   └── 整体架构说明.md
 ├── services
 │   ├── agent-services
 │   └── website-services
-└── doc
-    ├── admin-web
-    ├── website-services
-    ├── WSL与Docker环境配置说明.md
-    └── 整体架构说明.md
+└── doc                       # 兼容跳转占位（正文权威均在 docs/；见 doc/README.md）
 ```
+
+设计与数据文档请以 **`docs/`** 为准：`docs/website-services/`、`docs/数据字典/`。若仍有指向 `doc/` 的旧书签或外链，同名路径下现为 **一页跳转说明**，并非正文副本。
 
 ## 子项目职责
 
@@ -46,8 +48,8 @@ my-website/
 
 专项文档：
 
-- `doc/admin-web/架构设计.md`
-- `doc/admin-web/API设计.md`
+- `docs/admin-web/架构设计.md`
+- `docs/admin-web/API设计.md`
 
 ### services/website-services
 
@@ -71,7 +73,9 @@ Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。
 
 专项文档：
 
-- `doc/website-services/架构设计.md`
+- `docs/website-services/架构设计.md`
+- `docs/website-services/Java持久层设计V1.md`（MyBatis-Plus / PO / Mapper 约定；阶段 3A）
+- `docs/数据字典/`（表级字典，与 Flyway 对齐）
 - `services/website-services/README.md`
 
 ### services/agent-services
@@ -158,4 +162,4 @@ pnpm dev
 - MinIO / AIStor API：`http://localhost:9000`
 - MinIO / AIStor Console：`http://localhost:9001`
 
-更多说明见 `doc/WSL与Docker环境配置说明.md`。
+更多说明见 `docs/website-services/WSL与Docker环境配置说明.md`。

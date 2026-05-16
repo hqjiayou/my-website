@@ -2,7 +2,8 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/my_website_dev}
     username: ${DB_USERNAME:mywebsite}
-    password: ${DB_PASSWORD:CHANGE_ME}
+    # 与 services/website-services/docker-compose.yml 中 Postgres 约定一致；本机自建库请设置 DB_PASSWORD
+    password: ${DB_PASSWORD:devpass}
   flyway:
     # 与 admin 共用同一库时须避免双应用各跑一套 migration；脚本集中由 admin 执行
     enabled: ${SITE_APP_FLYWAY_ENABLED:false}
@@ -12,7 +13,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:CHANGE_ME}
+      password: ${REDIS_PASSWORD:}
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

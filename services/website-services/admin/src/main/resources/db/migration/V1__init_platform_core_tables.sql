@@ -260,3 +260,108 @@ CREATE TRIGGER tr_site_user_profile_touch_updated_at
 
 CREATE UNIQUE INDEX uq_site_user_profile_user_active ON site_user_profile (site_user_id) WHERE deleted = FALSE;
 CREATE INDEX idx_site_user_profile_site_id_active ON site_user_profile (site_id) WHERE deleted = FALSE;
+
+-- -----------------------------------------------------------------------------
+-- COMMENT ON COLUMN（补充：公共审计字段、关键业务字段、状态与关系字段）
+-- -----------------------------------------------------------------------------
+COMMENT ON FUNCTION fn_touch_updated_at() IS 'BEFORE UPDATE 触发器函数：将 NEW.updated_at 设为 clock_timestamp()';
+
+COMMENT ON COLUMN site.site_name IS '站点名称';
+COMMENT ON COLUMN site.description IS '站点说明';
+COMMENT ON COLUMN site.created_at IS '创建时间';
+COMMENT ON COLUMN site.created_by IS '创建人 ID（可空）';
+COMMENT ON COLUMN site.updated_at IS '更新时间（UPDATE 触发器刷新）';
+COMMENT ON COLUMN site.updated_by IS '更新人 ID（可空）';
+COMMENT ON COLUMN site.deleted IS '软删除标记';
+COMMENT ON COLUMN site.deleted_at IS '软删除时间';
+COMMENT ON COLUMN site.version IS '乐观锁版本';
+
+COMMENT ON COLUMN admin_user.username IS '登录用户名（未删除数据全平台唯一）';
+COMMENT ON COLUMN admin_user.email IS '邮箱（可选登录标识）';
+COMMENT ON COLUMN admin_user.phone IS '手机号（可选登录标识）';
+COMMENT ON COLUMN admin_user.display_name IS '展示名称';
+COMMENT ON COLUMN admin_user.status IS '账号状态：ACTIVE、DISABLED、LOCKED 等';
+COMMENT ON COLUMN admin_user.last_login_at IS '最近登录时间';
+COMMENT ON COLUMN admin_user.created_at IS '创建时间';
+COMMENT ON COLUMN admin_user.created_by IS '创建人 ID（可空）';
+COMMENT ON COLUMN admin_user.updated_at IS '更新时间（UPDATE 触发器刷新）';
+COMMENT ON COLUMN admin_user.updated_by IS '更新人 ID（可空）';
+COMMENT ON COLUMN admin_user.deleted IS '软删除标记';
+COMMENT ON COLUMN admin_user.deleted_at IS '软删除时间';
+COMMENT ON COLUMN admin_user.version IS '乐观锁版本';
+
+COMMENT ON COLUMN admin_role.role_code IS '角色编码（未删除数据全平台唯一）';
+COMMENT ON COLUMN admin_role.role_name IS '角色名称';
+COMMENT ON COLUMN admin_role.description IS '说明';
+COMMENT ON COLUMN admin_role.status IS '角色状态';
+COMMENT ON COLUMN admin_role.created_at IS '创建时间';
+COMMENT ON COLUMN admin_role.created_by IS '创建人 ID（可空）';
+COMMENT ON COLUMN admin_role.updated_at IS '更新时间（UPDATE 触发器刷新）';
+COMMENT ON COLUMN admin_role.updated_by IS '更新人 ID（可空）';
+COMMENT ON COLUMN admin_role.deleted IS '软删除标记';
+COMMENT ON COLUMN admin_role.deleted_at IS '软删除时间';
+COMMENT ON COLUMN admin_role.version IS '乐观锁版本';
+
+COMMENT ON COLUMN admin_permission.permission_code IS '权限编码（未删除数据全平台唯一）';
+COMMENT ON COLUMN admin_permission.permission_name IS '权限名称';
+COMMENT ON COLUMN admin_permission.resource_type IS '资源类型：MENU、API、ACTION 等';
+COMMENT ON COLUMN admin_permission.resource_key IS '资源标识';
+COMMENT ON COLUMN admin_permission.description IS '说明';
+COMMENT ON COLUMN admin_permission.status IS '权限状态';
+COMMENT ON COLUMN admin_permission.created_at IS '创建时间';
+COMMENT ON COLUMN admin_permission.created_by IS '创建人 ID（可空）';
+COMMENT ON COLUMN admin_permission.updated_at IS '更新时间（UPDATE 触发器刷新）';
+COMMENT ON COLUMN admin_permission.updated_by IS '更新人 ID（可空）';
+COMMENT ON COLUMN admin_permission.deleted IS '软删除标记';
+COMMENT ON COLUMN admin_permission.deleted_at IS '软删除时间';
+COMMENT ON COLUMN admin_permission.version IS '乐观锁版本';
+
+COMMENT ON COLUMN admin_user_role.admin_user_id IS '管理员 ID（FK → admin_user.id，ON DELETE RESTRICT）';
+COMMENT ON COLUMN admin_user_role.admin_role_id IS '角色 ID（FK → admin_role.id，ON DELETE RESTRICT）';
+COMMENT ON COLUMN admin_user_role.created_at IS '创建时间';
+COMMENT ON COLUMN admin_user_role.created_by IS '创建人 ID（可空）';
+COMMENT ON COLUMN admin_user_role.updated_at IS '更新时间（UPDATE 触发器刷新）';
+COMMENT ON COLUMN admin_user_role.updated_by IS '更新人 ID（可空）';
+COMMENT ON COLUMN admin_user_role.deleted IS '软删除标记';
+COMMENT ON COLUMN admin_user_role.deleted_at IS '软删除时间';
+COMMENT ON COLUMN admin_user_role.version IS '乐观锁版本';
+
+COMMENT ON COLUMN admin_role_permission.admin_role_id IS '角色 ID（FK → admin_role.id，ON DELETE RESTRICT）';
+COMMENT ON COLUMN admin_role_permission.admin_permission_id IS '权限 ID（FK → admin_permission.id，ON DELETE RESTRICT）';
+COMMENT ON COLUMN admin_role_permission.created_at IS '创建时间';
+COMMENT ON COLUMN admin_role_permission.created_by IS '创建人 ID（可空）';
+COMMENT ON COLUMN admin_role_permission.updated_at IS '更新时间（UPDATE 触发器刷新）';
+COMMENT ON COLUMN admin_role_permission.updated_by IS '更新人 ID（可空）';
+COMMENT ON COLUMN admin_role_permission.deleted IS '软删除标记';
+COMMENT ON COLUMN admin_role_permission.deleted_at IS '软删除时间';
+COMMENT ON COLUMN admin_role_permission.version IS '乐观锁版本';
+
+COMMENT ON COLUMN site_user.username IS '用户名（同站点可选登录标识）';
+COMMENT ON COLUMN site_user.email IS '邮箱（同站点可选登录标识）';
+COMMENT ON COLUMN site_user.phone IS '手机号（同站点可选登录标识）';
+COMMENT ON COLUMN site_user.password_hash IS '密码哈希（可选）';
+COMMENT ON COLUMN site_user.status IS '账号状态：ACTIVE、DISABLED、LOCKED 等';
+COMMENT ON COLUMN site_user.last_login_at IS '最近登录时间';
+COMMENT ON COLUMN site_user.created_at IS '创建时间';
+COMMENT ON COLUMN site_user.created_by IS '创建人 ID（可空）';
+COMMENT ON COLUMN site_user.updated_at IS '更新时间（UPDATE 触发器刷新）';
+COMMENT ON COLUMN site_user.updated_by IS '更新人 ID（可空）';
+COMMENT ON COLUMN site_user.deleted IS '软删除标记';
+COMMENT ON COLUMN site_user.deleted_at IS '软删除时间';
+COMMENT ON COLUMN site_user.version IS '乐观锁版本';
+
+COMMENT ON COLUMN site_user_profile.site_id IS '所属站点 ID（冗余列便于过滤；FK → site.id；须与 site_user.site_id 一致）';
+COMMENT ON COLUMN site_user_profile.site_user_id IS '前台用户 ID（FK → site_user.id，一对一 profile）';
+COMMENT ON COLUMN site_user_profile.display_name IS '展示昵称';
+COMMENT ON COLUMN site_user_profile.avatar_url IS '头像 URL';
+COMMENT ON COLUMN site_user_profile.gender IS '性别';
+COMMENT ON COLUMN site_user_profile.birthday IS '生日';
+COMMENT ON COLUMN site_user_profile.locale IS '语言偏好';
+COMMENT ON COLUMN site_user_profile.timezone IS '时区';
+COMMENT ON COLUMN site_user_profile.created_at IS '创建时间';
+COMMENT ON COLUMN site_user_profile.created_by IS '创建人 ID（可空）';
+COMMENT ON COLUMN site_user_profile.updated_at IS '更新时间（UPDATE 触发器刷新）';
+COMMENT ON COLUMN site_user_profile.updated_by IS '更新人 ID（可空）';
+COMMENT ON COLUMN site_user_profile.deleted IS '软删除标记';
+COMMENT ON COLUMN site_user_profile.deleted_at IS '软删除时间';
+COMMENT ON COLUMN site_user_profile.version IS '乐观锁版本';

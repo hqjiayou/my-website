@@ -22,6 +22,11 @@
         </dependency>
         <dependency>
             <groupId>com.mywebsite</groupId>
+            <artifactId>infra</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.mywebsite</groupId>
             <artifactId>auth</artifactId>
             <version>${project.version}</version>
         </dependency>
