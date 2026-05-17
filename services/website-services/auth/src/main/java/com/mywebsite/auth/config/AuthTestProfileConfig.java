@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Profile;
  */
 @Configuration(proxyBeanMethods = false)
 @Profile("test")
-public class AuthTestProfileConfiguration {
+public class AuthTestProfileConfig {
 
     @Bean
     @ConditionalOnMissingBean(AdminRefreshSessionService.class)

@@ -1,11 +1,12 @@
 package com.mywebsite.auth.config;
 
-import com.mywebsite.auth.crypto.RsaPemLoader;
-import com.mywebsite.auth.jwks.AuthJwkSetDocument;
+import com.mywebsite.auth.dto.AuthJwkSetDocumentDto;
+import com.mywebsite.auth.utils.RsaPemUtils;
 import com.mywebsite.auth.properties.AdminAuthProperties;
 import com.mywebsite.auth.properties.AuthJwtKeyProperties;
-import com.mywebsite.auth.token.JwtTokenService;
-import com.mywebsite.auth.token.TokenService;
+import com.mywebsite.auth.properties.AuthJwtProperties;
+import com.mywebsite.auth.service.impl.JwtTokenServiceImpl;
+import com.mywebsite.auth.service.TokenService;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.KeyUse;
@@ -51,8 +52,8 @@ public class AuthJwtConfiguration {
                     env.getProperty("mywebsite.auth.jwt.keyId"),
                     env.getProperty("mywebsite.auth.jwt.key-id"),
                     env.getProperty("AUTH_JWT_KEY_ID"));
-            RSAPrivateKey privateKey = RsaPemLoader.loadPrivateKeyPem(privatePath);
-            RSAPublicKey publicKey = RsaPemLoader.loadPublicKeyPem(publicPath);
+            RSAPrivateKey privateKey = RsaPemUtils.loadPrivateKeyPem(privatePath);
+            RSAPublicKey publicKey = RsaPemUtils.loadPublicKeyPem(publicPath);
             assertMatchingKeyPair(privateKey, publicKey, privatePath, publicPath);
             try {
                 return new RSAKey.Builder(publicKey)
@@ -95,7 +96,7 @@ public class AuthJwtConfiguration {
         TokenService tokenService(
                 JwtEncoder jwtEncoder,
                 JwtDecoder jwtDecoder,
-                JwtProperties jwtProperties,
+                AuthJwtProperties authJwtProperties,
                 AuthJwtKeyProperties keys,
                 Environment env) {
             String kid = nonemptyFirst(
@@ -103,14 +104,14 @@ public class AuthJwtConfiguration {
                     env.getProperty("mywebsite.auth.jwt.keyId"),
                     env.getProperty("mywebsite.auth.jwt.key-id"),
                     env.getProperty("AUTH_JWT_KEY_ID"));
-            return new JwtTokenService(jwtEncoder, jwtDecoder, jwtProperties, kid);
+            return new JwtTokenServiceImpl(jwtEncoder, jwtDecoder, authJwtProperties, kid);
         }
 
         @Bean
-        AuthJwkSetDocument authJwkSetDocument(RSAKey authSigningRsaJwk) {
+        AuthJwkSetDocumentDto authJwkSetDocument(RSAKey authSigningRsaJwk) {
             try {
                 RSAKey pub = authSigningRsaJwk.toPublicJWK();
-                return new AuthJwkSetDocument(new JWKSet(pub).toString());
+                return new AuthJwkSetDocumentDto(new JWKSet(pub).toString());
             } catch (Exception e) {
                 throw new IllegalStateException("Failed to build JWKS document", e);
             }

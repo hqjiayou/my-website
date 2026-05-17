@@ -32,12 +32,12 @@
 ## 3. 实现位置（代码锚点）
 
 - **Auth**
-  - RSA 密钥加载、**`JwtEncoder` / 验证用 `JwtDecoder`**、**`TokenService`**：`com.mywebsite.auth.config.AuthJwtConfiguration`、`com.mywebsite.auth.properties.AuthJwtKeyProperties`、`com.mywebsite.auth.crypto.RsaPemLoader`
-  - Access JWT 签发与 **`kid`**：`com.mywebsite.auth.token.JwtTokenService`
-  - JWKS：`com.mywebsite.auth.controller.WellKnownJwksController`，文档载体 `com.mywebsite.auth.jwks.AuthJwkSetDocument`（JSON 由 **`JWKSet#toString()`** 序列化，标准 JSON）
+  - RSA 密钥加载、**`JwtEncoder` / 验证用 `JwtDecoder`**、**`TokenService`**：`com.mywebsite.auth.config.AuthJwtConfiguration`、`com.mywebsite.auth.properties.AuthJwtKeyProperties`、`com.mywebsite.auth.utils.RsaPemUtils`
+  - Access JWT 签发与 **`kid`**：`com.mywebsite.auth.service.impl.JwtTokenServiceImpl`
+  - JWKS：`com.mywebsite.auth.controller.AuthJwksWellKnownController`，文档载体 `com.mywebsite.auth.dto.AuthJwkSetDocumentDto`（JSON 由 **`JWKSet#toString()`** 序列化，标准 JSON）
 - **Admin**
   - Resource Server：`spring.security.oauth2.resourceserver.jwt.jwk-set-uri`
-  - 解码与校验器：`com.mywebsite.admin.security.AdminJwtDecoderConfiguration`（若类名以仓库为准）
+  - 解码与校验器：`com.mywebsite.admin.config.AdminJwtDecoderConfig`
 
 ---
 

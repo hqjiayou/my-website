@@ -1,6 +1,6 @@
 # website-services
 
-`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。**阶段 5A（后台 RBAC 深化）暂不推进**。**阶段 4F** 已将 **`auth`** 收敛为**单一可执行认证服务**（**`mvn -pl auth -am spring-boot:run`**），**`/api/admin/auth/*`**（Login / Refresh / Logout、JWT 签发、Redis Refresh 会话）由 **Auth** 承载；**Admin** 仅作为 **Resource Server** 与后台业务 API。**阶段 4G** 已完成 **RS256 + JWKS**：Auth 持私钥签发，Admin 仅 **`AUTH_JWKS_URI` / `jwk-set-uri` 验签**。设计见 [**阶段 4D 文档**](../../docs/website-services/设计文档/认证与安全/阶段4D-Auth独立认证服务架构回归设计与迁移方案.md) · **落地**见 [**阶段 4F 说明**](../../docs/website-services/设计文档/认证与安全/阶段4F-Auth单服务收敛与认证主链路上提落地说明.md) · **4G** 见 [**RS256/JWKS 迁移说明**](../../docs/website-services/设计文档/认证与安全/阶段4G-RS256与JWKS签名验签体系迁移说明.md)。**完整文档导航**：[`docs/website-services/README.md`](../../docs/website-services/README.md)。
+`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。**阶段 4H（Gateway 全链路）**、**阶段 4I（迁移清理收口）** 已完成；**阶段 5A（后台 RBAC 深化）** 可按 **[路线图](../../docs/website-services/总览/后端开发路线图与阶段状态.md)** 推进。**阶段 4F** 已将 **`auth`** 收敛为**单一可执行认证服务**（**`mvn -pl auth -am spring-boot:run`**），**`/api/admin/auth/*`**（Login / Refresh / Logout、JWT 签发、Redis Refresh 会话）由 **Auth** 承载；**Admin** 仅作为 **Resource Server** 与后台业务 API。**阶段 4G** 已完成 **RS256 + JWKS**：Auth 持私钥签发，Admin 仅 **`AUTH_JWKS_URI` / `jwk-set-uri` 验签**。设计见 [**阶段 4D 文档**](../../docs/website-services/设计文档/认证与安全/阶段4D-Auth独立认证服务架构回归设计与迁移方案.md) · **落地**见 [**阶段 4F 说明**](../../docs/website-services/设计文档/认证与安全/阶段4F-Auth单服务收敛与认证主链路上提落地说明.md) · **4G** 见 [**RS256/JWKS 迁移说明**](../../docs/website-services/设计文档/认证与安全/阶段4G-RS256与JWKS签名验签体系迁移说明.md)。**完整文档导航**：[`docs/website-services/README.md`](../../docs/website-services/README.md)。
 
 除此之外：统一网关入口、多端可启动应用、基础设施、MyBatis-Plus、Flyway、OpenAPI。（[`架构设计`](../../docs/website-services/设计文档/基础架构/架构设计.md) §8）
 
@@ -12,7 +12,8 @@
 | 文档体系重整（`docs/website-services` 分类与总览） | **已完成** |
 | 阶段 4G（RS256 + JWKS） | **已完成** |
 | 阶段 4H（Gateway 全链路真实联调） | **已完成** |
-| 阶段 5A（Admin RBAC 深化） | **暂缓**（4H 后） |
+| 阶段 4I（迁移清理收口：脚本/文档口径） | **已完成**（见 [**阶段4I 说明**](../../docs/website-services/联调说明/阶段4I-迁移清理收口.md)） |
+| 阶段 5A（Admin RBAC 深化） | **待开始**（4H/4I 已就绪） |
 
 **勿在仓库另建第二份「后端 TODO 清单」。** 完整阶段史、产出与下一步：**[`docs/website-services/总览/后端开发路线图与阶段状态.md`](../../docs/website-services/总览/后端开发路线图与阶段状态.md)**；文档总导航：**[`docs/website-services/README.md`](../../docs/website-services/README.md)**。
 
@@ -131,7 +132,7 @@ website-services/
 统一认证 **可执行** 模块（**单模块**，不再有 `auth-core` / `auth-app` 拆分）。
 
 - **`AuthApplication`**；默认端口 **`8083`**（**`AUTH_APP_PORT`**）。
-- **承担**：`POST /api/admin/auth/login|refresh|logout`、`GET /api/auth/ping`、**`GET /.well-known/jwks.json`**、Access JWT **RS256** 签发（**`JwtTokenService`/`TokenService`**）、Refresh Cookie、**Redis** 刷新会话（**`RedisAdminRefreshSessionServiceImpl`** 等）；**`i18n/auth`** 承载 **`admin.auth.*`** 等认证文案。
+- **承担**：`POST /api/admin/auth/login|refresh|logout`、`GET /api/auth/ping`、**`GET /.well-known/jwks.json`**、Access JWT **RS256** 签发（**`TokenService`/`JwtTokenServiceImpl`**）、Refresh Cookie、**Redis** 刷新会话（**`RedisAdminRefreshSessionServiceImpl`** 等）；**`i18n/auth`** 承载 **`admin.auth.*`** 等认证文案。
 - **直连** 与 admin 相同的 **`admin_user` 表**（本模块内自有 `entity`/`mapper`；**不**依赖 `admin` jar）。
 - **显式关闭 Flyway**（避免与 admin 重复迁移）；使用 **`AUTH_DB_*`** 可选覆盖 **`DB_*`**。
 - **启动**：`mvn -pl auth -am spring-boot:run`。
@@ -208,7 +209,7 @@ migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 
 ### JWT 与认证边界（4F～4G）
 
-- **签发**：仅在 **`auth`**（`TokenService`/`JwtTokenService`、`AuthJwtKeyProperties`、RSA PEM；**RS256**）。
+- **签发**：仅在 **`auth`**（`TokenService`/`JwtTokenServiceImpl`、`AuthJwtKeyProperties`、RSA PEM；**RS256**）。
 - **Resource Server 验签**：**`admin`** 使用 **`spring.security.oauth2.resourceserver.jwt.jwk-set-uri`**（`**AUTH_JWKS_URI**`）与自定义 **`JwtDecoder`** 校验 **`iss`/`aud`**；**`com.mywebsite.common.security`** 提供 **`JwtClaimConstants`**、**`TokenAudience`**、**`AuthContext`** 等。
 - **4G 后**：Admin **不再**使用 `SECURITY_JWT_SECRET`；Access JWT 仅由 Auth 用**私钥**签发，公钥经 **`GET /.well-known/jwks.json`** 发布。
 

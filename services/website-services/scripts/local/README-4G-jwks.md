@@ -27,7 +27,7 @@ AUTH_JWT_KEY_ID=auth-local-rs256-key-1
 AUTH_JWKS_URI=http://localhost:8083/.well-known/jwks.json
 ```
 
-路径可为相对 **`services/website-services`** 工作目录的相对路径；也可用绝对路径。**若从 `auth` 子目录启动 Spring Boot**（`user.dir` 为 `…/website-services/auth`），相对路径会优先在子模块下解析；`RsaPemLoader` 会在找不到文件时**再尝试父目录（`website-services`）**，与 PEM 放在 `services/website-services/secrets/local` 的推荐布局一致。
+路径可为相对 **`services/website-services`** 工作目录的相对路径；也可用绝对路径。**若从 `auth` 子目录启动 Spring Boot**（`user.dir` 为 `…/website-services/auth`），相对路径会优先在子模块下解析；`RsaPemUtils` 会在找不到文件时**再尝试父目录（`website-services`）**，与 PEM 放在 `services/website-services/secrets/local` 的推荐布局一致。
 
 ### 数据库环境变量与 `.env` 的优先级
 

@@ -255,7 +255,7 @@ SameSite：**Strict**（见 §12）。
 ## 16. 本轮修复的确定性问题（代码 / 脚本）
 
 1. **`java -jar admin` 缺少 PostgreSQL 驱动**：`admin/pom.xml` 将 `postgresql` 依赖从 **`test`** 调整为 **`runtime`**。  
-2. **Redis Refresh 会话 Bean 注册顺序错误**：`@Component` + `@ConditionalOnBean(RedisConnectionFactory)` 会在 Redis 自动配置完成前判定失败，导致 **运行时缺少 `AdminRefreshSessionService`**。引入 `RedisAdminRefreshSessionConfiguration`，并以 **`@ConditionalOnBean(StringRedisTemplate)` + `@ConditionalOnMissingBean(AdminRefreshSessionService)`** 注册 Redis 实现；测试 profile 继续走 `AdminRefreshSessionTestBeans` 内存实现。  
+2. **Redis Refresh 会话 Bean 注册顺序错误**：`@Component` + `@ConditionalOnBean(RedisConnectionFactory)` 会在 Redis 自动配置完成前判定失败，导致 **运行时缺少 `AdminRefreshSessionService`**。引入 `RedisAdminRefreshSessionConfig`，并以 **`@ConditionalOnBean(StringRedisTemplate)` + `@ConditionalOnMissingBean(AdminRefreshSessionService)`** 注册 Redis 实现；测试 profile 继续走 `AdminRefreshSessionTestBeans` 内存实现。  
 3. **联调脚本**：新增 `scripts/local/run-4c-http-verify.ps1`（覆盖登录失败多语言、未知用户、校验、Bearer、篡改 JWT、轮换/replay、logout、OpenAPI 摘要），以及种子 SQL / README。
 
 ---

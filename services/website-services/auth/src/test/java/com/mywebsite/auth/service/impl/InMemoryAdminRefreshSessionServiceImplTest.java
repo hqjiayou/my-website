@@ -3,7 +3,7 @@ package com.mywebsite.auth.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.mywebsite.auth.dto.RotateRefreshDto;
-import com.mywebsite.auth.token.RefreshTokenGenerator;
+import com.mywebsite.auth.utils.RefreshTokenUtils;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +13,7 @@ class InMemoryAdminRefreshSessionServiceImplTest {
     void rotateThenReplayRevokesSession() {
         InMemoryAdminRefreshSessionServiceImpl store = new InMemoryAdminRefreshSessionServiceImpl();
         Instant expireAt = Instant.now().plusSeconds(3600);
-        String r1 = RefreshTokenGenerator.generateOpaque();
+        String r1 = RefreshTokenUtils.generateOpaque();
         store.bindNewSession(9L, "u1", "sid-a", r1, expireAt);
 
         RotateRefreshDto first = store.rotate(r1);
@@ -31,7 +31,7 @@ class InMemoryAdminRefreshSessionServiceImplTest {
     void logoutInvalidatesRefresh() {
         InMemoryAdminRefreshSessionServiceImpl store = new InMemoryAdminRefreshSessionServiceImpl();
         Instant expireAt = Instant.now().plusSeconds(3600);
-        String r = RefreshTokenGenerator.generateOpaque();
+        String r = RefreshTokenUtils.generateOpaque();
         store.bindNewSession(1L, "u", "sid-b", r, expireAt);
 
         store.revokeByRefreshCookie(java.util.Optional.of(r));

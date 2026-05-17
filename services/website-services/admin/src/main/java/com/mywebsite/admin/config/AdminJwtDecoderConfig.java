@@ -18,7 +18,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
  * 通过 {@code jwk-set-uri} 获取 JWK Set；并校验 {@code iss} / {@code aud}。
  */
 @Configuration
-public class AdminJwtDecoderConfiguration {
+public class AdminJwtDecoderConfig {
 
     @Bean
     JwtDecoder adminJwtDecoder(

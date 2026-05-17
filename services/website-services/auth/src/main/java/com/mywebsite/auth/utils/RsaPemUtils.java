@@ -1,4 +1,4 @@
-package com.mywebsite.auth.crypto;
+package com.mywebsite.auth.utils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,9 +15,9 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 
 /** 从 PEM 文件加载 RSA 公私钥；支持 {@code classpath:} 前缀或文件系统路径。 */
-public final class RsaPemLoader {
+public final class RsaPemUtils {
 
-    private RsaPemLoader() {}
+    private RsaPemUtils() {}
 
     public static RSAPrivateKey loadPrivateKeyPem(String path) {
         String pem = readPemString(path);
@@ -48,7 +48,7 @@ public final class RsaPemLoader {
         return path;
     }
 
-    static String readPemString(String path) {
+    private static String readPemString(String path) {
         if (path == null || path.isBlank()) {
             throw new IllegalStateException("RSA key path is blank (set AUTH_JWT_PRIVATE_KEY_PATH / AUTH_JWT_PUBLIC_KEY_PATH or auth.jwt.*)");
         }

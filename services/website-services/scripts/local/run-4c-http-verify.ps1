@@ -1,5 +1,6 @@
-# 阶段 4C/4F 本地 HTTP 验证脚本。
+# 阶段 4C/4F 本地 HTTP 验证脚本（偏 i18n / 安全边界回归）。
 # 4F 起：登录/刷新/登出打 $AuthBase（默认 http://127.0.0.1:8083），Ping/受保护业务打 $AdminBase。
+# 4G+：Admin Access JWT 验签走 JWKS；勿再配置 Admin SECURITY_JWT_SECRET。全链路经 Gateway 见「阶段4H」联调文档。
 # 使用前请已启动 auth（8083）与 admin（8081），或自行调整 -SkipStartJar 并在外部启动进程。
 
 param(
@@ -39,7 +40,7 @@ if (-not $SkipStartJar) {
         $env:SECURITY_REFRESH_COOKIE_SECURE = "false"
     }
     Write-Host "==> java -jar $JarPath"
-    Write-Host "    (确保已设置 DB_URL/DB_USERNAME/DB_PASSWORD、REDIS_PASSWORD、SECURITY_JWT_SECRET 等)"
+    Write-Host "    (确保已设置 DB_URL/DB_USERNAME/DB_PASSWORD、REDIS_PASSWORD；Admin: AUTH_JWKS_URI 指向 Auth JWKS；Auth: RSA 密钥等——见 .env.example / README)"
     $proc = Start-Process -FilePath "java" -ArgumentList @("-jar", $JarPath) -WorkingDirectory (Split-Path $JarPath) -PassThru -WindowStyle Hidden
 }
 

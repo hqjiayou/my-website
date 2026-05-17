@@ -9,13 +9,13 @@ import com.mywebsite.auth.dto.RotateRefreshDto;
 import com.mywebsite.auth.entity.AdminUserEntity;
 import com.mywebsite.auth.mapper.AdminUserMapper;
 import com.mywebsite.auth.constant.AdminAuthConstants;
-import com.mywebsite.auth.config.JwtProperties;
 import com.mywebsite.auth.properties.AdminAuthProperties;
+import com.mywebsite.auth.properties.AuthJwtProperties;
 import com.mywebsite.auth.service.AdminAuthService;
 import com.mywebsite.auth.service.AdminRefreshSessionService;
-import com.mywebsite.auth.token.IssuedAccessToken;
-import com.mywebsite.auth.token.RefreshTokenGenerator;
-import com.mywebsite.auth.token.TokenService;
+import com.mywebsite.auth.dto.IssuedAccessTokenDto;
+import com.mywebsite.auth.service.TokenService;
+import com.mywebsite.auth.utils.RefreshTokenUtils;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.security.TokenAudience;
@@ -47,7 +47,7 @@ public class AdminAuthServiceImpl implements AdminAuthService {
 
     private final AdminRefreshSessionService refreshSessionService;
 
-    private final JwtProperties jwtProperties;
+    private final AuthJwtProperties authJwtProperties;
 
     private final AdminAuthProperties adminAuthProperties;
 
@@ -56,13 +56,13 @@ public class AdminAuthServiceImpl implements AdminAuthService {
             PasswordEncoder passwordEncoder,
             TokenService tokenService,
             AdminRefreshSessionService refreshSessionService,
-            JwtProperties jwtProperties,
+            AuthJwtProperties authJwtProperties,
             AdminAuthProperties adminAuthProperties) {
         this.adminUserMapper = adminUserMapper;
         this.passwordEncoder = passwordEncoder;
         this.tokenService = tokenService;
         this.refreshSessionService = refreshSessionService;
-        this.jwtProperties = jwtProperties;
+        this.authJwtProperties = authJwtProperties;
         this.adminAuthProperties = adminAuthProperties;
     }
 
@@ -88,19 +88,19 @@ public class AdminAuthServiceImpl implements AdminAuthService {
         }
 
         String sessionId = UUID.randomUUID().toString();
-        String refreshPlain = RefreshTokenGenerator.generateOpaque();
+        String refreshPlain = RefreshTokenUtils.generateOpaque();
         Instant expireAt = Instant.now().plus(adminAuthProperties.getRefreshTokenTtl());
 
         refreshSessionService.bindNewSession(user.getId(), user.getUsername(), sessionId, refreshPlain, expireAt);
 
-        String accessToken = tokenService.createAccessToken(new IssuedAccessToken(
+        String accessToken = tokenService.createAccessToken(new IssuedAccessTokenDto(
                 TokenAudience.ADMIN,
                 String.valueOf(user.getId()),
                 user.getUsername(),
                 sessionId,
                 Set.of()));
 
-        long expiresInSec = jwtProperties.getAccessTokenTtl().toSeconds();
+        long expiresInSec = authJwtProperties.getAccessTokenTtl().toSeconds();
 
         AdminLoginUserDto userDto =
                 new AdminLoginUserDto(user.getId(), user.getUsername(), user.getDisplayName(), user.getStatus());
@@ -120,13 +120,13 @@ public class AdminAuthServiceImpl implements AdminAuthService {
             case RotateRefreshDto.Invalid ignored -> throw unauthorizedRefresh();
             case RotateRefreshDto.ReplayRevoked ignored -> throw unauthorizedRefresh();
             case RotateRefreshDto.Rotated ok -> {
-                String accessToken = tokenService.createAccessToken(new IssuedAccessToken(
+                String accessToken = tokenService.createAccessToken(new IssuedAccessTokenDto(
                         TokenAudience.ADMIN,
                         String.valueOf(ok.adminUserId()),
                         ok.username(),
                         ok.sessionId(),
                         Set.of()));
-                long expiresInSec = jwtProperties.getAccessTokenTtl().toSeconds();
+                long expiresInSec = authJwtProperties.getAccessTokenTtl().toSeconds();
                 AdminRefreshResponseDto body = new AdminRefreshResponseDto(accessToken, expiresInSec);
                 yield new AdminRefreshCookieDto(body, ok.newRefreshPlain(), ok.expireAt());
             }

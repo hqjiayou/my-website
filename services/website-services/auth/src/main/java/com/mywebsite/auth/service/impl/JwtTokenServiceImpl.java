@@ -1,6 +1,9 @@
-package com.mywebsite.auth.token;
+package com.mywebsite.auth.service.impl;
 
-import com.mywebsite.auth.config.JwtProperties;
+import com.mywebsite.auth.dto.IssuedAccessTokenDto;
+import com.mywebsite.auth.dto.TokenClaimsDto;
+import com.mywebsite.auth.properties.AuthJwtProperties;
+import com.mywebsite.auth.service.TokenService;
 import com.mywebsite.common.security.JwtClaimConstants;
 import com.mywebsite.common.security.TokenAudience;
 import java.time.Instant;
@@ -18,37 +21,37 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 
-public class JwtTokenService implements TokenService {
+public class JwtTokenServiceImpl implements TokenService {
 
     private final JwtEncoder jwtEncoder;
 
     private final JwtDecoder jwtDecoder;
 
-    private final JwtProperties jwtProperties;
+    private final AuthJwtProperties authJwtProperties;
 
     private final String jwtKeyId;
 
-    public JwtTokenService(
-            JwtEncoder jwtEncoder, JwtDecoder jwtDecoder, JwtProperties jwtProperties, String jwtKeyId) {
+    public JwtTokenServiceImpl(
+            JwtEncoder jwtEncoder, JwtDecoder jwtDecoder, AuthJwtProperties authJwtProperties, String jwtKeyId) {
         this.jwtEncoder = jwtEncoder;
         this.jwtDecoder = jwtDecoder;
-        this.jwtProperties = jwtProperties;
+        this.authJwtProperties = authJwtProperties;
         this.jwtKeyId = jwtKeyId;
     }
 
     @Override
-    public String createAccessToken(IssuedAccessToken issuance) {
+    public String createAccessToken(IssuedAccessTokenDto issuance) {
         Instant now = Instant.now();
-        Instant exp = now.plus(jwtProperties.getAccessTokenTtl());
+        Instant exp = now.plus(authJwtProperties.getAccessTokenTtl());
         String jti = UUID.randomUUID().toString();
         String tokenType = issuance.audience() == TokenAudience.ADMIN ? "ADMIN" : issuance.audience().name();
 
         Long adminUserId = Long.parseLong(issuance.subjectUserId());
 
         JwtClaimsSet.Builder builder = JwtClaimsSet.builder()
-                .issuer(jwtProperties.getIssuer())
+                .issuer(authJwtProperties.getIssuer())
                 .subject(issuance.subjectUserId())
-                .audience(Collections.singletonList(jwtProperties.getAudience()))
+                .audience(Collections.singletonList(authJwtProperties.getAudience()))
                 .issuedAt(now)
                 .expiresAt(exp)
                 .id(jti)
@@ -68,11 +71,11 @@ public class JwtTokenService implements TokenService {
     }
 
     @Override
-    public Optional<TokenClaims> parseToken(String token, TokenAudience expectedAudience) {
+    public Optional<TokenClaimsDto> parseToken(String token, TokenAudience expectedAudience) {
         Jwt jwt = jwtDecoder.decode(token);
 
         List<String> audiences = jwt.getAudience();
-        if (audiences == null || audiences.stream().noneMatch(jwtProperties.getAudience()::equals)) {
+        if (audiences == null || audiences.stream().noneMatch(authJwtProperties.getAudience()::equals)) {
             return Optional.empty();
         }
 
@@ -90,7 +93,7 @@ public class JwtTokenService implements TokenService {
 
         Set<String> authorities = extractRoles(jwt);
 
-        return Optional.of(new TokenClaims(
+        return Optional.of(new TokenClaimsDto(
                 expectedAudience,
                 jwt.getSubject(),
                 username,

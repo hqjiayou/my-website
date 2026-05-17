@@ -3,7 +3,7 @@ package com.mywebsite.auth.service.impl;
 import com.mywebsite.auth.constant.AdminAuthRedisKeyConstants;
 import com.mywebsite.auth.dto.RotateRefreshDto;
 import com.mywebsite.auth.service.AdminRefreshSessionService;
-import com.mywebsite.auth.token.RefreshTokenGenerator;
+import com.mywebsite.auth.utils.RefreshTokenUtils;
 import com.mywebsite.auth.utils.RefreshTokenHashUtils;
 import java.time.Duration;
 import java.time.Instant;
@@ -15,7 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-/** 由 {@link com.mywebsite.auth.config.RedisAdminRefreshSessionConfiguration} 注册为 Bean。 */
+/** 由 {@link com.mywebsite.auth.config.RedisAdminRefreshSessionConfig} 注册为 Bean。 */
 public class RedisAdminRefreshSessionServiceImpl implements AdminRefreshSessionService {
 
     private static final Logger log = LoggerFactory.getLogger(RedisAdminRefreshSessionServiceImpl.class);
@@ -106,7 +106,7 @@ public class RedisAdminRefreshSessionServiceImpl implements AdminRefreshSessionS
 
         long ttlRemain = ttlSeconds(now, expireAt);
 
-        String newPlain = RefreshTokenGenerator.generateOpaque();
+        String newPlain = RefreshTokenUtils.generateOpaque();
         String hNew = RefreshTokenHashUtils.sha256Hex(newPlain);
 
         redis.delete(AdminAuthRedisKeyConstants.refreshIndexKey(hIn));

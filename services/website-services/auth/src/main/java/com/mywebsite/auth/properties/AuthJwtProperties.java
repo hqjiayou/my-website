@@ -1,10 +1,11 @@
-package com.mywebsite.auth.config;
+package com.mywebsite.auth.properties;
 
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/** Access JWT 语义配置（issuer / audience / TTL），前缀 {@code security.jwt}。 */
 @ConfigurationProperties(prefix = "security.jwt")
-public class JwtProperties {
+public class AuthJwtProperties {
 
     private String issuer = "my-website";
 

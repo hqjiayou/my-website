@@ -24,7 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
     RedisAutoConfiguration.class,
     RedisRepositoriesAutoConfiguration.class,
 })
-class JwksWellKnownMvcTest {
+class AuthJwksWellKnownMvcTest {
 
     @Autowired
     private MockMvc mockMvc;

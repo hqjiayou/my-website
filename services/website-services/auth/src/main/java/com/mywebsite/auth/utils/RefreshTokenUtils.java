@@ -1,13 +1,13 @@
-package com.mywebsite.auth.token;
+package com.mywebsite.auth.utils;
 
 import java.security.SecureRandom;
 import java.util.Base64;
 
-public final class RefreshTokenGenerator {
+public final class RefreshTokenUtils {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private RefreshTokenGenerator() {}
+    private RefreshTokenUtils() {}
 
     /** Opaque refresh token (URL-safe Base64, ~43 chars for 32 bytes). */
     public static String generateOpaque() {

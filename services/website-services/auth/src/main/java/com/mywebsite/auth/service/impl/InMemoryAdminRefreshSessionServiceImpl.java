@@ -2,7 +2,7 @@ package com.mywebsite.auth.service.impl;
 
 import com.mywebsite.auth.dto.RotateRefreshDto;
 import com.mywebsite.auth.service.AdminRefreshSessionService;
-import com.mywebsite.auth.token.RefreshTokenGenerator;
+import com.mywebsite.auth.utils.RefreshTokenUtils;
 import com.mywebsite.auth.utils.RefreshTokenHashUtils;
 import java.time.Instant;
 import java.util.Map;
@@ -64,7 +64,7 @@ public class InMemoryAdminRefreshSessionServiceImpl implements AdminRefreshSessi
             refreshToSession.remove(hIn);
             replayToSession.put(hIn, sid);
 
-            String newPlain = RefreshTokenGenerator.generateOpaque();
+            String newPlain = RefreshTokenUtils.generateOpaque();
             String hNew = RefreshTokenHashUtils.sha256Hex(newPlain);
             Session rotated =
                     new Session(sid, session.adminUserId(), session.username(), hNew, session.issuedAt(), session.expireAt());

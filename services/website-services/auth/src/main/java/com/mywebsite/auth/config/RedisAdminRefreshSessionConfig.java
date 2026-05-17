@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 @Configuration(proxyBeanMethods = false)
-public class RedisAdminRefreshSessionConfiguration {
+public class RedisAdminRefreshSessionConfig {
 
     /**
      * 不使用 {@code @ConditionalOnBean(StringRedisTemplate.class)}：该条件会在配置类解析阶段过早求值，可能早于
