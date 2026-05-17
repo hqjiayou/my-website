@@ -72,7 +72,7 @@ Admin API 采用 **Spring Security**：口令 **BCrypt**；请求侧 **短命 Ac
 
 ### 5.4 测试
 
-- **`JwtTokenServiceTest`、`InMemoryAdminRefreshSessionServiceImplTest`、`AdminAuthMvcTest`**；默认 **`mvn test`** **不强依赖本机 Redis**。
+- **`JwtTokenServiceTest`**、**`AdminAuthServiceImplTest`**、**`InMemoryAdminRefreshSessionServiceImplTest`**、**`AdminAuthMvcTest`**；默认 **`mvn test`** **不强依赖本机 Redis**。
 
 ---
 

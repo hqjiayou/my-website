@@ -31,6 +31,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class AdminAuthServiceImpl implements AdminAuthService {
 
+    private static final String KEY_LOGIN_FAILED = "admin.auth.login.failed";
+
+    private static final String KEY_REFRESH_INVALID = "admin.auth.refresh.invalid";
+
+    private static final String KEY_ACCOUNT_DISABLED = "admin.auth.account.disabled";
+
+    private static final String KEY_PASSWORD_TOO_LONG = "admin.auth.password.too-long";
+
     private final AdminUserMapper adminUserMapper;
 
     private final PasswordEncoder passwordEncoder;
@@ -72,7 +80,7 @@ public class AdminAuthServiceImpl implements AdminAuthService {
 
         String status = user.getStatus() == null ? "" : user.getStatus().trim().toUpperCase(Locale.ROOT);
         if (!AdminAuthConstants.ACTIVE_ADMIN_ACCOUNT_STATUS.equals(status)) {
-            denyBadCredential();
+            throw new BusinessException(ErrorCode.UNAUTHORIZED.getCode(), KEY_ACCOUNT_DISABLED);
         }
 
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
@@ -105,7 +113,7 @@ public class AdminAuthServiceImpl implements AdminAuthService {
     @Override
     public AdminRefreshCookieDto refresh(Optional<String> refreshTokenPlainOptional) {
         String refreshPlain =
-                refreshTokenPlainOptional.filter(s -> !s.isBlank()).orElseThrow(() -> unauthorizedRefresh());
+                refreshTokenPlainOptional.filter(s -> !s.isBlank()).orElseThrow(this::unauthorizedRefresh);
 
         RotateRefreshDto rotated = refreshSessionService.rotate(refreshPlain);
         return switch (rotated) {
@@ -131,17 +139,17 @@ public class AdminAuthServiceImpl implements AdminAuthService {
     }
 
     private BusinessException unauthorizedRefresh() {
-        return new BusinessException(ErrorCode.UNAUTHORIZED, "未认证或令牌无效");
+        return new BusinessException(ErrorCode.UNAUTHORIZED.getCode(), KEY_REFRESH_INVALID);
     }
 
     private void denyBadCredential() {
-        throw new BusinessException(ErrorCode.UNAUTHORIZED, "用户名或密码错误");
+        throw new BusinessException(ErrorCode.UNAUTHORIZED.getCode(), KEY_LOGIN_FAILED);
     }
 
     private void validatePasswordPolicy(String rawPassword) {
         int maxLen = adminAuthProperties.getAdminLoginMaxPasswordLength();
         if (rawPassword != null && rawPassword.length() > maxLen) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "密码长度超出上限");
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), KEY_PASSWORD_TOO_LONG);
         }
     }
 }

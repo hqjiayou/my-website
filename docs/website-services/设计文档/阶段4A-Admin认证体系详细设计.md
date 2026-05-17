@@ -11,6 +11,8 @@
 
 本文约定均以 **Admin API（`admin` 模块）** 为中心；Site 前台认证保持 **`TokenAudience.SITE`** 分离思路，可在后续独立成章。
 
+> **阶段 4B.5**：返回给调用方的认证/校验类 **`ApiResponse.message`** 已改为 **`messageKey` + 多模块 `messages*.properties`**（`Accept-Language`，默认回退 **`ja-JP`**）。定案见 **[《后端多语言支持策略设计 V1》](./后端多语言支持策略设计V1.md)**。**JWT 无效等场景的 RFC 6750 / `WWW-Authenticate`** 仍以本文及阶段 4B 结论为准；4B.5 **不强制**统一为 JSON `ApiResponse` 错误体。
+
 ---
 
 ## 2. 设计目标与非目标
@@ -287,7 +289,7 @@ sequenceDiagram
 | **接口** | **`POST /api/admin/auth/login`**、**`POST /api/admin/auth/refresh`**、**`POST /api/admin/auth/logout`**；其它 **`/api/admin/**`** 默认 Bearer 保护 |
 | **Swagger** | **`Admin Auth`** 分组可见；受保护示例接口 **`GET /api/admin/ping`** 使用 **`adminBearer` scheme** |
 | **Redis** | **`RedisAdminRefreshSessionServiceImpl`**；缺 **`RedisConnectionFactory`**（如单元测试排除 Redis）时 **`AdminRefreshSessionTestBeans`** 仅向 **测试** 上下文注册 **`InMemoryAdminRefreshSessionServiceImpl`**（语义对齐，**禁止**视作生产替身） |
-| **测试** | **`JwtTokenServiceTest`**、`InMemoryAdminRefreshSessionServiceImplTest`、`AdminAuthMvcTest`；默认 **`mvn test`** 不依赖本机 Redis |
+| **测试** | **`JwtTokenServiceTest`**（签发/解析 + `JwtDecoder` Claims：`iss`/`aud`/`token_type`/`admin_user_id`/`session_id`/`username`）、**`AdminAuthServiceImplTest`**、**`InMemoryAdminRefreshSessionServiceImplTest`**、**`AdminAuthMvcTest`**（登录成败、密码过长、`/refresh` 缺 Cookie / 无效 Refresh / 轮换后重放、登出 Cookie 缺失幂等、受保护接口无 Bearer 或篡改 JWT）。**说明**：OAuth2 Resource Server 在 **JWT 签名验证失败** 等场景常返回 **401 + `WWW-Authenticate: Bearer invalid_token`**（无 `ApiResponse` body），与 **`AdminAuthenticationEntryPoint`** 的 JSON 401 并存，属 Spring Security 预期行为。默认 **`mvn test`** 不依赖本机 Redis |
 
 ---
 

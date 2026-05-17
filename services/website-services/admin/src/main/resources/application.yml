@@ -3,6 +3,18 @@ spring:
     name: admin-service
   profiles:
     default: local
+  messages:
+    basename: i18n/common/messages,i18n/auth/messages,i18n/admin/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+
+app:
+  i18n:
+    default-locale: ja-JP
+    supported-locales:
+      - ja-JP
+      - zh-CN
+      - en-US
 
 management:
   endpoints:

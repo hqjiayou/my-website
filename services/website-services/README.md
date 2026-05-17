@@ -58,6 +58,7 @@ website-services/
 - **认证代码组织**：**`dto/`（压平，统一 `*Dto` 后缀）**、**`service` / `service.impl`**、**`security`**、`properties.AdminAuthProperties`；详细约束见：[后端包结构与命名规范 V1](../../docs/website-services/设计文档/后端包结构与命名规范V1.md)。
 - 设计定案见：[阶段4A-Admin认证体系详细设计](../../docs/website-services/设计文档/阶段4A-Admin认证体系详细设计.md) · [决策确认单](../../docs/website-services/设计文档/阶段4A-Admin认证体系决策确认单.md)
 - 健康探测：`GET /api/admin/ping`（需 Bearer；用作 Swagger 鉴权示例）
+- **阶段 4B 闭环**：登录签发 Access JWT（**`auth.TokenService`/`JwtTokenService`**）→ Refresh 写入 **HttpOnly Cookie**（**`admin.AdminRefreshCookieServiceImpl` + `security.auth.*`**）→ Refresh 会话 **Redis**（**`RedisAdminRefreshSessionServiceImpl` + `AdminAuthRedisKeyConstants`**）→ Bearer 访问受保护 Admin API（**`AdminSecurityConfig` Resource Server**）→ **轮换**与 **登出**清理会话并清 Cookie；Swagger 见 **`/swagger-ui.html`** 下 **`Admin Auth`** 分组；**`auth`** 与 **`admin`** 分工见《阶段4A-Admin认证体系详细设计》§16 与决策确认单 §5。
 - **阶段 3B**：首批后台 RBAC 表 **`AdminUserEntity` 等 5 个 Entity + 5 Mapper**（见 [`Java 持久层设计 V1`](../../docs/website-services/Java持久层设计V1.md)；**未**依赖 `site-core`）
 
 ### site
@@ -90,7 +91,7 @@ website-services/
 
 - `ApiResponse`
 - `ErrorCode`
-- `BusinessException`
+- `BusinessException`（`messageKey` + `messageArgs`；由各应用 Handler + `LocalizedMessageService` 解析为自然语言，见 [后端多语言支持策略设计 V1](../../docs/website-services/设计文档/后端多语言支持策略设计V1.md)）
 - `PageResult`（通用分页载荷；新业务若引入 `PageRequest` 须经多模块复用评估后再落 common）
 - 通用常量
 
@@ -100,6 +101,7 @@ website-services/
 
 基础设施接入模块。
 
+- **国际化（阶段 4B.5）**：`Accept-Language`（BCP 47）解析、默认 **`ja-JP`**、`LocalizedMessageService`、成功响应 `ApiResponse` 写出前本地化；定案见 [`后端多语言支持策略设计 V1`](../../docs/website-services/设计文档/后端多语言支持策略设计V1.md)。
 - PostgreSQL：通过 Spring Boot DataSource 自动配置
 - Redis：通过 Spring Data Redis 自动配置
 - MinIO / S3：提供 `MinioClient` Bean
