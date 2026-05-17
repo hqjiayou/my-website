@@ -4,10 +4,14 @@ import com.mywebsite.common.api.ApiResponse;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.infra.service.LocalizedMessageService;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+/**
+ * 前台应用异常出口与 Admin 对齐（BusinessException / 兜底）。当前无带 {@code @Valid} 的 REST 入参，故不挂载
+ * {@code MethodArgumentNotValidException}；首個需要 Bean Validation 的 DTO 落地时再在 {@code pom} 增加
+ * {@code spring-boot-starter-validation} 并比照 {@code admin} 补全校验分支。
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -21,14 +25,6 @@ public class GlobalExceptionHandler {
     public ApiResponse<Void> handleBusinessException(BusinessException ex) {
         String message = localizedMessageService.getMessage(ex.getMessageKey(), ex.getMessageArgs());
         return ApiResponse.fail(ex.getCode(), message);
-    }
-
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ApiResponse<Void> handleValidation(MethodArgumentNotValidException ex) {
-        String resolved = ex.getBindingResult().getFieldErrors().isEmpty()
-                ? localizedMessageService.getMessage(ErrorCode.BAD_REQUEST.getMessageKey())
-                : ex.getBindingResult().getFieldErrors().getFirst().getDefaultMessage();
-        return ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), resolved);
     }
 
     @ExceptionHandler(Exception.class)

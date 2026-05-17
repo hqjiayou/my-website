@@ -1,5 +1,6 @@
 package com.mywebsite.auth.token;
 
+import com.mywebsite.common.security.TokenAudience;
 import java.time.Instant;
 import java.util.Set;
 
@@ -13,5 +14,4 @@ public record TokenClaims(
         String tokenType,
         Set<String> authorities,
         Instant issuedAt,
-        Instant expiresAt
-) {}
+        Instant expiresAt) {}

@@ -1,7 +1,7 @@
 package com.mywebsite.admin.security;
 
-import com.mywebsite.auth.context.AuthContext;
-import com.mywebsite.auth.principal.AuthenticatedUserUtils;
+import com.mywebsite.common.security.AuthContext;
+import com.mywebsite.common.security.AuthenticatedUserUtils;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

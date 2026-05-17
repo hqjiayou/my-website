@@ -1,29 +1,41 @@
 # website-services
 
-`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。当前阶段进入企业级基础框架 V1：统一网关入口、后台应用、前台站点应用、基础设施模块、JWT 认证骨架、MyBatis-Plus、Flyway、OpenAPI 与 **按 Maven 边界 + 模块内常规 Spring Boot 包结构**（见 [`架构设计`](../../docs/website-services/架构设计.md) §8）。
+`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。**阶段 5A（后台 RBAC 深化）暂不推进**。**阶段 4F** 已将 **`auth`** 收敛为**单一可执行认证服务**（**`mvn -pl auth -am spring-boot:run`**），**`/api/admin/auth/*`**（Login / Refresh / Logout、JWT 签发、Redis Refresh 会话）由 **Auth** 承载；**Admin** 仅作为 **Resource Server** 与后台业务 API。**HS256 + 共享 `SECURITY_JWT_SECRET` 验签** 为 **4F～4G 过渡期**，**4G** 需 **RS256 + JWKS**。设计见 [**阶段 4D 文档**](../../docs/website-services/设计文档/认证与安全/阶段4D-Auth独立认证服务架构回归设计与迁移方案.md) · **落地**见 [**阶段 4F 说明**](../../docs/website-services/设计文档/认证与安全/阶段4F-Auth单服务收敛与认证主链路上提落地说明.md)。**完整文档导航**：[`docs/website-services/README.md`](../../docs/website-services/README.md)。
+
+除此之外：统一网关入口、多端可启动应用、基础设施、MyBatis-Plus、Flyway、OpenAPI。（[`架构设计`](../../docs/website-services/设计文档/基础架构/架构设计.md) §8）
+
+## 文档入口与阶段 TODO（唯一权威）
+
+| 条目 | 状态 |
+|------|------|
+| 阶段 4F（Auth 单服务收敛 + 主链路上提） | **已完成** |
+| 文档体系重整（`docs/website-services` 分类与总览） | **已完成** |
+| 阶段 4G（RS256 + JWKS） | **待开始** |
+| 阶段 4H（Gateway 全链路真实联调） | **待开始** |
+| 阶段 5A（Admin RBAC 深化） | **暂缓**（4G/4H 后） |
+
+**勿在仓库另建第二份「后端 TODO 清单」。** 完整阶段史、产出与下一步：**[`docs/website-services/总览/后端开发路线图与阶段状态.md`](../../docs/website-services/总览/后端开发路线图与阶段状态.md)**；文档总导航：**[`docs/website-services/README.md`](../../docs/website-services/README.md)**。
 
 ## 快速理解
 
-本工程当前有三个可启动服务：
+本工程当前有 **四个**可执行的 Spring Boot **应用**：
 
 | 服务 | 模块 | 端口 | 职责 |
 |------|------|------|------|
-| Gateway | `gateway` | `8080` | 统一 API 入口，转发 admin/site 请求 |
-| Admin API | `admin` | `8081` | 后台管理后端 |
-| Site API | `site/site-app` | `8082` | 前台站点后端 |
-
-本工程还有若干普通 jar 模块，用于沉淀公共能力、基础设施与后续业务扩展。不要直接启动这些 jar 模块。
+| Gateway | `gateway` | `8080` | 网关；`/api/admin/auth/**`、`/api/site/auth/**` → **Auth(8083)**；`/api/admin/**` → Admin；`/api/site/**` → Site |
+| Admin API | `admin` | `8081` | 后台**业务** API；**OAuth2 Resource Server** 校验 Access JWT |
+| Site API | `site/site-app` | `8082` | 前台站点 API |
+| Auth | **`auth`** | **`8083`**（`AUTH_APP_PORT`） | 统一认证：`/api/admin/auth/*`、`GET /api/auth/ping`；**不设** Flyway（DDL 由 Admin/infra 迁移） |
 
 ## 模块结构
 
 ```text
 website-services/
 ├── gateway
+├── auth
 ├── admin
 ├── agent
-├── auth
 ├── common
-├── config
 ├── infra
 ├── site
 │   ├── site-app
@@ -41,25 +53,26 @@ website-services/
 统一 API 网关，可独立启动。
 
 - 端口：`8080`
-- `/api/admin/**` 转发到 `http://localhost:8081`
-- `/api/site/**` 转发到 `http://localhost:8082`
+- **`/api/admin/auth/**`**、**`/api/site/auth/**`** → `http://localhost:8083`（Auth）；**`/api/admin/**`** → `http://localhost:8081`（Admin）；**`/api/site/**`** → `http://localhost:8082`（Site）
 - 提供本地开发 CORS 配置
 - 提供基础 request-id 预留与请求日志
 - 不承载业务逻辑
 - 不直连 PostgreSQL / Redis / MinIO
+- **不**在网关校验 JWT（业务服务各自 Resource Server）
 
 ### admin
 
 后台管理 API，可独立启动。
 
 - 端口：`8081`
-- 依赖 `common`、`infra`、`agent`、`auth`、`config`
-- **认证（阶段 4B）**：`POST /api/admin/auth/login`、`POST /api/admin/auth/refresh`、`POST /api/admin/auth/logout`；其它 **`/api/admin/**`** 默认需要 **`Authorization: Bearer <accessToken>`**（Swagger 使用 **`adminBearer` scheme**；**Refresh Token 仅 HttpOnly Cookie**，Swagger「Authorize」无法代替 Cookie）
-- **认证代码组织**：**`dto/`（压平，统一 `*Dto` 后缀）**、**`service` / `service.impl`**、**`security`**、`properties.AdminAuthProperties`；详细约束见：[后端包结构与命名规范 V1](../../docs/website-services/设计文档/后端包结构与命名规范V1.md)。
-- 设计定案见：[阶段4A-Admin认证体系详细设计](../../docs/website-services/设计文档/阶段4A-Admin认证体系详细设计.md) · [决策确认单](../../docs/website-services/设计文档/阶段4A-Admin认证体系决策确认单.md)
-- 健康探测：`GET /api/admin/ping`（需 Bearer；用作 Swagger 鉴权示例）
-- **阶段 4B 闭环**：登录签发 Access JWT（**`auth.TokenService`/`JwtTokenService`**）→ Refresh 写入 **HttpOnly Cookie**（**`admin.AdminRefreshCookieServiceImpl` + `security.auth.*`**）→ Refresh 会话 **Redis**（**`RedisAdminRefreshSessionServiceImpl` + `AdminAuthRedisKeyConstants`**）→ Bearer 访问受保护 Admin API（**`AdminSecurityConfig` Resource Server**）→ **轮换**与 **登出**清理会话并清 Cookie；Swagger 见 **`/swagger-ui.html`** 下 **`Admin Auth`** 分组；**`auth`** 与 **`admin`** 分工见《阶段4A-Admin认证体系详细设计》§16 与决策确认单 §5。
-- **阶段 3B**：首批后台 RBAC 表 **`AdminUserEntity` 等 5 个 Entity + 5 Mapper**（见 [`Java 持久层设计 V1`](../../docs/website-services/Java持久层设计V1.md)；**未**依赖 `site-core`）
+- 依赖 `common`、`infra`、`agent`
+- **认证主链路（阶段 4F）**：`POST/GET ...` **`/api/admin/auth/*`** 已迁至 **`auth`（8083）**；经 Gateway 时仍使用**同一路径**，由网关转发至 Auth；**不要**再对 Admin 直连上述路径做联调（除非故意绕过网关）。
+- **`/api/admin/**`（业务）**：默认需要 **`Authorization: Bearer <accessToken>`**（Swagger **`adminBearer`**）；**HS256 过渡期** 与 Auth 共用 **`SECURITY_JWT_SECRET` 验签**，**4G** 切 **JWKS** 后 Admin **不再持有签名密钥**。
+- `AdminSecurityConfig`、`AdminAuthenticationEntryPoint`、`AdminAccessDeniedHandler`、`AuthContextSynchronizingFilter` 保留。
+- 健康探测：`GET /api/admin/ping`（需 Bearer）
+- **阶段 3B**：首批后台 **`AdminUserEntity` 等** Mapper（见 [`Java 持久层设计 V1`](../../docs/website-services/Java持久层设计V1.md)）
+- **阶段 4C 脚本**：`scripts/local/run-4c-http-verify.ps1` 已区分 **`$AuthBase`（默认 8083）** 与 **`$AdminBase`**；认证 HTTP 打 Auth，Ping 仍打 Admin。
+- **阶段 4D～4G 路线图**：见 [**阶段4D 文档**](../../docs/website-services/设计文档/认证与安全/阶段4D-Auth独立认证服务架构回归设计与迁移方案.md)。
 
 ### site
 
@@ -85,14 +98,15 @@ website-services/
 
 ### common
 
-通用基础模块（详见 [`后端包结构与命名规范 V1`](../../docs/website-services/设计文档/后端包结构与命名规范V1.md) §1）。
+通用基础模块（详见 [`后端包结构与命名规范 V1`](../../docs/website-services/设计文档/基础架构/后端包结构与命名规范V1.md) §1）。
 
 仅承载跨模块共用 **协议外壳与基础模型**：
 
 - `ApiResponse`
 - `ErrorCode`
-- `BusinessException`（`messageKey` + `messageArgs`；由各应用 Handler + `LocalizedMessageService` 解析为自然语言，见 [后端多语言支持策略设计 V1](../../docs/website-services/设计文档/后端多语言支持策略设计V1.md)）
+- `BusinessException`（`messageKey` + `messageArgs`；由各应用 Handler + `LocalizedMessageService` 解析为自然语言，见 [后端多语言支持策略设计 V1](../../docs/website-services/设计文档/认证与安全/后端多语言支持策略设计V1.md)）
 - `PageResult`（通用分页载荷；新业务若引入 `PageRequest` 须经多模块复用评估后再落 common）
+- **`com.mywebsite.common.security`**：`JwtClaimConstants`、`TokenAudience`、`AuthenticatedUser`、`AuthContext`、`AuthenticatedUserUtils`（Resource Server 与网关侧共享身份契约）
 - 通用常量
 
 **禁止**下沉任何 **`admin`/`site`/业务板块**的 **Request / Response**，避免 common 沦为「全场 DTO 垃圾桶」。
@@ -102,6 +116,7 @@ website-services/
 基础设施接入模块。
 
 - **国际化（阶段 4B.5）**：`Accept-Language`（BCP 47）解析、默认 **`ja-JP`**、`LocalizedMessageService`、成功响应 `ApiResponse` 写出前本地化；定案见 [`后端多语言支持策略设计 V1`](../../docs/website-services/设计文档/后端多语言支持策略设计V1.md)。
+- **`JwtSecretPresentCondition`**：当存在非空 `SECURITY_JWT_SECRET` / `security.jwt.secret` 时启用对称 JWT Bean（供 **auth** 签发；各服务可按需复用条件）。
 - PostgreSQL：通过 Spring Boot DataSource 自动配置
 - Redis：通过 Spring Data Redis 自动配置
 - MinIO / S3：提供 `MinioClient` Bean
@@ -115,12 +130,13 @@ website-services/
 
 ### auth
 
-公共认证基础能力模块。
+统一认证 **可执行** 模块（**单模块**，不再有 `auth-core` / `auth-app` 拆分）。
 
-- JWT：**仅在配置了非空 `security.jwt.secret`（如环境变量 `SECURITY_JWT_SECRET`）时**，装配 **`JwtEncoder` / `JwtDecoder` / `TokenService`**（避免未配置密钥的应用模块在测试中拉起失败）；**Admin 生产/本地真实启动必须配置密钥**
-- Token audience 区分 `ADMIN` / `SITE`
-- **`IssuedAccessToken`、`TokenClaims`、`AuthenticatedUser`、`AuthenticatedUserUtils`、`JwtClaimConstants`、`AuthContext`**
-- **不**定义具体 `admin_user` 或 `site_user`；**不**直连 Redis（Refresh 会话由 **`admin`** 侧存储）
+- **`AuthApplication`**；默认端口 **`8083`**（**`AUTH_APP_PORT`**）。
+- **承担**：`POST /api/admin/auth/login|refresh|logout`、`GET /api/auth/ping`、Access JWT 签发（**`JwtTokenService`/`TokenService`**）、Refresh Cookie、**Redis** 刷新会话（**`RedisAdminRefreshSessionServiceImpl`** 等）；**`i18n/auth`** 承载 **`admin.auth.*`** 等认证文案。
+- **直连** 与 admin 相同的 **`admin_user` 表**（本模块内自有 `entity`/`mapper`；**不**依赖 `admin` jar）。
+- **显式关闭 Flyway**（避免与 admin 重复迁移）；使用 **`AUTH_DB_*`** 可选覆盖 **`DB_*`**。
+- **启动**：`mvn -pl auth -am spring-boot:run`。
 
 ### agent
 
@@ -131,19 +147,9 @@ Java 后端未来调用 AI/Agent 服务的客户端层。
 - 不直接依赖 PostgreSQL / Redis / MinIO
 - 如果未来需要读取业务数据、文件或缓存会话，由 `admin` / `site-app` 等上层应用模块编排
 
-### config
-
-网站配置业务模块预留。
-
-- 主题
-- 页面布局
-- SEO
-- Brand / Logo
-- 页脚等配置能力
-
 ## 认证与用户模型边界
 
-- `auth` 只负责公共认证能力，不直接定义 `admin_user`、`site_user`、角色或权限实体。
+- **`auth`**：统一认证服务（4F）；后续 Site 登录仍走 **auth**，与 Admin realm 区分在 token/会话策略演进。**阶段 5A RBAC**：**暂不推进**。
 - admin 侧用户体系由 `admin` 模块承载，后续包括 `admin_user`、`admin_role`、`admin_permission`、`admin_user_role`、`admin_role_permission`。
 - site 侧用户体系由 `site-core` 承载，后续包括 `site_user`、`site_user_profile`，必要时扩展 `site_user_auth`。
 - 前台用户统一使用 `site_user`，通过 `site_id` 或 `site_code` 做多站点隔离。不要为 car/cake 分别建立 `car_user`、`cake_user`。
@@ -156,16 +162,15 @@ gateway       -> Spring Cloud Gateway only
 common
   ↑
 infra         -> common
-auth          -> common
+auth          -> common, infra
 agent         -> common
-config        -> common, infra
 
-site-core     -> common, infra, auth, config
+site-core     -> common, infra
 site-car      -> site-core
 site-cake     -> site-core
-site-app      -> common, infra, agent, auth, config, site-core, site-car, site-cake
+site-app      -> common, infra, agent, site-core, site-car, site-cake
 
-admin         -> common, infra, agent, auth, config
+admin         -> common, infra, agent
 ```
 
 约束：
@@ -173,8 +178,7 @@ admin         -> common, infra, agent, auth, config
 - `gateway` 不依赖业务模块。
 - `agent` 不直接依赖 `infra`，不做业务数据编排。
 - `site` 是聚合模块，不承载 Java 代码。
-- 只有 `gateway`、`admin`、`site/site-app` 是可启动应用。
-- library 模块不要配置 Spring Boot repackage。
+- 可启动应用：`gateway`、`admin`、`site/site-app`、**`auth`**。
 
 ## 企业级基础框架 V1
 
@@ -204,35 +208,25 @@ Flyway 是唯一数据库结构迁移机制。后续任何表结构变更必须�
 
 migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 
-### JWT 认证骨架
+### JWT 与认证边界（4F）
 
-认证策略采用 JWT 作为主模型，Admin / Site 认证逻辑隔离。
-
-当前只提供基础抽象：
-
-- `TokenAudience.ADMIN`
-- `TokenAudience.SITE`
-- `TokenClaims`
-- `AuthenticatedUser`
-- `AuthContext`
-- `JwtProperties`
-
-本阶段不实现登录接口、权限系统、完整 JWT 签发流程，也不把具体用户实体放入 `auth` 模块。Redis 未来用于 refresh token、主动失效、登出等扩展能力。
+- **签发**：仅在 **`auth`** 模块（`TokenService`/`JwtTokenService`、`JwtProperties`、`security.jwt.secret`）。
+- **Resource Server 验签**：**`admin`**（及未来 **`site-app`**）通过 **`JwtDecoder`**（`AdminResourceServerJwtConfiguration`）与 **`oauth2ResourceServer`**；**`com.mywebsite.common.security`** 提供 **`JwtClaimConstants`**、**`TokenAudience`**、**`AuthContext`** 等共享模型。
+- **对称密钥（HS256）** 为 **4F 过渡态**；**4G** 目标为 **RS256 + JWKS**，届时业务服务仅配置 **`spring.security.oauth2.resourceserver.jwt.jwk-set-uri`**，**不再**持有 `SECURITY_JWT_SECRET`。
 
 ### OpenAPI / Swagger
 
-`admin` 与 `site-app` 已接入 springdoc-openapi。`gateway` 暂不聚合文档。
+`admin`、`auth` 与 `site-app` 已接入 springdoc-openapi。`gateway` 暂不聚合文档。
 
 本地访问：
 
 - Admin Swagger UI：<http://localhost:8081/swagger-ui/index.html>
-- Admin OpenAPI JSON：<http://localhost:8081/v3/api-docs>
+- Auth Swagger UI：<http://localhost:8083/swagger-ui/index.html>
 - Site Swagger UI：<http://localhost:8082/swagger-ui/index.html>
-- Site OpenAPI JSON：<http://localhost:8082/v3/api-docs>
 
 ### 模块内 Java 包结构
 
-主要边界由 Maven 多模块承担；模块内包结构与后缀约定详见 **[《后端包结构与命名规范 V1》](../../docs/website-services/设计文档/后端包结构与命名规范V1.md)**，并与 [`架构设计`](../../docs/website-services/设计文档/架构设计.md) §8 对齐：`config`、`controller`、`handler`、`mapper`、`entity`、`dto`（下设 **`request/` / `response/` / `internal/`**）、`exception` 等；**不**再使用 `interfaces` / `application` / `domain` / `infrastructure` / `po` 作为一级分层包。详见 [`架构设计`](../../docs/website-services/设计文档/架构设计.md) §8。
+主要边界由 Maven 多模块承担；模块内包结构与后缀约定详见 **[《后端包结构与命名规范 V1》](../../docs/website-services/设计文档/后端包结构与命名规范V1.md)**，并与 [`架构设计`](../../docs/website-services/设计文档/基础架构/架构设计.md) §8 对齐：`config`、`controller`、`handler`、`mapper`、`entity`、`dto`（下设 **`request/` / `response/` / `internal/`**）、`exception` 等；**不**再使用 `interfaces` / `application` / `domain` / `infrastructure` / `po` 作为一级分层包。详见 [`架构设计`](../../docs/website-services/设计文档/基础架构/架构设计.md) §8。
 
 ## 本地运行依赖
 
@@ -245,15 +239,29 @@ migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 - MinIO / AIStor API：`http://localhost:9000`
 - MinIO / AIStor Console：`http://localhost:9001`
 
-`admin` 与 `site-app` 的本地配置使用 `application-local.yml`，敏感信息使用环境变量占位：
+`admin` 与 `site-app` 的 **local profile**（`application-local.yml`）中，数据库 / Redis / MinIO / Admin JWT 使用占位符；**未设置时在 YAML 中有安全默认值**（含合法 jdbc URL），同时支持从 **同级或祖先目录的 `.env`** 注入（启动类会先加载 `.env` 为系统属性，见 `common` 模块 `LocalDotenvSupport`）。**本地 PostgreSQL 请优先在 `.env` 中只维护 `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD`（与 `docker compose` 一致）**；Spring 默认会让 JDBC 的用户名、口令、库名与此对齐，不必再重复写 `DB_USERNAME` / `DB_PASSWORD`，除非需要覆盖。**请先复制范本：**
 
-- `DB_URL`，默认 `jdbc:postgresql://localhost:5432/my_website_dev`
-- `DB_USERNAME` / `DB_PASSWORD`
-- `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`
-- `MINIO_ENDPOINT`，默认 `http://localhost:9000`
-- `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` / `MINIO_BUCKET`
+```bash
+cd services/website-services
+cp .env.example .env
+# 再按本机修改 .env（勿提交）
+```
 
-在 `services/website-services/` 目录创建 `.env`（已在仓库根 `.gitignore` 中忽略，**勿提交**）。`docker compose` 会自动读取同级 `.env`。**变量名范本**（与本文档前文 `application-local.yml` 占位一致）：`POSTGRES_*`（Compose 拉起库）、`DB_URL` / `DB_USERNAME` / `DB_PASSWORD`、`REDIS_*`、`MINIO_*`、`FLYWAY_ENABLED` / `SITE_APP_FLYWAY_ENABLED`。详细可复制段落见 [`docs/website-services/设计文档/WSL与Docker环境配置说明.md`](../../docs/website-services/设计文档/WSL与Docker环境配置说明.md) §3.0。
+范本文件：**[`services/website-services/.env.example`](./.env.example)**（仓库跟踪）。其中 **`POSTGRES_*`** 供 Docker Compose 与 Spring 共用；可选 **`DB_*`** 用于远程库或非默认端口时覆盖。
+
+`docker compose` 会读取 **`services/website-services/.env`**；应用进程读取同名键（或通过 OS 环境变量覆盖）。
+
+其余常用键（节选，完整见 `.env.example`）：
+
+- `POSTGRES_DB`、`POSTGRES_USER`、`POSTGRES_PASSWORD`（本地数据库主配置；可选 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` 覆盖 JDBC）
+- `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD`
+- `MINIO_ENDPOINT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`MINIO_SECURE`
+- `AUTH_APP_PORT`（默认 `8083`）
+- `AUTH_DB_*`（可选；未设置时回退到 `DB_*` 再回退到 `POSTGRES_*`，供 **auth** 分域配置）
+- `SECURITY_JWT_SECRET`、`SECURITY_REFRESH_COOKIE_SECURE`（JWT 与 Refresh Cookie；**auth** 与 **admin** 过渡态共用验签 secret）
+- `FLYWAY_ENABLED`、`SITE_APP_FLYWAY_ENABLED`
+
+在 `services/website-services/` 目录创建 `.env`（已在仓库根 `.gitignore` 中忽略 **`.env`**，**勿提交**）。若终端直接 `mvn spring-boot:run`，请保持工作目录处于能拾取到上述 `.env` 的模块上级（例如 `services/website-services`，或 `admin` 子目录——父级亦会扫到）。更多说明见 [`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](../../docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md) §3。
 
 Flyway 相关：
 
@@ -270,13 +278,15 @@ Flyway 相关：
 mvn clean install -DskipTests
 ```
 
-构建成功后，`admin`、`site-app`、`gateway` 可以分别独立启动。
+构建成功后，`gateway`、`auth`、`admin`、`site-app` 可以分别独立启动（联调认证时 **需同时** 起 **auth** 与 **admin**；仅 `mvn -pl auth` 时请使用 **`mvn -pl auth -am`** 以带上 `common`/`infra`）。
 
 运行测试：
 
 ```bash
 mvn test
 ```
+
+仅编译/测试单个模块时建议 **`mvn -pl <模块> -am`**，避免上游模块未安装导致 **`common.security`** 等测试源码找不到。
 
 ### 持久层真实 PostgreSQL 回归验证（可选）
 
@@ -294,21 +304,33 @@ mvn clean test -Ppersistence-verify-pg -pl admin,site/site-app -am
 
 先确认 WSL + Docker 中的 PostgreSQL、Redis、MinIO / AIStor 已启动。
 
-如果基础设施未启动，`admin` 和 `site-app` 仍可能启动成功，但 `/actuator/health` 中数据库或 Redis 会显示 `DOWN`。
+如果基础设施未启动，`admin` / **`auth`** / `site-app` 仍可能部分启动成功，但 `/actuator/health` 中数据库或 Redis 会显示 `DOWN`。
 
-### 2. 启动 admin
+### 2. 启动 auth（认证服务）
+
+```bash
+mvn -pl auth -am spring-boot:run
+```
+
+验证探活：
+
+```bash
+curl http://localhost:8083/api/auth/ping
+```
+
+### 3. 启动 admin
 
 ```bash
 mvn -pl admin -am spring-boot:run
 ```
 
-启动后验证：
+`GET /api/admin/ping` 需要 Bearer（应先通过 **auth** 登录拿到 Access JWT）：
 
 ```bash
-curl http://localhost:8081/api/admin/ping
+curl -i http://localhost:8081/api/admin/ping
 ```
 
-### 3. 启动 site-app
+### 4. 启动 site-app
 
 ```bash
 mvn -pl site/site-app -am spring-boot:run
@@ -320,28 +342,32 @@ mvn -pl site/site-app -am spring-boot:run
 curl http://localhost:8082/api/site/ping
 ```
 
-### 4. 启动 gateway
+### 5. 启动 gateway
 
 ```bash
 mvn -pl gateway -am spring-boot:run
 ```
 
-启动后通过网关验证：
+启动后通过网关验证（**ping 仍需 Bearer**；认证请求可走网关到 **auth**）：
 
 ```bash
-curl http://localhost:8080/api/admin/ping
+curl -i http://localhost:8080/api/admin/ping
 curl http://localhost:8080/api/site/ping
+curl http://localhost:8080/api/auth/ping
 ```
 
-说明：`gateway` 可以先启动，但推荐在本地联调时先启动 `admin` 和 `site-app`，再启动 `gateway`，这样网关路由目标服务已经可用。
+说明：`gateway` 可以先启动，但推荐在本地联调时先启动 **`auth`、admin、`site-app`**，再启动 `gateway`，这样网关路由目标服务已经可用。
 
 ## 验证接口
 
-- Gateway 转发 admin：<http://localhost:8080/api/admin/ping>
-- Gateway 转发 site：<http://localhost:8080/api/site/ping>
-- Admin 直连：<http://localhost:8081/api/admin/ping>
+- Auth 探活：<http://localhost:8083/api/auth/ping>
+- Gateway → Auth：<http://localhost:8080/api/auth/ping>
+- Gateway → Admin business：<http://localhost:8080/api/admin/ping>（需 Bearer）
+- Gateway → Site：<http://localhost:8080/api/site/ping>
+- Admin 直连：<http://localhost:8081/api/admin/ping>（需 Bearer）
 - Site 直连：<http://localhost:8082/api/site/ping>
 - Gateway health：<http://localhost:8080/actuator/health>
+- Auth health：<http://localhost:8083/actuator/health>
 - Admin health：<http://localhost:8081/actuator/health>
 - Site health：<http://localhost:8082/actuator/health>
 
@@ -371,7 +397,7 @@ mvn clean install -DskipTests
 
 ### 文档归档约定（必读）
 
-后端说明文档：**设计类正文**权威路径为 **`docs/website-services/设计文档/`**（架构、数据库模型、持久层 Java 约定、环境说明等）；**`docs/website-services/`** 根目录下同名 `.md` 多为 **跳转入口**，勿与 `设计文档/` **并行维护两份正文**。数据库数据字典权威路径：**`docs/数据字典/`**。不要在 `services/website-services/docs/` 撰写或存放权威正文（该目录仅保留跳转 [`README`](docs/README.md)）。
+后端说明文档：**设计类正文**权威路径为 **`docs/website-services/设计文档/`**（子目录 **`基础架构/`**、**`数据与持久层/`**、**`认证与安全/`**）；**总导航**见 **[`docs/website-services/README.md`](../../docs/website-services/README.md)**。**`docs/website-services/`** 根目录下同名 `.md` 多为 **跳转入口**。数据字典（随仓库实际存放路径）见 **`docs/website-services/数据字典/`** 或顶层 **`docs/数据字典/`** 跳转说明。不要在 `services/website-services/docs/` 撰写权威正文（该目录仅保留跳转 [`README`](docs/README.md)）。
 
 ### Java 持久层（阶段 3A / 3B）
 
@@ -400,5 +426,5 @@ mvn clean install -DskipTests
 ### 其他
 
 - 总体架构：[整体架构说明](../../docs/整体架构说明.md)
-- 后端架构：[架构设计](../../docs/website-services/架构设计.md)（入口；正文：[设计文档/架构设计](../../docs/website-services/设计文档/架构设计.md)）
+- 后端架构：[架构设计](../../docs/website-services/架构设计.md)（入口；正文：[设计文档/基础架构/架构设计](../../docs/website-services/设计文档/基础架构/架构设计.md)）
 - WSL/Docker：[WSL 与 Docker 环境配置说明](../../docs/website-services/WSL与Docker环境配置说明.md)

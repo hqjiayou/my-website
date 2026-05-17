@@ -13,7 +13,7 @@ import java.time.OffsetDateTime;
 /**
  * 与平台首批表的公共列对齐；{@code created_at}/{@code updated_at} 由库默认值与触发器维护，不在 {@code MetaObjectHandler} 中填充。
  */
-public abstract class AbstractAuditableEntity implements Serializable {
+public abstract class  AbstractAuditableEntity implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;

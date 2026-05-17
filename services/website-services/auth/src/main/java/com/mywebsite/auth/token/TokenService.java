@@ -1,5 +1,6 @@
 package com.mywebsite.auth.token;
 
+import com.mywebsite.common.security.TokenAudience;
 import java.util.Optional;
 
 public interface TokenService {

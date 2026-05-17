@@ -1,26 +1,22 @@
+# 数据库 / Redis / MinIO / Admin JWT 等本地连接信息在 `.env`（范本 `.env.example`）中维护。
+# PostgreSQL：优先维护 POSTGRES_*（与 Docker Compose 一致）；JDBC 默认值与之对齐。可选覆盖 DB_*。
+# 未加载 `.env` 时仍可解析出合法 jdbc URL（见下方默认值）。
+
 security:
   jwt:
-    secret: ${SECURITY_JWT_SECRET:dev-dev-dev-signing-secret-at-least-32-bytes-x}
-  auth:
-    refresh-cookie-secure: false
+    secret: ${SECURITY_JWT_SECRET:REPLACE_WITH_RANDOM_SECRET_AT_LEAST_32_BYTES_LONG}
 
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/my_website_dev}
-    username: ${DB_USERNAME:mywebsite}
-    # 默认值与仓库 services/website-services/docker-compose.yml 中 Postgres（POSTGRES_*）对齐；自建库请用 DB_* 覆盖
-    password: ${DB_PASSWORD:devpass}
+    # DB_* 可选；未设置时与 Compose 的 POSTGRES_* 一致（同一 .env 只改一套口令即可）
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/${POSTGRES_DB:my_website_dev}}
+    username: ${DB_USERNAME:${POSTGRES_USER:mywebsite}}
+    password: ${DB_PASSWORD:${POSTGRES_PASSWORD:CHANGE_ME}}
   flyway:
     # 平台 DDL 仅此一处维护；变更请在 infra/src/main/resources/db/migration 追加脚本（classpath:db/migration）
     enabled: ${FLYWAY_ENABLED:true}
     locations: classpath:db/migration
     baseline-on-migrate: true
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      # 仓库 docker-compose redis 默认无口令；按需设置 REDIS_PASSWORD
-      password: ${REDIS_PASSWORD:}
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

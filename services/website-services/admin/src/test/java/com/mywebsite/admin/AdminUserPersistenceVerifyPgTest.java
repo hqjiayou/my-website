@@ -2,7 +2,6 @@ package com.mywebsite.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import com.mywebsite.admin.config.AdminRefreshSessionTestBeans;
 import com.mywebsite.admin.entity.AdminUserEntity;
 import com.mywebsite.admin.mapper.AdminUserMapper;
 import java.util.UUID;
@@ -15,8 +14,6 @@ import org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoCo
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.context.annotation.Import;
-
 /**
  * 持久层真实 PostgreSQL 回归验证：校验 {@link AdminUserEntity} / {@link AdminUserMapper} 与 Flyway、PostgreSQL 的基础联通性（插入查询、约束、乐观锁等）。
  *
@@ -33,7 +30,6 @@ import org.springframework.context.annotation.Import;
             RedisAutoConfiguration.class,
             RedisRepositoriesAutoConfiguration.class,
         })
-@Import(AdminRefreshSessionTestBeans.class)
 class AdminUserPersistenceVerifyPgTest {
 
     @Autowired

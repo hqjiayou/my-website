@@ -1,11 +1,13 @@
+# 数据库 / Redis / MinIO 等本地连接信息在 `.env`（范本 `.env.example`）中维护。
+# JDBC 默认与 POSTGRES_* 对齐；未加载 `.env` 时仍有合法 jdbc URL。
+
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/my_website_dev}
-    username: ${DB_USERNAME:mywebsite}
-    # 与 services/website-services/docker-compose.yml 中 Postgres 约定一致；本机自建库请设置 DB_PASSWORD
-    password: ${DB_PASSWORD:devpass}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/${POSTGRES_DB:my_website_dev}}
+    username: ${DB_USERNAME:${POSTGRES_USER:mywebsite}}
+    password: ${DB_PASSWORD:${POSTGRES_PASSWORD:CHANGE_ME}}
   flyway:
-    # 与 admin 共用同一库时须避免双应用各跑一套 migration；DDL 脚本由 infra 模块 classpath:db/migration 单一维护，默认仍建议仅由 admin 执行迁移
+    # 与 admin 共用同一库时须避免双应用各跑一套 migration；DDL 由 infra classpath:db/migration 单一维护，默认建议仅 admin 执行迁移
     enabled: ${SITE_APP_FLYWAY_ENABLED:false}
     locations: classpath:db/migration
     baseline-on-migrate: true
@@ -13,7 +15,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      password: ${REDIS_PASSWORD:CHANGE_ME}
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

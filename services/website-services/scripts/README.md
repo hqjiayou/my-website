@@ -6,19 +6,20 @@
 
 ## 方式 A：Docker Compose（仓库自带 postgres）
 
-镜像 **`postgres`** 在 **数据目录首次为空** 时会根据环境变量 **`POSTGRES_DB`** 创建库（默认 `my_website_dev`）。若你曾经用过同名 volume、但当时未设置该变量，或手动删过库，可任选其一：
+镜像 **`postgres`** 在 **数据目录首次为空** 时会根据环境变量 **`POSTGRES_DB`** 创建库（变量定义在 **`.env`**，范本见 **`.env.example`**）。若你曾经用过同名 volume、但当时未设置该变量，或手动删过库，可任选其一：
 
 ### A1 保留其它数据的情况下单独建库（推荐）
 
 在 **`services/website-services`** 目录：
 
 ```bash
-docker compose exec postgres psql -U mywebsite -d postgres -c "CREATE DATABASE my_website_dev OWNER mywebsite ENCODING 'UTF8';"
+# 若 .env 中 POSTGRES_USER 非 hqjiayou，请替换命令中的用户名（范本默认为 hqjiayou）
+docker compose exec postgres psql -U hqjiayou -d postgres -c "CREATE DATABASE my_website_dev OWNER hqjiayou ENCODING 'UTF8';"
 ```
 
 若提示「already exists」则说明库已有，无需再执行。
 
-说明：`docker-compose.yml` 中 **`POSTGRES_USER`** 默认为 **`mywebsite`**，该用户在官方镜像中具有超级用户权限，足以 **`CREATE DATABASE`**。
+说明：`docker-compose.yml` 中 Postgres 的 **`POSTGRES_USER`** 等取自 **`.env`**（与 **`DB_USERNAME`** 等应对齐）；若未复制 `.env.example` 为 `.env` 就执行 compose，容器环境变量将未被替换。
 
 若 `.env` 将 **`POSTGRES_USER`** 改成了其它用户名，请将上面 `-U` 换成同一用户名。
 
@@ -47,13 +48,13 @@ $env:PGPASSWORD = '<管理员密码>'
 psql -h localhost -p 5432 -U postgres -d postgres -v ON_ERROR_STOP=1 -f scripts/create-my_website_dev.sql
 ```
 
-执行前若尚无角色 **`mywebsite`**，可先：
+执行前若尚无角色 **`hqjiayou`**，可先：
 
 ```sql
-CREATE ROLE mywebsite LOGIN PASSWORD 'devpass';
+CREATE ROLE hqjiayou LOGIN PASSWORD 'hqjiayou';
 ```
 
-（口令请与本机 `.env` / `application-local.yml` 一致。）
+（口令请与本机 `.env` 一致。）
 
 ---
 
@@ -64,6 +65,7 @@ CREATE ROLE mywebsite LOGIN PASSWORD 'devpass';
 Docker Compose（在 **`services/website-services`** 目录、`postgres` 已启动）：
 
 ```bash
+# 用户名可与 .env 中 POSTGRES_USER 对齐（范本默认为 hqjiayou）
 docker compose exec postgres psql -U hqjiayou -d postgres -c "CREATE DATABASE my_website_3c_verify OWNER hqjiayou ENCODING 'UTF8';"
 ```
 
@@ -77,5 +79,5 @@ docker compose exec postgres psql -U hqjiayou -d postgres -c "CREATE DATABASE my
 
 | 文件 | 用途 |
 |------|------|
-| [`create-my_website_dev.sql`](./create-my_website_dev.sql) | `CREATE DATABASE my_website_dev`，Owner 默认为 **`mywebsite`** |
-| [`create-my_website_persistence_verify.sql`](./create-my_website_persistence_verify.sql) | `CREATE DATABASE my_website_3c_verify`（持久层回归专用临时库），Owner 默认 **`hqjiayou`**（与 compose 默认 `POSTGRES_USER` 一致） |
+| [`create-my_website_dev.sql`](./create-my_website_dev.sql) | `CREATE DATABASE my_website_dev`，Owner 默认为 **`hqjiayou`**（与 **`.env.example`** 中 `POSTGRES_USER` 范本一致；若你已改 `.env`，请同步改 SQL） |
+| [`create-my_website_persistence_verify.sql`](./create-my_website_persistence_verify.sql) | `CREATE DATABASE my_website_3c_verify`（持久层回归专用临时库），Owner 默认同上 |

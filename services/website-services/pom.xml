@@ -24,7 +24,6 @@
         <module>infra</module>
         <module>agent</module>
         <module>auth</module>
-        <module>config</module>
         <module>admin</module>
         <module>site</module>
     </modules>

@@ -29,11 +29,12 @@
 ### 创建验证库
 
 1. PostgreSQL 可达（默认 `localhost:5432`）。
-2. 使用具备 **`CREATEDB`** 的角色连接维护库 **`postgres`**，创建 **`my_website_3c_verify`**；Owner 建议与 JDBC 登录用户一致（与 **`docker-compose.yml` 默认 **`POSTGRES_USER`** 一致时为 **`hqjiayou`**）。
+2. 使用具备 **`CREATEDB`** 的角色连接维护库 **`postgres`**，创建 **`my_website_3c_verify`**；Owner 建议与 JDBC 登录用户一致（与 **`.env`** 中 **`POSTGRES_USER`** / **`VERIFY_PG_USER`** 对齐；**`.env.example`** 范本为 **`hqjiayou`**）。
 
 **Docker Compose**（在 **`services/website-services`**、`postgres` 已启动）示例：
 
 ```bash
+# 用户名与 OWNER 请与 .env 中 POSTGRES_USER 一致（范本默认为 hqjiayou）
 docker compose exec postgres psql -U hqjiayou -d postgres -c "CREATE DATABASE my_website_3c_verify OWNER hqjiayou ENCODING 'UTF8';"
 ```
 
@@ -96,7 +97,7 @@ mvn clean test -Ppersistence-verify-pg -pl admin,site/site-app -am
 
 ## 环境变量（可选）
 
-**`application-verify-pg.yml`** 解析顺序：**`VERIFY_PG_*` → 环境变量 `POSTGRES_USER` / `POSTGRES_PASSWORD` → 与 `docker-compose.yml` 对齐的字面默认值**（当前默认 **`hqjiayou`** / **`hqjiayou`**）。
+**`application-verify-pg.yml`** 解析顺序：**`VERIFY_PG_*` → 环境变量 `POSTGRES_USER` / `POSTGRES_PASSWORD` → 字面默认值 `hqjiayou`**（与 **`.env.example`** 范本对齐；Compose 本身不再有 `${VAR:-默认}`，本地 JDBC 口令应以 **`.env`** 为准）。
 
 | 变量 | 含义 | 未设置时的回落 |
 |------|------|----------------|

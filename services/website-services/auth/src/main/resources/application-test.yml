@@ -1,0 +1,47 @@
+# 测试 Profile：内存 H2，不跑 Flyway；供 mvn spring-boot:run -Dspring-boot.run.profiles=test 与集成冒烟。
+security:
+  jwt:
+    secret: test-signing-secret-at-least-32-bytes-long-xx
+    access-token-ttl: 15m
+    audience: ADMIN
+    issuer: test-issuer
+  auth:
+    refresh-token-ttl: 7d
+    refresh-cookie-secure: false
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  datasource:
+    url: jdbc:h2:mem:auth_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  flyway:
+    enabled: false
+  messages:
+    basename: i18n/common/messages,i18n/auth/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+
+app:
+  i18n:
+    default-locale: ja-JP
+    supported-locales:
+      - ja-JP
+      - zh-CN
+      - en-US
+
+storage:
+  minio:
+    endpoint: http://127.0.0.1:19000
+    access-key: test
+    secret-key: test
+    bucket: test
+    secure: false

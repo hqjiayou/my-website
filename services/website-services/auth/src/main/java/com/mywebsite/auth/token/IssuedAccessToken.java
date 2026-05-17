@@ -1,5 +1,6 @@
 package com.mywebsite.auth.token;
 
+import com.mywebsite.common.security.TokenAudience;
 import java.util.Objects;
 import java.util.Set;
 
@@ -9,8 +10,7 @@ public record IssuedAccessToken(
         String subjectUserId,
         String username,
         String sessionId,
-        Set<String> authorities
-) {
+        Set<String> authorities) {
     public IssuedAccessToken {
         Objects.requireNonNull(audience);
         Objects.requireNonNull(subjectUserId);

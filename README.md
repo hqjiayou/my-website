@@ -7,7 +7,7 @@
 - 用一套平台同时承载多个行业站点，不是单个官网。
 - `apps/site-web` 是前台子站点集合目录，内部按行业拆分独立站点。
 - `apps/admin-web` 负责总后台与站点后台管理。
-- `services/website-services` 是当前 Java 后端主干，包含统一网关、后台 API、前台 API、基础设施接入与后续业务模块骨架。
+- `services/website-services` 是当前 Java 后端主干，包含**统一网关**、**独立认证服务（`auth`）**、后台 API、前台 API、基础设施接入与后续业务模块骨架。
 - `services/agent-services` 是 Node.js + Fastify 的 AI/Agent 编排服务骨架，当前仍以 mock 能力为主。
 
 ## 目录结构
@@ -58,24 +58,24 @@ Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。
 核心运行模块：
 
 - `gateway`：统一 API 网关，端口 `8080`
-- `admin`：后台管理 API，端口 `8081`
+- `auth`：**统一认证服务**（Admin 登录/刷新/登出、JWT 签发等），端口 `8083`
+- `admin`：后台管理 API（OAuth2 Resource Server + 业务），端口 `8081`
 - `site/site-app`：前台站点 API，端口 `8082`
 
 基础与预留模块：
 
-- `common`：通用响应、错误码、异常、分页等基础模型
-- `infra`：PostgreSQL、Redis、MinIO / S3 接入
-- `auth`：公共认证基础能力，不承载具体用户表
-- `agent`：未来对接 AI/Agent 运行服务的 Java 客户端层
-- `config`：网站配置业务能力预留
+- `common`：通用响应、错误码、异常、分页；**`common.security`** JWT/身份轻量契约
+- `infra`：PostgreSQL、Redis、MinIO / S3 接入、MyBatis-Plus、**系统消息 i18n** 等
+- `agent`：对接 AI/Agent 运行服务的 Java 客户端层
 - `site/site-core`：前台站点核心能力与统一 site 用户体系预留
 - `site/site-car`、`site/site-cake`：行业业务模块骨架，当前不实现具体业务
 
 专项文档：
 
-- [`docs/website-services/架构设计.md`](docs/website-services/架构设计.md)（入口页；正文：[设计文档/架构设计.md](docs/website-services/设计文档/架构设计.md)）
-- [`docs/website-services/Java持久层设计V1.md`](docs/website-services/Java持久层设计V1.md)（入口页；正文：[设计文档/Java持久层设计V1.md](docs/website-services/设计文档/Java持久层设计V1.md)）
-- [`docs/数据字典/`](docs/数据字典/)（表级字典，与 Flyway 对齐）
+- [`docs/website-services/README.md`](docs/website-services/README.md)（**文档总导航**）
+- [`docs/website-services/架构设计.md`](docs/website-services/架构设计.md)（入口；正文：[设计文档/基础架构/架构设计.md](docs/website-services/设计文档/基础架构/架构设计.md)）
+- [`docs/website-services/Java持久层设计V1.md`](docs/website-services/Java持久层设计V1.md)（入口；正文：[设计文档/数据与持久层/Java持久层设计V1.md](docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md)）
+- [`docs/website-services/数据字典/`](docs/website-services/数据字典/)（表级字典，与 Flyway 对齐）
 - [`services/website-services/README.md`](services/website-services/README.md)
 
 ### services/agent-services
@@ -95,18 +95,17 @@ Node.js + Fastify + TypeScript 的 AI/Agent 编排服务，默认端口 `3001`�
 
 ```text
 admin-web ─┐
-           ├──> website-services/gateway:8080 ──> admin:8081
-site-web  ─┘                                └──> site-app:8082
+           ├──> website-services/gateway:8080 ──> /api/admin/auth/** → auth:8083
+           │                                 ──> /api/admin/**       → admin:8081（业务）
+site-web  ─┘                                 └──> /api/site/**     → site-app:8082
 ```
 
-内部后续关系：
+内部 Maven 依赖关系（非 HTTP 拓扑）：
 
 ```text
-admin / site-app
-├── infra  -> PostgreSQL / Redis / MinIO
-├── auth   -> 公共认证基础能力
-├── config -> 网站配置能力
-└── agent  -> services/agent-services
+admin / site-app / auth
+  ├── infra  -> PostgreSQL / Redis / MinIO
+  └── agent（按需） -> services/agent-services
 ```
 
 当前阶段不引入注册中心、服务发现、消息队列或复杂网关鉴权。`gateway` 只做统一入口、CORS、基础 request-id 与路由。
@@ -118,9 +117,10 @@ admin / site-app
 ```bash
 cd services/website-services
 mvn clean install -DskipTests
+mvn -pl auth -am spring-boot:run
 mvn -pl admin -am spring-boot:run
 mvn -pl site/site-app -am spring-boot:run
-mvn -pl gateway -am spring-boot:run
+mvn -pl gateway spring-boot:run
 ```
 
 启动 `admin-web`：

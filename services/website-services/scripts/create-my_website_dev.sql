@@ -1,6 +1,6 @@
 -- 以具备 CREATEDB 权限的超级用户连接到 maintenance database「postgres」后执行。
--- 若角色 mywebsite 尚不存在，请先执行：
---   CREATE ROLE mywebsite LOGIN PASSWORD 'devpass';
+-- 若角色 hqjiayou 尚不存在，请先执行：
+--   CREATE ROLE hqjiayou LOGIN PASSWORD 'hqjiayou';
 -- （口令须与本机 DB_PASSWORD / PostgreSQL 实际口令一致。）
 --
 -- psql 示例：

@@ -1,6 +1,8 @@
 package com.mywebsite.auth.token;
 
 import com.mywebsite.auth.config.JwtProperties;
+import com.mywebsite.common.security.JwtClaimConstants;
+import com.mywebsite.common.security.TokenAudience;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -35,8 +37,7 @@ public class JwtTokenService implements TokenService {
         Instant now = Instant.now();
         Instant exp = now.plus(jwtProperties.getAccessTokenTtl());
         String jti = UUID.randomUUID().toString();
-        String tokenType =
-                issuance.audience() == TokenAudience.ADMIN ? "ADMIN" : issuance.audience().name();
+        String tokenType = issuance.audience() == TokenAudience.ADMIN ? "ADMIN" : issuance.audience().name();
 
         Long adminUserId = Long.parseLong(issuance.subjectUserId());
 
@@ -54,8 +55,7 @@ public class JwtTokenService implements TokenService {
 
         if (!issuance.authorities().isEmpty()) {
             builder.claim(
-                    "roles",
-                    issuance.authorities().stream().sorted().collect(Collectors.toList()));
+                    "roles", issuance.authorities().stream().sorted().collect(Collectors.toList()));
         }
 
         JwtClaimsSet claims = builder.build();

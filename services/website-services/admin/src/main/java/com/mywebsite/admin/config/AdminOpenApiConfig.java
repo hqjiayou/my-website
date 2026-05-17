@@ -21,10 +21,10 @@ public class AdminOpenApiConfig {
                                         .scheme("bearer")
                                         .bearerFormat("JWT")
                                         .description(
-                                                "Admin Access JWT（Authorization: Bearer）。Refresh Token 仅 HttpOnly Cookie，不由 Swagger 填写。")))
+                                                "Admin Access JWT（Authorization: Bearer）。登录/刷新/登出见独立 Auth 服务；Refresh 仅 HttpOnly Cookie。")))
                 .info(new Info()
                         .title("my-website Admin API")
                         .version("v1")
-                        .description("后台管理 API：认证链路（登录/刷新/登出）与健康探测等。"));
+                        .description("后台管理业务 API（Resource Server）；认证入口已上提至 Auth 服务（阶段 4F）。"));
     }
 }

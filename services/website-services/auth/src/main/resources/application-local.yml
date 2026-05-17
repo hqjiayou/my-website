@@ -1,0 +1,27 @@
+# 连接信息与密钥在仓库 `services/website-services/.env`（范本 `.env.example`）中维护。
+# 支持服务级变量 AUTH_*；未设置时回退到 DB_* / POSTGRES_*（与 Compose 同一套主配置）。
+# 下列默认值与 `.env.example` 一致：在尚未复制 `.env` 或未注入 OS 环境变量时，仍可解析出合法 jdbc URL，避免 Hikari 报「url must start with jdbc」。请在真实环境中于 `.env` 中覆盖口令与密钥。
+
+security:
+  jwt:
+    secret: ${SECURITY_JWT_SECRET:REPLACE_WITH_RANDOM_SECRET_AT_LEAST_32_BYTES_LONG}
+  auth:
+    refresh-cookie-secure: ${SECURITY_REFRESH_COOKIE_SECURE:false}
+
+spring:
+  datasource:
+    url: ${AUTH_DB_URL:${DB_URL:jdbc:postgresql://localhost:5432/${POSTGRES_DB:my_website_dev}}}
+    username: ${AUTH_DB_USERNAME:${DB_USERNAME:${POSTGRES_USER:mywebsite}}}
+    password: ${AUTH_DB_PASSWORD:${DB_PASSWORD:${POSTGRES_PASSWORD:CHANGE_ME}}}
+  flyway:
+    enabled: false
+  data:
+    redis:
+      host: ${AUTH_REDIS_HOST:${REDIS_HOST:localhost}}
+      port: ${AUTH_REDIS_PORT:${REDIS_PORT:6379}}
+      password: ${AUTH_REDIS_PASSWORD:${REDIS_PASSWORD:CHANGE_ME}}
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
