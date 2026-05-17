@@ -87,7 +87,7 @@ mvn clean test -Ppersistence-verify-pg -pl admin,site/site-app -am
 
 | 模块 | 类 |
 |------|-----|
-| admin | `com.mywebsite.admin.persistence.AdminUserPersistenceVerifyPgTest` |
+| admin | `com.mywebsite.admin.AdminUserPersistenceVerifyPgTest` |
 | site-app | `com.mywebsite.site.persistence.SitePersistenceVerifyPgTest` |
 
 二者均标注 **`@Tag("verifyPg")`**，测试逻辑聚焦持久层基础行为，**不**替代业务用例测试。

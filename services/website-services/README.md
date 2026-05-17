@@ -54,7 +54,10 @@ website-services/
 
 - 端口：`8081`
 - 依赖 `common`、`infra`、`agent`、`auth`、`config`
-- 当前提供 `GET /api/admin/ping`
+- **认证（阶段 4B）**：`POST /api/admin/auth/login`、`POST /api/admin/auth/refresh`、`POST /api/admin/auth/logout`；其它 **`/api/admin/**`** 默认需要 **`Authorization: Bearer <accessToken>`**（Swagger 使用 **`adminBearer` scheme**；**Refresh Token 仅 HttpOnly Cookie**，Swagger「Authorize」无法代替 Cookie）
+- **认证代码组织**：**`dto/`（压平，统一 `*Dto` 后缀）**、**`service` / `service.impl`**、**`security`**、`properties.AdminAuthProperties`；详细约束见：[后端包结构与命名规范 V1](../../docs/website-services/设计文档/后端包结构与命名规范V1.md)。
+- 设计定案见：[阶段4A-Admin认证体系详细设计](../../docs/website-services/设计文档/阶段4A-Admin认证体系详细设计.md) · [决策确认单](../../docs/website-services/设计文档/阶段4A-Admin认证体系决策确认单.md)
+- 健康探测：`GET /api/admin/ping`（需 Bearer；用作 Swagger 鉴权示例）
 - **阶段 3B**：首批后台 RBAC 表 **`AdminUserEntity` 等 5 个 Entity + 5 Mapper**（见 [`Java 持久层设计 V1`](../../docs/website-services/Java持久层设计V1.md)；**未**依赖 `site-core`）
 
 ### site
@@ -81,13 +84,17 @@ website-services/
 
 ### common
 
-通用基础模块。
+通用基础模块（详见 [`后端包结构与命名规范 V1`](../../docs/website-services/设计文档/后端包结构与命名规范V1.md) §1）。
+
+仅承载跨模块共用 **协议外壳与基础模型**：
 
 - `ApiResponse`
 - `ErrorCode`
 - `BusinessException`
-- `PageResult`
+- `PageResult`（通用分页载荷；新业务若引入 `PageRequest` 须经多模块复用评估后再落 common）
 - 通用常量
+
+**禁止**下沉任何 **`admin`/`site`/业务板块**的 **Request / Response**，避免 common 沦为「全场 DTO 垃圾桶」。
 
 ### infra
 
@@ -108,11 +115,10 @@ website-services/
 
 公共认证基础能力模块。
 
-- JWT 抽象预留
+- JWT：**仅在配置了非空 `security.jwt.secret`（如环境变量 `SECURITY_JWT_SECRET`）时**，装配 **`JwtEncoder` / `JwtDecoder` / `TokenService`**（避免未配置密钥的应用模块在测试中拉起失败）；**Admin 生产/本地真实启动必须配置密钥**
 - Token audience 区分 `ADMIN` / `SITE`
-- 认证上下文
-- 当前登录用户抽象
-- 不定义具体 `admin_user` 或 `site_user`
+- **`IssuedAccessToken`、`TokenClaims`、`AuthenticatedUser`、`AuthenticatedUserUtils`、`JwtClaimConstants`、`AuthContext`**
+- **不**定义具体 `admin_user` 或 `site_user`；**不**直连 Redis（Refresh 会话由 **`admin`** 侧存储）
 
 ### agent
 
@@ -224,7 +230,7 @@ migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 
 ### 模块内 Java 包结构
 
-主要边界由 Maven 多模块承担；模块内采用 **Spring Boot 常规包名**（`config`、`controller`、`handler`、`mapper`、`entity`、`dto`、`exception` 等），数据库映射统一 **`XxxEntity`**，配置类统一 **`XxxConfig`**；**不**再使用 `interfaces` / `application` / `domain` / `infrastructure` / `po` 作为一级分层包。详见 [`架构设计`](../../docs/website-services/架构设计.md) §8。
+主要边界由 Maven 多模块承担；模块内包结构与后缀约定详见 **[《后端包结构与命名规范 V1》](../../docs/website-services/设计文档/后端包结构与命名规范V1.md)**，并与 [`架构设计`](../../docs/website-services/设计文档/架构设计.md) §8 对齐：`config`、`controller`、`handler`、`mapper`、`entity`、`dto`（下设 **`request/` / `response/` / `internal/`**）、`exception` 等；**不**再使用 `interfaces` / `application` / `domain` / `infrastructure` / `po` 作为一级分层包。详见 [`架构设计`](../../docs/website-services/设计文档/架构设计.md) §8。
 
 ## 本地运行依赖
 

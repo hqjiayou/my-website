@@ -27,5 +27,5 @@ springdoc:
 security:
   jwt:
     issuer: my-website
+    audience: ADMIN
     access-token-ttl: 30m
-    refresh-token-ttl: 14d

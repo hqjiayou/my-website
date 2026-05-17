@@ -25,7 +25,7 @@ import org.springframework.test.context.ActiveProfiles;
 /**
  * 持久层真实 PostgreSQL 回归验证：校验 {@link SiteEntity}/{@link SiteMapper}、{@link SiteUserEntity}/{@link SiteUserMapper} 与外键及乐观锁等与 Flyway、库的联通性。
  *
- * <p>执行方式见 {@link com.mywebsite.admin.persistence.AdminUserPersistenceVerifyPgTest}。
+ * <p>执行方式见 {@link com.mywebsite.admin.AdminUserPersistenceVerifyPgTest}。
  */
 @Tag("verifyPg")
 @SpringBootTest(classes = SiteApplication.class)

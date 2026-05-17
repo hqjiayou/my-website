@@ -4,7 +4,7 @@ import java.util.Optional;
 
 public interface TokenService {
 
-    String createToken(TokenClaims claims);
+    String createAccessToken(IssuedAccessToken issuance);
 
     Optional<TokenClaims> parseToken(String token, TokenAudience expectedAudience);
 }

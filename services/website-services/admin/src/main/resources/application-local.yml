@@ -1,3 +1,9 @@
+security:
+  jwt:
+    secret: ${SECURITY_JWT_SECRET:dev-dev-dev-signing-secret-at-least-32-bytes-x}
+  auth:
+    refresh-cookie-secure: false
+
 spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/my_website_dev}

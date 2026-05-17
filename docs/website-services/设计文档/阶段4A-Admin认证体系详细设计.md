@@ -5,7 +5,7 @@
 | 项 | 说明 |
 | --- | --- |
 | 性质 | **设计文档**：界定后台登录、JWT、Refresh Token、Redis、Spring Security 的职责边界与约定 |
-| **禁止范围（本阶段）** | **不**实现登录接口；**不**编写 Controller / Service / Security Filter / AuthenticationProvider 等业务代码 |
+| **阶段状态** | **阶段 4A 已收口并关闭**；**阶段 4B（Admin 认证基础链路）已实现**。本文「已定案结论」与「4B 落地状态」与仓库代码、`application*.yml`、Swagger 对齐 |
 | 读者 | 后端开发与评审 |
 | 关联前置 | 阶段 2B 首批表；阶段 3A/3B 持久层；**持久层真实 PostgreSQL 回归验证**（长期）已就绪 |
 
@@ -98,15 +98,15 @@ JWT 校验成功后，构造 **`Authentication`**（例如 **`JwtAuthenticationT
 
 ### 6.1 Access JWT（短命）
 
-| 字段 | 建议 |
+| 字段 | 定案 |
 | --- | --- |
-| **`sub`** | 管理员主体 ID（与 **`admin_user.id`** 对齐） |
-| **`aud`** | **`ADMIN`** |
-| **`exp` / `iat`** | 标准时间声明；TTL 建议 **15–30 分钟**（可调） |
-| **`jti`** | 可选：配合吊销（Redis 黑名单），代价为每次校验访问 Redis——默认可不启用，仅靠短命 |
-| **自定义 claims** | **`username`**、`roles`（精简枚举）、**`permissions`**（可选；过大则改为服务端加载） |
+| **`sub` / `aud` / `iss` / `iat` / `exp` / `jti`** | 标准声明；**Access TTL = 15 分钟**（配置 **`security.jwt.access-token-ttl`**） |
+| **`token_type`** | **`ADMIN`**（与 **`TokenAudience.ADMIN`** 对齐） |
+| **`admin_user_id` / `username` / `session_id`** | 业务载荷 |
+| **`permissions`** | **禁止写入 JWT** |
+| **`roles`** | **4B 认证链路不作为依赖**（RBAC 阶段再决定是否写入少量 **`roleCodes`**） |
 
-密钥：**对称 HS256**（单机开发简单）或 **RS256**（私钥签发、公钥校验，利于多实例与网关校验演进）。
+密钥：**对称 HS256**（环境变量 **`SECURITY_JWT_SECRET`** / **`security.jwt.secret`**）；私钥签发、网关验签、RS256 等演进另行评估。
 
 ### 6.2 Refresh Token（长命、服务端约束）
 
@@ -123,17 +123,20 @@ JWT 校验成功后，构造 **`Authentication`**（例如 **`JwtAuthenticationT
 
 ---
 
-## 7. Redis 键空间约定（草案）
+## 7. Redis 键空间约定（已定稿 · 与实现对齐）
 
-命名空间前缀：**`admin:auth:`**（可按环境追加 **`dev:`**）。
+统一前缀：**`auth:admin:`**（不按环境追加别名；环境隔离依赖 Redis DB / 实例边界）。
 
-| Key 模式 | 值 | TTL |
+| Key 模式 | 值语义 | TTL |
 | --- | --- | --- |
-| **`admin:auth:refresh:{jti}`** | **`sub`**（用户 ID）、签发时间、可选 **`rotated_from`** | 与 refresh 策略一致 |
-| **`admin:auth:logout:access:{jti}`** | **`1`**（Access 黑名单，可选） | 直至 Access **`exp`** |
-| **`admin:auth:ratelimit:login:{ip}`** | 计数 | 短时间窗口 |
+| **`auth:admin:session:{sessionId}`** | Hash：**`adminUserId`**、**`username`**、**`refreshTokenHash`**（SHA-256 hex）、**`issuedAtMillis`**、**`expireAtMillis`**（会话绝对到期锚点） | 直至 **`expireAt`** |
+| **`auth:admin:user:sessions:{adminUserId}`** | Set：**`sessionId`** 列表（便于后续会话治理扩展） | 成员随会话删除维护 |
+| **`auth:admin:refresh:{sha256(refresh)}`** | 指向 **`sessionId`**（当前有效的 Refresh 映射） | 会话剩余寿命 |
+| **`auth:admin:refresh-replay:{sha256(oldRefresh)}`** | 指向 **`sessionId`**（轮换后被废除的旧 Refresh **墓碑**，用于基础版 **Replay 检测**） | 会话剩余寿命 |
 
-具体序列化可用 **String** 或 **Hash**；生产需开启 **Redis ACL** 与连接 TLS（运维项）。
+生产需开启 **Redis ACL** 与连接 TLS（运维项）。
+
+> **Replay（4B 基础版）**：轮换成功后旧 Refresh 写入 **`refresh-replay:*`**；若同一旧 Refresh **再次被提交**，判定异常并重拳 **`purgeSession`**（吊销服务端会话状态）。
 
 ---
 
@@ -145,7 +148,7 @@ JWT 校验成功后，构造 **`Authentication`**（例如 **`JwtAuthenticationT
 2. **`admin`** 根据 **`username`** 查 **`admin_user`**（**仅活跃用户**，逻辑删除过滤）。
 3. **`PasswordEncoder.matches`**；失败返回 **401**（模糊错误信息，避免枚举用户名）。
 4. 签发 **Access JWT**；生成 **Refresh**，写入 Redis。
-5. 响应体返回 **access_token**、**expires_in**、**refresh_token**（HTTP-only Cookie 或 Body 由 Admin Web 设计选定；本文建议 **Cookie HttpOnly + Secure** 仅用于 refresh，access 仍 Bearer）。
+5. 响应体返回 **Access JWT**、**`expires_in`**、管理员摘要；**Refresh Token 仅写入 HttpOnly Cookie**（**不下发 JSON**，前端 JS 不可读）。
 
 ### 8.2 刷新
 
@@ -222,25 +225,70 @@ sequenceDiagram
 
 ---
 
-## 13. 开放问题（需在实现前拍板）
+## 13. 已定案结论（阶段 4A 收口）
 
-1. Access / Refresh **下发载体**：Body vs Cookie（refresh **强烈建议 HttpOnly**）。
-2. JWT **对称 vs 非对称**及密钥轮转流程。
-3. **权限 claims**：JWT 内嵌角色列表 vs 服务端每次加载。
-4. **多终端并发 refresh**：是否允许同一用户多 refresh 并存上限。
-5. **网关层**是否在下一阶段接手 JWT 校验。
+以下内容取代历史上「待确认 / 可选 / 开放问题」，作为 **唯一口径**：
+
+1. **登录标识（V1）**：仅 **`username + password`**；**不支持** email / phone 作为主标识登录。
+2. **密码**：Spring Security **`BCryptPasswordEncoder`**；DB 仅存哈希；登录 **`matches`**；**口令最大长度**由 **`security.auth.admin-login-max-password-length`** 集中约束（请求校验 + 服务端兜底）。
+3. **Access JWT**：**15 分钟** TTL；**`Authorization: Bearer`**；Claims 至少包含 **`sub`、`jti`、`aud`、`iss`、`iat`、`exp`、`token_type=ADMIN`、`admin_user_id`、`username`、`session_id`**；**`permissions` 不入 JWT**；**4B 不以 `roles` 作为认证链路依赖**。
+4. **Refresh**：**不透明随机串**；**Redis** 持久化；**绝对 TTL = 7 天**（轮换 **不延长** 该锚点）；**HttpOnly Cookie** 下发，`Secure`/`SameSite` 见配置 **`security.auth.refresh-cookie-*`**（本地 HTTP 允许 **`Secure=false`**）。
+5. **Rotation**：每次刷新校验 Refresh → 签发 **新 Refresh + 新 Access** → **旧 Refresh 立即失效**；若捕获 **旧 Refresh 重放**，**吊销服务端会话状态**。
+6. **登出**：删除会话 Redis 状态并 **清除 Refresh Cookie**；**不做 Access 黑名单（4B）**，依赖 Access 短命自然过期。
+7. **多端**：**允许并行会话**；每次登录新建 **`sessionId`**；**不做设备上限 / 踢下线策略（4B）**。
+8. **JWT 算法**：**HS256**；密钥 **环境变量注入**，禁止硬编码。
+9. **Spring Security**：OAuth2 Resource Server **JWT + `JwtDecoder`**；**`STATELESS`**；登录三接口放行；其余 **`/api/admin/**`** 默认需认证。
+10. **Gateway（4B）**：**不做 JWT 校验**，只做路由接入。
 
 ---
 
-## 14. 文档索引
+## 14. HTTP Cookie（Refresh）策略摘要
+
+| 项 | 定案 |
+| --- | --- |
+| **`HttpOnly`** | **`true`** |
+| **`Secure`** | 生产 **`true`**；本地 HTTP 可通过 **`SECURITY_REFRESH_COOKIE_SECURE` / `security.auth.refresh-cookie-secure`** 置 **`false`** |
+| **`SameSite`** | 生产 **`Strict`**（配置项 **`security.auth.refresh-cookie-same-site`**） |
+| **`Path`** | **`/api/admin/auth`**（避免站点其它路径携带 Refresh） |
+
+---
+
+## 15. Spring 配置项（命名与实现对齐）
+
+**JWT（`security.jwt.*`）**：`issuer`、`audience`、`secret`（**非空才会装配 JWT Bean**，参见 §17）、`access-token-ttl`。  
+**认证会话（`security.auth.*`）**：`refresh-token-ttl`、`refresh-cookie-name`、`refresh-cookie-path`、`refresh-cookie-secure`、`refresh-cookie-same-site`、`admin-login-max-password-length`。
+
+**绑定类对齐**：`security.jwt.*` → **`JwtProperties`**（**`auth`**）；`security.auth.*` → **`AdminAuthProperties`**（**`admin/properties`**）。
+
+环境变量推荐使用：`SECURITY_JWT_SECRET`、`SECURITY_REFRESH_COOKIE_SECURE`（布尔）。
+
+---
+
+## 16. JWT Bean 装配说明（跨应用）
+
+`auth` 模块中的 **`AuthConfig`** 通过内嵌配置类并配合 **`JwtBeansEnabledCondition`**：**仅当 `security.jwt.secret` 非空** 时才注册 **`JwtEncoder` / `JwtDecoder` / `TokenService`**，以便 **`site-app`** 等在尚未配置密钥时仍可正常编译与冒烟测试；**Admin 运行时必须配置密钥**，否则认证链路无法工作。
+
+---
+
+## 17. 文档索引
 
 - [持久层真实 PostgreSQL 验证说明](../数据文档/持久层真实PostgreSQL验证说明.md)
 - [数据库模型设计 V1](./数据库模型设计V1.md) · Admin RBAC 表
 - [Java 持久层设计 V1](../Java持久层设计V1.md)
-- `services/website-services/auth` · JWT 抽象骨架
+- `services/website-services/auth` · JWT 抽象与签发实现
+- `services/website-services/admin` · Spring Security（**`AdminSecurityConfig`**）/ 登录刷新登出 / Redis Refresh
 
 ---
 
-**结论：**阶段 4A 将 Admin 认证定位为 **Spring Security 官方口令摘要能力 + JWT Access + Redis 约束 Refresh** 的组合；实现阶段应优先落地 **`PasswordEncoder`** 与 **JWT 校验链路**，再迭代 RBAC 与网关协同。
+## 18. 阶段 4B 落地状态（实现核对）
 
-> 最终进入 4B 前，以《阶段4A-Admin认证体系决策确认单》作为方案拍板依据。
+| 类别 | 状态 |
+| --- | --- |
+| **接口** | **`POST /api/admin/auth/login`**、**`POST /api/admin/auth/refresh`**、**`POST /api/admin/auth/logout`**；其它 **`/api/admin/**`** 默认 Bearer 保护 |
+| **Swagger** | **`Admin Auth`** 分组可见；受保护示例接口 **`GET /api/admin/ping`** 使用 **`adminBearer` scheme** |
+| **Redis** | **`RedisAdminRefreshSessionServiceImpl`**；缺 **`RedisConnectionFactory`**（如单元测试排除 Redis）时 **`AdminRefreshSessionTestBeans`** 仅向 **测试** 上下文注册 **`InMemoryAdminRefreshSessionServiceImpl`**（语义对齐，**禁止**视作生产替身） |
+| **测试** | **`JwtTokenServiceTest`**、`InMemoryAdminRefreshSessionServiceImplTest`、`AdminAuthMvcTest`；默认 **`mvn test`** 不依赖本机 Redis |
+
+---
+
+**结论：**阶段 4A 已完成决策收口并 **正式关闭**；阶段 4B 已实现 **Admin 认证最小闭环**。下一步进入 **阶段 4C：Admin 认证真实联调与安全边界验证**（HTTPS/Cookie、网关转发头、Redis 会话观测与风控加固等）。
