@@ -7,7 +7,7 @@
 - 用一套平台同时承载多个行业站点，不是单个官网。
 - `apps/site-web` 是前台子站点集合目录，内部按行业拆分独立站点。
 - `apps/admin-web` 负责总后台与站点后台管理。
-- `services/website-services` 是当前 Java 后端主干，包含**统一网关**、**独立认证服务（`auth`）**、后台 API、前台 API、基础设施接入与后续业务模块骨架。
+- `services/website-services` 是当前 Java 后端主干，包含**统一网关**、**独立认证服务（`auth`）**、后台 API、前台 API、基础设施接入与后续业务模块骨架；**JWT 为 RS256 + JWKS（Auth 签发，业务服务 JWKS 验签）**。
 - `services/agent-services` 是 Node.js + Fastify 的 AI/Agent 编排服务骨架，当前仍以 mock 能力为主。
 
 ## 目录结构

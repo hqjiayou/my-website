@@ -1,72 +1,150 @@
 package com.mywebsite.auth.config;
 
+import com.mywebsite.auth.crypto.RsaPemLoader;
+import com.mywebsite.auth.jwks.AuthJwkSetDocument;
 import com.mywebsite.auth.properties.AdminAuthProperties;
+import com.mywebsite.auth.properties.AuthJwtKeyProperties;
 import com.mywebsite.auth.token.JwtTokenService;
 import com.mywebsite.auth.token.TokenService;
-import com.mywebsite.infra.jwt.JwtSecretPresentCondition;
 import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.KeyUse;
-import com.nimbusds.jose.jwk.OctetSequenceKey;
+import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import java.nio.charset.StandardCharsets;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
+import java.security.GeneralSecurityException;
+import java.security.Signature;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.core.env.Environment;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
 @Configuration
-@EnableConfigurationProperties({JwtProperties.class, AdminAuthProperties.class})
 public class AuthJwtConfiguration {
 
     @Configuration
-    @Conditional(JwtSecretPresentCondition.class)
     static class JwtBeans {
 
         @Bean
         @ConditionalOnMissingBean
-        SecretKey jwtSigningKey(JwtProperties jwtProperties) {
-            String secret = jwtProperties.getSecret();
-            if (secret == null || secret.isBlank()) {
-                throw new IllegalStateException(
-                        "security.jwt.secret is required (set SECURITY_JWT_SECRET or equivalent)");
+        RSAKey authSigningRsaJwk(Environment env, AuthJwtKeyProperties keyProperties) {
+            String privatePath = nonemptyFirst(
+                    keyProperties.getPrivateKeyPath(),
+                    env.getProperty("mywebsite.auth.jwt.privateKeyPath"),
+                    env.getProperty("mywebsite.auth.jwt.private-key-path"),
+                    env.getProperty("AUTH_JWT_PRIVATE_KEY_PATH"));
+            String publicPath = nonemptyFirst(
+                    keyProperties.getPublicKeyPath(),
+                    env.getProperty("mywebsite.auth.jwt.publicKeyPath"),
+                    env.getProperty("mywebsite.auth.jwt.public-key-path"),
+                    env.getProperty("AUTH_JWT_PUBLIC_KEY_PATH"));
+            String keyId = nonemptyFirst(
+                    keyProperties.getKeyId(),
+                    env.getProperty("mywebsite.auth.jwt.keyId"),
+                    env.getProperty("mywebsite.auth.jwt.key-id"),
+                    env.getProperty("AUTH_JWT_KEY_ID"));
+            RSAPrivateKey privateKey = RsaPemLoader.loadPrivateKeyPem(privatePath);
+            RSAPublicKey publicKey = RsaPemLoader.loadPublicKeyPem(publicPath);
+            assertMatchingKeyPair(privateKey, publicKey, privatePath, publicPath);
+            try {
+                return new RSAKey.Builder(publicKey)
+                        .privateKey(privateKey)
+                        .keyID(keyId)
+                        .algorithm(JWSAlgorithm.RS256)
+                        .keyUse(KeyUse.SIGNATURE)
+                        .build();
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to build RSA JWK for JWT signing", e);
             }
-            byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
-            if (bytes.length < 32) {
-                throw new IllegalStateException("security.jwt.secret must be at least 32 UTF-8 bytes for HS256");
+        }
+
+        private static String nonemptyFirst(String... candidates) {
+            for (String s : candidates) {
+                if (s != null && !s.isBlank()) {
+                    return s;
+                }
             }
-            return new SecretKeySpec(bytes, "HmacSHA256");
+            return "";
         }
 
         @Bean
-        JwtEncoder jwtEncoder(SecretKey jwtSigningKey) throws Exception {
-            OctetSequenceKey jwk = new OctetSequenceKey.Builder(jwtSigningKey.getEncoded())
-                    .keyID("website-services-admin-hs256")
-                    .algorithm(JWSAlgorithm.HS256)
-                    .keyUse(KeyUse.SIGNATURE)
-                    .build();
-            JWKSource<SecurityContext> jwkSource =
-                    new ImmutableJWKSet<>(new com.nimbusds.jose.jwk.JWKSet(jwk));
+        JwtEncoder jwtEncoder(RSAKey authSigningRsaJwk) {
+            JWKSource<SecurityContext> jwkSource = new ImmutableJWKSet<>(new JWKSet(authSigningRsaJwk));
             return new NimbusJwtEncoder(jwkSource);
         }
 
         @Bean
-        JwtDecoder jwtDecoder(SecretKey jwtSigningKey) {
-            return NimbusJwtDecoder.withSecretKey(jwtSigningKey).macAlgorithm(MacAlgorithm.HS256).build();
+        JwtDecoder jwtDecoder(RSAKey authSigningRsaJwk) {
+            try {
+                RSAPublicKey publicKey = authSigningRsaJwk.toRSAPublicKey();
+                return NimbusJwtDecoder.withPublicKey(publicKey).build();
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to create JwtDecoder from RSA public key", e);
+            }
         }
 
         @Bean
-        TokenService tokenService(JwtEncoder jwtEncoder, JwtDecoder jwtDecoder, JwtProperties jwtProperties) {
-            return new JwtTokenService(jwtEncoder, jwtDecoder, jwtProperties);
+        TokenService tokenService(
+                JwtEncoder jwtEncoder,
+                JwtDecoder jwtDecoder,
+                JwtProperties jwtProperties,
+                AuthJwtKeyProperties keys,
+                Environment env) {
+            String kid = nonemptyFirst(
+                    keys.getKeyId(),
+                    env.getProperty("mywebsite.auth.jwt.keyId"),
+                    env.getProperty("mywebsite.auth.jwt.key-id"),
+                    env.getProperty("AUTH_JWT_KEY_ID"));
+            return new JwtTokenService(jwtEncoder, jwtDecoder, jwtProperties, kid);
+        }
+
+        @Bean
+        AuthJwkSetDocument authJwkSetDocument(RSAKey authSigningRsaJwk) {
+            try {
+                RSAKey pub = authSigningRsaJwk.toPublicJWK();
+                return new AuthJwkSetDocument(new JWKSet(pub).toString());
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to build JWKS document", e);
+            }
+        }
+
+        private static void assertMatchingKeyPair(
+                RSAPrivateKey privateKey, RSAPublicKey publicKey, String privatePath, String publicPath) {
+            try {
+                byte[] challenge = "pair-check".getBytes(StandardCharsets.UTF_8);
+                Signature sign = Signature.getInstance("SHA256withRSA");
+                sign.initSign(privateKey);
+                sign.update(challenge);
+                byte[] signature = sign.sign();
+
+                Signature ver = Signature.getInstance("SHA256withRSA");
+                ver.initVerify(publicKey);
+                ver.update(challenge);
+                if (!ver.verify(signature)) {
+                    throw new IllegalStateException(
+                            "RSA public key does not match private key (check "
+                                    + publicPath
+                                    + " vs "
+                                    + privatePath
+                                    + ")");
+                }
+            } catch (GeneralSecurityException e) {
+                throw new IllegalStateException(
+                        "RSA public/private key mismatch or invalid PEM (check "
+                                + publicPath
+                                + " vs "
+                                + privatePath
+                                + ")",
+                        e);
+            }
         }
     }
 }

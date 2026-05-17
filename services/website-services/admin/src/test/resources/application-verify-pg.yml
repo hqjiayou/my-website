@@ -10,6 +10,11 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_JWKS_URI:http://localhost:8083/.well-known/jwks.json}
 
 storage:
   minio:

@@ -1,11 +1,9 @@
-# 测试 Profile：内存 H2，仅用于 Spring 与 MyBatis-Plus / Mapper Bean 冒烟；不执行 Flyway、不跑真实 CRUD 用例。
-# 与 `application-local.yml` 对齐：显式开启下划线 → 驼峰（MP 默认值亦多为 true）。
+# 测试 Profile：内存 H2，不跑 Flyway；JWKS 由集成测试类 {@link com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest} 动态注册。
 security:
   jwt:
-    secret: test-signing-secret-at-least-32-bytes-long-xx
-    access-token-ttl: 15m
-    audience: ADMIN
     issuer: test-issuer
+    audience: ADMIN
+    access-token-ttl: 15m
 
 mybatis-plus:
   configuration:

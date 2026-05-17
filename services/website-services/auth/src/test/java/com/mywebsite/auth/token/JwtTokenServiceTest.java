@@ -1,10 +1,13 @@
 package com.mywebsite.auth.token;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.mywebsite.auth.config.AuthJwtConfiguration;
+import com.mywebsite.auth.properties.AuthJwtKeyProperties;
 import com.mywebsite.common.security.JwtClaimConstants;
 import com.mywebsite.common.security.TokenAudience;
+import com.nimbusds.jwt.SignedJWT;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -22,10 +25,12 @@ import com.mywebsite.auth.config.JwtProperties;
 @SpringBootTest(classes = JwtTokenServiceTest.Empty.class)
 @ActiveProfiles("test")
 @Import(AuthJwtConfiguration.class)
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, AuthJwtKeyProperties.class})
 @TestPropertySource(
         properties = {
-            "security.jwt.secret=test-signing-secret-at-least-32-bytes-long-xx",
+            "mywebsite.auth.jwt.privateKeyPath=classpath:jwt/test-private.pem",
+            "mywebsite.auth.jwt.publicKeyPath=classpath:jwt/test-public.pem",
+            "mywebsite.auth.jwt.keyId=auth-test-rs256-key-1",
             "security.jwt.issuer=test-issuer",
             "security.jwt.audience=ADMIN"
         })
@@ -40,19 +45,34 @@ class JwtTokenServiceTest {
     private JwtDecoder jwtDecoder;
 
     @Test
-    void roundTripAccessTokenCarriesAdminClaims() {
+    void roundTripAccessTokenCarriesAdminClaimsAndUsesRs256WithKid() throws Exception {
         String jwt = tokenService.createAccessToken(
                 new IssuedAccessToken(TokenAudience.ADMIN, "42", "root", "sid-1", Set.of()));
 
-        Optional<TokenClaims> parsed = tokenService.parseToken(jwt, TokenAudience.ADMIN);
-        assertThat(parsed).isPresent();
-        TokenClaims claims = parsed.get();
+        SignedJWT parsed = SignedJWT.parse(jwt);
+        assertThat(parsed.getHeader().getAlgorithm().getName()).isEqualTo("RS256");
+        assertThat(parsed.getHeader().getKeyID()).isEqualTo("auth-test-rs256-key-1");
+
+        Optional<TokenClaims> p = tokenService.parseToken(jwt, TokenAudience.ADMIN);
+        assertThat(p).isPresent();
+        TokenClaims claims = p.get();
         assertThat(claims.audience()).isEqualTo(TokenAudience.ADMIN);
         assertThat(claims.username()).isEqualTo("root");
 
         Jwt decoded = jwtDecoder.decode(jwt);
         assertThat(decoded.getClaimAsString(JwtClaimConstants.TOKEN_TYPE)).isEqualTo("ADMIN");
         assertThat(decoded.getClaimAsString(JwtClaimConstants.SESSION_ID)).isEqualTo("sid-1");
-        assertThat(Number.class.cast(decoded.getClaim(JwtClaimConstants.ADMIN_USER_ID)).longValue()).isEqualTo(42L);
+        Object uid = decoded.getClaim(JwtClaimConstants.ADMIN_USER_ID);
+        assertThat(uid).isInstanceOf(Number.class);
+        assertThat(((Number) uid).longValue()).isEqualTo(42L);
+    }
+
+    @Test
+    void tamperedJwtFailsDecode() {
+        String jwt = tokenService.createAccessToken(
+                new IssuedAccessToken(TokenAudience.ADMIN, "1", "u", "s", Set.of()));
+        String tampered = jwt.substring(0, jwt.length() - 4) + "xxxx";
+        assertThatThrownBy(() -> jwtDecoder.decode(tampered))
+                .isInstanceOf(org.springframework.security.oauth2.jwt.JwtException.class);
     }
 }

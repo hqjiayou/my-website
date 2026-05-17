@@ -14,8 +14,8 @@
 1. **`auth` 为单一、可执行的 Spring Boot 模块**（**不再有 `auth-core` / `auth-app` Maven 拆分**）。  
 2. **认证主链路 HTTP**（Admin **Login / Refresh / Logout**）由 **`auth`（默认 8083）** 承载；**`admin`** 为 **OAuth2 Resource Server** + 业务 API。  
 3. **`gateway`** 路由：**`/api/admin/auth/**`**、**`/api/site/auth/**`** → **`auth`**；**`/api/admin/**`**（非 auth 前缀的业务路径）→ **`admin`**。  
-4. **HS256 + `SECURITY_JWT_SECRET`** 为 **4F～4G 过渡**；**4G** 目标 **RS256 + JWKS**。  
-5. **下一阶段执行顺序**：**4G** → **4H**（Gateway 全链路真实联调与脚本）→（按需）**4I** 清理 → **5A** RBAC。  
+4. **RS256 + JWKS**：**4G 已完成**；**auth** 持私钥签发并发布 **`/.well-known/jwks.json`**；**admin** 仅 **`jwk-set-uri` 验签**，**不再**使用 `SECURITY_JWT_SECRET` 作为主链路配置。详见 [**阶段4G**](./阶段4G-RS256与JWKS签名验签体系迁移说明.md)。  
+5. **下一阶段执行顺序**：**4H**（Gateway 全链路真实联调与脚本）→（按需）**4I** 清理 → **5A** RBAC。  
 
 详细落地清单见 **[阶段4F-Auth单服务收敛与认证主链路上提落地说明.md](./阶段4F-Auth单服务收敛与认证主链路上提落地说明.md)**。
 
@@ -25,7 +25,7 @@
 > **阶段 4E（过渡，已被 4F 替代）**：曾规划 `auth/` 为 Maven 聚合父模块，子模块 **`auth-core`** 与 **`auth-app`**；**4F** 已将其**收敛**为单一 **`auth`** 可执行模块，并完成 **Login/Refresh/Logout** 上提与 **Gateway** 路由拆分。
 
 > **文档性质（原始摘要）**：设计与审计定案（4D）；原「迁移实施见 4E 起」已推进至 **4F 完成**。  
-> **Roadmap**：**暂停 5A（RBAC 深化）** 直至 **4G/4H** 就绪。  
+> **Roadmap**：**暂停 5A（RBAC 深化）** 直至 **4H** 就绪。  
 > **关联**：[`架构设计`](../基础架构/架构设计.md) §6、[`.env.example` 范本](../../../services/website-services/.env.example)。
 
 ---

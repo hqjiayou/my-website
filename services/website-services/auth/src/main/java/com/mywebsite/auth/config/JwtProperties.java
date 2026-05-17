@@ -11,11 +11,6 @@ public class JwtProperties {
     /** JWT {@code aud} claim for Admin access tokens; defaults to ADMIN audience name. */
     private String audience = "ADMIN";
 
-    /**
-     * HS256 signing secret (UTF-8 bytes); inject via {@code SECURITY_JWT_SECRET}. Never commit real secrets.
-     */
-    private String secret = "";
-
     private Duration accessTokenTtl = Duration.ofMinutes(15);
 
     public String getIssuer() {
@@ -32,14 +27,6 @@ public class JwtProperties {
 
     public void setAudience(String audience) {
         this.audience = audience;
-    }
-
-    public String getSecret() {
-        return secret;
-    }
-
-    public void setSecret(String secret) {
-        this.secret = secret;
     }
 
     public Duration getAccessTokenTtl() {

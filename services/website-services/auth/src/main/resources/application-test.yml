@@ -1,10 +1,16 @@
-# 测试 Profile：内存 H2，不跑 Flyway；供 mvn spring-boot:run -Dspring-boot.run.profiles=test 与集成冒烟。
+# 测试 Profile：内存 H2，不跑 Flyway；RS256 使用 classpath 下固定测试 PEM。
+mywebsite:
+  auth:
+    jwt:
+      privateKeyPath: classpath:jwt/test-private.pem
+      publicKeyPath: classpath:jwt/test-public.pem
+      keyId: auth-test-rs256-key-1
+
 security:
   jwt:
-    secret: test-signing-secret-at-least-32-bytes-long-xx
-    access-token-ttl: 15m
-    audience: ADMIN
     issuer: test-issuer
+    audience: ADMIN
+    access-token-ttl: 15m
   auth:
     refresh-token-ttl: 7d
     refresh-cookie-secure: false

@@ -1,10 +1,14 @@
 package com.mywebsite.auth;
 
 import com.mywebsite.common.env.LocalDotenvSupport;
+import com.mywebsite.auth.config.JwtProperties;
+import com.mywebsite.auth.properties.AdminAuthProperties;
+import com.mywebsite.auth.properties.AuthJwtKeyProperties;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
  * 统一认证服务：Admin 登录 / Refresh / Logout、Access JWT 签发、Refresh 会话（Redis）。
@@ -15,6 +19,7 @@ import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
         scanBasePackages = {"com.mywebsite.auth", "com.mywebsite.infra"},
         exclude = {FlywayAutoConfiguration.class})
 @MapperScan("com.mywebsite.auth.mapper")
+@EnableConfigurationProperties({JwtProperties.class, AdminAuthProperties.class, AuthJwtKeyProperties.class})
 public class AuthApplication {
 
     public static void main(String[] args) {

@@ -1,0 +1,7 @@
+# 测试 classpath 优先于 main：确保 mvn test 时始终能解析 PEM（与 application-test 中配置一致）。
+mywebsite:
+  auth:
+    jwt:
+      privateKeyPath: classpath:jwt/test-private.pem
+      publicKeyPath: classpath:jwt/test-public.pem
+      keyId: auth-test-rs256-key-1

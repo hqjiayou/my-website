@@ -4,31 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mywebsite.admin.AdminApplication;
+import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration;
-import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.test.context.ActiveProfiles;
-import org.mockito.Mockito;
 
-@SpringBootTest(classes = AdminApplication.class)
-@ActiveProfiles("test")
-@ImportAutoConfiguration(exclude = {
-        FlywayAutoConfiguration.class,
-        RedisAutoConfiguration.class,
-        RedisRepositoriesAutoConfiguration.class,
-})
-class AdminSecurityHandlersI18nTest {
+class AdminSecurityHandlersI18nTest extends AbstractAdminSpringBootTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 

@@ -46,7 +46,6 @@ security:
   jwt:
     issuer: my-website
     audience: ADMIN
-    secret: ${SECURITY_JWT_SECRET:}
     access-token-ttl: 15m
   auth:
     refresh-token-ttl: 7d

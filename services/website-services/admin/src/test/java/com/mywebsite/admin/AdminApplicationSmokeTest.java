@@ -1,6 +1,7 @@
 package com.mywebsite.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
 import com.mywebsite.admin.mapper.AdminPermissionMapper;
@@ -8,25 +9,13 @@ import com.mywebsite.admin.mapper.AdminRoleMapper;
 import com.mywebsite.admin.mapper.AdminRolePermissionMapper;
 import com.mywebsite.admin.mapper.AdminUserMapper;
 import com.mywebsite.admin.mapper.AdminUserRoleMapper;
+import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
 import com.mywebsite.infra.handler.AuditMetaObjectHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration;
-import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
-import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest(classes = AdminApplication.class)
-@ActiveProfiles("test")
-@ImportAutoConfiguration(exclude = {
-        FlywayAutoConfiguration.class,
-        RedisAutoConfiguration.class,
-        RedisRepositoriesAutoConfiguration.class,
-})
-class AdminApplicationSmokeTest {
+class AdminApplicationSmokeTest extends AbstractAdminSpringBootTest {
 
     @Autowired
     private ApplicationContext applicationContext;

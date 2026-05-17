@@ -31,6 +31,9 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
+# Local PEM keys / secrets (e.g. RS256 under website-services/secrets/)
+services/website-services/secrets/
+
 # =========================
 # Frontend - Node
 # =========================

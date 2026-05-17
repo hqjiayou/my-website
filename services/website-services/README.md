@@ -1,6 +1,6 @@
 # website-services
 
-`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。**阶段 5A（后台 RBAC 深化）暂不推进**。**阶段 4F** 已将 **`auth`** 收敛为**单一可执行认证服务**（**`mvn -pl auth -am spring-boot:run`**），**`/api/admin/auth/*`**（Login / Refresh / Logout、JWT 签发、Redis Refresh 会话）由 **Auth** 承载；**Admin** 仅作为 **Resource Server** 与后台业务 API。**HS256 + 共享 `SECURITY_JWT_SECRET` 验签** 为 **4F～4G 过渡期**，**4G** 需 **RS256 + JWKS**。设计见 [**阶段 4D 文档**](../../docs/website-services/设计文档/认证与安全/阶段4D-Auth独立认证服务架构回归设计与迁移方案.md) · **落地**见 [**阶段 4F 说明**](../../docs/website-services/设计文档/认证与安全/阶段4F-Auth单服务收敛与认证主链路上提落地说明.md)。**完整文档导航**：[`docs/website-services/README.md`](../../docs/website-services/README.md)。
+`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。**阶段 5A（后台 RBAC 深化）暂不推进**。**阶段 4F** 已将 **`auth`** 收敛为**单一可执行认证服务**（**`mvn -pl auth -am spring-boot:run`**），**`/api/admin/auth/*`**（Login / Refresh / Logout、JWT 签发、Redis Refresh 会话）由 **Auth** 承载；**Admin** 仅作为 **Resource Server** 与后台业务 API。**阶段 4G** 已完成 **RS256 + JWKS**：Auth 持私钥签发，Admin 仅 **`AUTH_JWKS_URI` / `jwk-set-uri` 验签**。设计见 [**阶段 4D 文档**](../../docs/website-services/设计文档/认证与安全/阶段4D-Auth独立认证服务架构回归设计与迁移方案.md) · **落地**见 [**阶段 4F 说明**](../../docs/website-services/设计文档/认证与安全/阶段4F-Auth单服务收敛与认证主链路上提落地说明.md) · **4G** 见 [**RS256/JWKS 迁移说明**](../../docs/website-services/设计文档/认证与安全/阶段4G-RS256与JWKS签名验签体系迁移说明.md)。**完整文档导航**：[`docs/website-services/README.md`](../../docs/website-services/README.md)。
 
 除此之外：统一网关入口、多端可启动应用、基础设施、MyBatis-Plus、Flyway、OpenAPI。（[`架构设计`](../../docs/website-services/设计文档/基础架构/架构设计.md) §8）
 
@@ -10,7 +10,7 @@
 |------|------|
 | 阶段 4F（Auth 单服务收敛 + 主链路上提） | **已完成** |
 | 文档体系重整（`docs/website-services` 分类与总览） | **已完成** |
-| 阶段 4G（RS256 + JWKS） | **待开始** |
+| 阶段 4G（RS256 + JWKS） | **已完成** |
 | 阶段 4H（Gateway 全链路真实联调） | **待开始** |
 | 阶段 5A（Admin RBAC 深化） | **暂缓**（4G/4H 后） |
 
@@ -67,7 +67,7 @@ website-services/
 - 端口：`8081`
 - 依赖 `common`、`infra`、`agent`
 - **认证主链路（阶段 4F）**：`POST/GET ...` **`/api/admin/auth/*`** 已迁至 **`auth`（8083）**；经 Gateway 时仍使用**同一路径**，由网关转发至 Auth；**不要**再对 Admin 直连上述路径做联调（除非故意绕过网关）。
-- **`/api/admin/**`（业务）**：默认需要 **`Authorization: Bearer <accessToken>`**（Swagger **`adminBearer`**）；**HS256 过渡期** 与 Auth 共用 **`SECURITY_JWT_SECRET` 验签**，**4G** 切 **JWKS** 后 Admin **不再持有签名密钥**。
+- **`/api/admin/**`（业务）**：默认需要 **`Authorization: Bearer <accessToken>`**（Swagger **`adminBearer`**）；JWT 经 **`spring.security.oauth2.resourceserver.jwt.jwk-set-uri`**（**`AUTH_JWKS_URI`**）验签，**不持有**签名密钥。
 - `AdminSecurityConfig`、`AdminAuthenticationEntryPoint`、`AdminAccessDeniedHandler`、`AuthContextSynchronizingFilter` 保留。
 - 健康探测：`GET /api/admin/ping`（需 Bearer）
 - **阶段 3B**：首批后台 **`AdminUserEntity` 等** Mapper（见 [`Java 持久层设计 V1`](../../docs/website-services/Java持久层设计V1.md)）
@@ -116,7 +116,6 @@ website-services/
 基础设施接入模块。
 
 - **国际化（阶段 4B.5）**：`Accept-Language`（BCP 47）解析、默认 **`ja-JP`**、`LocalizedMessageService`、成功响应 `ApiResponse` 写出前本地化；定案见 [`后端多语言支持策略设计 V1`](../../docs/website-services/设计文档/后端多语言支持策略设计V1.md)。
-- **`JwtSecretPresentCondition`**：当存在非空 `SECURITY_JWT_SECRET` / `security.jwt.secret` 时启用对称 JWT Bean（供 **auth** 签发；各服务可按需复用条件）。
 - PostgreSQL：通过 Spring Boot DataSource 自动配置
 - Redis：通过 Spring Data Redis 自动配置
 - MinIO / S3：提供 `MinioClient` Bean
@@ -133,7 +132,7 @@ website-services/
 统一认证 **可执行** 模块（**单模块**，不再有 `auth-core` / `auth-app` 拆分）。
 
 - **`AuthApplication`**；默认端口 **`8083`**（**`AUTH_APP_PORT`**）。
-- **承担**：`POST /api/admin/auth/login|refresh|logout`、`GET /api/auth/ping`、Access JWT 签发（**`JwtTokenService`/`TokenService`**）、Refresh Cookie、**Redis** 刷新会话（**`RedisAdminRefreshSessionServiceImpl`** 等）；**`i18n/auth`** 承载 **`admin.auth.*`** 等认证文案。
+- **承担**：`POST /api/admin/auth/login|refresh|logout`、`GET /api/auth/ping`、**`GET /.well-known/jwks.json`**、Access JWT **RS256** 签发（**`JwtTokenService`/`TokenService`**）、Refresh Cookie、**Redis** 刷新会话（**`RedisAdminRefreshSessionServiceImpl`** 等）；**`i18n/auth`** 承载 **`admin.auth.*`** 等认证文案。
 - **直连** 与 admin 相同的 **`admin_user` 表**（本模块内自有 `entity`/`mapper`；**不**依赖 `admin` jar）。
 - **显式关闭 Flyway**（避免与 admin 重复迁移）；使用 **`AUTH_DB_*`** 可选覆盖 **`DB_*`**。
 - **启动**：`mvn -pl auth -am spring-boot:run`。
@@ -208,11 +207,11 @@ Flyway 是唯一数据库结构迁移机制。后续任何表结构变更必须�
 
 migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 
-### JWT 与认证边界（4F）
+### JWT 与认证边界（4F～4G）
 
-- **签发**：仅在 **`auth`** 模块（`TokenService`/`JwtTokenService`、`JwtProperties`、`security.jwt.secret`）。
-- **Resource Server 验签**：**`admin`**（及未来 **`site-app`**）通过 **`JwtDecoder`**（`AdminResourceServerJwtConfiguration`）与 **`oauth2ResourceServer`**；**`com.mywebsite.common.security`** 提供 **`JwtClaimConstants`**、**`TokenAudience`**、**`AuthContext`** 等共享模型。
-- **对称密钥（HS256）** 为 **4F 过渡态**；**4G** 目标为 **RS256 + JWKS**，届时业务服务仅配置 **`spring.security.oauth2.resourceserver.jwt.jwk-set-uri`**，**不再**持有 `SECURITY_JWT_SECRET`。
+- **签发**：仅在 **`auth`**（`TokenService`/`JwtTokenService`、`AuthJwtKeyProperties`、RSA PEM；**RS256**）。
+- **Resource Server 验签**：**`admin`** 使用 **`spring.security.oauth2.resourceserver.jwt.jwk-set-uri`**（`**AUTH_JWKS_URI**`）与自定义 **`JwtDecoder`** 校验 **`iss`/`aud`**；**`com.mywebsite.common.security`** 提供 **`JwtClaimConstants`**、**`TokenAudience`**、**`AuthContext`** 等。
+- **4G 后**：Admin **不再**使用 `SECURITY_JWT_SECRET`；Access JWT 仅由 Auth 用**私钥**签发，公钥经 **`GET /.well-known/jwks.json`** 发布。
 
 ### OpenAPI / Swagger
 
@@ -258,7 +257,9 @@ cp .env.example .env
 - `MINIO_ENDPOINT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`MINIO_SECURE`
 - `AUTH_APP_PORT`（默认 `8083`）
 - `AUTH_DB_*`（可选；未设置时回退到 `DB_*` 再回退到 `POSTGRES_*`，供 **auth** 分域配置）
-- `SECURITY_JWT_SECRET`、`SECURITY_REFRESH_COOKIE_SECURE`（JWT 与 Refresh Cookie；**auth** 与 **admin** 过渡态共用验签 secret）
+- **`AUTH_JWT_PRIVATE_KEY_PATH`**、**`AUTH_JWT_PUBLIC_KEY_PATH`**、**`AUTH_JWT_KEY_ID`**（Auth **RS256**）
+- **`AUTH_JWKS_URI`**（Admin Resource Server 拉取 JWKS；默认 `http://localhost:8083/.well-known/jwks.json`）
+- **`SECURITY_REFRESH_COOKIE_SECURE`**（Refresh Cookie）
 - `FLYWAY_ENABLED`、`SITE_APP_FLYWAY_ENABLED`
 
 在 `services/website-services/` 目录创建 `.env`（已在仓库根 `.gitignore` 中忽略 **`.env`**，**勿提交**）。若终端直接 `mvn spring-boot:run`，请保持工作目录处于能拾取到上述 `.env` 的模块上级（例如 `services/website-services`，或 `admin` 子目录——父级亦会扫到）。更多说明见 [`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](../../docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md) §3。

@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -26,10 +26,14 @@ public class JwtTokenService implements TokenService {
 
     private final JwtProperties jwtProperties;
 
-    public JwtTokenService(JwtEncoder jwtEncoder, JwtDecoder jwtDecoder, JwtProperties jwtProperties) {
+    private final String jwtKeyId;
+
+    public JwtTokenService(
+            JwtEncoder jwtEncoder, JwtDecoder jwtDecoder, JwtProperties jwtProperties, String jwtKeyId) {
         this.jwtEncoder = jwtEncoder;
         this.jwtDecoder = jwtDecoder;
         this.jwtProperties = jwtProperties;
+        this.jwtKeyId = jwtKeyId;
     }
 
     @Override
@@ -59,7 +63,7 @@ public class JwtTokenService implements TokenService {
         }
 
         JwtClaimsSet claims = builder.build();
-        JwsHeader headers = JwsHeader.with(MacAlgorithm.HS256).build();
+        JwsHeader headers = JwsHeader.with(SignatureAlgorithm.RS256).header("kid", jwtKeyId).build();
         return jwtEncoder.encode(JwtEncoderParameters.from(headers, claims)).getTokenValue();
     }
 

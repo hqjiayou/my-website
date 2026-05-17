@@ -15,7 +15,7 @@ public class AuthOpenApiConfig {
                         .title("my-website Auth Service API")
                         .version("v1")
                         .description(
-                                "统一认证服务：Admin 登录 / Refresh / Logout、Access JWT（HS256 过渡态，见文档 4F/4G）、"
+                                "统一认证服务：Admin 登录 / Refresh / Logout、Access JWT（RS256 + JWKS）、"
                                         + "Refresh HttpOnly Cookie + Redis 会话。"));
     }
 }
