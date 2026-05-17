@@ -11,8 +11,8 @@
 | 阶段 4F（Auth 单服务收敛 + 主链路上提） | **已完成** |
 | 文档体系重整（`docs/website-services` 分类与总览） | **已完成** |
 | 阶段 4G（RS256 + JWKS） | **已完成** |
-| 阶段 4H（Gateway 全链路真实联调） | **待开始** |
-| 阶段 5A（Admin RBAC 深化） | **暂缓**（4G/4H 后） |
+| 阶段 4H（Gateway 全链路真实联调） | **已完成** |
+| 阶段 5A（Admin RBAC 深化） | **暂缓**（4H 后） |
 
 **勿在仓库另建第二份「后端 TODO 清单」。** 完整阶段史、产出与下一步：**[`docs/website-services/总览/后端开发路线图与阶段状态.md`](../../docs/website-services/总览/后端开发路线图与阶段状态.md)**；文档总导航：**[`docs/website-services/README.md`](../../docs/website-services/README.md)**。
 
@@ -59,8 +59,7 @@ website-services/
 - 不承载业务逻辑
 - 不直连 PostgreSQL / Redis / MinIO
 - **不**在网关校验 JWT（业务服务各自 Resource Server）
-
-### admin
+- **阶段 4H**：经 **:8080** 与 **Auth/Admin 多进程** 的真实联调结论见 [**阶段4H 联调说明**](../../docs/website-services/联调说明/阶段4H-Gateway唯一入口全链路真实联调.md)；路由 YAML 内注释强调 **`/api/admin/auth/**` 必须在 `/api/admin/**` 之前**。
 
 后台管理 API，可独立启动。
 

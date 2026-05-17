@@ -9,6 +9,7 @@ spring:
       server:
         webflux:
           routes:
+            # 顺序敏感：/api/admin/auth/** 必须排在 /api/admin/** 之前，否则 Login/Refresh/Logout 会被误送到 Admin。
             - id: auth-admin-auth
               uri: http://localhost:8083
               predicates:
