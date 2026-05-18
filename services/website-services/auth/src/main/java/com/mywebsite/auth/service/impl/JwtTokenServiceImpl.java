@@ -5,14 +5,16 @@ import com.mywebsite.auth.dto.TokenClaimsDto;
 import com.mywebsite.auth.properties.AuthJwtProperties;
 import com.mywebsite.auth.service.TokenService;
 import com.mywebsite.common.security.JwtClaimConstants;
+import com.mywebsite.common.security.SubjectCodes;
+import com.mywebsite.common.security.SubjectType;
 import com.mywebsite.common.security.TokenAudience;
+import com.mywebsite.common.security.config.TokenProperties;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -29,45 +31,52 @@ public class JwtTokenServiceImpl implements TokenService {
 
     private final AuthJwtProperties authJwtProperties;
 
+    private final TokenProperties tokenProperties;
+
     private final String jwtKeyId;
 
     public JwtTokenServiceImpl(
-            JwtEncoder jwtEncoder, JwtDecoder jwtDecoder, AuthJwtProperties authJwtProperties, String jwtKeyId) {
+            JwtEncoder jwtEncoder,
+            JwtDecoder jwtDecoder,
+            AuthJwtProperties authJwtProperties,
+            TokenProperties tokenProperties,
+            String jwtKeyId) {
         this.jwtEncoder = jwtEncoder;
         this.jwtDecoder = jwtDecoder;
         this.authJwtProperties = authJwtProperties;
+        this.tokenProperties = tokenProperties;
         this.jwtKeyId = jwtKeyId;
     }
 
     @Override
     public String createAccessToken(IssuedAccessTokenDto issuance) {
         Instant now = Instant.now();
-        Instant exp = now.plus(authJwtProperties.getAccessTokenTtl());
+        Instant exp = now.plus(tokenProperties.accessTokenTtl());
         String jti = UUID.randomUUID().toString();
-        String tokenType = issuance.audience() == TokenAudience.ADMIN ? "ADMIN" : issuance.audience().name();
 
-        Long adminUserId = Long.parseLong(issuance.subjectUserId());
+        long numericId = Long.parseLong(issuance.subjectUserId());
+        String subject = issuance.audience() == TokenAudience.ADMIN
+                ? SubjectCodes.formatAdminSubject(numericId)
+                : SubjectCodes.formatSiteUserSubject(numericId);
 
-        JwtClaimsSet.Builder builder = JwtClaimsSet.builder()
+        SubjectType subjectType = subjectTypeForAudience(issuance.audience());
+
+        JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(authJwtProperties.getIssuer())
-                .subject(issuance.subjectUserId())
-                .audience(Collections.singletonList(authJwtProperties.getAudience()))
+                .subject(subject)
+                .audience(Collections.singletonList(audienceForJwt(issuance.audience())))
                 .issuedAt(now)
                 .expiresAt(exp)
                 .id(jti)
-                .claim(JwtClaimConstants.TOKEN_TYPE, tokenType)
-                .claim(JwtClaimConstants.ADMIN_USER_ID, adminUserId)
-                .claim(JwtClaimConstants.USERNAME, issuance.username())
-                .claim(JwtClaimConstants.SESSION_ID, issuance.sessionId());
+                .claim(JwtClaimConstants.SUBJECT_TYPE, subjectType.name())
+                .build();
 
-        if (!issuance.authorities().isEmpty()) {
-            builder.claim(
-                    "roles", issuance.authorities().stream().sorted().collect(Collectors.toList()));
-        }
-
-        JwtClaimsSet claims = builder.build();
         JwsHeader headers = JwsHeader.with(SignatureAlgorithm.RS256).header("kid", jwtKeyId).build();
         return jwtEncoder.encode(JwtEncoderParameters.from(headers, claims)).getTokenValue();
+    }
+
+    private String audienceForJwt(TokenAudience audience) {
+        return audience == TokenAudience.ADMIN ? authJwtProperties.getAudience() : authJwtProperties.getSiteAudience();
     }
 
     @Override
@@ -75,42 +84,50 @@ public class JwtTokenServiceImpl implements TokenService {
         Jwt jwt = jwtDecoder.decode(token);
 
         List<String> audiences = jwt.getAudience();
-        if (audiences == null || audiences.stream().noneMatch(authJwtProperties.getAudience()::equals)) {
+        String expectedAud = audienceForJwt(expectedAudience);
+        if (audiences == null || audiences.stream().noneMatch(expectedAud::equals)) {
             return Optional.empty();
         }
 
-        String tokenType = jwt.getClaimAsString(JwtClaimConstants.TOKEN_TYPE);
-        if (tokenType == null || !tokenType.equals(expectedAudience.name())) {
+        SubjectType expectedSubjectType = subjectTypeForAudience(expectedAudience);
+        SubjectType actualSubjectType = parseSubjectTypeClaim(jwt.getClaimAsString(JwtClaimConstants.SUBJECT_TYPE));
+        if (actualSubjectType != expectedSubjectType) {
             return Optional.empty();
         }
 
-        Object uid = jwt.getClaim(JwtClaimConstants.ADMIN_USER_ID);
-        String username = jwt.getClaimAsString(JwtClaimConstants.USERNAME);
-        String sessionId = jwt.getClaimAsString(JwtClaimConstants.SESSION_ID);
-        if (uid == null || username == null || sessionId == null) {
+        boolean subjectOk = switch (expectedAudience) {
+            case ADMIN -> SubjectCodes.parseAdminUserId(jwt.getSubject()).isPresent();
+            case SITE -> SubjectCodes.parseSiteUserId(jwt.getSubject()).isPresent();
+        };
+        if (!subjectOk) {
             return Optional.empty();
         }
-
-        Set<String> authorities = extractRoles(jwt);
 
         return Optional.of(new TokenClaimsDto(
                 expectedAudience,
                 jwt.getSubject(),
-                username,
                 jwt.getId(),
-                sessionId,
-                tokenType,
-                authorities,
                 jwt.getIssuedAt(),
                 jwt.getExpiresAt()));
     }
 
-    @SuppressWarnings("unchecked")
-    private static Set<String> extractRoles(Jwt jwt) {
-        Object roles = jwt.getClaim("roles");
-        if (roles instanceof List<?> list) {
-            return list.stream().map(Object::toString).collect(Collectors.toUnmodifiableSet());
+    /** 签发侧 {@link TokenAudience} 与 JWT {@code subject_type}（{@link SubjectType}）的对应关系；解析侧必须一致校验。 */
+    private static SubjectType subjectTypeForAudience(TokenAudience audience) {
+        return switch (audience) {
+            case ADMIN -> SubjectType.ADMIN;
+            case SITE -> SubjectType.SITE;
+        };
+    }
+
+    /** {@code subject_type} 必须是有效的 {@link SubjectType} 名称；未知值视为不匹配。 */
+    private static SubjectType parseSubjectTypeClaim(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
         }
-        return Set.of();
+        try {
+            return SubjectType.valueOf(raw.trim());
+        } catch (@SuppressWarnings("unused") IllegalArgumentException ex) {
+            return null;
+        }
     }
 }

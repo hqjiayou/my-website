@@ -8,6 +8,17 @@ spring:
     encoding: UTF-8
     fallback-to-system-locale: false
 
+mywebsite:
+  security:
+    token:
+      access-token-expire-seconds: 900
+      refresh-token-expire-seconds: 604800
+      refresh-cookie-name: MYWEBSITE_REFRESH_TOKEN
+      refresh-cookie-path: /api/auth/token/refresh
+      refresh-cookie-secure: ${SECURITY_REFRESH_COOKIE_SECURE:true}
+      refresh-cookie-http-only: true
+      refresh-cookie-same-site: Lax
+
 app:
   i18n:
     default-locale: ja-JP
@@ -46,11 +57,6 @@ security:
   jwt:
     issuer: my-website
     audience: ADMIN
-    access-token-ttl: 15m
+    site-audience: SITE
   auth:
-    refresh-token-ttl: 7d
-    refresh-cookie-name: admin_refresh_token
-    refresh-cookie-path: /api/admin/auth
-    refresh-cookie-secure: ${SECURITY_REFRESH_COOKIE_SECURE:true}
-    refresh-cookie-same-site: Strict
     admin-login-max-password-length: 128

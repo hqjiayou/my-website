@@ -44,4 +44,3 @@ security:
   jwt:
     issuer: my-website
     audience: ADMIN
-    access-token-ttl: 15m

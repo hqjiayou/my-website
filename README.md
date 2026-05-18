@@ -95,9 +95,9 @@ Node.js + Fastify + TypeScript 的 AI/Agent 编排服务，默认端口 `3001`�
 
 ```text
 admin-web ─┐
-           ├──> website-services/gateway:8080 ──> /api/admin/auth/** → auth:8083
-           │                                 ──> /api/admin/**       → admin:8081（业务）
-site-web  ─┘                                 └──> /api/site/**     → site-app:8082
+           ├──> website-services/gateway:8080 ──> /api/auth/**           → auth:8083（登录 / 刷新 / 登出等）
+           │                                 ──> /api/admin/**           → admin:8081（业务 API，含 **`GET /api/admin/auth/me`**）
+site-web  ─┘                                 └──> /api/site/**           → site-app:8082（含 **`GET /api/site/auth/me`**）
 ```
 
 内部 Maven 依赖关系（非 HTTP 拓扑）：
@@ -155,11 +155,12 @@ pnpm dev
 
 ## 本地基础设施
 
-本地后端依赖 WSL + Docker 中的基础设施：
+后端本地依赖统一使用既有 **local-stack**（不在 `website-services` 内再起第二套 Postgres/Redis）：
 
-- PostgreSQL：`localhost:5432`
-- Redis：`localhost:6379`
-- MinIO / AIStor API：`http://localhost:9000`
-- MinIO / AIStor Console：`http://localhost:9001`
+- PostgreSQL：`local-postgres` → `localhost:5432`
+- Redis：`local-redis` → `localhost:6379`
+- MinIO / AIStor：`local-aistor` → API `http://localhost:9000`（控制台端口以栈配置为准）
 
-更多说明见 `docs/website-services/WSL与Docker环境配置说明.md`。
+应用在 **`services/website-services/.env`**（范本 `.env.example`）中配置 JDBC / Redis / MinIO 等；与 **local-stack** 目录下的 `.env` **分开维护**。
+
+更多说明见 [`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。

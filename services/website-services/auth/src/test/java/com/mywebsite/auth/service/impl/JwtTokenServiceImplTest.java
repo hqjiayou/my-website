@@ -2,15 +2,18 @@ package com.mywebsite.auth.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
-import com.mywebsite.auth.config.AuthJwtConfiguration;
+import com.mywebsite.auth.config.jwt.AuthJwtConfiguration;
 import com.mywebsite.auth.dto.IssuedAccessTokenDto;
 import com.mywebsite.auth.dto.TokenClaimsDto;
 import com.mywebsite.auth.properties.AuthJwtKeyProperties;
 import com.mywebsite.auth.properties.AuthJwtProperties;
 import com.mywebsite.auth.service.TokenService;
 import com.mywebsite.common.security.JwtClaimConstants;
+import com.mywebsite.common.security.SubjectCodes;
 import com.mywebsite.common.security.TokenAudience;
+import com.mywebsite.common.security.config.TokenProperties;
 import com.nimbusds.jwt.SignedJWT;
 import java.util.Optional;
 import java.util.Set;
@@ -27,14 +30,16 @@ import org.springframework.test.context.TestPropertySource;
 @SpringBootTest(classes = JwtTokenServiceImplTest.Empty.class)
 @ActiveProfiles("test")
 @Import(AuthJwtConfiguration.class)
-@EnableConfigurationProperties({AuthJwtProperties.class, AuthJwtKeyProperties.class})
+@EnableConfigurationProperties({AuthJwtProperties.class, AuthJwtKeyProperties.class, TokenProperties.class})
 @TestPropertySource(
         properties = {
             "mywebsite.auth.jwt.privateKeyPath=classpath:jwt/test-private.pem",
             "mywebsite.auth.jwt.publicKeyPath=classpath:jwt/test-public.pem",
             "mywebsite.auth.jwt.keyId=auth-test-rs256-key-1",
             "security.jwt.issuer=test-issuer",
-            "security.jwt.audience=ADMIN"
+            "security.jwt.audience=ADMIN",
+            "security.jwt.site-audience=SITE",
+            "mywebsite.security.token.access-token-expire-seconds=900"
         })
 class JwtTokenServiceImplTest {
 
@@ -59,14 +64,15 @@ class JwtTokenServiceImplTest {
         assertThat(p).isPresent();
         TokenClaimsDto claims = p.get();
         assertThat(claims.audience()).isEqualTo(TokenAudience.ADMIN);
-        assertThat(claims.username()).isEqualTo("root");
+        assertThat(claims.subjectUserCode()).isEqualTo(SubjectCodes.formatAdminSubject(42L));
 
         Jwt decoded = jwtDecoder.decode(jwt);
-        assertThat(decoded.getClaimAsString(JwtClaimConstants.TOKEN_TYPE)).isEqualTo("ADMIN");
-        assertThat(decoded.getClaimAsString(JwtClaimConstants.SESSION_ID)).isEqualTo("sid-1");
-        Object uid = decoded.getClaim(JwtClaimConstants.ADMIN_USER_ID);
-        assertThat(uid).isInstanceOf(Number.class);
-        assertThat(((Number) uid).longValue()).isEqualTo(42L);
+        assertThat(decoded.getSubject()).isEqualTo(SubjectCodes.formatAdminSubject(42L));
+        assertThat(decoded.getClaimAsString(JwtClaimConstants.SUBJECT_TYPE)).isEqualTo("ADMIN");
+        assertNull(decoded.getClaim(JwtClaimConstants.TOKEN_TYPE));
+        assertNull(decoded.getClaim(JwtClaimConstants.ADMIN_USER_ID));
+        assertNull(decoded.getClaim(JwtClaimConstants.USERNAME));
+        assertNull(decoded.getClaim(JwtClaimConstants.SESSION_ID));
     }
 
     @Test

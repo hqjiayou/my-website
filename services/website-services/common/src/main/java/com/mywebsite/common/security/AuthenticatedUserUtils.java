@@ -11,9 +11,17 @@ public final class AuthenticatedUserUtils {
 
     /** Maps an Admin audience access JWT into {@link AuthenticatedUser} for request-scope context. */
     public static AuthenticatedUser fromAdminAccessJwt(Jwt jwt) {
-        Object uidObj = jwt.getClaim(JwtClaimConstants.ADMIN_USER_ID);
-        Objects.requireNonNull(uidObj, "admin_user_id claim missing");
-        String username = jwt.getClaimAsString(JwtClaimConstants.USERNAME);
-        return new AuthenticatedUser(TokenAudience.ADMIN, jwt.getSubject(), username, Set.of());
+        Objects.requireNonNull(jwt.getSubject(), "jwt.sub missing");
+        SubjectCodes.parseAdminUserId(jwt.getSubject())
+                .orElseThrow(() -> new IllegalStateException("jwt.sub is not a valid admin subject code"));
+        return new AuthenticatedUser(TokenAudience.ADMIN, jwt.getSubject(), null, Set.of());
+    }
+
+    /** Maps a SITE audience access JWT into {@link AuthenticatedUser} for request-scope context. */
+    public static AuthenticatedUser fromSiteAccessJwt(Jwt jwt) {
+        Objects.requireNonNull(jwt.getSubject(), "jwt.sub missing");
+        SubjectCodes.parseSiteUserId(jwt.getSubject())
+                .orElseThrow(() -> new IllegalStateException("jwt.sub is not a valid site subject code"));
+        return new AuthenticatedUser(TokenAudience.SITE, jwt.getSubject(), null, Set.of());
     }
 }

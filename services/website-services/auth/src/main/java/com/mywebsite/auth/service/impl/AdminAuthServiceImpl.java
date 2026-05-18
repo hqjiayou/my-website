@@ -2,34 +2,39 @@ package com.mywebsite.auth.service.impl;
 
 import com.mywebsite.auth.dto.AdminLoginCookieDto;
 import com.mywebsite.auth.dto.AdminLoginResponseDto;
-import com.mywebsite.auth.dto.AdminLoginUserDto;
 import com.mywebsite.auth.dto.AdminRefreshCookieDto;
 import com.mywebsite.auth.dto.AdminRefreshResponseDto;
+import com.mywebsite.auth.dto.IssuedAccessTokenDto;
 import com.mywebsite.auth.dto.RotateRefreshDto;
 import com.mywebsite.auth.entity.AdminUserEntity;
 import com.mywebsite.auth.mapper.AdminUserMapper;
 import com.mywebsite.auth.constant.AdminAuthConstants;
 import com.mywebsite.auth.properties.AdminAuthProperties;
-import com.mywebsite.auth.properties.AuthJwtProperties;
 import com.mywebsite.auth.service.AdminAuthService;
 import com.mywebsite.auth.service.AdminRefreshSessionService;
-import com.mywebsite.auth.dto.IssuedAccessTokenDto;
 import com.mywebsite.auth.service.TokenService;
 import com.mywebsite.auth.utils.RefreshTokenUtils;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.security.TokenAudience;
+import com.mywebsite.common.security.config.TokenProperties;
+import com.mywebsite.common.web.HttpRequestCorrelation;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AdminAuthServiceImpl implements AdminAuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminAuthServiceImpl.class);
 
     private static final String KEY_LOGIN_FAILED = "admin.auth.login.failed";
 
@@ -47,7 +52,7 @@ public class AdminAuthServiceImpl implements AdminAuthService {
 
     private final AdminRefreshSessionService refreshSessionService;
 
-    private final AuthJwtProperties authJwtProperties;
+    private final TokenProperties tokenProperties;
 
     private final AdminAuthProperties adminAuthProperties;
 
@@ -56,13 +61,13 @@ public class AdminAuthServiceImpl implements AdminAuthService {
             PasswordEncoder passwordEncoder,
             TokenService tokenService,
             AdminRefreshSessionService refreshSessionService,
-            AuthJwtProperties authJwtProperties,
+            TokenProperties tokenProperties,
             AdminAuthProperties adminAuthProperties) {
         this.adminUserMapper = adminUserMapper;
         this.passwordEncoder = passwordEncoder;
         this.tokenService = tokenService;
         this.refreshSessionService = refreshSessionService;
-        this.authJwtProperties = authJwtProperties;
+        this.tokenProperties = tokenProperties;
         this.adminAuthProperties = adminAuthProperties;
     }
 
@@ -70,26 +75,28 @@ public class AdminAuthServiceImpl implements AdminAuthService {
     public AdminLoginCookieDto login(String username, String rawPassword) {
         validatePasswordPolicy(rawPassword);
 
+        String trimmedUsername = username.trim();
+
         AdminUserEntity user =
                 adminUserMapper.selectOne(new LambdaQueryWrapper<AdminUserEntity>()
-                        .eq(AdminUserEntity::getUsername, username.trim()));
+                        .eq(AdminUserEntity::getUsername, trimmedUsername));
 
         if (user == null || user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
-            denyBadCredential();
+            denyBadCredential(trimmedUsername);
         }
 
         String status = user.getStatus() == null ? "" : user.getStatus().trim().toUpperCase(Locale.ROOT);
         if (!AdminAuthConstants.ACTIVE_ADMIN_ACCOUNT_STATUS.equals(status)) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED.getCode(), KEY_ACCOUNT_DISABLED);
+            throw new BusinessException(ErrorCode.FORBIDDEN.getCode(), KEY_ACCOUNT_DISABLED);
         }
 
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
-            denyBadCredential();
+            denyBadCredential(user.getUsername());
         }
 
         String sessionId = UUID.randomUUID().toString();
         String refreshPlain = RefreshTokenUtils.generateOpaque();
-        Instant expireAt = Instant.now().plus(adminAuthProperties.getRefreshTokenTtl());
+        Instant expireAt = Instant.now().plus(tokenProperties.refreshTokenTtl());
 
         refreshSessionService.bindNewSession(user.getId(), user.getUsername(), sessionId, refreshPlain, expireAt);
 
@@ -100,12 +107,14 @@ public class AdminAuthServiceImpl implements AdminAuthService {
                 sessionId,
                 Set.of()));
 
-        long expiresInSec = authJwtProperties.getAccessTokenTtl().toSeconds();
+        long expiresInSec = tokenProperties.accessTokenTtl().toSeconds();
 
-        AdminLoginUserDto userDto =
-                new AdminLoginUserDto(user.getId(), user.getUsername(), user.getDisplayName(), user.getStatus());
+        AdminLoginResponseDto body = new AdminLoginResponseDto(accessToken, expiresInSec);
 
-        AdminLoginResponseDto body = new AdminLoginResponseDto(accessToken, expiresInSec, userDto);
+        log.info(
+                "auth security login_success requestId={} realm=admin userId={}",
+                MDC.get(HttpRequestCorrelation.MDC_REQUEST_ID),
+                user.getId());
 
         return new AdminLoginCookieDto(body, refreshPlain, expireAt);
     }
@@ -118,7 +127,12 @@ public class AdminAuthServiceImpl implements AdminAuthService {
         RotateRefreshDto rotated = refreshSessionService.rotate(refreshPlain);
         return switch (rotated) {
             case RotateRefreshDto.Invalid ignored -> throw unauthorizedRefresh();
-            case RotateRefreshDto.ReplayRevoked ignored -> throw unauthorizedRefresh();
+            case RotateRefreshDto.ReplayRevoked ignored -> {
+                log.warn(
+                        "auth security refresh_replay_detected requestId={} realm=admin sessionRevoked=true",
+                        MDC.get(HttpRequestCorrelation.MDC_REQUEST_ID));
+                throw unauthorizedRefresh();
+            }
             case RotateRefreshDto.Rotated ok -> {
                 String accessToken = tokenService.createAccessToken(new IssuedAccessTokenDto(
                         TokenAudience.ADMIN,
@@ -126,8 +140,12 @@ public class AdminAuthServiceImpl implements AdminAuthService {
                         ok.username(),
                         ok.sessionId(),
                         Set.of()));
-                long expiresInSec = authJwtProperties.getAccessTokenTtl().toSeconds();
+                long expiresInSec = tokenProperties.accessTokenTtl().toSeconds();
                 AdminRefreshResponseDto body = new AdminRefreshResponseDto(accessToken, expiresInSec);
+                log.info(
+                        "auth security refresh_success requestId={} realm=admin userId={}",
+                        MDC.get(HttpRequestCorrelation.MDC_REQUEST_ID),
+                        ok.adminUserId());
                 yield new AdminRefreshCookieDto(body, ok.newRefreshPlain(), ok.expireAt());
             }
         };
@@ -142,7 +160,11 @@ public class AdminAuthServiceImpl implements AdminAuthService {
         return new BusinessException(ErrorCode.UNAUTHORIZED.getCode(), KEY_REFRESH_INVALID);
     }
 
-    private void denyBadCredential() {
+    private void denyBadCredential(String attemptedUsername) {
+        log.warn(
+                "auth security login_failed requestId={} realm=admin username={}",
+                MDC.get(HttpRequestCorrelation.MDC_REQUEST_ID),
+                attemptedUsername);
         throw new BusinessException(ErrorCode.UNAUTHORIZED.getCode(), KEY_LOGIN_FAILED);
     }
 

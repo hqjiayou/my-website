@@ -6,7 +6,7 @@
 
 当前 `services/website-services` 的基础架构骨架整体符合既定方向：Maven 多模块关系完整，`gateway/admin/site-app` 三个可启动应用边界清晰，`site` 已作为聚合模块管理前台子模块，`auth` 未承载具体用户业务，`infra` 集中接入 PostgreSQL、Redis、MinIO，且本地配置通过环境变量占位。
 
-本次审查未发现需要立即调整的 POM 注册、端口规划、网关路由或模块依赖硬错误。已自动补齐无需额外决策的问题：在 [`docs/website-services/WSL与Docker环境配置说明.md`](../../docs/website-services/WSL与Docker环境配置说明.md) §3.0 增补与本仓库 Compose 对齐的 `.env` 范本说明，更新 `services/website-services/README.md` 中的环境变量说明，并同步修正仓库根 `README.md` 中旧的 `site-service` 叙述。
+本次审查未发现需要立即调整的 POM 注册、端口规划、网关路由或模块依赖硬错误。后续已在 **[`docs/website-services/WSL与Docker环境配置说明.md`](../../docs/website-services/WSL与Docker环境配置说明.md)**（跳转至 **`设计文档/基础架构/`** 正文）§3.0 明确：**基础设施统一 local-stack**，**`website-services/.env`**（范本 **`.env.example`**）仅供 Java 进程对齐 JDBC/Redis；并与 **`services/website-services/README.md`**、仓库根 **`README.md`** 保持一致口径。
 
 当前仍有少量需要人工确认的方向性问题，主要集中在后续基础框架 V1 是否引入 ORM/Mapper、数据库迁移、OpenAPI、认证策略、测试基线与模块内部分层规范。这些问题不应在本次审查中擅自落地。
 
@@ -35,7 +35,7 @@
 
 | 状态 | 检查项 | 当前情况 | 建议 |
 | --- | --- | --- | --- |
-| 🟡 部分符合 | 本地 `.env` 说明或可复制的示例 | README 与 WSL 文档已说明变量名；可复制范本已写在 **`docs/website-services/WSL与Docker环境配置说明.md` §3.0**（开发人员本地创建 `.env`，勿入库）。仓库内不提供 `.env.example`，避免与本机 `.env` 双轨维护。 | 若团队需要统一 Compose 与工作区密钥管理，可考虑后续引入 **direnv** 或在 IDE Run Configuration 中固化同一套变量。 |
+| 🟡 部分符合 | 本地 `.env` 说明或可复制的示例 | 权威范本为 **`services/website-services/.env.example`**（仓库跟踪）；正文指引见 **[`docs/website-services/WSL与Docker环境配置说明.md`](../../docs/website-services/WSL与Docker环境配置说明.md)** §3.0；开发人员本地 **`cp .env.example .env`**（勿入库）。基础设施 **`website-services/.env`** 与 **local-stack** 目录 `.env` 分开维护。 | 若团队需要统一密钥注入，可考虑 **direnv** 或 IDE Run Configuration 固化变量。 |
 | 🟡 部分符合 | 文档一致性 | `website-services/README.md` 与 `docs/整体架构说明.md` 已贴近当前设计。仓库根 `README.md` 审查前仍有旧 `site-service` 描述，本次已更新。`docs/admin-web/架构设计.md` 曾有少量旧称呼。 | 后续在 admin-web API 联调前，统一更新 admin-web 专项文档中的服务命名。 |
 | 🟡 部分符合 | 测试基线 | POM 已引入 `spring-boot-starter-test`，但当前未发现 `src/test` 测试用例。 | 是否建立基础 smoke test 属于下一步工程规范选择，本次不擅自新增。 |
 | 🟡 部分符合 | 基础异常体系 | `common` 已有 `ApiResponse`、`ErrorCode`、`BusinessException`，`admin/site-app` 有全局异常处理。 | 错误码分层、国际化、trace-id 回传格式需要后续确认。 |
@@ -78,7 +78,7 @@
 
 | 状态 | 问题 | 修复方式 |
 | --- | --- | --- |
-| ✅ 已修复 | `services/website-services` 缺少可读入的本地环境变量约定。 | 在 WSL 文档 §3.0 提供与 `docker-compose.yml`、应用一致的 `.env` 范本（本机自用文件 `.gitignore`，不提交示例文件）。 |
+| ✅ 已修复 | `services/website-services` 缺少可读入的本地环境变量约定。 | 在 WSL 文档 §3.0 提供与 **local-stack**、应用一致的 **`website-services/.env`** 范本（本机自用文件 `.gitignore`，跟踪 `.env.example`）。 |
 | ✅ 已修复 | `website-services/README.md` 对环境变量出处说明不足。 | 在本地运行依赖章节改为指向 **`services/website-services/` 目录下的 `.env`** 与 `docs/website-services/WSL与Docker环境配置说明.md` §3.0。 |
 | ✅ 已修复 | 仓库根 `README.md` 仍描述旧的 `site-service`，与当前 `website-services` 架构不一致。 | 更新根 README 为当前 `gateway/admin/site-app` 后端结构。 |
 

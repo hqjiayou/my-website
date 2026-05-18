@@ -32,7 +32,7 @@
 ## 3. 实现位置（代码锚点）
 
 - **Auth**
-  - RSA 密钥加载、**`JwtEncoder` / 验证用 `JwtDecoder`**、**`TokenService`**：`com.mywebsite.auth.config.AuthJwtConfiguration`、`com.mywebsite.auth.properties.AuthJwtKeyProperties`、`com.mywebsite.auth.utils.RsaPemUtils`
+  - RSA 密钥加载、**`JwtEncoder` / 验证用 `JwtDecoder`**、**`TokenService`**：`com.mywebsite.auth.config.jwt.AuthJwtConfiguration`、`com.mywebsite.auth.properties.AuthJwtKeyProperties`、`com.mywebsite.auth.utils.RsaPemUtils`
   - Access JWT 签发与 **`kid`**：`com.mywebsite.auth.service.impl.JwtTokenServiceImpl`
   - JWKS：`com.mywebsite.auth.controller.AuthJwksWellKnownController`，文档载体 `com.mywebsite.auth.dto.AuthJwkSetDocumentDto`（JSON 由 **`JWKSet#toString()`** 序列化，标准 JSON）
 - **Admin**

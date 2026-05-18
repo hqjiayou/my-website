@@ -1,10 +1,10 @@
 # 数据库 / Redis / MinIO 等本地连接信息在 `.env`（范本 `.env.example`）中维护。
 # Admin 验签：仅通过 AUTH_JWKS_URI 拉取 Auth 的 JWKS（不持有 JWT 签名密钥）。建议先启动 Auth 再启动 Admin。
-# PostgreSQL：优先维护 POSTGRES_*（与 Docker Compose 一致）。
+# PostgreSQL：优先维护 POSTGRES_*（与 website-services/.env 及 local-stack Postgres 账号一致）。
 
 spring:
   datasource:
-    # DB_* 可选；未设置时与 Compose 的 POSTGRES_* 一致（同一 .env 只改一套口令即可）
+    # DB_* 可选；未设置时回落到 POSTGRES_*（同一 website-services/.env 保持一套口令即可）
     url: ${DB_URL:jdbc:postgresql://localhost:5432/${POSTGRES_DB:my_website_dev}}
     username: ${DB_USERNAME:${POSTGRES_USER:mywebsite}}
     password: ${DB_PASSWORD:${POSTGRES_PASSWORD:CHANGE_ME}}

@@ -1,12 +1,12 @@
-package com.mywebsite.auth.config;
+package com.mywebsite.auth.config.jwt;
 
 import com.mywebsite.auth.dto.AuthJwkSetDocumentDto;
-import com.mywebsite.auth.utils.RsaPemUtils;
-import com.mywebsite.auth.properties.AdminAuthProperties;
 import com.mywebsite.auth.properties.AuthJwtKeyProperties;
 import com.mywebsite.auth.properties.AuthJwtProperties;
-import com.mywebsite.auth.service.impl.JwtTokenServiceImpl;
 import com.mywebsite.auth.service.TokenService;
+import com.mywebsite.auth.service.impl.JwtTokenServiceImpl;
+import com.mywebsite.auth.utils.RsaPemUtils;
+import com.mywebsite.common.security.config.TokenProperties;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.KeyUse;
@@ -28,6 +28,10 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
+/**
+ * JWT（RS256）签发、验签、JWKS 文档等 Bean；与 {@link com.mywebsite.auth.config.AuthSecurityConfig}、
+ * OpenAPI 等并列，单独置于 {@code config.jwt} 子包便于浏览。
+ */
 @Configuration
 public class AuthJwtConfiguration {
 
@@ -97,6 +101,7 @@ public class AuthJwtConfiguration {
                 JwtEncoder jwtEncoder,
                 JwtDecoder jwtDecoder,
                 AuthJwtProperties authJwtProperties,
+                TokenProperties tokenProperties,
                 AuthJwtKeyProperties keys,
                 Environment env) {
             String kid = nonemptyFirst(
@@ -104,7 +109,7 @@ public class AuthJwtConfiguration {
                     env.getProperty("mywebsite.auth.jwt.keyId"),
                     env.getProperty("mywebsite.auth.jwt.key-id"),
                     env.getProperty("AUTH_JWT_KEY_ID"));
-            return new JwtTokenServiceImpl(jwtEncoder, jwtDecoder, authJwtProperties, kid);
+            return new JwtTokenServiceImpl(jwtEncoder, jwtDecoder, authJwtProperties, tokenProperties, kid);
         }
 
         @Bean

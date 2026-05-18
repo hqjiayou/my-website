@@ -5,15 +5,21 @@ mywebsite:
       privateKeyPath: classpath:jwt/test-private.pem
       publicKeyPath: classpath:jwt/test-public.pem
       keyId: auth-test-rs256-key-1
+  security:
+    token:
+      access-token-expire-seconds: 900
+      refresh-token-expire-seconds: 604800
+      refresh-cookie-name: MYWEBSITE_REFRESH_TOKEN
+      refresh-cookie-path: /api/auth/token/refresh
+      refresh-cookie-secure: false
+      refresh-cookie-http-only: true
+      refresh-cookie-same-site: Lax
 
 security:
   jwt:
     issuer: test-issuer
     audience: ADMIN
-    access-token-ttl: 15m
-  auth:
-    refresh-token-ttl: 7d
-    refresh-cookie-secure: false
+    site-audience: SITE
 
 mybatis-plus:
   configuration:

@@ -29,16 +29,16 @@
 ### 创建验证库
 
 1. PostgreSQL 可达（默认 `localhost:5432`）。
-2. 使用具备 **`CREATEDB`** 的角色连接维护库 **`postgres`**，创建 **`my_website_3c_verify`**；Owner 建议与 JDBC 登录用户一致（与 **`.env`** 中 **`POSTGRES_USER`** / **`VERIFY_PG_USER`** 对齐；**`.env.example`** 范本为 **`hqjiayou`**）。
+2. 使用具备 **`CREATEDB`** 的角色连接维护库 **`postgres`**，创建 **`my_website_3c_verify`**；Owner 建议与 JDBC 登录用户一致（与 **`website-services/.env`** 中 **`POSTGRES_USER`** / **`VERIFY_PG_USER`** 对齐；**`.env.example`** 范本默认为 **`mywebsite`**）。
 
-**Docker Compose**（在 **`services/website-services`**、`postgres` 已启动）示例：
+**Docker（local-stack / `local-postgres`）示例**：
 
 ```bash
-# 用户名与 OWNER 请与 .env 中 POSTGRES_USER 一致（范本默认为 hqjiayou）
-docker compose exec postgres psql -U hqjiayou -d postgres -c "CREATE DATABASE my_website_3c_verify OWNER hqjiayou ENCODING 'UTF8';"
+# 用户名与 OWNER 请与 website-services/.env 中 Postgres 登录用户一致（范本默认为 mywebsite）
+docker exec -i local-postgres psql -U mywebsite -d postgres -c "CREATE DATABASE my_website_3c_verify OWNER mywebsite ENCODING 'UTF8';"
 ```
 
-若 `.env` 修改了 **`POSTGRES_USER`**，请将命令中的 **`hqjiayou`**（`-U` 与 `OWNER`）替换为与你容器一致的登录用户。
+若容器名不同，请以 **`docker ps`** 为准；也可改用宿主机 **`psql`** 直连 **`localhost:5432`** 执行等价 **`CREATE DATABASE`**。
 
 **SQL 文件（与本仓库脚本命名一致）：**
 
@@ -97,7 +97,7 @@ mvn clean test -Ppersistence-verify-pg -pl admin,site/site-app -am
 
 ## 环境变量（可选）
 
-**`application-verify-pg.yml`** 解析顺序：**`VERIFY_PG_*` → 环境变量 `POSTGRES_USER` / `POSTGRES_PASSWORD` → 字面默认值 `hqjiayou`**（与 **`.env.example`** 范本对齐；Compose 本身不再有 `${VAR:-默认}`，本地 JDBC 口令应以 **`.env`** 为准）。
+**`application-verify-pg.yml`** 解析顺序：**`VERIFY_PG_*` → 环境变量 `POSTGRES_USER` / `POSTGRES_PASSWORD` → 字面默认值 `hqjiayou`**（历史默认；本地请以 **`website-services/.env`** 与 **`POSTGRES_*`** 为准）。
 
 | 变量 | 含义 | 未设置时的回落 |
 |------|------|----------------|
@@ -117,11 +117,11 @@ mvn clean test -Ppersistence-verify-pg -pl admin,site/site-app -am
 
 ### Connection refused
 
-启动 PostgreSQL，或 **`docker compose up -d postgres`**。
+启动 PostgreSQL（例如启动 **local-stack** / **`local-postgres`**），确认 **`localhost:5432`** 可达。
 
 ### `password authentication failed`（SQLState **28P01**）
 
-用户或口令与实例不符：对齐 **`VERIFY_PG_*`** / **`POSTGRES_*`** 与 **`docker-compose.yml` 或 `.env`**。
+用户或口令与实例不符：对齐 **`VERIFY_PG_*`** / **`POSTGRES_*`** 与 **`website-services/.env`**（以及实际 **local-postgres** 账号）。
 
 ### `Found more than one migration with version 1`
 

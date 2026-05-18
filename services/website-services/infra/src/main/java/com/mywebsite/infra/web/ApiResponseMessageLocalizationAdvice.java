@@ -1,9 +1,8 @@
 package com.mywebsite.infra.web;
 
 import com.mywebsite.common.api.ApiResponse;
+import com.mywebsite.common.api.ResponseMessages;
 import com.mywebsite.common.enums.ErrorCode;
-import com.mywebsite.infra.i18n.MessageKeys;
-import com.mywebsite.infra.service.LocalizedMessageService;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -12,24 +11,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 /**
- * 仅对「语义成功」{@link ApiResponse} 做写出前可选本地化：{@code ApiResponse.success()} 在 {@code common} 模块仍携带 {@code messageKey}
- * ，此处补足为自然语言，避免让每个 Controller 手写 {@code LocalizedMessageService}。
+ * 将语义成功 {@link ApiResponse} 的 {@code message} 规范为固定字面量 {@link ResponseMessages#SUCCESS}，
+ * 避免沿用历史上的 messageKey → i18n 差异化成功文案。
  *
- * <p><b>刻意收窄：</b>仅当 {@linkplain ApiResponse#getCode()} 等于 {@linkplain ErrorCode#SUCCESS} 时再检查 message。
- * {@code Fail}（非零语义）、Security EntryPoint/handler JSON、{@code GlobalExceptionHandler} 等路径不负责在此继续解析，
- * 避免隐式改写错误体或误判。
- *
- * <p>判定仍使用 {@linkplain MessageKeys#looksLikeMessageKey(String)} 启发式；若业务必须把「读起来像 key 的英文字符串」原样透出成功消息，
- * 应避免采用 {@code aaa.bbb} 形态的纯小写点分格式（见 《后端多语言支持策略设计 V1》）。
+ * <p>仅处理 {@linkplain ApiResponse#getCode()} 等于 {@linkplain ErrorCode#SUCCESS} 的写出体；
+ * 失败码、{@code HttpMessageBody} 错误信封等不在此改写。
  */
 @RestControllerAdvice
 public class ApiResponseMessageLocalizationAdvice implements ResponseBodyAdvice<ApiResponse<?>> {
-
-    private final LocalizedMessageService localizedMessageService;
-
-    public ApiResponseMessageLocalizationAdvice(LocalizedMessageService localizedMessageService) {
-        this.localizedMessageService = localizedMessageService;
-    }
 
     @Override
     public boolean supports(MethodParameter returnType, @NonNull Class<? extends HttpMessageConverter<?>> converterType) {
@@ -50,11 +39,6 @@ public class ApiResponseMessageLocalizationAdvice implements ResponseBodyAdvice<
         if (body.getCode() != ErrorCode.SUCCESS.getCode()) {
             return body;
         }
-        String raw = body.getMessage();
-        if (!MessageKeys.looksLikeMessageKey(raw)) {
-            return body;
-        }
-        String localized = localizedMessageService.getMessage(raw);
-        return new ApiResponse<>(body.getCode(), localized, body.getData());
+        return new ApiResponse<>(body.getCode(), ResponseMessages.SUCCESS, body.getData());
     }
 }

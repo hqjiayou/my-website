@@ -1,18 +1,18 @@
 package com.mywebsite.auth.properties;
 
-import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/** Access JWT 语义配置（issuer / audience / TTL），前缀 {@code security.jwt}。 */
+/** Access JWT iss / aud（前缀 {@code security.jwt}）；TTL 见 {@link com.mywebsite.common.security.config.TokenProperties}。 */
 @ConfigurationProperties(prefix = "security.jwt")
 public class AuthJwtProperties {
 
     private String issuer = "my-website";
 
-    /** JWT {@code aud} claim for Admin access tokens; defaults to ADMIN audience name. */
+    /** JWT {@code aud} — Admin Access Token */
     private String audience = "ADMIN";
 
-    private Duration accessTokenTtl = Duration.ofMinutes(15);
+    /** JWT {@code aud} — Site Access Token */
+    private String siteAudience = "SITE";
 
     public String getIssuer() {
         return issuer;
@@ -30,11 +30,11 @@ public class AuthJwtProperties {
         this.audience = audience;
     }
 
-    public Duration getAccessTokenTtl() {
-        return accessTokenTtl;
+    public String getSiteAudience() {
+        return siteAudience;
     }
 
-    public void setAccessTokenTtl(Duration accessTokenTtl) {
-        this.accessTokenTtl = accessTokenTtl;
+    public void setSiteAudience(String siteAudience) {
+        this.siteAudience = siteAudience;
     }
 }

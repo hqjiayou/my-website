@@ -62,48 +62,48 @@ try {
     $missingUser = '{"username":"admin_local_verify_missing_xyz","password":"whatever"}'
 
     Write-Host "`n=== Wrong password ja-JP ==="
-    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $wrong
+    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $wrong
     Write-Host (StripHttpCode $o)
 
     Write-Host "`n=== Wrong password zh-CN ==="
-    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: zh-CN" -H "Content-Type: application/json" --data-binary $wrong
+    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: zh-CN" -H "Content-Type: application/json" --data-binary $wrong
     Write-Host (StripHttpCode $o)
 
     Write-Host "`n=== Wrong password en-US ==="
-    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: en-US" -H "Content-Type: application/json" --data-binary $wrong
+    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: en-US" -H "Content-Type: application/json" --data-binary $wrong
     Write-Host (StripHttpCode $o)
 
     Write-Host "`n=== Unknown username ja-JP ==="
-    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $missingUser
+    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $missingUser
     Write-Host (StripHttpCode $o)
 
     Write-Host "`n=== Unknown username zh-CN ==="
-    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: zh-CN" -H "Content-Type: application/json" --data-binary $missingUser
+    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: zh-CN" -H "Content-Type: application/json" --data-binary $missingUser
     Write-Host (StripHttpCode $o)
 
     Write-Host "`n=== Unknown username en-US ==="
-    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: en-US" -H "Content-Type: application/json" --data-binary $missingUser
+    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: en-US" -H "Content-Type: application/json" --data-binary $missingUser
     Write-Host (StripHttpCode $o)
 
     Write-Host "`n=== Validation username blank ja-JP ==="
-    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary '{"username":"","password":"x"}'
+    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary '{"username":"","password":"x"}'
     Write-Host (StripHttpCode $o)
 
     Write-Host "`n=== Validation password blank zh-CN ==="
-    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: zh-CN" -H "Content-Type: application/json" --data-binary '{"username":"admin_local_verify","password":""}'
+    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: zh-CN" -H "Content-Type: application/json" --data-binary '{"username":"admin_local_verify","password":""}'
     Write-Host (StripHttpCode $o)
 
     Write-Host "`n=== Validation password too long en-US ==="
     $longPw = ("a" * 129)
     $longBody = '{"username":"admin_local_verify","password":"' + $longPw + '"}'
-    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: en-US" -H "Content-Type: application/json" --data-binary $longBody
+    $o = curl.exe -sS -w "`nHTTP_CODE:%{http_code}" -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: en-US" -H "Content-Type: application/json" --data-binary $longBody
     Write-Host (StripHttpCode $o)
 
     Write-Host "`n=== Login success + Set-Cookie sample (-D headers) ==="
     Remove-Item $cjLogin -ErrorAction SilentlyContinue
     $hdrLogin = Join-Path $tmp "login_hdr.txt"
     $good = '{"username":"admin_local_verify","password":"Local4c_Verify"}'
-    curl.exe -sS -D $hdrLogin -o (Join-Path $tmp "login_body.json") -w "HTTP_CODE:%{http_code}`n" -c $cjLogin -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $good | Out-Host
+    curl.exe -sS -D $hdrLogin -o (Join-Path $tmp "login_body.json") -w "HTTP_CODE:%{http_code}`n" -c $cjLogin -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $good | Out-Host
     Write-Host "--- Response headers (HTTP / Set-Cookie) ---"
     Get-Content $hdrLogin | Select-String -Pattern "^(HTTP/|Set-Cookie:)" | ForEach-Object { $_.Line }
 
@@ -131,33 +131,33 @@ try {
     Write-Host "`n=== Refresh rotate ==="
     Copy-Item -Force $cjLogin $cjOrig
     Remove-Item $cjRot -ErrorAction SilentlyContinue
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjRot -X POST "$AuthBase/api/admin/auth/refresh" -H "Accept-Language: ja-JP" | Out-Host
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjRot -X POST "$AuthBase/api/auth/token/refresh" -H "Accept-Language: ja-JP" | Out-Host
 
     Write-Host "`n=== Replay old refresh cookie ==="
     Remove-Item $cjReplay -ErrorAction SilentlyContinue
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjOrig -c $cjReplay -X POST "$AuthBase/api/admin/auth/refresh" -H "Accept-Language: ja-JP"
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjOrig -c $cjReplay -X POST "$AuthBase/api/auth/token/refresh" -H "Accept-Language: ja-JP"
 
     Write-Host "`n=== Refresh with rotated cookie AFTER replay (expect invalid / session revoked) ==="
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjRot -c $cjRot -X POST "$AuthBase/api/admin/auth/refresh" -H "Accept-Language: ja-JP"
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjRot -c $cjRot -X POST "$AuthBase/api/auth/token/refresh" -H "Accept-Language: ja-JP"
 
     Write-Host "`n=== Fresh login after replay purge ==="
     Remove-Item $cjLogin -ErrorAction SilentlyContinue
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -c $cjLogin -X POST "$AuthBase/api/admin/auth/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $good
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -c $cjLogin -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $good
 
     Write-Host "`n=== Logout ==="
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjLogin -X POST "$AuthBase/api/admin/auth/logout" -H "Accept-Language: ja-JP"
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjLogin -X POST "$AuthBase/api/auth/logout" -H "Accept-Language: ja-JP"
 
     Write-Host "`n=== Refresh after logout (expect unauthorized business envelope) ==="
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjLogin -X POST "$AuthBase/api/admin/auth/refresh" -H "Accept-Language: ja-JP"
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjLogin -X POST "$AuthBase/api/auth/token/refresh" -H "Accept-Language: ja-JP"
 
     Write-Host "`n=== Logout idempotent without cookie ==="
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -X POST "$AuthBase/api/admin/auth/logout" -H "Accept-Language: ja-JP"
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -X POST "$AuthBase/api/auth/logout" -H "Accept-Language: ja-JP"
 
     if (-not $SkipGateway) {
         Write-Host "`n=== Gateway login headers (may fail if gateway not running) ==="
         try {
             $gh = Join-Path $tmp "gw.hdr"
-            curl.exe -sS -D $gh -o NUL -w "HTTP_CODE:%{http_code}`n" -c (Join-Path $tmp "gw.cj") -X POST "$GatewayBase/api/admin/auth/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $good
+            curl.exe -sS -D $gh -o NUL -w "HTTP_CODE:%{http_code}`n" -c (Join-Path $tmp "gw.cj") -X POST "$GatewayBase/api/auth/admin/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $good
             Get-Content $gh | Select-String -Pattern "^(HTTP/|Set-Cookie:)" | ForEach-Object { $_.Line }
         }
         catch {
@@ -166,7 +166,7 @@ try {
     }
 
     Write-Host "`n=== OpenAPI snippet (auth paths on Auth service) ==="
-    curl.exe -sS "$AuthBase/v3/api-docs" | Select-String "/api/admin/auth" | Select-Object -First 12
+    curl.exe -sS "$AuthBase/v3/api-docs" | Select-String "/api/auth/admin" | Select-Object -First 12
 }
 finally {
     if ($proc -and -not $SkipStartJar) {

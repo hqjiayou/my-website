@@ -1,5 +1,5 @@
 # 持久层真实 PostgreSQL 回归验证：与 admin 共用 infra 内 Flyway 脚本（classpath:db/migration），验证 site / site_user Mapper。
-# 数据源账号默认与 docker-compose POSTGRES_* 一致；可被 VERIFY_PG_* 覆盖。
+# 数据源账号默认与 website-services/.env 中 POSTGRES_*（local-stack Postgres）对齐；可被 VERIFY_PG_* 覆盖。
 spring:
   datasource:
     url: ${VERIFY_PG_URL:jdbc:postgresql://localhost:5432/my_website_3c_verify}

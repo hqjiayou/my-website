@@ -1,7 +1,8 @@
 package com.mywebsite.common.enums;
 
-/** API 语义码；对用户可见文案由对应 {@linkplain #messageKey} 在多语言资源中解析。 */
+/** API 语义码；失败场景对用户可见文案通常由对应 {@linkplain #messageKey} 在多语言资源中解析。 */
 public enum ErrorCode {
+    /** 语义码 0；HTTP 成功体 {@code message} 固定为 {@code success}，不使用此 messageKey。 */
     SUCCESS(0, "common.result.success"),
     SYSTEM_ERROR(1000, "common.error.system"),
     BAD_REQUEST(1001, "common.error.bad-request"),

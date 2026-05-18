@@ -1,7 +1,7 @@
 package com.mywebsite.admin.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mywebsite.common.api.ApiResponse;
+import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.infra.service.LocalizedMessageService;
 import jakarta.servlet.ServletException;
@@ -29,7 +29,7 @@ public class AdminAccessDeniedHandler implements AccessDeniedHandler {
     public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException accessDeniedException)
             throws IOException, ServletException {
         String message = localizedMessageService.getMessage(request, ErrorCode.FORBIDDEN.getMessageKey());
-        ApiResponse<Void> body = ApiResponse.fail(ErrorCode.FORBIDDEN.getCode(), message);
+        HttpMessageBody<Void> body = new HttpMessageBody<>(ErrorCode.FORBIDDEN.getCode(), message, null);
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setCharacterEncoding("UTF-8");
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

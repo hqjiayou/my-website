@@ -2,16 +2,11 @@ package com.mywebsite.auth.dto;
 
 import com.mywebsite.common.security.TokenAudience;
 import java.time.Instant;
-import java.util.Set;
 
-/** Parsed Admin access JWT semantics (Site tokens reuse shape where applicable). */
+/** Parsed access JWT（精简载荷：主体编码见 {@code subject} / SubjectCodes）。 */
 public record TokenClaimsDto(
         TokenAudience audience,
-        String subject,
-        String username,
+        String subjectUserCode,
         String jwtId,
-        String sessionId,
-        String tokenType,
-        Set<String> authorities,
         Instant issuedAt,
         Instant expiresAt) {}

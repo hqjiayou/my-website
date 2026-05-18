@@ -31,11 +31,11 @@ AUTH_JWKS_URI=http://localhost:8083/.well-known/jwks.json
 
 ### 数据库环境变量与 `.env` 的优先级
 
-`LocalDotenvSupport` **不会覆盖** 系统中已存在的 OS 环境变量。若机器上已设置 **`DB_USERNAME` / `DB_PASSWORD` / `DB_URL`**（例如 IDE 注入的 `CHANGE_ME`），将优先生效，可能导致与 Docker PostgreSQL 账号（如 `hqjiayou`）不一致、**Hikari 连库失败**。本地联调前可临时清除：`Remove-Item Env:DB_PASSWORD,Env:DB_USERNAME,Env:DB_URL`（PowerShell），或仅依赖 **`POSTGRES_*`** 与仓库 `.env` 对齐。
+`LocalDotenvSupport` **不会覆盖** 系统中已存在的 OS 环境变量。若机器上已设置 **`DB_USERNAME` / `DB_PASSWORD` / `DB_URL`**（例如 IDE 注入的 `CHANGE_ME`），将优先生效，可能导致与 **local-stack Postgres** 账号不一致、**Hikari 连库失败**。本地联调前可临时清除：`Remove-Item Env:DB_PASSWORD,Env:DB_USERNAME,Env:DB_URL`（PowerShell），或仅依赖 **`POSTGRES_*`** 与 **`website-services/.env`** 对齐。
 
-### Redis 无密码（Compose 默认）
+### Redis 无密码（local-stack 常见）
 
-本地 **Redis 容器未设 `requirepass`** 时，`application-local.yml` 中 Redis 口令**默认空**；勿让占位串作为口令连接，否则 `AUTH` 会认证失败。
+本地 **Redis**（如 **`local-redis`**）未设 `requirepass` 时，`application-local.yml` 中 Redis 口令**默认空**；勿让占位串作为口令连接，否则 **`auth`** 会认证失败。
 
 ## 3. 运行注意
 

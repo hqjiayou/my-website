@@ -8,12 +8,17 @@ import java.nio.file.Path;
 /**
  * Spring Boot 不读取同级 {@code .env}；仅在本地 startup 注入为系统属性，供 {@code ${DB_*}} 等占位绑定。
  * 不覆盖已有的 OS 环境变量或既有 {@link System#setProperty}。
+ *
+ * <p>查找顺序（从 {@code user.dir} 起每一层祖先目录，最多 12 层）：① 当前目录下的 {@code .env}；② 当前目录下的
+ * {@code services/website-services/.env}（便于工作目录设在仓库根 {@code my-website} 时仍能加载后端专用配置）。
  */
 public final class LocalDotenvSupport {
 
+    private static final String WEBSITE_SERVICES_ENV_REL = "services/website-services/.env";
+
     private LocalDotenvSupport() {}
 
-    /** 从 {@code user.dir} 起向祖先目录查找最近一个 {@code .env}（最多 12 层）。解析失败或非文件则静默跳过。 */
+    /** 按类文档所述查找并加载首个存在的 {@code .env}；解析失败或非文件则静默跳过。 */
     public static void tryLoadNearestEnv() {
         try {
             Path dir = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
@@ -21,6 +26,11 @@ public final class LocalDotenvSupport {
                 Path envFile = dir.resolve(".env");
                 if (Files.isRegularFile(envFile)) {
                     applyEnvFile(envFile);
+                    return;
+                }
+                Path nestedEnv = dir.resolve(WEBSITE_SERVICES_ENV_REL);
+                if (Files.isRegularFile(nestedEnv)) {
+                    applyEnvFile(nestedEnv);
                     return;
                 }
                 dir = dir.getParent();

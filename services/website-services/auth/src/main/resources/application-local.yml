@@ -24,7 +24,7 @@ spring:
     redis:
       host: ${AUTH_REDIS_HOST:${REDIS_HOST:localhost}}
       port: ${AUTH_REDIS_PORT:${REDIS_PORT:6379}}
-      # 本地 Compose 中 Redis 常无密码；空默认避免误用占位串 CHANGE_ME 连接失败。
+      # local-stack 常见 Redis 未设 requirepass；空默认避免误用占位串 CHANGE_ME 连接失败。
       password: ${AUTH_REDIS_PASSWORD:${REDIS_PASSWORD:}}
 
 mybatis-plus:

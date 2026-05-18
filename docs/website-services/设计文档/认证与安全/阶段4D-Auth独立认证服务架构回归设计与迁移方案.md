@@ -13,7 +13,7 @@
 
 1. **`auth` 为单一、可执行的 Spring Boot 模块**（**不再有 `auth-core` / `auth-app` Maven 拆分**）。  
 2. **认证主链路 HTTP**（Admin **Login / Refresh / Logout**）由 **`auth`（默认 8083）** 承载；**`admin`** 为 **OAuth2 Resource Server** + 业务 API。  
-3. **`gateway`** 路由：**`/api/admin/auth/**`**、**`/api/site/auth/**`** → **`auth`**；**`/api/admin/**`**（非 auth 前缀的业务路径）→ **`admin`**。  
+3. **`gateway`** 路由：**`/api/auth/**`** → **`auth`**（编排：**`/api/auth/admin/login`**、**`/api/auth/token/refresh`**、**`/api/auth/logout`** 等）；**`/api/admin/**`**（业务 API，含 **`/api/admin/auth/me`**）→ **`admin`**；**`/api/site/**`**（含 **`/api/site/auth/me`**）→ **`site-app`**。**顺序**：`/api/auth/**` 须在 **`/api/admin/**`、`/api/site/**`** 之前。  
 4. **RS256 + JWKS**：**4G 已完成**；**auth** 持私钥签发并发布 **`/.well-known/jwks.json`**；**admin** 仅 **`jwk-set-uri` 验签**，**不再**使用 `SECURITY_JWT_SECRET` 作为主链路配置。详见 [**阶段4G**](./阶段4G-RS256与JWKS签名验签体系迁移说明.md)。  
 5. **下一阶段执行顺序**：**4H**（Gateway 全链路真实联调）、**4I**（迁移清理收口）已完成 → **5A** RBAC。详见 **[路线图](../../总览/后端开发路线图与阶段状态.md)**。
 
@@ -25,8 +25,8 @@
 > **阶段 4E（过渡，已被 4F 替代）**：曾规划 `auth/` 为 Maven 聚合父模块，子模块 **`auth-core`** 与 **`auth-app`**；**4F** 已将其**收敛**为单一 **`auth`** 可执行模块，并完成 **Login/Refresh/Logout** 上提与 **Gateway** 路由拆分。
 
 > **文档性质（原始摘要）**：设计与审计定案（4D）；原「迁移实施见 4E 起」已推进至 **4F 完成**。  
-> **Roadmap**：**暂停 5A（RBAC 深化）** 直至 **4H** 就绪。  
-> **关联**：[`架构设计`](../基础架构/架构设计.md) §6、[`.env.example` 范本](../../../services/website-services/.env.example)。
+> **Roadmap**：**5A（RBAC）** 可在 **4H / 4I** 完成后推进（当前已就绪）。  
+> **关联**：[`架构设计`](../基础架构/架构设计.md) §6、[`.env.example` 范本](../../../../services/website-services/.env.example)。
 
 ---
 
@@ -148,8 +148,7 @@ flowchart TB
   PG[(PostgreSQL)]
 
   Client --> GW
-  GW -->|"/api/admin/auth/**"| AUTH
-  GW -->|"/api/site/auth/**"| AUTH
+  GW -->|"/api/auth/**"| AUTH
   GW -->|"/api/admin/**" 业务 API| ADM
   GW -->|"/api/site/**" 业务 API| SITE
 
@@ -194,8 +193,8 @@ website-services/
 | 维度 | 建议 |
 |------|------|
 | **Audience** | 沿用 `TokenAudience`：`ADMIN`、`SITE`。Access JWT **`aud`** 区分域。 |
-| **登录路径** | 推荐 **路径分域**：`/api/admin/auth/login`、`/api/site/auth/login`，与 Gateway 前缀一致；**避免**单一模糊接口增加网关路由与安全策略复杂度。 |
-| **Refresh Cookie** | **分域**：不同 Cookie 名称与 `Path`（例如 `admin_refresh_token` vs `site_refresh_token`，Path 与各站前端挂载一致）；**HttpOnly`、`SameSite`、** **`Secure`** 按 profile 配置。 |
+| **登录路径** | **现行**：**`POST /api/auth/admin/login`**、**`POST /api/auth/site/login`**（占位）；与 Gateway **`Path=/api/auth/**`** 一致。 |
+| **Refresh Cookie** | **现行**：默认 **`MYWEBSITE_REFRESH_TOKEN`**，`Path`**`/api/auth/token/refresh`**（**`mywebsite.security.token`**）；Site 可与 Admin 分 Cookie 名称演进，见 **`README`**。 |
 
 ### 4.2 Auth 读取不同用户的方案对比与本项目推荐
 
@@ -271,7 +270,7 @@ website-services/
 
 | 域 | 变量示例 |
 |----|----------|
-| **基础设施 Compose** | `POSTGRES_*`、`REDIS_*` |
+| **基础设施（local-stack）** | `POSTGRES_*`、`REDIS_*`（由 **`website-services/.env`** 对齐 **`localhost`** 上映射的实例） |
 | **auth-app** | `AUTH_DB_*` 或共用 `DATABASE_URL`、`AUTH_JWT_PRIVATE_KEY`、`AUTH_ISSUER_URI`、`AUTH_REDIS_*` |
 | **admin** | `ADMIN_DB_*`（或与 auth 分摊只读）；**`ADMIN_JWK_SET_URI`** |
 | **site** | `SITE_DB_*`；**`SITE_JWK_SET_URI`** |

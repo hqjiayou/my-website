@@ -1,5 +1,6 @@
 package com.mywebsite.admin.config;
 
+import com.mywebsite.common.security.SubjectType;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -14,8 +15,7 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 /**
- * Resource Server 验签：仅从 Auth 的 JWKS 拉取公钥；本服务不持有签名私钥或对称 secret。
- * 通过 {@code jwk-set-uri} 获取 JWK Set；并校验 {@code iss} / {@code aud}。
+ * Resource Server：JWKS 验签；校验 {@code iss} / {@code aud} / {@code subject_type=ADMIN}。
  */
 @Configuration
 public class AdminJwtDecoderConfig {
@@ -27,10 +27,13 @@ public class AdminJwtDecoderConfig {
             @Value("${security.jwt.audience}") String audience) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
         OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(issuer);
-        OAuth2TokenValidator<Jwt> withAudience = new JwtClaimValidator<List<String>>(
-                JwtClaimNames.AUD, aud -> aud != null && aud.contains(audience));
+        OAuth2TokenValidator<Jwt> withAudience =
+                new JwtClaimValidator<List<String>>(JwtClaimNames.AUD, aud -> aud != null && aud.contains(audience));
+        OAuth2TokenValidator<Jwt> subjectAdmin =
+                new JwtClaimValidator<>(
+                        "subject_type", sub -> SubjectType.ADMIN.name().equals(sub));
         OAuth2TokenValidator<Jwt> combined =
-                new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience);
+                new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience, subjectAdmin);
         decoder.setJwtValidator(combined);
         return decoder;
     }

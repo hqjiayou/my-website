@@ -3,7 +3,7 @@
 spring:
   datasource:
     url: ${VERIFY_PG_URL:jdbc:postgresql://localhost:5432/my_website_3c_verify}
-    # 与 docker-compose.yml 中 POSTGRES_* 默认值一致；可被 VERIFY_PG_* 或环境变量 POSTGRES_USER / POSTGRES_PASSWORD 覆盖。
+    # 与 website-services/.env 中 POSTGRES_*（local-stack Postgres）对齐；可被 VERIFY_PG_* 或环境变量 POSTGRES_USER / POSTGRES_PASSWORD 覆盖。
     username: ${VERIFY_PG_USER:${POSTGRES_USER:hqjiayou}}
     password: ${VERIFY_PG_PASSWORD:${POSTGRES_PASSWORD:hqjiayou}}
   flyway:

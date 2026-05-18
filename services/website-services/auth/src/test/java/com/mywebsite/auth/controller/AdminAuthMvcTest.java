@@ -1,10 +1,13 @@
 package com.mywebsite.auth.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import static org.hamcrest.Matchers.nullValue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.auth.AuthApplication;
@@ -12,6 +15,7 @@ import com.mywebsite.auth.entity.AdminUserEntity;
 import com.mywebsite.auth.mapper.AdminUserMapper;
 import com.mywebsite.auth.service.AdminRefreshCookieService;
 import com.mywebsite.common.security.JwtClaimConstants;
+import com.mywebsite.common.security.SubjectCodes;
 import jakarta.servlet.http.Cookie;
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -90,16 +94,16 @@ class AdminAuthMvcTest {
     @MethodSource("loginFailureMessagesByLocale")
     void loginFailureMessageIsLocalizedWithoutChangingCode(String acceptLanguageHeader, String expectedMessage)
             throws Exception {
-        var req = post("/api/admin/auth/login")
+        var req = post("/api/auth/admin/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\":\"admin_it\",\"password\":\"wrong\"}");
         if (acceptLanguageHeader != null) {
             req = req.header(HttpHeaders.ACCEPT_LANGUAGE, acceptLanguageHeader);
         }
         mockMvc.perform(req)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(1002))
-                .andExpect(jsonPath("$.message").value(expectedMessage));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value(expectedMessage))
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     static Stream<Arguments> validationUsernameBlankLocales() {
@@ -113,16 +117,16 @@ class AdminAuthMvcTest {
     @MethodSource("validationUsernameBlankLocales")
     void loginFailsWhenUsernameBlankMessageIsLocalized(String acceptLanguageHeader, String expectedMessage)
             throws Exception {
-        var req = post("/api/admin/auth/login")
+        var req = post("/api/auth/admin/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\":\"\",\"password\":\"x\"}");
         if (acceptLanguageHeader != null) {
             req = req.header(HttpHeaders.ACCEPT_LANGUAGE, acceptLanguageHeader);
         }
         mockMvc.perform(req)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(1001))
-                .andExpect(jsonPath("$.message").value(expectedMessage));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(expectedMessage))
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     static Stream<Arguments> validationPasswordBlankLocales() {
@@ -136,16 +140,16 @@ class AdminAuthMvcTest {
     @MethodSource("validationPasswordBlankLocales")
     void loginFailsWhenPasswordBlankMessageIsLocalized(String acceptLanguageHeader, String expectedMessage)
             throws Exception {
-        var req = post("/api/admin/auth/login")
+        var req = post("/api/auth/admin/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\":\"admin_it\",\"password\":\"\"}");
         if (acceptLanguageHeader != null) {
             req = req.header(HttpHeaders.ACCEPT_LANGUAGE, acceptLanguageHeader);
         }
         mockMvc.perform(req)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(1001))
-                .andExpect(jsonPath("$.message").value(expectedMessage));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(expectedMessage))
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     static Stream<Arguments> validationPasswordTooLongLocales() {
@@ -160,16 +164,16 @@ class AdminAuthMvcTest {
     void loginFailsWhenPasswordExceedsMaxLengthMessageIsLocalized(String acceptLanguageHeader, String expectedMessage)
             throws Exception {
         String tooLongPassword = "a".repeat(129);
-        var req = post("/api/admin/auth/login")
+        var req = post("/api/auth/admin/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(OBJECT_MAPPER.writeValueAsString(Map.of("username", "admin_it", "password", tooLongPassword)));
         if (acceptLanguageHeader != null) {
             req = req.header(HttpHeaders.ACCEPT_LANGUAGE, acceptLanguageHeader);
         }
         mockMvc.perform(req)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(1001))
-                .andExpect(jsonPath("$.message").value(expectedMessage));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(expectedMessage))
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     static Stream<Arguments> validationUsernameTooLongLocales() {
@@ -184,25 +188,26 @@ class AdminAuthMvcTest {
     void loginFailsWhenUsernameExceedsMaxLengthMessageIsLocalized(String acceptLanguageHeader, String expectedMessage)
             throws Exception {
         String tooLongUsername = "u".repeat(129);
-        var req = post("/api/admin/auth/login")
+        var req = post("/api/auth/admin/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(OBJECT_MAPPER.writeValueAsString(Map.of("username", tooLongUsername, "password", "x")));
         if (acceptLanguageHeader != null) {
             req = req.header(HttpHeaders.ACCEPT_LANGUAGE, acceptLanguageHeader);
         }
         mockMvc.perform(req)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(1001))
-                .andExpect(jsonPath("$.message").value(expectedMessage));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(expectedMessage))
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     @Test
     void loginJwtMatchesAuthIssuerAudienceAndStructuredClaims() throws Exception {
-        MvcResult loginResult = mockMvc.perform(post("/api/admin/auth/login")
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/admin/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"admin_it\",\"password\":\"correct-password\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
                 .andReturn();
 
         String jwt = OBJECT_MAPPER
@@ -214,19 +219,20 @@ class AdminAuthMvcTest {
         Jwt decoded = jwtDecoder.decode(jwt);
         assertThat(decoded.getClaimAsString("iss")).isEqualTo("test-issuer");
         assertThat(decoded.getAudience()).contains("ADMIN");
-        assertThat(decoded.getClaimAsString(JwtClaimConstants.TOKEN_TYPE)).isEqualTo("ADMIN");
-        assertThat(decoded.getClaimAsString(JwtClaimConstants.SESSION_ID)).isNotBlank();
-        assertThat(decoded.getClaimAsString(JwtClaimConstants.USERNAME)).isEqualTo("admin_it");
-        assertThat(Number.class.cast(decoded.getClaim(JwtClaimConstants.ADMIN_USER_ID)).longValue())
-                .isEqualTo(100L);
+        assertThat(decoded.getSubject()).isEqualTo(SubjectCodes.formatAdminSubject(100L));
+        assertThat(decoded.getClaimAsString(JwtClaimConstants.SUBJECT_TYPE)).isEqualTo("ADMIN");
+        assertNull(decoded.getClaim(JwtClaimConstants.TOKEN_TYPE));
+        assertNull(decoded.getClaim(JwtClaimConstants.ADMIN_USER_ID));
+        assertNull(decoded.getClaim(JwtClaimConstants.USERNAME));
+        assertNull(decoded.getClaim(JwtClaimConstants.SESSION_ID));
     }
 
     @Test
     void refreshWithoutCookieFailsWithUnifiedUnauthorizedEnvelopeAndClearsCookie() throws Exception {
-        MvcResult res = mockMvc.perform(post("/api/admin/auth/refresh"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(1002))
+        MvcResult res = mockMvc.perform(post("/api/auth/token/refresh"))
+                .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("認証されていないかトークンが無効です"))
+                .andExpect(jsonPath("$.data").value(nullValue()))
                 .andReturn();
 
         Cookie cleared = res.getResponse().getCookie(adminRefreshCookieService.refreshCookieName());
@@ -237,47 +243,50 @@ class AdminAuthMvcTest {
     @Test
     void refreshWithUnknownOpaqueFailsUnauthorized() throws Exception {
         Cookie fake = new Cookie(adminRefreshCookieService.refreshCookieName(), "opaque-token-not-bound-to-session-xx");
-        mockMvc.perform(post("/api/admin/auth/refresh").cookie(fake))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(1002));
+        mockMvc.perform(post("/api/auth/token/refresh").cookie(fake))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     @Test
     void replayingFirstRefreshAfterSuccessfulRotationFails() throws Exception {
-        MvcResult loginResult = mockMvc.perform(post("/api/admin/auth/login")
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/admin/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"admin_it\",\"password\":\"correct-password\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
                 .andReturn();
 
         Cookie firstRefresh =
                 loginResult.getResponse().getCookie(adminRefreshCookieService.refreshCookieName());
         assertThat(firstRefresh).isNotNull();
 
-        mockMvc.perform(post("/api/admin/auth/refresh").cookie(firstRefresh))
+        mockMvc.perform(post("/api/auth/token/refresh").cookie(firstRefresh))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty());
 
-        mockMvc.perform(post("/api/admin/auth/refresh").cookie(firstRefresh))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(1002));
+        mockMvc.perform(post("/api/auth/token/refresh").cookie(firstRefresh))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     @Test
     void logoutIsIdempotentWhenRefreshCookieAbsent() throws Exception {
-        mockMvc.perform(post("/api/admin/auth/logout"))
+        mockMvc.perform(post("/api/auth/logout"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     @Test
     void loginRefreshLogoutFlow() throws Exception {
-        MvcResult loginResult = mockMvc.perform(post("/api/admin/auth/login")
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/admin/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"admin_it\",\"password\":\"correct-password\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
                 .andReturn();
 
@@ -289,9 +298,9 @@ class AdminAuthMvcTest {
         assertThat(refreshCookie).isNotNull();
         assertThat(refreshCookie.isHttpOnly()).isTrue();
 
-        MvcResult refreshResult = mockMvc.perform(post("/api/admin/auth/refresh").cookie(refreshCookie))
+        MvcResult refreshResult = mockMvc.perform(post("/api/auth/token/refresh").cookie(refreshCookie))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
                 .andReturn();
 
@@ -299,12 +308,13 @@ class AdminAuthMvcTest {
                 refreshResult.getResponse().getCookie(adminRefreshCookieService.refreshCookieName());
         assertThat(rotatedRefresh).isNotNull();
 
-        mockMvc.perform(post("/api/admin/auth/logout").cookie(rotatedRefresh))
+        mockMvc.perform(post("/api/auth/logout").cookie(rotatedRefresh))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data").value(nullValue()));
 
-        mockMvc.perform(post("/api/admin/auth/refresh").cookie(rotatedRefresh))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(1002));
+        mockMvc.perform(post("/api/auth/token/refresh").cookie(rotatedRefresh))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 }

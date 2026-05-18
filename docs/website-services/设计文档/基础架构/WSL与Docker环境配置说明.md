@@ -32,30 +32,24 @@ WSL 用作本机 Linux 开发环境，适合承载 Docker Engine、容器网络�
 
 Docker 用于启动本地开发依赖，不承载当前仓库的应用代码。
 
-当前应用默认依赖：
+当前应用默认依赖（由既有 **local-stack** 提供；容器名示例 **`local-postgres` / `local-redis` / `local-aistor`**）：
 
 - PostgreSQL：`localhost:5432`
 - Redis：`localhost:6379`
 - MinIO / AIStor API：`http://localhost:9000`
-- MinIO / AIStor Console：`http://localhost:9001`
+- MinIO / AIStor Console：以你的 **local-stack** 配置为准（常见 `9001`）
 
-仓库在 `services/website-services/docker-compose.yml` 中提供 PostgreSQL（库名与用户由 **`POSTGRES_*`** 替换）及无口令 Redis。**请先在本目录复制范本**，Compose 与应用才会拿到一致的变量：
+**本仓库不在 `website-services` 下再起第二套 Postgres/Redis**。请先启动 **local-stack**，再在 **`services/website-services`** 维护 **`website-services/.env`**（范本 **`.env.example`**），使 JDBC / Redis / MinIO 键值与本机 **`localhost`** 上映射的实例一致。**local-stack** 目录若自带 `.env`，请在**该目录**单独维护，勿与 **`website-services/.env`** 混用。
 
-```bash
-cd services/website-services
-cp .env.example .env   # 再按需修改；勿提交 .env
-docker compose up -d postgres redis
-```
+若无 **`website-services/.env`**，`spring-boot:run` 可能因 **`application-local.yml` 中数据源 / Redis / MinIO / JWT 占位符缺少注入**而解析失败。
 
-若无 `.env`，Compose 无法替换 `${POSTGRES_DB}` 等占位符，`spring-boot:run` 也会因 **`application-local.yml` 中数据源 / Redis / MinIO / JWT 占位符缺少默认值** 而解析失败。
-
-若本机已通过其他方式手动启动同名库与用户，端口和账号必须与 **`.env` 中的 `DB_*` / `POSTGRES_*`** 一致。**`admin` / `site-app`** 在 `main` 中会从 `user.dir` 向其父目录向上查找最近一层 `.env`，将其中键值写入 **系统属性**（不覆盖操作系统环境变量或 JVM 已设置的同名属性），从而让占位符生效；若你希望完全由 IDE/OS 注入变量，仍可不在仓库内放 `.env`。若终端直接 `mvn spring-boot:run`，请保持工作目录处于能拾取到上述 `.env` 的模块上级（例如 `services/website-services`，或 `admin` 子目录——父级亦会扫到）。
+若本机已通过 **local-stack** 或其它方式启动 Postgres，端口和账号必须与 **`website-services/.env`** 中的 **`DB_*` / `POSTGRES_*`** 一致。**`admin` / `auth` / `site-app`** 在 `main` 中调用 **`LocalDotenvSupport`**：从 **`user.dir`** 向上查找名为 **`.env`** 的文件；若在仓库根 **`my-website`** 启动，会加载 **`services/website-services/.env`**。键值写入 **系统属性**（不覆盖操作系统环境变量或 JVM 已设置的同名属性）。若你希望完全由 IDE/OS 注入变量，仍可不在仓库内放 **`.env`**。
 
 ## 3. 后端本地配置
 
 `services/website-services` 中 `admin` 与 `site/site-app` 的 **`application-local.yml` 仅声明 `${...}` 占位符**，**不在 YAML 内维护连接串或口令的默认值**；实际值来自 **`.env`**（或操作系统 / IDE 注入的同名环境变量）。
 
-### 3.0 与本仓库 Compose 对齐的 `.env`（仅本机，勿提交）
+### 3.0 与本地基础设施对齐的 `website-services/.env`（仅本机，勿提交）
 
 **权威范本**为仓库跟踪文件 **`services/website-services/.env.example`**。本地请执行：
 
@@ -64,7 +58,7 @@ cd services/website-services
 cp .env.example .env
 ```
 
-再按本机修改 **`.env`**。其中 **`POSTGRES_*`** 供 `docker compose` 替换；**`DB_*` / `REDIS_*` / `MINIO_*` / `SECURITY_*`** 等供 Spring 绑定。`POSTGRES_*` 与 **`DB_USERNAME` / `DB_PASSWORD`** 应指向同一套登录账号，避免容器内用户与应用 JDBC 不一致。
+再按本机修改 **`website-services/.env`**：**`POSTGRES_*` / `DB_*`**、**`REDIS_*`**、**`MINIO_*`**、**`AUTH_*`** 等供 Spring 绑定，须与你当前连接的 **local-stack**（**`localhost:5432` / `6379` / `9000`**）一致。
 
 ### 3.1 数据库
 
@@ -78,12 +72,12 @@ cp .env.example .env
 
 ### 3.2 Redis
 
-**`REDIS_*`** 键见 **`.env.example`**；`application-local.yml` 仅为占位引用。
+**`REDIS_*`** 键见 **`website-services/.env.example`**；`application-local.yml` 仅为占位引用。
 
 要求：
 
-- Redis 容器需要暴露 `6379` 到宿主机。
-- Compose 自带的 Redis **无口令**；若改用带口令实例，务必设置 `REDIS_PASSWORD`。
+- Redis 容器需要暴露 `6379` 到宿主机（**local-redis**）。
+- 若实例 **无口令**，`.env` 中 **`REDIS_PASSWORD`** 应为空或与实例一致；若实例要求口令，务必与 **`REDIS_PASSWORD`** 对齐。
 
 ### 3.3 MinIO / AIStor
 
@@ -221,20 +215,20 @@ curl http://localhost:8082/actuator/health
 
 含义：PostgreSQL 服务可达，但 **`my_website_dev`** 尚未创建；Flyway / DataSource 会在连接阶段失败。
 
-**使用仓库 `docker-compose.yml` 时**
+**使用 local-stack / local-postgres 时**
 
-- 正常情况下 **`POSTGRES_DB=my_website_dev`** 会在 **数据目录首次初始化** 时自动建库。
-- 若 volume 已是旧数据目录（从未包含该库），或曾经手动删库，需要在容器内执行一次建库（不删数据）：
+- 是否在初始化阶段自动创建 **`my_website_dev`** 取决于你的栈配置。
+- 若库缺失，可在 Postgres 内执行一次建库（将 **`mywebsite`** 替换为你 `.env` 中的数据库用户）：
 
 ```bash
-cd services/website-services
-# 将 hqjiayou 替换为你 .env 中 POSTGRES_USER（范本默认为 hqjiayou）
-docker compose exec postgres psql -U hqjiayou -d postgres -c "CREATE DATABASE my_website_dev OWNER hqjiayou ENCODING 'UTF8';"
+docker exec -i local-postgres psql -U mywebsite -d postgres -c "CREATE DATABASE my_website_dev OWNER mywebsite ENCODING 'UTF8';"
 ```
+
+或用宿主机 **`psql`** 直连 **`localhost:5432`** 执行等价 **`CREATE DATABASE`**。
 
 若报错「already exists」，说明库已存在，请核对 **`DB_URL`** 是否指向 **`jdbc:postgresql://…:5432/my_website_dev`**。
 
-更多场景（本机 PostgreSQL、重置 volume）见：`services/website-services/scripts/README.md`。
+更多场景见：`services/website-services/scripts/README.md`。
 
 ### 6.4 Gateway 返回 502 或连接失败
 
@@ -256,9 +250,9 @@ docker compose exec postgres psql -U hqjiayou -d postgres -c "CREATE DATABASE my
 ## 7. 环境变量管理建议
 
 - 本地真实密码只保存在本机环境变量、IDE Run Configuration 或未提交的本地脚本中。
-- 仓库内通过 **`.env.example`** 给出可复制范本；真实口令放在本机 **`.env`**、环境变量或 IDE Run Configuration。
-- `services/website-services/` 已有 `docker-compose.yml`：**不要提交 `.env`**，请复制 `.env.example` 生成。
-- 修改本地基础设施账号、密码或端口后，需要同步更新 **`.env`**（变量名见 **`application-local.yml` 占位符**）。
+- 仓库内通过 **`.env.example`** 给出可复制范本；真实口令放在本机 **`website-services/.env`**、环境变量或 IDE Run Configuration。
+- **`website-services/`** 勿提交本地 **`.env`**；基础设施编排请仅在 **local-stack** 仓库/目录维护。
+- 修改本地基础设施账号、密码或端口后，需要同步更新 **`website-services/.env`**（变量名见 **`application-local.yml` 占位符**）。
 
 ## 8. 相关文档
 

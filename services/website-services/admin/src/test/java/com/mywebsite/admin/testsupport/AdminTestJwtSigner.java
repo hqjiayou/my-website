@@ -1,6 +1,8 @@
 package com.mywebsite.admin.testsupport;
 
 import com.mywebsite.common.security.JwtClaimConstants;
+import com.mywebsite.common.security.SubjectCodes;
+import com.mywebsite.common.security.SubjectType;
 import com.nimbusds.jose.JOSEObjectType;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
@@ -37,15 +39,12 @@ public final class AdminTestJwtSigner {
         Instant now = Instant.now();
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .issuer(issuer)
-                .subject("100")
+                .subject(SubjectCodes.formatAdminSubject(100L))
                 .audience(audience)
                 .jwtID(UUID.randomUUID().toString())
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(now.plusSeconds(3600)))
-                .claim(JwtClaimConstants.TOKEN_TYPE, "ADMIN")
-                .claim(JwtClaimConstants.ADMIN_USER_ID, 100L)
-                .claim(JwtClaimConstants.USERNAME, "admin_it")
-                .claim(JwtClaimConstants.SESSION_ID, "sid-test")
+                .claim(JwtClaimConstants.SUBJECT_TYPE, SubjectType.ADMIN.name())
                 .build();
         SignedJWT jwt = new SignedJWT(
                 new JWSHeader.Builder(JWSAlgorithm.RS256)

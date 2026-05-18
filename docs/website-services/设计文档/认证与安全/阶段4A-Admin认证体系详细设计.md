@@ -14,7 +14,7 @@
 | 读者 | 后端开发与评审 |
 | 关联前置 | 阶段 2B 首批表；阶段 3A/3B 持久层；**持久层真实 PostgreSQL 回归验证**（长期）已就绪 |
 
-本文约定均以 **Admin 领域（管理员账号与权限数据）** 为中心；**HTTP 入口**在 **4F 后**位于 **`auth`**（路径仍可为 `/api/admin/auth/*`，由 **Gateway** 转发）。Site 前台认证保持 **`TokenAudience.SITE`** 分离思路，可在后续独立成章。
+本文约定均以 **Admin 领域（管理员账号与权限数据）** 为中心；**认证编排 HTTP**在 **`auth`**（**现行**：**`/api/auth/admin/login`**、**`/api/auth/token/refresh`**、**`/api/auth/logout`**；经 Gateway：**`/api/auth/**`**）。**业务上下文**：**`GET /api/admin/auth/me`**（**admin**）。权威清单：**[`README`](../../../../services/website-services/README.md)** §认证 HTTP 契约。Site 前台认证保持 **`TokenAudience.SITE`** 分离思路（**`/api/auth/site/login`** 占位）。
 
 > **阶段 4B.5**：返回给调用方的认证/校验类 **`ApiResponse.message`** 已改为 **`messageKey` + 多模块 `messages*.properties`**（`Accept-Language`，默认回退 **`ja-JP`**）。定案见 **[《后端多语言支持策略设计 V1》](./后端多语言支持策略设计V1.md)**。  
 > **JWT 无效等场景的 RFC 6750 / `WWW-Authenticate`** 仍以本文及阶段 4B 结论为准；4B.5 **不强制**统一为 JSON `ApiResponse` 错误体。
@@ -172,27 +172,37 @@ JWT 校验成功后，构造 **`Authentication`**（例如 **`JwtAuthenticationT
 
 ### 8.4 示意图（Mermaid）
 
+**现行（4F+，与 README §认证 HTTP 契约一致）**：登录 / 刷新 / 登出在 **`auth`**；**admin** 只做 Resource Server 与 **`GET /api/admin/auth/me`** 等业务接口。
+
 ```mermaid
 sequenceDiagram
     participant C as Admin Web
     participant G as Gateway
+    participant Auth as Auth Service
     participant A as Admin API
     participant R as Redis
     participant D as PostgreSQL
 
-    C->>G: POST /api/admin/auth/login
-    G->>A: forward
-    A->>D: load admin_user by username
-    A->>A: PasswordEncoder.matches
-    A->>A: issue Access JWT
-    A->>R: store refresh+jti
-    A-->>C: tokens
+    C->>G: POST /api/auth/admin/login
+    G->>Auth: forward
+    Auth->>D: load admin_user by username
+    Auth->>Auth: PasswordEncoder.matches
+    Auth->>Auth: issue Access JWT
+    Auth->>R: store refresh+jti
+    Auth-->>C: tokens + Set-Cookie Refresh
+
+    C->>G: POST /api/auth/token/refresh (Cookie)
+    G->>Auth: forward
+    Auth->>R: rotate refresh
+    Auth-->>C: new Access + Set-Cookie
 
     C->>G: GET /api/admin/... + Bearer access
     G->>A: forward
     A->>A: JwtDecoder validate + SecurityContext
     A-->>C: 200 + body
 ```
+
+**4B 归档示意**：曾为 **`POST /api/admin/auth/login`** → **Gateway → Admin**，编排与签发同在 **Admin**；现已迁至 **`auth`**，勿与新契约混读。
 
 ---
 
@@ -235,7 +245,7 @@ sequenceDiagram
 
 ## 13. 已定案结论（阶段 4A 收口）
 
-以下内容取代历史上「待确认 / 可选 / 开放问题」，作为 **唯一口径**：
+以下内容取代历史上「待确认 / 可选 / 开放问题」，作为 **唯一口径**（**加密算法**：条目 8 保留 **4A HS256** 定案文字；**现行仓库**为 **RS256 + JWKS**，见 **阶段 4G**，本条不因现行实现回溯改写段落编号）：
 
 1. **登录标识（V1）**：仅 **`username + password`**；**不支持** email / phone 作为主标识登录。
 2. **密码**：Spring Security **`BCryptPasswordEncoder`**；DB 仅存哈希；登录 **`matches`**；**口令最大长度**由 **`security.auth.admin-login-max-password-length`** 集中约束（请求校验 + 服务端兜底）。
@@ -245,7 +255,7 @@ sequenceDiagram
 6. **登出**：删除会话 Redis 状态并 **清除 Refresh Cookie**；**不做 Access 黑名单（4B）**，依赖 Access 短命自然过期。
 7. **多端**：**允许并行会话**；每次登录新建 **`sessionId`**；**不做设备上限 / 踢下线策略（4B）**。
 8. **JWT 算法**：**HS256**；密钥 **环境变量注入**，禁止硬编码。
-9. **Spring Security**：OAuth2 Resource Server **JWT + `JwtDecoder`**；**`STATELESS`**；登录三接口放行；其余 **`/api/admin/**`** 默认需认证。
+9. **Spring Security**：OAuth2 Resource Server **JWT + `JwtDecoder`**；**`STATELESS`**。**现行**：**`admin`** **不**再放行 **`/api/admin/auth/login|refresh|logout`**（编排已在 **`auth`**）；其余 **`/api/admin/**`**（及 Swagger 等既有放行项）按 **`AdminSecurityConfig`** 需 Bearer。**4B 归档**：曾放行登录三接口于 **`/api/admin/auth/*`**。
 10. **Gateway（4B）**：**不做 JWT 校验**，只做路由接入。
 
 ---
@@ -257,7 +267,7 @@ sequenceDiagram
 | **`HttpOnly`** | **`true`** |
 | **`Secure`** | 生产 **`true`**；本地 HTTP 可通过 **`SECURITY_REFRESH_COOKIE_SECURE` / `security.auth.refresh-cookie-secure`** 置 **`false`** |
 | **`SameSite`** | 生产 **`Strict`**（配置项 **`security.auth.refresh-cookie-same-site`**） |
-| **`Path`** | **`/api/admin/auth`**（避免站点其它路径携带 Refresh） |
+| **`Path`** | **`/api/auth/token/refresh`**（**现行**：与 **`security.auth.refresh-cookie-path`** 一致，限定 Refresh 仅发往刷新路由）；**4B 归档**曾为 **`/api/admin/auth`** |
 
 ---
 
@@ -292,7 +302,7 @@ sequenceDiagram
 
 | 类别 | 状态 |
 | --- | --- |
-| **接口** | **`POST /api/admin/auth/login`**、**`POST /api/admin/auth/refresh`**、**`POST /api/admin/auth/logout`**；其它 **`/api/admin/**`** 默认 Bearer 保护 |
+| **接口** | **现行**：**`/api/auth/admin/login`**、**`/api/auth/token/refresh`**、**`/api/auth/logout`**（**`auth`**，经 Gateway **`/api/auth/**`**）；**`GET /api/admin/auth/me`** 等在 **`admin`**。**§18 归档（4B）**：曾由 **`AdminAuthController`** 暴露 **`POST /api/admin/auth/login|refresh|logout`** |
 | **Swagger** | **`Admin Auth`** 分组可见；受保护示例接口 **`GET /api/admin/ping`** 使用 **`adminBearer` scheme** |
 | **Redis** | **`RedisAdminRefreshSessionServiceImpl`**；缺 **`RedisConnectionFactory`**（如单元测试排除 Redis）时 **`AdminRefreshSessionTestBeans`** 仅向 **测试** 上下文注册 **`InMemoryAdminRefreshSessionServiceImpl`**（语义对齐，**禁止**视作生产替身） |
 | **测试** | **`JwtTokenServiceTest`**（签发/解析 + `JwtDecoder` Claims：`iss`/`aud`/`token_type`/`admin_user_id`/`session_id`/`username`）、**`AdminAuthServiceImplTest`**、**`InMemoryAdminRefreshSessionServiceImplTest`**、**`AdminAuthMvcTest`**（登录成败、密码过长、`/refresh` 缺 Cookie / 无效 Refresh / 轮换后重放、登出 Cookie 缺失幂等、受保护接口无 Bearer 或篡改 JWT）。**说明**：OAuth2 Resource Server 在 **JWT 签名验证失败** 等场景常返回 **401 + `WWW-Authenticate: Bearer invalid_token`**（无 `ApiResponse` body），与 **`AdminAuthenticationEntryPoint`** 的 JSON 401 并存，属 Spring Security 预期行为。默认 **`mvn test`** 不依赖本机 Redis |

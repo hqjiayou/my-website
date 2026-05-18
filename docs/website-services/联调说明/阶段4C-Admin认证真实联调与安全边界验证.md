@@ -1,20 +1,21 @@
 # 阶段 4C：Admin 认证真实联调与安全边界验证
 
-> **文档状态**：历史验证有效 + **入口已随 4F 变更**（正文 §0）  
+> **文档状态**：历史验证有效 + **入口已多次演进**（§0：**现行路径以 README 为准**）  
 > **对应阶段**：4C  
-> **当前适用性**：**Cookie / Redis / Rotation / Replay / i18n / `invalid_token`** 等结论在**语义上仍成立**；**服务进程与 URL 拓扑**请以 **4F** 为准。  
-> **最近同步**：2026-05-17  
+> **当前适用性**：**Cookie / Redis / Rotation / Replay / i18n / `invalid_token`** 等结论在**语义上仍成立**；**URL / Cookie 名 / 响应信封**请以 **`README`** §认证 HTTP 契约为准；§6 起表格为 **4C 原始归档**。  
+> **最近同步**：2026-05-17（对齐 **`/api/auth/*`** 文档口径）
 
 本文记录在本机 **真实 PostgreSQL + 真实 Redis + 真实 HTTP（curl）** 下对 Admin 认证主链路与安全边界的核验结论；不包含新业务扩展（RBAC、Site 登录、Gateway JWT 校验等均不在本轮范围）。
 
 ---
 
-## 0. 与阶段 4F 的关系（必读）
+## 0. 与阶段 4F / 现行契约的关系（必读）
 
-- **4C 成文时**：联调脚本的 **$AdminBase**（默认 **8081**）上**同时**承担 **认证与业务**（`/api/admin/auth/*` 与 `/api/admin/ping` 等同进程）。  
-- **4F 后**：**认证主链路 HTTP** 迁至独立服务 **`auth`（默认 8083）**；**经 Gateway** 访问时路径仍为 **`/api/admin/auth/*`**（由网关转发到 Auth）。**业务 API**（如 `/api/admin/ping`）仍在 **admin**。  
-- **4C 中的验证结论**（Rotation、重放、Redis Key、i18n、`WWW-Authenticate` 等）仍可作为安全语义参考；**复测时**请使用 **`scripts/local/run-4c-http-verify.ps1`** 更新后的 **`$AuthBase`** / **`$AdminBase`**（见 `services/website-services/README`）。  
-- **下一阶段**：**4H** 将以 **Gateway + Auth + Admin** 架构做**端到端**真实联调与脚本固化。
+- **4C 成文时**：联调脚本的 **$AdminBase**（默认 **8081**）上**同时**承担 **认证与业务**（历史上曾为 **`/api/admin/auth/*`** 与 `/api/admin/ping` 等同进程）。  
+- **4F 后**：**认证编排**迁至 **`auth`（默认 8083）**；**现行**编排路径为 **`/api/auth/admin/login`**、**`/api/auth/token/refresh`**、**`/api/auth/logout`**（经 Gateway：**`/api/auth/**`** → Auth）。**业务 API**（如 **`GET /api/admin/ping`**、**`GET /api/admin/auth/me`**）仍在 **admin**。  
+- **权威清单**：**[`services/website-services/README.md`](../../../services/website-services/README.md)** §认证 HTTP 契约；脚本 **`scripts/local/run-4c-http-verify.ps1`** 已与 **`/api/auth/*`** 对齐。  
+- **4C 中的验证结论**（Rotation、重放、Redis Key、i18n、`WWW-Authenticate` 等）仍可作为安全语义参考；**§6 起正文为 4C 时点原始抄录**（旧 Cookie 名、`ApiResponse.code`、HTTP 200+业务码等），**仅供对照历史**。  
+- **端到端网关**：见 **[阶段4H](./阶段4H-Gateway唯一入口全链路真实联调.md)**（含 **2026-05** 契约修订说明）。
 
 ---
 
@@ -80,7 +81,7 @@ SECURITY_REFRESH_COOKIE_SECURE=false
 SPRING_PROFILES_ACTIVE=local
 ```
 
-若本机数据库账号与范本不同，只需改 **`.env`** 中的 `DB_USERNAME`、`DB_PASSWORD`、`DB_URL`（并与 `POSTGRES_*`、Compose 一致）。
+若本机数据库账号与范本不同，只需改 **`website-services/.env`** 中的 `DB_USERNAME`、`DB_PASSWORD`、`DB_URL`（并与 **`POSTGRES_*`**、**local-postgres** 实际账号一致）。
 
 ---
 
@@ -95,7 +96,9 @@ SPRING_PROFILES_ACTIVE=local
 
 ---
 
-## 6. Login 实测摘要（`POST /api/admin/auth/login`）
+## 6. Login 实测摘要（4C 归档：`POST /api/admin/auth/login`，非现行契约）
+
+> **现行复测**：**`POST http://127.0.0.1:8083/api/auth/admin/login`**（或经 Gateway **`POST http://127.0.0.1:8080/api/auth/admin/login`**）；响应 **`{ message, data }`**，HTTP **401/400** 表示失败。下文表格为 **4C 同进程 Admin** 时期的 **`ApiResponse.code`** 口径。
 
 **直连**：`http://127.0.0.1:8081/api/admin/auth/login`
 
@@ -130,7 +133,7 @@ Set-Cookie: admin_refresh_token=<opaque>; Max-Age=604799; Expires=...; Path=/api
 
 ---
 
-## 8. Refresh / Rotation（`POST /api/admin/auth/refresh`）
+## 8. Refresh / Rotation（4C 归档：`POST /api/admin/auth/refresh`；**现行：`POST /api/auth/token/refresh`**）
 
 - 请求 **无需 Body**，使用 `-b` 携带 Cookie 文件即可。  
 - **轮换成功**：HTTP 200，`code=0`，Body 返回新 `accessToken`；响应再次 `Set-Cookie` 写入新的 `admin_refresh_token`（Max-Age 仍约 7 天）。
@@ -148,7 +151,7 @@ Set-Cookie: admin_refresh_token=<opaque>; Max-Age=604799; Expires=...; Path=/api
 
 ---
 
-## 10. Logout（`POST /api/admin/auth/logout`）
+## 10. Logout（4C 归档：`POST /api/admin/auth/logout`；**现行：`POST /api/auth/logout`**）
 
 | 步骤 | HTTP | code | 备注 |
 |------|------|------|------|
@@ -178,7 +181,7 @@ Set-Cookie: admin_refresh_token=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:10 G
 
 ---
 
-## 12. Cookie 安全属性核验（Refresh：`admin_refresh_token`）
+## 12. Cookie 安全属性核验（4C 归档：`admin_refresh_token`；**现行：`MYWEBSITE_REFRESH_TOKEN`，`Path=/api/auth/token/refresh`**）
 
 配置来源：`admin/src/main/resources/application.yml` → `security.auth.*`，local 覆盖见 `application-local.yml`。
 

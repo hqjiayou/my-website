@@ -9,6 +9,11 @@ spring:
     basename: i18n/common/messages,i18n/auth/messages
     encoding: UTF-8
     fallback-to-system-locale: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_JWKS_URI:http://localhost:8083/.well-known/jwks.json}
 
 management:
   endpoints:
@@ -39,5 +44,4 @@ app:
 security:
   jwt:
     issuer: my-website
-    audience: ADMIN
-    access-token-ttl: 30m
+    audience: SITE
