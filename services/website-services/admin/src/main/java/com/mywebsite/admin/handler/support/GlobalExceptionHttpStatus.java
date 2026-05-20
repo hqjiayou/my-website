@@ -24,6 +24,9 @@ public final class GlobalExceptionHttpStatus {
         if (code == ErrorCode.NOT_FOUND.getCode()) {
             return HttpStatus.NOT_FOUND;
         }
+        if (code == ErrorCode.CONFLICT.getCode()) {
+            return HttpStatus.CONFLICT;
+        }
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 }

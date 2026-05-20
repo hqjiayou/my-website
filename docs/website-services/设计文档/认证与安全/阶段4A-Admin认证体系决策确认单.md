@@ -50,7 +50,7 @@ Admin API 采用 **Spring Security**：口令 **BCrypt**；请求侧 **短命 Ac
 
 | 维度 | 定案 |
 | --- | --- |
-| **Cookie（Refresh）** | **`HttpOnly=true`**；生产 **`Secure=true`、`SameSite=Strict`**；本地 HTTP 允许 **`Secure=false`**（`SECURITY_REFRESH_COOKIE_SECURE`）；**Path**：**现行** **`/api/auth/token/refresh`**（与 **`auth`** `refresh-cookie-path` 一致）；**4B 归档**：`/api/admin/auth` |
+| **Cookie（Refresh）** | **`HttpOnly=true`**；**`SameSite=Lax`**（可配置，生产可按策略收紧）；生产 **`Secure=true`**；本地 HTTP 允许 **`Secure=false`**（`SECURITY_REFRESH_COOKIE_SECURE`）；**Path**：**现行** **`/api/auth/admin`**（与 **`auth`** `refresh-cookie-path` 一致）；**4B 归档**：`/api/admin/auth` |
 | **配置前缀** | **`security.jwt.*`**（issuer/audience/secret/access TTL）；**`security.auth.*`**（refresh TTL + cookie 策略 + 口令长度上限） |
 | **JWT Bean 装配** | **`security.jwt.secret` 非空** 才启用对称 JWT Bean（避免 **`site-app`** 未配置密钥时测试上下文失败）；**Admin 运行时必须配置密钥** |
 
@@ -62,7 +62,7 @@ Admin API 采用 **Spring Security**：口令 **BCrypt**；请求侧 **短命 Ac
 
 - **`JwtProperties`** 绑定；**`AuthConfig`** 在内嵌配置类上配合 **`JwtBeansEnabledCondition`** 装配 **`JwtEncoder`/`JwtDecoder`/`TokenService`**（实现 **`JwtTokenService`**）。
 - **`JwtTokenService`/`JwtTokenServiceImpl`**：**现行** Access JWT **RS256**（见 **阶段 4G**）；签发 / 校验 **`aud`、`subject_type`**（与 **`SubjectType`** 枚举比对）等核心语义。
-- **编排 HTTP**：**`AuthAdminLoginController`** 等 — **`POST /api/auth/admin/login`**、**`POST /api/auth/token/refresh`**、**`POST /api/auth/logout`**。
+- **编排 HTTP**：**`AuthAdminLoginController`** 等 — **`POST /api/auth/admin/login`**、**`POST /api/auth/admin/refresh`**、**`POST /api/auth/admin/logout`**。
 - **`AdminAuthService`** / **`AdminAuthServiceImpl`**：**username** 登录、`ACTIVE` 校验、模糊失败语义。
 - **`RedisAdminRefreshSessionServiceImpl`**：Refresh 轮换 + replay 吊销；测试可用 **`InMemoryAdminRefreshSessionServiceImpl`**。
 - **`IssuedAccessToken`、`RefreshTokenGenerator`、`JwtClaimConstants`、`AuthenticatedUserUtils`** 等与实现对齐。

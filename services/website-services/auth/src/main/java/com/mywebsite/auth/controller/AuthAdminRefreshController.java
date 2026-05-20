@@ -19,15 +19,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/auth/token")
-@Tag(name = "Auth · Token")
-public class AuthTokenRefreshController {
+@RequestMapping("/api/auth/admin")
+@Tag(name = "Auth · Admin Refresh")
+public class AuthAdminRefreshController {
 
     private final AdminAuthService adminAuthService;
 
     private final AdminRefreshCookieService adminRefreshCookieService;
 
-    public AuthTokenRefreshController(
+    public AuthAdminRefreshController(
             AdminAuthService adminAuthService, AdminRefreshCookieService adminRefreshCookieService) {
         this.adminAuthService = adminAuthService;
         this.adminRefreshCookieService = adminRefreshCookieService;

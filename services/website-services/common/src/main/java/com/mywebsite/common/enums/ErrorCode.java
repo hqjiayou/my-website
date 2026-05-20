@@ -8,7 +8,9 @@ public enum ErrorCode {
     BAD_REQUEST(1001, "common.error.bad-request"),
     UNAUTHORIZED(1002, "auth.unauthorized"),
     FORBIDDEN(1003, "auth.access.denied"),
-    NOT_FOUND(1004, "common.error.not-found");
+    NOT_FOUND(1004, "common.error.not-found"),
+    /** 409；资源冲突（如唯一约束重复）。 */
+    CONFLICT(1005, "common.error.conflict");
 
     private final int code;
 

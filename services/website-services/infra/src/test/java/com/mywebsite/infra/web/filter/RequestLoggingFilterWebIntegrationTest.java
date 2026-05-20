@@ -20,11 +20,12 @@ class RequestLoggingFilterWebIntegrationTest {
     private MockMvc mockMvc;
 
     @Test
-    void echoesProvidedRequestId() throws Exception {
+    void doesNotEchoInboundRequestIdOnServletResponse() throws Exception {
+        // 入站已带 X-Request-Id 时由 Gateway 在响应完成时回写一次，Servlet 不再叠加。
         mockMvc.perform(MockMvcRequestBuilders.get("/infra-itest/ping")
                         .header(HttpRequestCorrelation.X_REQUEST_ID, "id-from-client"))
                 .andExpect(r -> assertThat(r.getResponse().getHeader(HttpRequestCorrelation.X_REQUEST_ID))
-                        .isEqualTo("id-from-client"));
+                        .isNull());
     }
 
     @Test

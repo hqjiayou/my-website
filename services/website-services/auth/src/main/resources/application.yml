@@ -14,7 +14,7 @@ mywebsite:
       access-token-expire-seconds: 900
       refresh-token-expire-seconds: 604800
       refresh-cookie-name: MYWEBSITE_REFRESH_TOKEN
-      refresh-cookie-path: /api/auth/token/refresh
+      refresh-cookie-path: /api/auth/admin
       refresh-cookie-secure: ${SECURITY_REFRESH_COOKIE_SECURE:true}
       refresh-cookie-http-only: true
       refresh-cookie-same-site: Lax
@@ -60,3 +60,8 @@ security:
     site-audience: SITE
   auth:
     admin-login-max-password-length: 128
+    admin-register-min-password-length: 8
+    # 尚无活跃管理员时允许创建首个后台账号；生产就绪后按需关闭。
+    admin-bootstrap-registration-enabled: true
+    # 默认关闭：非 bootstrap 的自助注册仅建议本地联调启用。
+    admin-open-registration-enabled: false

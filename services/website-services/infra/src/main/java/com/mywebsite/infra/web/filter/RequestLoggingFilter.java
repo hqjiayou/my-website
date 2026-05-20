@@ -37,7 +37,13 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         if (requestId == null || requestId.isBlank()) {
             requestId = UUID.randomUUID().toString();
         }
-        response.setHeader(HttpRequestCorrelation.X_REQUEST_ID, requestId);
+        // 入站已带 X-Request-Id（通常经 Gateway 转发）时不在 Servlet 回写，由网关在响应完成时写一次。
+        boolean inboundCorrelation =
+                request.getHeader(HttpRequestCorrelation.X_REQUEST_ID) != null
+                        && !request.getHeader(HttpRequestCorrelation.X_REQUEST_ID).isBlank();
+        if (!inboundCorrelation) {
+            response.setHeader(HttpRequestCorrelation.X_REQUEST_ID, requestId);
+        }
         MDC.put(HttpRequestCorrelation.MDC_REQUEST_ID, requestId);
 
         String serviceName =

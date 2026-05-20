@@ -10,14 +10,17 @@
 
 | 语义 | HTTP | 模块 |
 |------|------|------|
+| 管理端注册（首管理员 / 受限开放注册） | **`POST /api/auth/admin/register`** | **auth** |
 | 管理端登录 | **`POST /api/auth/admin/login`** | **auth** |
-| 刷新 Access（Refresh **HttpOnly Cookie**） | **`POST /api/auth/token/refresh`** | **auth** |
-| 登出（吊销 Refresh、清除 Cookie） | **`POST /api/auth/logout`** | **auth** |
+| 刷新 Access（Refresh **HttpOnly Cookie**） | **`POST /api/auth/admin/refresh`** | **auth** |
+| 登出（吊销 Refresh、清除 Cookie） | **`POST /api/auth/admin/logout`** | **auth** |
 | 前台登录（占位） | **`POST /api/auth/site/login`** | **auth**（当前 **501**） |
 | 管理端当前用户上下文 | **`GET /api/admin/auth/me`**（需 Bearer） | **admin** |
 | 前台当前用户上下文（占位） | **`GET /api/site/auth/me`**（需 Bearer） | **site-app** |
 
-**Refresh Cookie（默认配置前缀 `mywebsite.security.token`）**：名称 **`MYWEBSITE_REFRESH_TOKEN`**，**`Path=/api/auth/token/refresh`**，`HttpOnly`，`SameSite` 默认 **Lax**；生产 **`Secure=true`**（本地可 **`SECURITY_REFRESH_COOKIE_SECURE=false`**）。
+**Refresh Cookie（`mywebsite.security.token`）**：**`MYWEBSITE_REFRESH_TOKEN`**，**`Path=/api/auth/admin`**，`HttpOnly`，**`SameSite=Lax`**（可配置）；本地 **`SECURITY_REFRESH_COOKIE_SECURE=false`**，生产建议 **`Secure=true`**。
+
+**管理端自助注册**：接口 **`POST /api/auth/admin/register`**。默认在 **PostgreSQL `admin_user` 中尚无未删除的记录**时可创建**第一个**管理员（bootstrap）；创建第二个管理员前须显式 **`security.auth.admin-open-registration-enabled=true`**（**默认 false**，一般不用于生产）。
 
 **Access JWT**：载荷含 **`subject_type`**（**`SubjectType`**：`ADMIN` / `SITE`，与 **`aud`「面向谁」** 语义分离）；**`auth`** 内 **`JwtTokenServiceImpl.parseToken`** 将声明解析为 **`SubjectType`** 后与期望值 **枚举比对**，不再与 **`TokenAudience.name()`** 混绑。
 
@@ -34,7 +37,7 @@
 | 阶段 4G（RS256 + JWKS） | **已完成** |
 | **阶段 4H.0**（请求链路日志 + **`X-Request-Id`** + Resource Server **401** JSON / **invalid_token**） | **已完成**（[**说明**](../../docs/website-services/设计文档/认证与安全/阶段4H.0-请求链路日志与Token错误响应完善说明.md)） |
 | 阶段 4H（Gateway 全链路真实联调） | **已完成** |
-| 阶段 4I（迁移清理收口：脚本/文档口径） | **已完成**（见 [**阶段4I 说明**](../../docs/website-services/联调说明/阶段4I-迁移清理收口.md)） |
+| 阶段 4I（认证阶段收口：4H 尾巴、删兼容路径、Cookie/i18n/边界） | **已完成**（见 [**阶段4I 说明**](../../docs/website-services/联调说明/阶段4I-迁移清理收口.md)） |
 | **认证契约现行版**（`/api/auth/*` + `/api/*/auth/me`，文档/网关一致） | **已完成**（2026-05；见本文 §认证 HTTP 契约） |
 | 阶段 5A（Admin RBAC 深化） | **待开始**（4H/4I 已就绪） |
 
@@ -49,7 +52,7 @@
 | Gateway | `gateway` | `8080` | 网关；**`/api/auth/**`** → **Auth(8083)**；`/api/admin/**` → Admin；`/api/site/**` → Site（**顺序**：`/api/auth/**` 须在 **`/api/admin/**`、`/api/site/**`** 之前） |
 | Admin API | `admin` | `8081` | 后台**业务** API；**OAuth2 Resource Server** 校验 Access JWT |
 | Site API | `site/site-app` | `8082` | 前台站点 API |
-| Auth | **`auth`** | **`8083`**（`AUTH_APP_PORT`） | 统一认证：**`/api/auth/admin/login`**、**`/api/auth/token/refresh`**、**`/api/auth/logout`**、`GET /api/auth/ping`；**不设** Flyway（DDL 由 Admin/infra 迁移） |
+| Auth | **`auth`** | **`8083`**（`AUTH_APP_PORT`） | 统一认证：**`/api/auth/admin/login`**、**`/api/auth/admin/refresh`**、**`/api/auth/admin/logout`**、`GET /api/auth/ping`；**不设** Flyway（DDL 由 Admin/infra 迁移） |
 
 ## 模块结构
 
@@ -159,7 +162,7 @@ website-services/
 统一认证 **可执行** 模块（**单模块**，不再有 `auth-core` / `auth-app` 拆分）。
 
 - **`AuthApplication`**；默认端口 **`8083`**（**`AUTH_APP_PORT`**）。
-- **承担**：**`POST /api/auth/admin/login`**、**`POST /api/auth/token/refresh`**、**`POST /api/auth/logout`**、`GET /api/auth/ping`、**`GET /.well-known/jwks.json`**、Access JWT **RS256** 签发（**`TokenService`/`JwtTokenServiceImpl`**，`subject_type` 与 **`SubjectType`** 显式校验）、Refresh Cookie（**`mywebsite.security.token`**）、**Redis** 刷新会话（**`RedisAdminRefreshSessionServiceImpl`** 等）；**`i18n/auth`** 承载 **`admin.auth.*`** 等认证文案。
+- **承担**：**`POST /api/auth/admin/register`**（首管理员 bootstrap / 可配置开启开放注册）、**`POST /api/auth/admin/login`**、**`POST /api/auth/admin/refresh`**、**`POST /api/auth/admin/logout`**、`GET /api/auth/ping`、**`GET /.well-known/jwks.json`**、Access JWT **RS256** 签发（**`TokenService`/`JwtTokenServiceImpl`**，`subject_type` 与 **`SubjectType`** 显式校验）、Refresh Cookie（**`mywebsite.security.token`**）、**Redis** 刷新会话（**`RedisAdminRefreshSessionServiceImpl`** 等）；**`i18n/auth`** 承载 **`admin.auth.*`** 等认证文案。注册与安全策略：`security.auth.admin-bootstrap-registration-enabled`、`security.auth.admin-open-registration-enabled`、`security.auth.admin-register-min-password-length`。
 - **直连** 与 admin 相同的 **`admin_user` 表**（本模块内自有 `entity`/`mapper`；**不**依赖 `admin` jar）。
 - **显式关闭 Flyway**（避免与 admin 重复迁移）；使用 **`AUTH_DB_*`** 可选覆盖 **`DB_*`**。
 - **启动**：`mvn -pl auth -am spring-boot:run`。

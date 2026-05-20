@@ -14,7 +14,7 @@
 | 读者 | 后端开发与评审 |
 | 关联前置 | 阶段 2B 首批表；阶段 3A/3B 持久层；**持久层真实 PostgreSQL 回归验证**（长期）已就绪 |
 
-本文约定均以 **Admin 领域（管理员账号与权限数据）** 为中心；**认证编排 HTTP**在 **`auth`**（**现行**：**`/api/auth/admin/login`**、**`/api/auth/token/refresh`**、**`/api/auth/logout`**；经 Gateway：**`/api/auth/**`**）。**业务上下文**：**`GET /api/admin/auth/me`**（**admin**）。权威清单：**[`README`](../../../../services/website-services/README.md)** §认证 HTTP 契约。Site 前台认证保持 **`TokenAudience.SITE`** 分离思路（**`/api/auth/site/login`** 占位）。
+本文约定均以 **Admin 领域（管理员账号与权限数据）** 为中心；**认证编排 HTTP**在 **`auth`**（**现行**：**`/api/auth/admin/login`**、**`/api/auth/admin/refresh`**、**`/api/auth/admin/logout`**；经 Gateway：**`/api/auth/**`**）。**业务上下文**：**`GET /api/admin/auth/me`**（**admin**）。权威清单：**[`README`](../../../../services/website-services/README.md)** §认证 HTTP 契约。Site 前台认证保持 **`TokenAudience.SITE`** 分离思路（**`/api/auth/site/login`** 占位）。
 
 > **阶段 4B.5**：返回给调用方的认证/校验类 **`ApiResponse.message`** 已改为 **`messageKey` + 多模块 `messages*.properties`**（`Accept-Language`，默认回退 **`ja-JP`**）。定案见 **[《后端多语言支持策略设计 V1》](./后端多语言支持策略设计V1.md)**。  
 > **JWT 无效等场景的 RFC 6750 / `WWW-Authenticate`** 仍以本文及阶段 4B 结论为准；4B.5 **不强制**统一为 JSON `ApiResponse` 错误体。
@@ -191,7 +191,7 @@ sequenceDiagram
     Auth->>R: store refresh+jti
     Auth-->>C: tokens + Set-Cookie Refresh
 
-    C->>G: POST /api/auth/token/refresh (Cookie)
+    C->>G: POST /api/auth/admin/refresh (Cookie)
     G->>Auth: forward
     Auth->>R: rotate refresh
     Auth-->>C: new Access + Set-Cookie
@@ -266,8 +266,8 @@ sequenceDiagram
 | --- | --- |
 | **`HttpOnly`** | **`true`** |
 | **`Secure`** | 生产 **`true`**；本地 HTTP 可通过 **`SECURITY_REFRESH_COOKIE_SECURE` / `security.auth.refresh-cookie-secure`** 置 **`false`** |
-| **`SameSite`** | 生产 **`Strict`**（配置项 **`security.auth.refresh-cookie-same-site`**） |
-| **`Path`** | **`/api/auth/token/refresh`**（**现行**：与 **`security.auth.refresh-cookie-path`** 一致，限定 Refresh 仅发往刷新路由）；**4B 归档**曾为 **`/api/admin/auth`** |
+| **`SameSite`** | 默认 **`Lax`**（配置项 **`refresh-cookie-same-site`**；生产可按策略改为 Strict） |
+| **`Path`** | **`/api/auth/admin`**（**现行**：与 **`refresh-cookie-path`** 一致，覆盖 admin 登录/刷新/登出）；**4B 归档**曾为 **`/api/admin/auth`** |
 
 ---
 
@@ -302,7 +302,7 @@ sequenceDiagram
 
 | 类别 | 状态 |
 | --- | --- |
-| **接口** | **现行**：**`/api/auth/admin/login`**、**`/api/auth/token/refresh`**、**`/api/auth/logout`**（**`auth`**，经 Gateway **`/api/auth/**`**）；**`GET /api/admin/auth/me`** 等在 **`admin`**。**§18 归档（4B）**：曾由 **`AdminAuthController`** 暴露 **`POST /api/admin/auth/login|refresh|logout`** |
+| **接口** | **现行**：**`/api/auth/admin/login`**、**`/api/auth/admin/refresh`**、**`/api/auth/admin/logout`**（**`auth`**，经 Gateway **`/api/auth/**`**）；**`GET /api/admin/auth/me`** 等在 **`admin`**。**§18 归档（4B）**：曾由 **`AdminAuthController`** 暴露 **`POST /api/admin/auth/login|refresh|logout`** |
 | **Swagger** | **`Admin Auth`** 分组可见；受保护示例接口 **`GET /api/admin/ping`** 使用 **`adminBearer` scheme** |
 | **Redis** | **`RedisAdminRefreshSessionServiceImpl`**；缺 **`RedisConnectionFactory`**（如单元测试排除 Redis）时 **`AdminRefreshSessionTestBeans`** 仅向 **测试** 上下文注册 **`InMemoryAdminRefreshSessionServiceImpl`**（语义对齐，**禁止**视作生产替身） |
 | **测试** | **`JwtTokenServiceTest`**（签发/解析 + `JwtDecoder` Claims：`iss`/`aud`/`token_type`/`admin_user_id`/`session_id`/`username`）、**`AdminAuthServiceImplTest`**、**`InMemoryAdminRefreshSessionServiceImplTest`**、**`AdminAuthMvcTest`**（登录成败、密码过长、`/refresh` 缺 Cookie / 无效 Refresh / 轮换后重放、登出 Cookie 缺失幂等、受保护接口无 Bearer 或篡改 JWT）。**说明**：OAuth2 Resource Server 在 **JWT 签名验证失败** 等场景常返回 **401 + `WWW-Authenticate: Bearer invalid_token`**（无 `ApiResponse` body），与 **`AdminAuthenticationEntryPoint`** 的 JSON 401 并存，属 Spring Security 预期行为。默认 **`mvn test`** 不依赖本机 Redis |

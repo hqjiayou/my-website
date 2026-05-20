@@ -81,6 +81,9 @@ class AdminAuthMvcTest {
         user.setCreatedAt(OffsetDateTime.now());
         user.setUpdatedAt(OffsetDateTime.now());
         Mockito.when(adminUserMapper.selectOne(any())).thenReturn(user);
+        Mockito.when(adminUserMapper.selectCount(any())).thenReturn(1L);
+        Mockito.when(adminUserMapper.updateById(org.mockito.ArgumentMatchers.any(AdminUserEntity.class)))
+                .thenReturn(1);
     }
 
     static Stream<Arguments> loginFailureMessagesByLocale() {
@@ -229,7 +232,7 @@ class AdminAuthMvcTest {
 
     @Test
     void refreshWithoutCookieFailsWithUnifiedUnauthorizedEnvelopeAndClearsCookie() throws Exception {
-        MvcResult res = mockMvc.perform(post("/api/auth/token/refresh"))
+        MvcResult res = mockMvc.perform(post("/api/auth/admin/refresh"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("認証されていないかトークンが無効です"))
                 .andExpect(jsonPath("$.data").value(nullValue()))
@@ -243,7 +246,7 @@ class AdminAuthMvcTest {
     @Test
     void refreshWithUnknownOpaqueFailsUnauthorized() throws Exception {
         Cookie fake = new Cookie(adminRefreshCookieService.refreshCookieName(), "opaque-token-not-bound-to-session-xx");
-        mockMvc.perform(post("/api/auth/token/refresh").cookie(fake))
+        mockMvc.perform(post("/api/auth/admin/refresh").cookie(fake))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.data").value(nullValue()));
     }
@@ -262,19 +265,19 @@ class AdminAuthMvcTest {
                 loginResult.getResponse().getCookie(adminRefreshCookieService.refreshCookieName());
         assertThat(firstRefresh).isNotNull();
 
-        mockMvc.perform(post("/api/auth/token/refresh").cookie(firstRefresh))
+        mockMvc.perform(post("/api/auth/admin/refresh").cookie(firstRefresh))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("success"))
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty());
 
-        mockMvc.perform(post("/api/auth/token/refresh").cookie(firstRefresh))
+        mockMvc.perform(post("/api/auth/admin/refresh").cookie(firstRefresh))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     @Test
     void logoutIsIdempotentWhenRefreshCookieAbsent() throws Exception {
-        mockMvc.perform(post("/api/auth/logout"))
+        mockMvc.perform(post("/api/auth/admin/logout"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("success"))
                 .andExpect(jsonPath("$.data").value(nullValue()));
@@ -298,7 +301,7 @@ class AdminAuthMvcTest {
         assertThat(refreshCookie).isNotNull();
         assertThat(refreshCookie.isHttpOnly()).isTrue();
 
-        MvcResult refreshResult = mockMvc.perform(post("/api/auth/token/refresh").cookie(refreshCookie))
+        MvcResult refreshResult = mockMvc.perform(post("/api/auth/admin/refresh").cookie(refreshCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("success"))
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
@@ -308,12 +311,12 @@ class AdminAuthMvcTest {
                 refreshResult.getResponse().getCookie(adminRefreshCookieService.refreshCookieName());
         assertThat(rotatedRefresh).isNotNull();
 
-        mockMvc.perform(post("/api/auth/logout").cookie(rotatedRefresh))
+        mockMvc.perform(post("/api/auth/admin/logout").cookie(rotatedRefresh))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("success"))
                 .andExpect(jsonPath("$.data").value(nullValue()));
 
-        mockMvc.perform(post("/api/auth/token/refresh").cookie(rotatedRefresh))
+        mockMvc.perform(post("/api/auth/admin/refresh").cookie(rotatedRefresh))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.data").value(nullValue()));
     }

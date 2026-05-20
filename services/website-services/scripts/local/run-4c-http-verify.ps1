@@ -1,6 +1,6 @@
 # 阶段 4C/4F 本地 HTTP 验证脚本（偏 i18n / 安全边界回归）。
 # 4F 起：登录/刷新/登出打 $AuthBase（默认 http://127.0.0.1:8083），Ping/受保护业务打 $AdminBase。
-# 4G+：Admin Access JWT 验签走 JWKS；勿再配置 Admin SECURITY_JWT_SECRET。全链路经 Gateway 见「阶段4H」联调文档。
+# 4G+：Admin Access JWT 验签走 JWKS。全链路经 Gateway 请用 scripts/local/run-4h-gateway-auth-flow-verify.ps1（阶段4H 联调文档）。
 # 使用前请已启动 auth（8083）与 admin（8081），或自行调整 -SkipStartJar 并在外部启动进程。
 
 param(
@@ -131,27 +131,27 @@ try {
     Write-Host "`n=== Refresh rotate ==="
     Copy-Item -Force $cjLogin $cjOrig
     Remove-Item $cjRot -ErrorAction SilentlyContinue
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjRot -X POST "$AuthBase/api/auth/token/refresh" -H "Accept-Language: ja-JP" | Out-Host
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjRot -X POST "$AuthBase/api/auth/admin/refresh" -H "Accept-Language: ja-JP" | Out-Host
 
     Write-Host "`n=== Replay old refresh cookie ==="
     Remove-Item $cjReplay -ErrorAction SilentlyContinue
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjOrig -c $cjReplay -X POST "$AuthBase/api/auth/token/refresh" -H "Accept-Language: ja-JP"
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjOrig -c $cjReplay -X POST "$AuthBase/api/auth/admin/refresh" -H "Accept-Language: ja-JP"
 
     Write-Host "`n=== Refresh with rotated cookie AFTER replay (expect invalid / session revoked) ==="
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjRot -c $cjRot -X POST "$AuthBase/api/auth/token/refresh" -H "Accept-Language: ja-JP"
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjRot -c $cjRot -X POST "$AuthBase/api/auth/admin/refresh" -H "Accept-Language: ja-JP"
 
     Write-Host "`n=== Fresh login after replay purge ==="
     Remove-Item $cjLogin -ErrorAction SilentlyContinue
     curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -c $cjLogin -X POST "$AuthBase/api/auth/admin/login" -H "Accept-Language: ja-JP" -H "Content-Type: application/json" --data-binary $good
 
     Write-Host "`n=== Logout ==="
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjLogin -X POST "$AuthBase/api/auth/logout" -H "Accept-Language: ja-JP"
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjLogin -X POST "$AuthBase/api/auth/admin/logout" -H "Accept-Language: ja-JP"
 
     Write-Host "`n=== Refresh after logout (expect unauthorized business envelope) ==="
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjLogin -X POST "$AuthBase/api/auth/token/refresh" -H "Accept-Language: ja-JP"
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -b $cjLogin -c $cjLogin -X POST "$AuthBase/api/auth/admin/refresh" -H "Accept-Language: ja-JP"
 
     Write-Host "`n=== Logout idempotent without cookie ==="
-    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -X POST "$AuthBase/api/auth/logout" -H "Accept-Language: ja-JP"
+    curl.exe -sS -w " HTTP_CODE:%{http_code}`n" -X POST "$AuthBase/api/auth/admin/logout" -H "Accept-Language: ja-JP"
 
     if (-not $SkipGateway) {
         Write-Host "`n=== Gateway login headers (may fail if gateway not running) ==="

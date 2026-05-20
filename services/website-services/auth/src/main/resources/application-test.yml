@@ -10,7 +10,7 @@ mywebsite:
       access-token-expire-seconds: 900
       refresh-token-expire-seconds: 604800
       refresh-cookie-name: MYWEBSITE_REFRESH_TOKEN
-      refresh-cookie-path: /api/auth/token/refresh
+      refresh-cookie-path: /api/auth/admin
       refresh-cookie-secure: false
       refresh-cookie-http-only: true
       refresh-cookie-same-site: Lax
@@ -20,6 +20,11 @@ security:
     issuer: test-issuer
     audience: ADMIN
     site-audience: SITE
+  auth:
+    admin-login-max-password-length: 128
+    admin-register-min-password-length: 8
+    admin-bootstrap-registration-enabled: true
+    admin-open-registration-enabled: false
 
 mybatis-plus:
   configuration:

@@ -13,7 +13,7 @@
 
 1. **`auth` 为单一、可执行的 Spring Boot 模块**（**不再有 `auth-core` / `auth-app` Maven 拆分**）。  
 2. **认证主链路 HTTP**（Admin **Login / Refresh / Logout**）由 **`auth`（默认 8083）** 承载；**`admin`** 为 **OAuth2 Resource Server** + 业务 API。  
-3. **`gateway`** 路由：**`/api/auth/**`** → **`auth`**（编排：**`/api/auth/admin/login`**、**`/api/auth/token/refresh`**、**`/api/auth/logout`** 等）；**`/api/admin/**`**（业务 API，含 **`/api/admin/auth/me`**）→ **`admin`**；**`/api/site/**`**（含 **`/api/site/auth/me`**）→ **`site-app`**。**顺序**：`/api/auth/**` 须在 **`/api/admin/**`、`/api/site/**`** 之前。  
+3. **`gateway`** 路由：**`/api/auth/**`** → **`auth`**（编排：**`/api/auth/admin/login`**、**`/api/auth/admin/refresh`**、**`/api/auth/admin/logout`** 等）；**`/api/admin/**`**（业务 API，含 **`/api/admin/auth/me`**）→ **`admin`**；**`/api/site/**`**（含 **`/api/site/auth/me`**）→ **`site-app`**。**顺序**：`/api/auth/**` 须在 **`/api/admin/**`、`/api/site/**`** 之前。  
 4. **RS256 + JWKS**：**4G 已完成**；**auth** 持私钥签发并发布 **`/.well-known/jwks.json`**；**admin** 仅 **`jwk-set-uri` 验签**，**不再**使用 `SECURITY_JWT_SECRET` 作为主链路配置。详见 [**阶段4G**](./阶段4G-RS256与JWKS签名验签体系迁移说明.md)。  
 5. **下一阶段执行顺序**：**4H**（Gateway 全链路真实联调）、**4I**（迁移清理收口）已完成 → **5A** RBAC。详见 **[路线图](../../总览/后端开发路线图与阶段状态.md)**。
 
@@ -194,7 +194,7 @@ website-services/
 |------|------|
 | **Audience** | 沿用 `TokenAudience`：`ADMIN`、`SITE`。Access JWT **`aud`** 区分域。 |
 | **登录路径** | **现行**：**`POST /api/auth/admin/login`**、**`POST /api/auth/site/login`**（占位）；与 Gateway **`Path=/api/auth/**`** 一致。 |
-| **Refresh Cookie** | **现行**：默认 **`MYWEBSITE_REFRESH_TOKEN`**，`Path`**`/api/auth/token/refresh`**（**`mywebsite.security.token`**）；Site 可与 Admin 分 Cookie 名称演进，见 **`README`**。 |
+| **Refresh Cookie** | **现行**：默认 **`MYWEBSITE_REFRESH_TOKEN`**，`Path`**`/api/auth/admin`**，**`SameSite=Lax`**（**`mywebsite.security.token`**）；Site 可与 Admin 分 Cookie 名称演进，见 **`README`**。 |
 
 ### 4.2 Auth 读取不同用户的方案对比与本项目推荐
 

@@ -13,7 +13,7 @@ public class TokenProperties {
 
     private String refreshCookieName = "MYWEBSITE_REFRESH_TOKEN";
 
-    private String refreshCookiePath = "/api/auth/token/refresh";
+    private String refreshCookiePath = "/api/auth/admin";
 
     private boolean refreshCookieSecure = true;
 

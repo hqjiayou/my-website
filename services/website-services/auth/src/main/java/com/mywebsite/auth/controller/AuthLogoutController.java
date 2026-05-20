@@ -20,8 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/auth")
-@Tag(name = "Auth · Session")
+@RequestMapping("/api/auth/admin")
+@Tag(name = "Auth · Admin Logout")
 public class AuthLogoutController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthLogoutController.class);
