@@ -5,7 +5,11 @@ import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.infra.service.LocalizedMessageService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -24,6 +28,13 @@ public class GlobalExceptionHandler {
         String message = localizedMessageService.getMessage(ex.getMessageKey(), ex.getMessageArgs());
         return ResponseEntity.status(GlobalExceptionHttpStatus.fromBusinessCode(ex.getCode()))
                 .body(new HttpMessageBody<>(ex.getCode(), message, null));
+    }
+
+    @ExceptionHandler({AccessDeniedException.class, AuthorizationDeniedException.class})
+    public ResponseEntity<HttpMessageBody<Void>> handleAccessDenied(HttpServletRequest request, Exception ex) {
+        String message = localizedMessageService.getMessage(request, ErrorCode.FORBIDDEN.getMessageKey());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new HttpMessageBody<>(ErrorCode.FORBIDDEN.getCode(), message, null));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

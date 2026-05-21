@@ -2,9 +2,9 @@ package com.mywebsite.admin.controller;
 
 import com.mywebsite.admin.dto.authme.AdminAuthMeResponse;
 import com.mywebsite.admin.dto.authme.AdminAuthMeUser;
-import com.mywebsite.admin.dto.authme.AdminMenuNode;
 import com.mywebsite.admin.entity.AdminUserEntity;
 import com.mywebsite.admin.mapper.AdminUserMapper;
+import com.mywebsite.admin.rbac.service.AdminPermissionQueryService;
 import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.api.ResponseMessages;
 import com.mywebsite.common.enums.ErrorCode;
@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,11 +27,15 @@ public class AdminAuthMeController {
 
     private final AdminUserMapper adminUserMapper;
 
-    public AdminAuthMeController(AdminUserMapper adminUserMapper) {
+    private final AdminPermissionQueryService permissionQueryService;
+
+    public AdminAuthMeController(AdminUserMapper adminUserMapper, AdminPermissionQueryService permissionQueryService) {
         this.adminUserMapper = adminUserMapper;
+        this.permissionQueryService = permissionQueryService;
     }
 
     @GetMapping("/me")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "当前管理员上下文（用户 / 角色 / 权限 / 菜单）")
     public ResponseEntity<HttpMessageBody<AdminAuthMeResponse>> me() {
         String subject =
@@ -51,20 +56,12 @@ public class AdminAuthMeController {
                 null,
                 entity.getStatus());
 
-        List<String> roles = List.of("SUPER_ADMIN");
-        List<String> permissions =
-                List.of("admin:user:list", "admin:user:create", "admin:role:list", "admin:menu:list");
+        var authorization = permissionQueryService
+                .loadForUserCode(userCode)
+                .orElseThrow(() -> new IllegalStateException("authenticated admin user missing RBAC snapshot"));
 
-        List<AdminMenuNode> menus = List.of(new AdminMenuNode(
-                "system",
-                "系统管理",
-                "/system",
-                "SettingOutlined",
-                10,
-                List.of(new AdminMenuNode(
-                        "system-user", "用户管理", "/system/user", null, 10, List.of()))));
-
-        AdminAuthMeResponse data = new AdminAuthMeResponse(user, roles, permissions, menus);
+        AdminAuthMeResponse data = new AdminAuthMeResponse(
+                user, authorization.roles(), authorization.permissions(), List.of());
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, data));
     }
 }

@@ -36,10 +36,15 @@ public final class AdminTestJwtSigner {
     }
 
     public static String signAdminAccess(RSAKey privateKeyJwk, String issuer, String audience) throws Exception {
+        return signAdminAccess(privateKeyJwk, issuer, audience, 100L);
+    }
+
+    public static String signAdminAccess(RSAKey privateKeyJwk, String issuer, String audience, long adminUserId)
+            throws Exception {
         Instant now = Instant.now();
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .issuer(issuer)
-                .subject(SubjectCodes.formatAdminSubject(100L))
+                .subject(SubjectCodes.formatAdminSubject(adminUserId))
                 .audience(audience)
                 .jwtID(UUID.randomUUID().toString())
                 .issueTime(Date.from(now))

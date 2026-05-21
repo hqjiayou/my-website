@@ -60,9 +60,23 @@ docker exec -i local-postgres psql -U mywebsite -d postgres -c "CREATE DATABASE 
 
 ---
 
+# RBAC 种子验证库：`my_website_rbac_seed_verify`
+
+用于 **[阶段5C.1 RBAC 种子真实 PostgreSQL 迁移验证](../../../docs/website-services/数据文档/阶段5C.1-RBAC种子真实PostgreSQL迁移验证.md)**（Flyway **V1 + V2** 与种子数据），与开发库、持久层验证库分离。
+
+```bash
+docker exec -i local-postgres psql -U hqjiayou -d postgres -v ON_ERROR_STOP=1 \
+  -c "CREATE DATABASE my_website_rbac_seed_verify OWNER hqjiayou ENCODING 'UTF8';"
+```
+
+回归测试：`mvn clean test -Ppersistence-verify-pg -pl admin -am "-Dtest=AdminRbacSeedVerifyPgTest" "-Dsurefire.failIfNoSpecifiedTests=false"`
+
+---
+
 ## SQL 文件
 
 | 文件 | 用途 |
 |------|------|
 | [`create-my_website_dev.sql`](./create-my_website_dev.sql) | `CREATE DATABASE my_website_dev`（脚本内 Owner 默认为 **`hqjiayou`**；若你的 `.env` 使用 **`mywebsite`** 等账号，请编辑 SQL 或改用上文交互式 `CREATE DATABASE`） |
 | [`create-my_website_persistence_verify.sql`](./create-my_website_persistence_verify.sql) | `CREATE DATABASE my_website_3c_verify`（持久层回归专用临时库），Owner 默认同上 |
+| [`create-my_website_rbac_seed_verify.sql`](./create-my_website_rbac_seed_verify.sql) | `CREATE DATABASE my_website_rbac_seed_verify`（5C.1 RBAC 种子 Flyway 验证专用） |

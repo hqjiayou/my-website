@@ -1,6 +1,6 @@
 # website-services
 
-`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。**阶段 4H.0（请求链路 + Token 错误体）**、**4H（Gateway 全链路）**、**4I（迁移清理收口）** 已完成；**现行认证 HTTP 契约**（网关 **`/api/auth/**`**、业务 **`/api/*/auth/me`**）已与实现对齐（见下文 **认证 HTTP 契约**）。**阶段 5A（后台 RBAC 深化）** 可按 **[路线图](../../docs/website-services/总览/后端开发路线图与阶段状态.md)** 推进。**阶段 4F** 已将 **`auth`** 收敛为**单一可执行认证服务**（**`mvn -pl auth -am spring-boot:run`**），负责 **Login / Refresh / Logout**、**JWT 签发**、**Redis Refresh 会话**；**Admin / Site-app** 为 **OAuth2 Resource Server** 与业务 API。**阶段 4G** 已完成 **RS256 + JWKS**。设计见 [**阶段 4D**](../../docs/website-services/设计文档/认证与安全/阶段4D-Auth独立认证服务架构回归设计与迁移方案.md) · **落地**见 [**阶段 4F**](../../docs/website-services/设计文档/认证与安全/阶段4F-Auth单服务收敛与认证主链路上提落地说明.md) · **4G** 见 [**RS256/JWKS**](../../docs/website-services/设计文档/认证与安全/阶段4G-RS256与JWKS签名验签体系迁移说明.md)。**完整文档导航**：[`docs/website-services/README.md`](../../docs/website-services/README.md)。
+`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。**阶段 4H.0（请求链路 + Token 错误体）**、**4H（Gateway 全链路）**、**4I（认证收口）** 已完成；**阶段 5A（Admin RBAC 详细设计）**、**5B（RBAC 权限校验底座）**、**5C（角色与权限管理）** 已完成（见 [**5A**](../../docs/website-services/设计文档/权限与后台管理/阶段5A-Admin-RBAC权限体系详细设计.md) / [**5B**](../../docs/website-services/设计文档/权限与后台管理/阶段5B-Admin-RBAC权限校验底座落地说明.md) / [**5C**](../../docs/website-services/设计文档/权限与后台管理/阶段5C-角色与权限管理接口落地说明.md)）。**现行认证 HTTP 契约**（网关 **`/api/auth/**`**、业务 **`/api/*/auth/me`**）已与实现对齐。**5D（管理员与角色绑定）** 已完成；**下一步：5E** 菜单权限与导航。**阶段 4F** 已将 **`auth`** 收敛为**单一可执行认证服务**（**`mvn -pl auth -am spring-boot:run`**），负责 **Login / Refresh / Logout**、**JWT 签发**、**Redis Refresh 会话**；**Admin / Site-app** 为 **OAuth2 Resource Server** 与业务 API。**阶段 4G** 已完成 **RS256 + JWKS**。设计见 [**阶段 4D**](../../docs/website-services/设计文档/认证与安全/阶段4D-Auth独立认证服务架构回归设计与迁移方案.md) · **落地**见 [**阶段 4F**](../../docs/website-services/设计文档/认证与安全/阶段4F-Auth单服务收敛与认证主链路上提落地说明.md) · **4G** 见 [**RS256/JWKS**](../../docs/website-services/设计文档/认证与安全/阶段4G-RS256与JWKS签名验签体系迁移说明.md)。**完整文档导航**：[`docs/website-services/README.md`](../../docs/website-services/README.md)。
 
 除此之外：统一网关入口、多端可启动应用、基础设施、MyBatis-Plus、Flyway、OpenAPI。（[`架构设计`](../../docs/website-services/设计文档/基础架构/架构设计.md) §8）
 
@@ -39,7 +39,13 @@
 | 阶段 4H（Gateway 全链路真实联调） | **已完成** |
 | 阶段 4I（认证阶段收口：4H 尾巴、删兼容路径、Cookie/i18n/边界） | **已完成**（见 [**阶段4I 说明**](../../docs/website-services/联调说明/阶段4I-迁移清理收口.md)） |
 | **认证契约现行版**（`/api/auth/*` + `/api/*/auth/me`，文档/网关一致） | **已完成**（2026-05；见本文 §认证 HTTP 契约） |
-| 阶段 5A（Admin RBAC 深化） | **待开始**（4H/4I 已就绪） |
+| 阶段 5A（Admin RBAC 权限体系详细设计） | **已完成**（见 [**阶段5A 说明**](../../docs/website-services/设计文档/权限与后台管理/阶段5A-Admin-RBAC权限体系详细设计.md)） |
+| 阶段 5B（RBAC 权限校验底座） | **已完成**（`AdminPermissionChecker`、真实 `/auth/me`；Method Security 验证见 test `RbacTestController`；见 [**5B 说明**](../../docs/website-services/设计文档/权限与后台管理/阶段5B-Admin-RBAC权限校验底座落地说明.md) §7/§10） |
+| 阶段 5C（角色与权限管理） | **已完成**（`/api/admin/roles`、`/api/admin/permissions`、角色-权限绑定、`V2` 种子；见 [**5C 说明**](../../docs/website-services/设计文档/权限与后台管理/阶段5C-角色与权限管理接口落地说明.md)） |
+| 阶段 5C.1（RBAC 种子 PG 验证） | **已完成**（`my_website_rbac_seed_verify` + `AdminRbacSeedVerifyPgTest`；见 [**5C.1 说明**](../../docs/website-services/数据文档/阶段5C.1-RBAC种子真实PostgreSQL迁移验证.md)） |
+| 阶段 5C.2（清理测试探针权限） | **已完成**（生产 `V2` 不含 `admin:rbac:check`；16 条生产权限） |
+| 阶段 5D（管理员与角色绑定） | **已完成**（`/api/admin/users/{id}/roles`；见 [**5D 说明**](../../docs/website-services/设计文档/权限与后台管理/阶段5D-管理员与角色绑定接口落地说明.md)） |
+| 阶段 5E（菜单导航） | **待开始** |
 
 **勿在仓库另建第二份「后端 TODO 清单」。** 完整阶段史、产出与下一步：**[`docs/website-services/总览/后端开发路线图与阶段状态.md`](../../docs/website-services/总览/后端开发路线图与阶段状态.md)**；文档总导航：**[`docs/website-services/README.md`](../../docs/website-services/README.md)**。
 

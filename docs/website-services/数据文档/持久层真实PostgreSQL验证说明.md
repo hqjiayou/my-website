@@ -89,6 +89,7 @@ mvn clean test -Ppersistence-verify-pg -pl admin,site/site-app -am
 | 模块 | 类 |
 |------|-----|
 | admin | `com.mywebsite.admin.AdminUserPersistenceVerifyPgTest` |
+| admin | `com.mywebsite.admin.AdminRbacSeedVerifyPgTest`（**5C.1**；Profile **`verify-pg-rbac`**，库 **`my_website_rbac_seed_verify`**，见 [阶段5C.1说明](./阶段5C.1-RBAC种子真实PostgreSQL迁移验证.md)） |
 | site-app | `com.mywebsite.site.persistence.SitePersistenceVerifyPgTest` |
 
 二者均标注 **`@Tag("verifyPg")`**，测试逻辑聚焦持久层基础行为，**不**替代业务用例测试。

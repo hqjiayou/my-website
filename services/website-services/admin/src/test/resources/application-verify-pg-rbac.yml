@@ -1,0 +1,29 @@
+# 5C.1：RBAC 种子 Flyway 真实 PostgreSQL 验证（专用库 my_website_rbac_seed_verify）。
+# 启用：VERIFY_PG_RBAC_URL 或本 profile + persistence-verify-pg
+spring:
+  datasource:
+    url: ${VERIFY_PG_RBAC_URL:jdbc:postgresql://localhost:5432/my_website_rbac_seed_verify}
+    username: ${VERIFY_PG_RBAC_USER:${VERIFY_PG_USER:${POSTGRES_USER:hqjiayou}}}
+    password: ${VERIFY_PG_RBAC_PASSWORD:${VERIFY_PG_PASSWORD:${POSTGRES_PASSWORD:hqjiayou}}}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_JWKS_URI:http://localhost:8083/.well-known/jwks.json}
+
+storage:
+  minio:
+    endpoint: http://127.0.0.1:19000
+    access-key: test
+    secret-key: test
+    bucket: test
+    secure: false
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
