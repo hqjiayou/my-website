@@ -25,6 +25,6 @@ public class AdminOpenApiConfig {
                 .info(new Info()
                         .title("my-website Admin API")
                         .version("v1")
-                        .description("后台管理业务 API（Resource Server）；认证入口已上提至 Auth 服务（阶段 4F）。"));
+                        .description("后台管理业务 API（Resource Server）"));
     }
 }

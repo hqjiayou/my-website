@@ -9,12 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
 import com.mywebsite.admin.testsupport.AdminTestJwtSigner;
 import com.mywebsite.admin.testsupport.RbacTestController;
-import com.mywebsite.agent.client.AgentClient;
 import com.nimbusds.jose.jwk.RSAKey;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.jdbc.Sql;
@@ -27,9 +25,6 @@ class AdminRbacSecurityMvcTest extends AbstractAdminSpringBootTest {
 
     @Autowired
     private MockMvc mockMvc;
-
-    @MockBean
-    private AgentClient agentClient;
 
     @Test
     void rbacCheckWithoutBearerIs401() throws Exception {

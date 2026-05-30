@@ -1,6 +1,5 @@
 package com.mywebsite.auth.handler;
 
-import com.mywebsite.auth.handler.support.GlobalExceptionHttpStatus;
 import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;

@@ -9,14 +9,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
 import com.mywebsite.admin.testsupport.AdminTestJwtSigner;
-import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.common.security.JwtClaimConstants;
 import com.mywebsite.common.security.SubjectCodes;
 import com.nimbusds.jose.jwk.RSAKey;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -25,9 +23,6 @@ class AdminPingSecurityMvcTest extends AbstractAdminSpringBootTest {
 
     @Autowired
     private MockMvc mockMvc;
-
-    @MockBean
-    private AgentClient agentClient;
 
     @Test
     void pingWithoutBearerIs401() throws Exception {
@@ -40,8 +35,6 @@ class AdminPingSecurityMvcTest extends AbstractAdminSpringBootTest {
 
     @Test
     void pingWithSyntheticJwtSucceeds() throws Exception {
-        org.mockito.Mockito.when(agentClient.ping()).thenReturn("ok");
-
         mockMvc.perform(get("/api/admin/ping")
                         .with(jwt()
                                 .jwt(j -> j.subject(SubjectCodes.formatAdminSubject(100L))
@@ -53,7 +46,6 @@ class AdminPingSecurityMvcTest extends AbstractAdminSpringBootTest {
 
     @Test
     void pingWithValidRs256BearerToken() throws Exception {
-        org.mockito.Mockito.when(agentClient.ping()).thenReturn("ok");
         RSAKey pk = AdminTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
         String token = AdminTestJwtSigner.signAdminAccess(pk, "test-issuer", "ADMIN");
 

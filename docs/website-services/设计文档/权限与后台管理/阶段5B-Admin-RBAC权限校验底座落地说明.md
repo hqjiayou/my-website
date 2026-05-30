@@ -72,7 +72,7 @@ infra    → Servlet 日志、i18n、MyBatis 公共列约定
 | 当前用户角色查询 | `AdminPermissionQueryService` → `AdminRbacQueryMapper.selectRoleCodesByUserId` |
 | 当前用户权限查询 | 同上 → `selectPermissionCodesByUserId` 或 super_admin 时 `selectAllActivePermissionCodes` |
 | 权限判断 | `AdminPermissionChecker`（Bean 名 **`adminPermissionChecker`**） |
-| Method Security | `AdminMethodSecurityConfig` + Controller 上 `@PreAuthorize` |
+| Method Security | `AdminSecurityConfig`（`@EnableMethodSecurity`）+ Controller 上 `@PreAuthorize` |
 | 当前用户权限信息 HTTP | `GET /api/admin/auth/me` |
 
 **分层约定**：
@@ -119,10 +119,10 @@ infra    → Servlet 日志、i18n、MyBatis 公共列约定
 |---|--------|------|-----------------|
 | 1 | `AdminPermissionQueryService` + `Impl` | ✅ | `rbac/service/`、`rbac/service/impl/AdminPermissionQueryServiceImpl` |
 | 2 | `AdminRbacQueryMapper`（有效角色/权限 SQL） | ✅ | `admin/.../rbac/mapper/` |
-| 3 | `AdminCurrentAuthorizationDto` | ✅ | `admin/.../rbac/dto/` |
+| 3 | `AdminCurrentAuthorizationSnapshot` | ✅ | `admin/.../security/AdminCurrentAuthorizationSnapshot`（**5D.1** 自 DTO 迁出） |
 | 4 | `CurrentAdminAuthorizationHolder`（请求级缓存） | ✅ | `admin/.../rbac/security/` |
 | 5 | `AdminPermissionChecker` | ✅ | Bean 名 **`adminPermissionChecker`** |
-| 6 | `@EnableMethodSecurity` | ✅ | `AdminMethodSecurityConfig` |
+| 6 | `@EnableMethodSecurity` | ✅ | `AdminSecurityConfig` |
 | 7 | `GET /api/admin/auth/me` 真实 roles/permissions | ✅ | `AdminAuthMeController`；`menus=[]` |
 | 8 | `super_admin` 短路 | ✅ | Checker 全 true；me 返回全量 ACTIVE permission |
 | 9 | test scope 权限探针（**非 main**） | ✅ | `RbacTestController` → `GET /api/admin/test/rbac/check` |
@@ -182,12 +182,12 @@ Authorization: Bearer <access>
 
 | 类 | 包路径 |
 |----|--------|
-| `AdminRbacConstants` | `com.mywebsite.admin.rbac` |
-| `AdminRbacQueryMapper` | `com.mywebsite.admin.rbac.mapper` |
-| `AdminPermissionQueryService` | `com.mywebsite.admin.rbac.service` |
-| `AdminPermissionQueryServiceImpl` | `com.mywebsite.admin.rbac.service.impl` |
-| `AdminPermissionChecker` | `com.mywebsite.admin.rbac.security` |
-| `AdminMethodSecurityConfig` | `com.mywebsite.admin.config` |
+| `AdminRbacConstants` | `com.mywebsite.admin.constant` |
+| `AdminRbacQueryMapper` | `com.mywebsite.admin.mapper` |
+| `AdminPermissionQueryService` | `com.mywebsite.admin.service` |
+| `AdminPermissionQueryServiceImpl` | `com.mywebsite.admin.service.impl` |
+| `AdminPermissionChecker` | `com.mywebsite.admin.security` |
+| `AdminSecurityConfig`（含 `@EnableMethodSecurity`） | `com.mywebsite.admin.config` |
 | `RbacTestController`（**test only**） | `com.mywebsite.admin.testsupport` |
 
 ### 5.3 `GET /api/admin/auth/me` 响应契约（5B）
@@ -290,11 +290,11 @@ rg -n "AdminRbacQueryMapper" services/website-services/admin/src/main/java/com/m
 
 # Security 配置、PermissionChecker 不得直接依赖 RBAC Query Mapper
 rg -n "AdminRbacQueryMapper" services/website-services/admin/src/main/java/com/mywebsite/admin/config
-rg -n "AdminRbacQueryMapper" services/website-services/admin/src/main/java/com/mywebsite/admin/rbac/security
+rg -n "AdminRbacQueryMapper" services/website-services/admin/src/main/java/com/mywebsite/admin/security
 # 期望：无匹配（Checker 仅依赖 CurrentAdminAuthorizationHolder / QueryService）
 
 # QueryService 实现层允许使用 Mapper
-rg -l "AdminRbacQueryMapper" services/website-services/admin/src/main/java/com/mywebsite/admin/rbac/service
+rg -l "AdminRbacQueryMapper" services/website-services/admin/src/main/java/com/mywebsite/admin/service
 # 期望：命中 AdminPermissionQueryServiceImpl（仅此一类为宜）
 ```
 
@@ -375,7 +375,7 @@ mvn -q test
 | 1 | Auth 模块没有新增 RBAC 查询或权限判断 | **通过**（`auth/src/main` 无 RBAC 关键字） |
 | 2 | JWT 中没有新增 permissions | **通过** |
 | 3 | `AdminSecurityConfig` 仍只做 authenticated | **通过** |
-| 4 | 已启用 Method Security | **通过**（`AdminMethodSecurityConfig`） |
+| 4 | 已启用 Method Security | **通过**（`AdminSecurityConfig`） |
 | 5 | 已新增 `AdminPermissionQueryService` | **通过** |
 | 6 | 已新增 `AdminPermissionChecker` | **通过**（`adminPermissionChecker`） |
 | 7 | Controller / Security / Checker 不直接访问 Mapper | **通过** |

@@ -114,10 +114,14 @@
 | `id` | `BIGINT` | 是 | identity | 权限主键 |
 | `permission_code` | `VARCHAR(128)` | 是 | — | 权限编码，未删除全表唯一 |
 | `permission_name` | `VARCHAR(255)` | 是 | — | 权限名称 |
-| `resource_type` | `VARCHAR(32)` | 否 | — | 资源类型，如 `MENU`、`API`、`ACTION` |
-| `resource_key` | `VARCHAR(255)` | 否 | — | 资源标识 |
+| `resource_type` | `VARCHAR(32)` | 否 | — | 资源类型：`MENU`（侧栏可见性）、`ACTION`（接口鉴权）等 |
+| `resource_key` | `VARCHAR(255)` | 否 | — | 资源标识；MENU 行建议与编码后缀一致 |
 | `description` | `TEXT` | 否 | — | 说明 |
-| `status` | `VARCHAR(32)` | 是 | `'ACTIVE'` | 状态 |
+| `status` | `VARCHAR(32)` | 是 | `'ACTIVE'` | 状态；`DISABLED` 表示停用（含旧版菜单占位行） |
+| `parent_id` | `BIGINT` | 否 | `NULL` | **5E V3**：MENU 父节点 FK → `admin_permission.id`；根为 NULL |
+| `sort_order` | `INTEGER` | 是 | `0` | **5E V3**：MENU 同级排序；非 MENU 行保持 `0` |
+| `route_path` | `VARCHAR(255)` | 否 | `NULL` | **5E V3**：前端路由，映射 `/auth/me` 的 `menus[].path` |
+| `icon` | `VARCHAR(128)` | 否 | `NULL` | **5E V3**：侧栏图标 key |
 | `created_at`…`version` | 公共字段 | — | — | 同上 |
 
 ### 唯一约束
@@ -131,10 +135,24 @@
 | 名称 | 定义 |
 | --- | --- |
 | `idx_admin_permission_status_active` | `(status) WHERE deleted = FALSE` |
+| `idx_admin_permission_parent_active` | **5E V3**：`(parent_id) WHERE deleted = FALSE` |
+| `idx_admin_permission_menu_tree_active` | **5E V3**：`(resource_type, parent_id, sort_order) WHERE deleted = FALSE AND resource_type = 'MENU'` |
 
 ### 外键与关联
 
+- **`fk_admin_permission_parent`**（**5E V3**）：`parent_id` → `admin_permission.id`，`ON DELETE RESTRICT`。
 - **被引用**：`admin_role_permission.admin_permission_id` → `admin_permission.id`，`ON DELETE RESTRICT`。
+
+### 5E 菜单种子（Flyway V4，摘要）
+
+| permission_code | resource_type | 说明 |
+| --- | --- | --- |
+| `admin:menu:system` | MENU | 系统管理（根） |
+| `admin:menu:system.user` / `.role` / `.permission` / `.menu` | MENU | 子菜单 |
+| `admin:menu:list` … `admin:menu:bind` | ACTION | 菜单管理接口鉴权 |
+| `admin:menu:view` | MENU | **V2 占位**；V4 置为 `DISABLED`，由 `admin:menu:system` 体系替代 |
+
+详见 **[阶段5E-菜单权限与导航说明](../设计文档/权限与后台管理/阶段5E-菜单权限与导航说明.md)**。
 
 ---
 

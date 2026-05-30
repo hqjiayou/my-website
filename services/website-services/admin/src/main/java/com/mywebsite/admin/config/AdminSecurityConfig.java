@@ -1,13 +1,11 @@
 package com.mywebsite.admin.config;
 
-import com.mywebsite.admin.security.AdminAccessDeniedHandler;
-import com.mywebsite.admin.security.AdminAuthenticationEntryPoint;
 import com.mywebsite.admin.security.AuthContextSynchronizingFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -22,6 +20,7 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class AdminSecurityConfig {
 
     @Bean

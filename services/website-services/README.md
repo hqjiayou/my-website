@@ -45,7 +45,9 @@
 | 阶段 5C.1（RBAC 种子 PG 验证） | **已完成**（`my_website_rbac_seed_verify` + `AdminRbacSeedVerifyPgTest`；见 [**5C.1 说明**](../../docs/website-services/数据文档/阶段5C.1-RBAC种子真实PostgreSQL迁移验证.md)） |
 | 阶段 5C.2（清理测试探针权限） | **已完成**（生产 `V2` 不含 `admin:rbac:check`；16 条生产权限） |
 | 阶段 5D（管理员与角色绑定） | **已完成**（`/api/admin/users/{id}/roles`；见 [**5D 说明**](../../docs/website-services/设计文档/权限与后台管理/阶段5D-管理员与角色绑定接口落地说明.md)） |
-| 阶段 5E（菜单导航） | **待开始** |
+| 阶段 5D.1（Admin 包结构 / 命名 / RBAC 链路审查收敛） | **已完成**（见 [**5D.1 综合说明**](../../docs/website-services/作業検査/阶段5D.1-Admin模块包结构命名与RBAC链路综合审查收敛.md)） |
+| **单模块文件结构与 AI 开发约束规则 V1** | **已完成**（**仅文档**；见 [**结构规则 V1**](../../docs/website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md)） |
+| 阶段 5E（菜单导航） | **待开始**（须遵守结构规则 V1） |
 
 **勿在仓库另建第二份「后端 TODO 清单」。** 完整阶段史、产出与下一步：**[`docs/website-services/总览/后端开发路线图与阶段状态.md`](../../docs/website-services/总览/后端开发路线图与阶段状态.md)**；文档总导航：**[`docs/website-services/README.md`](../../docs/website-services/README.md)**。
 
@@ -262,7 +264,9 @@ migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 
 ### 模块内 Java 包结构
 
-主要边界由 Maven 多模块承担；模块内包结构与后缀约定详见 **[《后端包结构与命名规范 V1》](../../docs/website-services/设计文档/后端包结构与命名规范V1.md)**，并与 [`架构设计`](../../docs/website-services/设计文档/基础架构/架构设计.md) §8 对齐：`config`、`controller`、`handler`、`mapper`、`entity`、`dto`（下设 **`request/` / `response/` / `internal/`**）、`exception` 等；**不**再使用 `interfaces` / `application` / `domain` / `infrastructure` / `po` 作为一级分层包。详见 [`架构设计`](../../docs/website-services/设计文档/基础架构/架构设计.md) §8。
+**Maven 边界 + 业务模块标准树 + AI 约束（必读）**：[单模块文件结构与AI开发约束规则V1](../../docs/website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md)。**命名后缀**见 [后端包结构与命名规范V1](../../docs/website-services/设计文档/基础架构/后端包结构与命名规范V1.md)。
+
+业务模块（admin、auth、site-core、site-app）按需使用：`config`、`constant`、`controller`、`dto`（**单层**，`XxxRequestDto` / `XxxResponseDto`）、`entity`、`mapper`、`properties`、`security`、`service` / `service.impl`、`handler`、`utils`。**禁止** `dto/request` 等子目录、`admin.rbac.*`、默认新增 manager/processor/facade 等中间层。gateway / common / infra / agent **不套用**上述业务树。
 
 ## 本地运行依赖
 

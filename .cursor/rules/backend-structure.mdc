@@ -1,0 +1,57 @@
+---
+description: website-services 后端结构硬约束（Maven 边界、包树、命名后缀）
+globs: services/website-services/**/*.java
+alwaysApply: false
+---
+
+# website-services 后端结构（硬约束）
+
+完整条文：`docs/website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md`
+
+## Maven 模块（禁止越界）
+
+| 模块 | 只做 | 禁止 |
+|------|------|------|
+| gateway | 路由、CORS、RequestId、网关 Filter | 业务、DB/Redis、Entity/Mapper/Service、依赖业务实现 |
+| auth | 登录/刷新/登出、JWT 签发、JWKS、Refresh | RBAC/菜单管理、依赖 admin/site 业务包 |
+| admin | 后台 API、RBAC 管理、Resource Server 验签 | `/api/auth/*`、JWT 签发、依赖 auth 实现、`admin.rbac.*` 深包 |
+| site | 前台业务 | 强依赖 admin 实现、无业务时堆 manager/adapter |
+| common | ApiResponse、ErrorCode、common.security 契约 | 业务 DTO/Entity/Mapper/Service |
+| infra | Redis、MyBatis、i18n、OAuth2 RS 辅助 | 业务流程、业务 Entity/Mapper |
+| agent | Agent 客户端 | 业务编排 |
+
+## 业务模块包树（admin / auth / site-core / site-app）
+
+按需使用，不建空包：`config` `constant` `controller` `dto` `entity` `mapper` `properties` `security` `service`+`service.impl` `handler` `utils`。
+
+- **gateway / common / infra / agent 不套用此树。**
+
+## 目录 ↔ 文件名后缀（必须匹配）
+
+- `controller/*Controller` · `service/*Service` · `service/impl/*ServiceImpl`
+- `mapper/*Mapper` · `entity/*Entity` · `dto/*Dto`（**禁止** `dto/request`、`dto/response`、`dto/authme` 等子包）
+- `config/*Config|*Configuration` · `properties/*Properties` · `constant/*Constants|*MessageKeys`
+- `handler/*Handler|*HttpStatus`（Security EntryPoint/AccessDenied → `security`）
+- `security`：鉴权链路 only · `utils/*Utils`：纯静态、多类复用
+
+## 职责边界
+
+- Controller：HTTP + 校验 + 调 Service；**不**直访 Mapper、**不**写主流程。
+- ServiceImpl：业务主流程；**禁止**实现类放在 `service` 根目录。
+- Mapper：仅 SQL；**不**做权限决策/菜单树组装。
+- security：请求能否过、当前用户权限；**不**放 RBAC CRUD（→ admin `service`）。
+- DTO **不放** common；**不**用 Support/Helper/Manager/Processor/Facade/Adapter 等模糊名（除非书面例外）。
+
+## 新增 / 移动 / 重命名前（五问）
+
+1. 能否放在现有 ServiceImpl？ 2. 是否两处以稳定复用？ 3. 是否跨模块依赖？ 4. 是否符合 §1 模块职责？ 5. **后缀是否与目录匹配？**
+
+答不清 → **不要**新建或移动文件。
+
+## 5E 菜单（未实现前勿提前拆层）
+
+`AdminMenuController` · `AdminMenuService`/`AdminMenuServiceImpl` · `AdminMenuMapper` · `AdminMenuEntity` · `AdminMenu*Dto`；树组装在 ServiceImpl；禁止 `admin.menu.processor.*`。
+
+## 已知例外（勿扩散）
+
+`AdminRbacDtos` 聚合 · `AdminRoleGuard` 在 `service` · `AdminCurrentAuthorizationSnapshot` 在 `security` · auth/admin `config/jwt`。
