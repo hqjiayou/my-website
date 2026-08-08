@@ -12,6 +12,6 @@ status: CURRENT
 | `check-imports.mjs` | PASS（0） |
 | `check-import-casing.mjs` | PASS（0） |
 | `AdminAuthRateLimitMvcTest` | PASS（10 tests） |
-| `gateway` package -DskipTests | 见本轮 mvn 输出 |
+| `gateway` package -DskipTests | PASS |
 | persistence PG verify | NOT RUN（本轮非 DB 变更） |
 | **BROWSER E2E** | **NOT RUN / NOT IMPLEMENTED** |

@@ -51,12 +51,13 @@ docs README · overview · domain CURRENT · contracts · rules · operations ·
 
 ## 5. Deleted (code)
 
+工作区已清理并验证 SAFE_TO_REMOVE；**未单独 commit**（与未提交的 admin-web FORCE REAL / rename WIP 强耦合，单独提交会使 HEAD API 树不一致）。应在提交 admin-web REAL 接线时一并 `chore(admin-web): remove verified obsolete mock...`。
+
 | Path | Evidence |
 |------|----------|
-| `api/operation/userApi.ts` | 无页面 consumer；仅 index 导出；路径 `/site/users` 危险并行 |
-| `mocks/services/{content,reservation,file,user}Mock.ts` | 无外部 import |
-| 对应 `mocks/db/*` / `mocks/types/*`（非 AI/site runtime） | 仅被上述 mock 引用 |
-| `mocks/utils/id.ts` · `mocks/types/site.ts` | 清理后无引用 |
+| `api/operation/userApi` / `user-api` | 无页面 consumer；危险并行 `/site/users` |
+| orphan content/reservation/file/user mocks | 无外部 import |
+| 对应 db/types（非 AI/runtime） | 仅被上述 mock 引用 |
 
 ## 6. 保留 Mock
 
