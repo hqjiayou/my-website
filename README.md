@@ -19,17 +19,19 @@ my-website/
 │   └── site-web
 │       ├── car-web
 │       └── cake-web
-├── docs
-│   ├── website-services    # Java 后端：架构、数据库模型、环境说明等（权威）
-│   ├── 数据字典             # 表级数据字典（权威）
-│   └── 整体架构说明.md
+├── docs                    # 全栈文档（地图见 docs/README.md）
+│   ├── overview/           # CURRENT_STATE（最高级 SoT）
+│   ├── contracts/          # 前后端契约
+│   ├── admin-web/ · site-web/ · website-services/
+│   ├── decisions/ · rules/ · testing/ · operations/
+│   └── implementation-history/ · archive/ · audit/
 ├── services
 │   ├── agent-services
 │   └── website-services
-└── doc                       # 兼容跳转占位（正文权威均在 docs/；见 doc/README.md）
+└── doc                       # 兼容跳转占位（正文权威均在 docs/）
 ```
 
-设计与数据文档请以 **`docs/`** 为准：`docs/website-services/`、`docs/数据字典/`。若仍有指向 `doc/` 的旧书签或外链，同名路径下现为 **一页跳转说明**，并非正文副本。
+**当前系统事实**请读 [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md)。文档地图：[`docs/README.md`](docs/README.md)。未完成工作 → GitHub Issues（见 `docs/overview/ROADMAP.md`）。
 
 ## 子项目职责
 
@@ -40,16 +42,18 @@ my-website/
 - `car-web`：汽车维修行业站点
 - `cake-web`：蛋糕烘焙行业站点
 
-前台站点后续优先通过 `website-services/gateway` 访问前台 API。
+前台站点后续优先通过 `website-services/gateway` 访问前台 API。  
+**Site Auth：后端已完成，site-web 前端尚未对接**（见 [`docs/site-web/CURRENT_STATE.md`](docs/site-web/CURRENT_STATE.md)）。
 
 ### apps/admin-web
 
-后台管理系统，负责多站点平台的管理界面。当前包含站点、模板、内容、AI、运营、系统等管理页面骨架。
+后台管理系统。主纵向域（Site / User / Template / Appearance / Media / Content / Reservation / RBAC）为 REAL API；AI 等仍可为 mock/占位。
 
 专项文档：
 
-- `docs/admin-web/架构设计.md`
-- `docs/admin-web/API设计.md`
+- [`docs/admin-web/CURRENT_STATE.md`](docs/admin-web/CURRENT_STATE.md)
+- [`docs/admin-web/开发规范.md`](docs/admin-web/开发规范.md)
+- [`docs/contracts/`](docs/contracts/)
 
 ### services/website-services
 
