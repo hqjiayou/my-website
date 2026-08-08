@@ -1,20 +1,18 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
+import { loadAdminPreferences } from '@/config/preferences'
+
+import {
+  DEFAULT_LOCALE,
+  isSupportedLocale,
+  LOCALE_STORAGE_KEY,
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+} from './constants'
 import { I18N_NAMESPACES, resources } from './resources'
 
-export const SUPPORTED_LOCALES = ['zh-CN', 'en-US', 'ja-JP'] as const
-
-export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
-
-/** 无存储、且浏览器语言无法匹配时的默认语言 */
-export const DEFAULT_LOCALE: SupportedLocale = 'ja-JP'
-
-export const LOCALE_STORAGE_KEY = 'admin-web.locale'
-
-function isSupportedLocale(value: string | null | undefined): value is SupportedLocale {
-  return value !== undefined && value !== null && (SUPPORTED_LOCALES as readonly string[]).includes(value)
-}
+export { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, SUPPORTED_LOCALES, type SupportedLocale, isSupportedLocale }
 
 export function readStoredLocale(): SupportedLocale | undefined {
   if (typeof localStorage === 'undefined') return undefined
@@ -23,6 +21,9 @@ export function readStoredLocale(): SupportedLocale | undefined {
 }
 
 export function resolveInitialLocale(): SupportedLocale {
+  const fromPreferences = loadAdminPreferences().locale
+  if (fromPreferences) return fromPreferences
+
   const stored = readStoredLocale()
   if (stored) return stored
 

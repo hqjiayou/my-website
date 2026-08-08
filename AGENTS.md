@@ -2,17 +2,25 @@
 
 多站点平台 Monorepo。当前主要活跃面：`apps/admin-web`（管理后台）与 `services/website-services`（Java 后端：gateway / auth / admin / site / common / infra）。`site-web` 与 `agent-services` 仍为骨架或 mock，非默认主战场。
 
+## Source of Truth 顺序
+
+| 层次 | 权威 |
+|------|------|
+| **Current Reality** | 代码 + DB/Flyway → [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md) → [`docs/contracts/`](docs/contracts/) → [`docs/decisions/`](docs/decisions/)（ADR） |
+| **Open Work** | **GitHub Issues**（[`docs/overview/ROADMAP.md`](docs/overview/ROADMAP.md) 只留 Issue 号） |
+| **High-level Direction** | ROADMAP |
+| **Historical Evidence** | `docs/audit/` · Execution/Verification · `implementation-history/` · `archive/` · `analysis/archive/` — **不指导未来实施** |
+
 ## 默认阅读顺序（任务开始前）
 
 1. 本文 + `.cursor/rules/`
 2. [`docs/README.md`](docs/README.md)
 3. [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md)
 4. 相关域 `CURRENT_STATE` / [`docs/contracts/`](docs/contracts/) / [`docs/decisions/`](docs/decisions/)
-5. **当前** Task Brief / Instruction（若有）
+5. 未决工作：GitHub Issues（经 ROADMAP 指针）
+6. **当前** Task Brief / Instruction（若有）
 
 以下**默认不得**作为当前实现依据：`docs/implementation-history/`、`docs/audit/archive/`、`docs/analysis/archive/`、`docs/archive/`。
-
-未完成工程工作以 **GitHub Issues** 为准（[`docs/overview/ROADMAP.md`](docs/overview/ROADMAP.md) 只留 Issue 号）。
 
 ## 调查优先
 

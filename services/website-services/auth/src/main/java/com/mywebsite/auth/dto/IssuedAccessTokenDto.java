@@ -7,12 +7,15 @@ import java.util.Set;
 /**
  * Inputs assembled by callers before {@link com.mywebsite.auth.service.TokenService#createAccessToken(IssuedAccessTokenDto)}
  * builds JWT claims.
+ *
+ * <p>{@code siteIdOrNull}：SITE 必填正向站点 ID；ADMIN 必须为 {@code null}。
  */
 public record IssuedAccessTokenDto(
         TokenAudience audience,
         String subjectUserId,
         String username,
         String sessionId,
+        Long siteIdOrNull,
         Set<String> authorities) {
     public IssuedAccessTokenDto {
         Objects.requireNonNull(audience);
@@ -20,5 +23,12 @@ public record IssuedAccessTokenDto(
         Objects.requireNonNull(username);
         Objects.requireNonNull(sessionId);
         authorities = authorities == null ? Set.of() : Set.copyOf(authorities);
+        if (audience == TokenAudience.SITE) {
+            if (siteIdOrNull == null || siteIdOrNull <= 0L) {
+                throw new IllegalArgumentException("SITE access token requires positive siteId");
+            }
+        } else if (siteIdOrNull != null) {
+            throw new IllegalArgumentException("ADMIN access token must not carry siteId");
+        }
     }
 }

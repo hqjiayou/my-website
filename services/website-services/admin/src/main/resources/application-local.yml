@@ -1,4 +1,5 @@
-# 数据库 / Redis / MinIO 等本地连接信息在 `.env`（范本 `.env.example`）中维护。
+# 数据库 / MinIO 等本地连接信息在 `.env`（范本 `.env.example`）中维护。
+# Admin 不使用 Redis（Refresh Session 在 auth）；已在 application.yml 排除 Redis 自动配置。
 # Admin 验签：仅通过 AUTH_JWKS_URI 拉取 Auth 的 JWKS（不持有 JWT 签名密钥）。建议先启动 Auth 再启动 Admin。
 # PostgreSQL：优先维护 POSTGRES_*（与 website-services/.env 及 local-stack Postgres 账号一致）。
 

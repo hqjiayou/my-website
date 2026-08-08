@@ -48,18 +48,19 @@ supersedes:
 
 ## 安全与未决（指针）
 
-详细描述不在此重复维护。见 [`ROADMAP.md`](./ROADMAP.md) 与 GitHub Issues。
+详细描述不在此重复维护。见 [`ROADMAP.md`](./ROADMAP.md) 与 **GitHub Issues**（权威 Tracker）。
 
-| 项 | 状态 |
-|----|------|
-| Auth trusted client IP / XFF | **PARTIALLY_RESOLVED**（配置已加；集成断言 STILL_OPEN） |
-| Browser E2E golden paths | **NOT_IMPLEMENTED** |
-| site-web authentication integration | **STILL_OPEN** |
-| Soft-delete `deleted_at` consistency | **STILL_OPEN**（LOW） |
-| Admin user mutation error feedback | **STILL_OPEN**（LOW） |
-| Orphan mocks / dead userApi | 本轮 cleanup 目标 |
-| Menu write | **DEFERRED_BY_DESIGN** |
-| AI LIVE | **EXTERNAL_BLOCKED** |
+| 项 | 状态 | Tracking |
+|----|------|----------|
+| Auth trusted client IP / XFF | **PARTIALLY_RESOLVED**（配置已加；集成断言 / 暴露面硬化 STILL_OPEN） | [#1](https://github.com/hqjiayou/my-website/issues/1) |
+| Browser E2E golden paths | **NOT_IMPLEMENTED** | [#2](https://github.com/hqjiayou/my-website/issues/2) |
+| site-web authentication integration | FE **NOT_IMPLEMENTED**（BE BACKEND_COMPLETE） | [#3](https://github.com/hqjiayou/my-website/issues/3) |
+| Soft-delete `deleted_at` consistency | **STILL_OPEN**（LOW；非 DB CHECK 不变量） | [#4](https://github.com/hqjiayou/my-website/issues/4) |
+| AI LIVE | **EXTERNAL_BLOCKED** + admin-web mock | [#5](https://github.com/hqjiayou/my-website/issues/5) |
+| Site runtime-status REAL | **DEFERRED**（REAL 下 null / 占位；产品确认后再开 Issue） | — |
+| Admin user mutation error feedback | **RESOLVED（文档漂移）** — 全局 `mutations.onError`→`handleApiError` | — |
+| Orphan mocks / dead userApi | **RESOLVED in worktree**（待与 FORCE REAL WIP 同交；非 Tracker） | — |
+| Menu write | **DEFERRED_BY_DESIGN** | — |
 
 ---
 

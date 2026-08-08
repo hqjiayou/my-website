@@ -4,6 +4,7 @@ import com.mywebsite.auth.dto.IssuedAccessTokenDto;
 import com.mywebsite.auth.dto.TokenClaimsDto;
 import com.mywebsite.auth.properties.AuthJwtProperties;
 import com.mywebsite.auth.service.TokenService;
+import com.mywebsite.common.security.AuthenticatedUserUtils;
 import com.mywebsite.common.security.JwtClaimConstants;
 import com.mywebsite.common.security.SubjectCodes;
 import com.mywebsite.common.security.SubjectType;
@@ -13,7 +14,6 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -61,15 +61,21 @@ public class JwtTokenServiceImpl implements TokenService {
 
         SubjectType subjectType = subjectTypeForAudience(issuance.audience());
 
-        JwtClaimsSet claims = JwtClaimsSet.builder()
+        JwtClaimsSet.Builder claimsBuilder = JwtClaimsSet.builder()
                 .issuer(authJwtProperties.getIssuer())
                 .subject(subject)
                 .audience(Collections.singletonList(audienceForJwt(issuance.audience())))
                 .issuedAt(now)
                 .expiresAt(exp)
                 .id(jti)
-                .claim(JwtClaimConstants.SUBJECT_TYPE, subjectType.name())
-                .build();
+                .claim(JwtClaimConstants.SUBJECT_TYPE, subjectType.name());
+
+        // SITE 必须写入 site_id；ADMIN 不得携带，避免跨受众冒充站点上下文。
+        if (issuance.audience() == TokenAudience.SITE) {
+            claimsBuilder.claim(JwtClaimConstants.SITE_ID, issuance.siteIdOrNull());
+        }
+
+        JwtClaimsSet claims = claimsBuilder.build();
 
         JwsHeader headers = JwsHeader.with(SignatureAlgorithm.RS256).header("kid", jwtKeyId).build();
         return jwtEncoder.encode(JwtEncoderParameters.from(headers, claims)).getTokenValue();
@@ -100,6 +106,15 @@ public class JwtTokenServiceImpl implements TokenService {
             case SITE -> SubjectCodes.parseSiteUserId(jwt.getSubject()).isPresent();
         };
         if (!subjectOk) {
+            return Optional.empty();
+        }
+
+        if (expectedAudience == TokenAudience.SITE
+                && AuthenticatedUserUtils.parsePositiveSiteIdClaim(jwt.getClaim(JwtClaimConstants.SITE_ID))
+                        .isEmpty()) {
+            return Optional.empty();
+        }
+        if (expectedAudience == TokenAudience.ADMIN && jwt.getClaim(JwtClaimConstants.SITE_ID) != null) {
             return Optional.empty();
         }
 

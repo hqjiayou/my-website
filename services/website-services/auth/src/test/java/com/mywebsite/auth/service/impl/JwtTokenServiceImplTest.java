@@ -54,7 +54,7 @@ class JwtTokenServiceImplTest {
     @Test
     void roundTripAccessTokenCarriesAdminClaimsAndUsesRs256WithKid() throws Exception {
         String jwt = tokenService.createAccessToken(
-                new IssuedAccessTokenDto(TokenAudience.ADMIN, "42", "root", "sid-1", Set.of()));
+                new IssuedAccessTokenDto(TokenAudience.ADMIN, "42", "root", "sid-1", null, Set.of()));
 
         SignedJWT parsed = SignedJWT.parse(jwt);
         assertThat(parsed.getHeader().getAlgorithm().getName()).isEqualTo("RS256");
@@ -69,6 +69,7 @@ class JwtTokenServiceImplTest {
         Jwt decoded = jwtDecoder.decode(jwt);
         assertThat(decoded.getSubject()).isEqualTo(SubjectCodes.formatAdminSubject(42L));
         assertThat(decoded.getClaimAsString(JwtClaimConstants.SUBJECT_TYPE)).isEqualTo("ADMIN");
+        assertNull(decoded.getClaim(JwtClaimConstants.SITE_ID));
         assertNull(decoded.getClaim(JwtClaimConstants.TOKEN_TYPE));
         assertNull(decoded.getClaim(JwtClaimConstants.ADMIN_USER_ID));
         assertNull(decoded.getClaim(JwtClaimConstants.USERNAME));
@@ -76,9 +77,31 @@ class JwtTokenServiceImplTest {
     }
 
     @Test
+    void siteAccessTokenCarriesSiteIdAndRejectsCrossAudienceParse() throws Exception {
+        String jwt = tokenService.createAccessToken(
+                new IssuedAccessTokenDto(TokenAudience.SITE, "200", "site_it", "sid-s1", 10L, Set.of()));
+
+        Jwt decoded = jwtDecoder.decode(jwt);
+        assertThat(decoded.getSubject()).isEqualTo(SubjectCodes.formatSiteUserSubject(200L));
+        assertThat(decoded.getAudience()).contains("SITE");
+        assertThat(decoded.getClaimAsString(JwtClaimConstants.SUBJECT_TYPE)).isEqualTo("SITE");
+        assertThat(((Number) decoded.getClaim(JwtClaimConstants.SITE_ID)).longValue()).isEqualTo(10L);
+
+        assertThat(tokenService.parseToken(jwt, TokenAudience.SITE)).isPresent();
+        assertThat(tokenService.parseToken(jwt, TokenAudience.ADMIN)).isEmpty();
+    }
+
+    @Test
+    void adminIssuedAccessTokenRejectsSiteAudienceParse() {
+        String jwt = tokenService.createAccessToken(
+                new IssuedAccessTokenDto(TokenAudience.ADMIN, "1", "u", "s", null, Set.of()));
+        assertThat(tokenService.parseToken(jwt, TokenAudience.SITE)).isEmpty();
+    }
+
+    @Test
     void tamperedJwtFailsDecode() {
         String jwt = tokenService.createAccessToken(
-                new IssuedAccessTokenDto(TokenAudience.ADMIN, "1", "u", "s", Set.of()));
+                new IssuedAccessTokenDto(TokenAudience.ADMIN, "1", "u", "s", null, Set.of()));
         String tampered = jwt.substring(0, jwt.length() - 4) + "xxxx";
         assertThatThrownBy(() -> jwtDecoder.decode(tampered))
                 .isInstanceOf(org.springframework.security.oauth2.jwt.JwtException.class);

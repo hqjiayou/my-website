@@ -45,3 +45,15 @@ security:
   jwt:
     issuer: my-website
     audience: SITE
+
+mywebsite:
+  agent:
+    base-url: ${AGENT_BASE_URL:http://127.0.0.1:3001}
+    connect-timeout-ms: ${AGENT_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${AGENT_READ_TIMEOUT_MS:20000}
+    internal-service-token: ${AGENT_INTERNAL_SERVICE_TOKEN:}
+    retry-max-attempts: ${AGENT_RETRY_MAX_ATTEMPTS:1}
+  site:
+    ai:
+      rate-limit-enabled: true
+      rate-limit-per-minute: 30

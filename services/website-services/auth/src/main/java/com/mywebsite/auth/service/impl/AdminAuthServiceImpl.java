@@ -12,6 +12,7 @@ import com.mywebsite.auth.entity.AdminUserEntity;
 import com.mywebsite.auth.mapper.AdminUserMapper;
 import com.mywebsite.auth.constant.AdminAuthConstants;
 import com.mywebsite.auth.properties.AdminAuthProperties;
+import com.mywebsite.auth.service.AdminAuthRateLimitService;
 import com.mywebsite.auth.service.AdminAuthService;
 import com.mywebsite.auth.service.AdminRefreshSessionService;
 import com.mywebsite.auth.service.TokenService;
@@ -55,6 +56,8 @@ public class AdminAuthServiceImpl implements AdminAuthService {
 
     private static final String KEY_PASSWORD_TOO_SHORT = "admin.auth.register.password-too-short";
 
+    private static final String KEY_RATE_LIMITED = "admin.auth.rate-limited";
+
     private final AdminUserMapper adminUserMapper;
 
     private final PasswordEncoder passwordEncoder;
@@ -67,32 +70,52 @@ public class AdminAuthServiceImpl implements AdminAuthService {
 
     private final AdminAuthProperties adminAuthProperties;
 
+    private final AdminAuthRateLimitService rateLimitService;
+
+    /**
+     * 启动时用注入的 encoder 生成一次；未知用户名路径也走 matches，抹平枚举时间侧信道。
+     * 不用硬编码 hash，避免将来调整 BCrypt strength 后重新打开侧信道。
+     */
+    private final String dummyPasswordHash;
+
     public AdminAuthServiceImpl(
             AdminUserMapper adminUserMapper,
             PasswordEncoder passwordEncoder,
             TokenService tokenService,
             AdminRefreshSessionService refreshSessionService,
             TokenProperties tokenProperties,
-            AdminAuthProperties adminAuthProperties) {
+            AdminAuthProperties adminAuthProperties,
+            AdminAuthRateLimitService rateLimitService) {
         this.adminUserMapper = adminUserMapper;
         this.passwordEncoder = passwordEncoder;
         this.tokenService = tokenService;
         this.refreshSessionService = refreshSessionService;
         this.tokenProperties = tokenProperties;
         this.adminAuthProperties = adminAuthProperties;
+        this.rateLimitService = rateLimitService;
+        this.dummyPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
     @Override
-    public AdminLoginCookieDto login(String username, String rawPassword) {
+    public AdminLoginCookieDto login(String username, String rawPassword, String clientIp) {
         validatePasswordPolicy(rawPassword);
 
         String trimmedUsername = username.trim();
+        String usernameNorm = normalizeUsernameForRateLimit(trimmedUsername);
+
+        if (adminAuthProperties.isAdminRateLimitEnabled()
+                && !rateLimitService.loginAllowed(clientIp, usernameNorm)) {
+            throw rateLimited();
+        }
 
         AdminUserEntity user =
                 adminUserMapper.selectOne(new LambdaQueryWrapper<AdminUserEntity>()
                         .eq(AdminUserEntity::getUsername, trimmedUsername));
 
         if (user == null || user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
+            // 结果丢弃：仅消耗与真实比对相近的 CPU 时间
+            passwordEncoder.matches(rawPassword, dummyPasswordHash);
+            recordLoginFailureIfEnabled(clientIp, usernameNorm);
             denyBadCredential(trimmedUsername);
         }
 
@@ -102,7 +125,12 @@ public class AdminAuthServiceImpl implements AdminAuthService {
         }
 
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+            recordLoginFailureIfEnabled(clientIp, usernameNorm);
             denyBadCredential(user.getUsername());
+        }
+
+        if (adminAuthProperties.isAdminRateLimitEnabled()) {
+            rateLimitService.resetLoginFailures(clientIp, usernameNorm);
         }
 
         user.setLastLoginAt(OffsetDateTime.now(ZoneOffset.UTC));
@@ -119,6 +147,7 @@ public class AdminAuthServiceImpl implements AdminAuthService {
                 String.valueOf(user.getId()),
                 user.getUsername(),
                 sessionId,
+                null,
                 Set.of()));
 
         long expiresInSec = tokenProperties.accessTokenTtl().toSeconds();
@@ -134,18 +163,22 @@ public class AdminAuthServiceImpl implements AdminAuthService {
     }
 
     @Override
-    public AdminRefreshCookieDto refresh(Optional<String> refreshTokenPlainOptional) {
+    public AdminRefreshCookieDto refresh(Optional<String> refreshTokenPlainOptional, String clientIp) {
+        if (adminAuthProperties.isAdminRateLimitEnabled() && !rateLimitService.refreshAllowed(clientIp)) {
+            throw rateLimited();
+        }
+
         String refreshPlain =
-                refreshTokenPlainOptional.filter(s -> !s.isBlank()).orElseThrow(this::unauthorizedRefresh);
+                refreshTokenPlainOptional.filter(s -> !s.isBlank()).orElseThrow(() -> unauthorizedRefresh(clientIp));
 
         RotateRefreshDto rotated = refreshSessionService.rotate(refreshPlain);
         return switch (rotated) {
-            case RotateRefreshDto.Invalid ignored -> throw unauthorizedRefresh();
+            case RotateRefreshDto.Invalid ignored -> throw unauthorizedRefresh(clientIp);
             case RotateRefreshDto.ReplayRevoked ignored -> {
                 log.warn(
                         "auth security refresh_replay_detected requestId={} realm=admin sessionRevoked=true",
                         MDC.get(HttpRequestCorrelation.MDC_REQUEST_ID));
-                throw unauthorizedRefresh();
+                throw unauthorizedRefresh(clientIp);
             }
             case RotateRefreshDto.Rotated ok -> {
                 String accessToken = tokenService.createAccessToken(new IssuedAccessTokenDto(
@@ -153,6 +186,7 @@ public class AdminAuthServiceImpl implements AdminAuthService {
                         String.valueOf(ok.adminUserId()),
                         ok.username(),
                         ok.sessionId(),
+                        null,
                         Set.of()));
                 long expiresInSec = tokenProperties.accessTokenTtl().toSeconds();
                 AdminRefreshResponseDto body = new AdminRefreshResponseDto(accessToken, expiresInSec);
@@ -171,8 +205,13 @@ public class AdminAuthServiceImpl implements AdminAuthService {
     }
 
     @Override
-    public AdminRegisterResponseDto register(AdminRegisterRequestDto request) {
-        ensureRegistrationChannelOpen();
+    public AdminRegisterResponseDto register(AdminRegisterRequestDto request, String clientIp) {
+        // 成功失败都计：放在通道判定之前，关闭通道的探测请求也计入 IP 桶
+        if (adminAuthProperties.isAdminRateLimitEnabled() && !rateLimitService.registerAllowed(clientIp)) {
+            throw rateLimited();
+        }
+
+        boolean usedOpenRegistration = ensureRegistrationChannelOpen();
 
         validatePasswordPolicy(request.password());
         validateRegisterMinimumPassword(request.password());
@@ -200,11 +239,31 @@ public class AdminAuthServiceImpl implements AdminAuthService {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), KEY_REGISTER_TAKEN);
         }
 
+        if (usedOpenRegistration) {
+            log.warn(
+                    "auth security open_registration_used requestId={} realm=admin userId={}",
+                    MDC.get(HttpRequestCorrelation.MDC_REQUEST_ID),
+                    entity.getId());
+        }
+
         return new AdminRegisterResponseDto(entity.getId(), trimmedUsername);
     }
 
-    private BusinessException unauthorizedRefresh() {
+    private void recordLoginFailureIfEnabled(String clientIp, String usernameNorm) {
+        if (adminAuthProperties.isAdminRateLimitEnabled()) {
+            rateLimitService.recordLoginFailure(clientIp, usernameNorm);
+        }
+    }
+
+    private BusinessException unauthorizedRefresh(String clientIp) {
+        if (adminAuthProperties.isAdminRateLimitEnabled()) {
+            rateLimitService.recordRefreshFailure(clientIp);
+        }
         return new BusinessException(ErrorCode.UNAUTHORIZED.getCode(), KEY_REFRESH_INVALID);
+    }
+
+    private BusinessException rateLimited() {
+        return new BusinessException(ErrorCode.TOO_MANY_REQUESTS.getCode(), KEY_RATE_LIMITED);
     }
 
     private void denyBadCredential(String attemptedUsername) {
@@ -233,13 +292,17 @@ public class AdminAuthServiceImpl implements AdminAuthService {
         }
     }
 
-    private void ensureRegistrationChannelOpen() {
+    /**
+     * @return {@code true} 表示走的是非 bootstrap 的开放注册路径（用于使用告警）
+     */
+    private boolean ensureRegistrationChannelOpen() {
         long activeCount = adminUserMapper.selectCount(new LambdaQueryWrapper<>());
         boolean bootstrap = adminAuthProperties.isAdminBootstrapRegistrationEnabled() && activeCount == 0;
         boolean open = adminAuthProperties.isAdminOpenRegistrationEnabled();
         if (!bootstrap && !open) {
             throw new BusinessException(ErrorCode.FORBIDDEN.getCode(), KEY_REGISTER_DISABLED);
         }
+        return open && !bootstrap;
     }
 
     private void ensureUsernameFree(String username) {
@@ -258,6 +321,10 @@ public class AdminAuthServiceImpl implements AdminAuthService {
         if (dup != null) {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), KEY_REGISTER_TAKEN);
         }
+    }
+
+    private static String normalizeUsernameForRateLimit(String trimmedUsername) {
+        return trimmedUsername.toLowerCase(Locale.ROOT);
     }
 
     private static String normalizeEmail(String email) {

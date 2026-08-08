@@ -1,0 +1,23 @@
+/**
+ * 字体层（font）：全局字体族与字号偏好。
+ * 仅放 typography 相关；颜色/间距 token 见 theme.css。
+ */
+
+:root {
+  font-family: Inter, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+/* 字号偏好：作用于根 rem，由 Preferences 写入 data-font-size */
+html[data-font-size='small'] {
+  font-size: 14px;
+}
+
+html[data-font-size='medium'] {
+  font-size: 16px;
+}
+
+html[data-font-size='large'] {
+  font-size: 18px;
+}

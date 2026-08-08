@@ -1,0 +1,111 @@
+/**
+ * 站点管理 API。
+ * Site Core（list/get/create/update/delete/status）→ 始终 REAL `/admin/sites`，不受 USE_MOCK 门控。
+ * runtime-status 等未真实化能力：mock 分支可用，REAL 模式不请求假数据。
+ */
+import { USE_MOCK } from '@/config/apiMode'
+import { siteMockService } from '@/mocks/services/siteMock'
+import type {
+  CreateSiteInput,
+  PageResult,
+  SiteDetail,
+  SiteListItem,
+  SiteListQuery,
+  SiteRuntimeStatus,
+  UpdateSiteInput,
+  UpdateSiteStatusInput,
+} from '@/types/site'
+import { SITE_TYPE_VALUES } from '@/types/site'
+import type { HttpMessageBody } from '@/types/rbac'
+import { ApiError } from '@/utils/http/apiError'
+import { httpClient } from '@/utils/http/axios'
+import { unwrapData } from '@/utils/http/unwrap'
+
+function toQueryString(query: Record<string, string | number | undefined>) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === '') continue
+    params.set(key, String(value))
+  }
+  const serialized = params.toString()
+  return serialized ? `?${serialized}` : ''
+}
+
+function unwrapVoid(body: HttpMessageBody<null | void>) {
+  if (body.code != null && body.code !== 0) {
+    throw new ApiError(body.message || 'Request failed', { code: body.code })
+  }
+}
+
+const siteHttpService = {
+  listSites(query: SiteListQuery = {}): Promise<PageResult<SiteListItem>> {
+    const qs = toQueryString({
+      pageNum: query.pageNum ?? 1,
+      pageSize: query.pageSize ?? 20,
+      status: query.status,
+      siteType: query.siteType,
+    })
+    return httpClient.get<HttpMessageBody<PageResult<SiteListItem>>>(`/admin/sites${qs}`).then(unwrapData)
+  },
+
+  getSite(id: number): Promise<SiteDetail> {
+    return httpClient.get<HttpMessageBody<SiteDetail>>(`/admin/sites/${id}`).then(unwrapData)
+  },
+
+  createSite(input: CreateSiteInput): Promise<SiteDetail> {
+    return httpClient.post<HttpMessageBody<SiteDetail>, CreateSiteInput>('/admin/sites', input).then(unwrapData)
+  },
+
+  updateSite(id: number, input: UpdateSiteInput): Promise<SiteDetail> {
+    return httpClient.put<HttpMessageBody<SiteDetail>, UpdateSiteInput>(`/admin/sites/${id}`, input).then(unwrapData)
+  },
+
+  deleteSite(id: number): Promise<void> {
+    return httpClient.delete<HttpMessageBody<null>>(`/admin/sites/${id}`).then(unwrapVoid)
+  },
+
+  updateSiteStatus(id: number, input: UpdateSiteStatusInput): Promise<SiteDetail> {
+    return httpClient
+      .patch<HttpMessageBody<SiteDetail>, UpdateSiteStatusInput>(`/admin/sites/${id}/status`, input)
+      .then(unwrapData)
+  },
+
+  /** Phase 2 未接入；REAL 模式显式返回 null，禁止假 KPI。 */
+  getSiteRuntimeStatus(id: number): Promise<SiteRuntimeStatus | null> {
+    void id
+    return Promise.resolve(null)
+  },
+}
+
+/** Site Core 始终走真实 HTTP；仅未真实化能力保留 mock 门控。 */
+export const siteApi = {
+  listSites: siteHttpService.listSites,
+  getSite: siteHttpService.getSite,
+  createSite: siteHttpService.createSite,
+  updateSite: siteHttpService.updateSite,
+  deleteSite: siteHttpService.deleteSite,
+  updateSiteStatus: siteHttpService.updateSiteStatus,
+  getSiteRuntimeStatus: USE_MOCK
+    ? (id: number) => siteMockService.getSiteRuntimeStatus(id)
+    : siteHttpService.getSiteRuntimeStatus,
+}
+
+export type {
+  CreateSiteInput,
+  PageResult,
+  SiteDetail,
+  SiteListItem,
+  SiteListQuery,
+  SiteRuntimeStatus,
+  SiteStatus,
+  SiteType,
+  UpdateSiteInput,
+  UpdateSiteStatusInput,
+} from '@/types/site'
+
+export type { Site } from '@/types/site'
+
+export { SITE_STATUS, SITE_STATUS_VALUES, SITE_TYPE_VALUES, SITE_CODE_PATTERN } from '@/types/site'
+
+/** @deprecated 使用 SITE_TYPE_VALUES；保留别名避免旧导入瞬时断裂。 */
+export const SITE_INDUSTRY_VALUES = SITE_TYPE_VALUES

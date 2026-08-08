@@ -2,9 +2,11 @@ package com.mywebsite.admin.service.impl;
 
 import com.mywebsite.admin.dto.AdminAuthMeDto;
 import com.mywebsite.admin.dto.AdminAuthMeUserDto;
+import com.mywebsite.admin.dto.AdminMenuNodeDto;
 import com.mywebsite.admin.entity.AdminUserEntity;
 import com.mywebsite.admin.mapper.AdminUserMapper;
 import com.mywebsite.admin.service.AdminAuthMeService;
+import com.mywebsite.admin.service.AdminMenuService;
 import com.mywebsite.admin.service.AdminPermissionQueryService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -20,9 +22,15 @@ public class AdminAuthMeServiceImpl implements AdminAuthMeService {
 
     private final AdminPermissionQueryService permissionQueryService;
 
-    public AdminAuthMeServiceImpl(AdminUserMapper adminUserMapper, AdminPermissionQueryService permissionQueryService) {
+    private final AdminMenuService adminMenuService;
+
+    public AdminAuthMeServiceImpl(
+            AdminUserMapper adminUserMapper,
+            AdminPermissionQueryService permissionQueryService,
+            AdminMenuService adminMenuService) {
         this.adminUserMapper = adminUserMapper;
         this.permissionQueryService = permissionQueryService;
+        this.adminMenuService = adminMenuService;
     }
 
     @Override
@@ -49,6 +57,8 @@ public class AdminAuthMeServiceImpl implements AdminAuthMeService {
                 .loadForUserCode(userCode)
                 .orElseThrow(() -> new IllegalStateException("authenticated admin user missing RBAC snapshot"));
 
-        return new AdminAuthMeDto(user, authorization.roles(), authorization.permissions(), List.of());
+        // A-3：快照只加载一次，显式传入菜单构建，避免菜单服务再次加载同一份 RBAC 快照。
+        List<AdminMenuNodeDto> menus = adminMenuService.buildMenuTree(authorization);
+        return new AdminAuthMeDto(user, authorization.roles(), authorization.permissions(), menus);
     }
 }

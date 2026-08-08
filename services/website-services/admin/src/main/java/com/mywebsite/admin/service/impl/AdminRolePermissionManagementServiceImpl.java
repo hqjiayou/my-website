@@ -67,9 +67,7 @@ public class AdminRolePermissionManagementServiceImpl implements AdminRolePermis
                 throw new BusinessException(
                         ErrorCode.BAD_REQUEST.getCode(), AdminRbacMessageKeys.PERMISSION_CODE_INVALID);
             }
-            if (!unique.add(code.trim())) {
-                continue;
-            }
+            unique.add(code.trim());
         }
 
         List<AdminPermissionEntity> resolved = new ArrayList<>();

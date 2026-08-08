@@ -80,3 +80,41 @@ docker exec -i local-postgres psql -U hqjiayou -d postgres -v ON_ERROR_STOP=1 \
 | [`create-my_website_dev.sql`](./create-my_website_dev.sql) | `CREATE DATABASE my_website_dev`（脚本内 Owner 默认为 **`hqjiayou`**；若你的 `.env` 使用 **`mywebsite`** 等账号，请编辑 SQL 或改用上文交互式 `CREATE DATABASE`） |
 | [`create-my_website_persistence_verify.sql`](./create-my_website_persistence_verify.sql) | `CREATE DATABASE my_website_3c_verify`（持久层回归专用临时库），Owner 默认同上 |
 | [`create-my_website_rbac_seed_verify.sql`](./create-my_website_rbac_seed_verify.sql) | `CREATE DATABASE my_website_rbac_seed_verify`（5C.1 RBAC 种子 Flyway 验证专用） |
+
+---
+
+## 本地 super_admin 账号（hqjiayou）
+
+在 **`my_website_dev`** 已建库且应用已跑过 Flyway（含 V2 RBAC 种子）后，可插入本地开发管理员：
+
+| 文件 | 用途 |
+|------|------|
+| [`local/seed-admin-hqjiayou-super.sql`](./local/seed-admin-hqjiayou-super.sql) | SQL：用户 `hqjiayou` / 密码 `123456`，绑定 `super_admin` |
+| [`local/run-seed-admin-hqjiayou-super.ps1`](./local/run-seed-admin-hqjiayou-super.ps1) | Windows：默认 `docker exec` → `local-postgres` |
+| [`local/run-seed-admin-hqjiayou-super.sh`](./local/run-seed-admin-hqjiayou-super.sh) | Linux/macOS：同上 |
+
+```powershell
+# 在 services/website-services 目录
+pwsh ./scripts/local/run-seed-admin-hqjiayou-super.ps1
+
+# 本机 psql（不用 Docker）
+pwsh ./scripts/local/run-seed-admin-hqjiayou-super.ps1 -UseHostPsql
+```
+
+连接参数从同级 **`.env`** 读取 `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD`（缺省为 `my_website_dev` / `hqjiayou` / `hqjiayou`）。
+
+---
+
+## 本地 Site 前台账号（demo）
+
+在 **`my_website_dev`** 已建库且 Flyway V1 已创建 `site` / `site_user` 后，可插入本地前台站点与用户：
+
+| 文件 | 用途 |
+|------|------|
+| [`local/seed-site-demo.sql`](./local/seed-site-demo.sql) | SQL：站点 `demo` + 用户 `site_demo` / 密码 `123456` |
+| [`local/run-seed-site-demo.ps1`](./local/run-seed-site-demo.ps1) | Windows：默认 `docker exec` → `local-postgres` |
+| [`local/run-seed-site-demo.sh`](./local/run-seed-site-demo.sh) | Linux/macOS：同上 |
+
+```powershell
+pwsh ./scripts/local/run-seed-site-demo.ps1
+```

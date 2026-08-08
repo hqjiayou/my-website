@@ -1,9 +1,10 @@
 export default {
   title: 'Analytics',
-  description: 'Visits, bookings, conversion, and AI usage with filters by site and time.',
+  description:
+    'Not implemented (placeholder). Aggregated visits, bookings, and conversion metrics are not wired; no KPIs available.',
   hints: [
-    'Define KPIs and refresh cadence.',
-    'Add charts (e.g. Recharts) and export.',
-    'Restrict visibility to ops/admin roles.',
+    'Status: not implemented — no fake KPIs or mock summaries.',
+    'Backend Analytics APIs and data models are not available yet.',
+    'Keep this empty shell until a real implementation lands.',
   ],
 } as const

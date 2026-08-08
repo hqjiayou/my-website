@@ -1,11 +1,10 @@
+/**
+ * 全局入口（globals）：仅负责 Tailwind 入口、分层 import、基础 reset。
+ * 业务色/主题见 theme.css；字体见 font.css。不要在本文写页面或模块样式。
+ */
 @import 'tailwindcss';
-
-:root {
-  font-family: Inter, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color-scheme: light;
-}
+@import './theme.css';
+@import './font.css';
 
 *,
 *::before,
@@ -16,8 +15,8 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: #f1f5f9;
-  color: #0f172a;
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
 }
 
 #root {

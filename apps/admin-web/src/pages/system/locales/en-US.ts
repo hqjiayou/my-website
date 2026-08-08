@@ -1,9 +1,10 @@
 export default {
   title: 'System',
-  description: 'Platform options: logs, notifications, security, and integrations—separate from business parameters.',
+  description:
+    'Not implemented (Deferred). Platform options (logs, notifications, security) are not wired; placeholder only.',
   hints: [
-    'Keep clear boundaries vs parameter configuration.',
-    'Surface audit logs and health checks.',
-    'Configure webhooks and alert channels.',
+    'Status: Deferred — no fake settings or universal config panels.',
+    'Separate from Parameters; both remain unimplemented for now.',
+    'Land after backend contracts are defined.',
   ],
 } as const

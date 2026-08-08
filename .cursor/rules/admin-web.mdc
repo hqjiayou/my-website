@@ -1,0 +1,56 @@
+---
+description: admin-web 实现硬约束（API/mock、权限、偏好、组件与状态）
+globs: apps/admin-web/src/**/*
+alwaysApply: false
+---
+
+# admin-web 实现边界
+
+Router 目录细则见 `admin-web-router.mdc`；全局样式分层见 `admin-web-styles.mdc`。
+
+## API
+
+- 页面 / 普通组件不要直接散落 `axios` / `fetch`；走现有 `api` 与 HTTP client 层。
+- 修改 API 前先确认该域是 REAL API / ACTIVE MOCK / LEGACY MOCK / HARDCODED。
+- 禁止因页面“有数据”就假设后端已实现。
+- mock → real 对接前先确认真实后端 DTO / API contract。
+- 不在业务页面重造第二套 HTTP Client。
+
+## Mock
+
+- mock 是开发阶段实现，不等于正式后端能力。
+- test fixture / 开发 seed 不等于业务 mock。
+- 修改 mock 域前先确认真实 API 是否已存在。
+- 不要把当前 `VITE_USE_MOCK` 默认行为写成永久架构；Rule 要求的是**明确识别** mock / real，不是永远使用 mock。
+
+## Permission
+
+- 权限 code 与 UI 展示文案分离。
+- 不自行创造后端不存在的 permission code。
+- 新增或修改受保护路由时，核对后端实际 ACTION permission，并按项目现有权限映射机制登记。
+- 不把当前路由权限映射的不完整覆盖写成永久规则。
+- Menu 可见性与 Authorization（能否调 API / 进受保护路由）不要混为一谈。
+
+## Preferences
+
+- theme / font size / density / primary color / language / sidebar 等 UI 偏好集中管理。
+- 不为 theme / font / density / sidebar 分别拆大量细碎 store / hook。
+- localStorage key 不要散落各页面。
+- 后端偏好持久化若未来实现，在现有 preference 边界上扩展；**当前未实现，不得假设已有**。
+
+## 组件与文件职责
+
+- 优先复用现有公共组件；不为单页复制一套相同基建。
+- 不把 Header 拆成大量只有几行的小组件；也不把简单 preference 拆成多个无关 service / hook。
+- 不把明显无关职责硬塞进同一文件。判断标准是职责，不是行数。
+
+## i18n
+
+- 新增用户可见文案优先接入现有 i18n。
+- 避免无必要的中 / 日 / 英混杂硬编码。
+- backend enum / code 不直接作为最终 UI 文案。
+
+## Error / State
+
+- 新增真实 API 页面应考虑 loading / empty / error。
+- 401 / 403 使用现有统一机制；不在每个页面重做认证错误处理。

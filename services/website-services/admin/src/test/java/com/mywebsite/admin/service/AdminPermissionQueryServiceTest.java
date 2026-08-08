@@ -49,8 +49,9 @@ class AdminPermissionQueryServiceTest extends AbstractAdminSpringBootTest {
         assertThat(auth).isPresent();
         assertThat(auth.get().roles()).containsExactly(AdminRbacConstants.ROLE_SUPER_ADMIN);
         assertThat(auth.get().superAdmin()).isTrue();
-        assertThat(auth.get().permissions()).contains("admin:role:list", "admin:rbac:check");
-        assertThat(auth.get().permissions()).doesNotContain("admin:user:delete");
+        assertThat(auth.get().permissions())
+                .contains("admin:role:list", "admin:rbac:check", "admin:user:create", "admin:user:delete");
+        assertThat(auth.get().permissions()).doesNotContain("admin:not:exists");
     }
 
     @Test

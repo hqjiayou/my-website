@@ -10,7 +10,14 @@ public enum ErrorCode {
     FORBIDDEN(1003, "auth.access.denied"),
     NOT_FOUND(1004, "common.error.not-found"),
     /** 409；资源冲突（如唯一约束重复）。 */
-    CONFLICT(1005, "common.error.conflict");
+    CONFLICT(1005, "common.error.conflict"),
+    /** 429；请求过于频繁（限流 / 冷却中）。 */
+    TOO_MANY_REQUESTS(1006, "common.error.too-many-requests"),
+    /**
+     * 503；外部依赖未配置或明确不可用（如 AI Provider 无 Key）。
+     * 不得用伪造成功响应掩盖该状态。
+     */
+    EXTERNAL_DEPENDENCY_BLOCKED(1007, "common.error.external-dependency-blocked");
 
     private final int code;
 

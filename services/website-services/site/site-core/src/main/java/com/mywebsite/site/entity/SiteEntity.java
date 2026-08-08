@@ -12,6 +12,8 @@ public class SiteEntity extends AbstractAuditableEntity {
     private String status;
     private String defaultDomain;
     private String description;
+    /** V8：选用模板；可空。外观真相源在 site_appearance。 */
+    private Long templateId;
 
     public String getSiteCode() {
         return siteCode;
@@ -59,5 +61,13 @@ public class SiteEntity extends AbstractAuditableEntity {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public Long getTemplateId() {
+        return templateId;
+    }
+
+    public void setTemplateId(Long templateId) {
+        this.templateId = templateId;
     }
 }

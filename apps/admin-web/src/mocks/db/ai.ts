@@ -3,7 +3,7 @@ import type { AiConfig, AiConversation, AiPrompt, KnowledgeBase } from '@/mocks/
 export const MOCK_AI_CONFIGS: AiConfig[] = [
   {
     id: 'ai-config-car',
-    siteId: 'tokyo-car-repair',
+    siteId: '1',
     model: 'gpt-4o-mini',
     temperature: 0.4,
     enabled: true,
@@ -11,7 +11,7 @@ export const MOCK_AI_CONFIGS: AiConfig[] = [
   },
   {
     id: 'ai-config-cake',
-    siteId: 'sweet-heart-cake',
+    siteId: '3',
     model: 'gpt-4o-mini',
     temperature: 0.6,
     enabled: true,
@@ -39,7 +39,7 @@ export const MOCK_AI_PROMPTS: AiPrompt[] = [
 export const MOCK_KNOWLEDGE_BASES: KnowledgeBase[] = [
   {
     id: 'kb-car-services',
-    siteId: 'tokyo-car-repair',
+    siteId: '1',
     name: '维修服务知识库',
     documentCount: 24,
     status: 'ready',
@@ -47,7 +47,7 @@ export const MOCK_KNOWLEDGE_BASES: KnowledgeBase[] = [
   },
   {
     id: 'kb-visa-procedures',
-    siteId: 'tokyo-gyoseishoshi',
+    siteId: '5',
     name: '签证流程知识库',
     documentCount: 18,
     status: 'indexing',
@@ -58,7 +58,7 @@ export const MOCK_KNOWLEDGE_BASES: KnowledgeBase[] = [
 export const MOCK_AI_CONVERSATIONS: AiConversation[] = [
   {
     id: 'conv-001',
-    siteId: 'tokyo-car-repair',
+    siteId: '1',
     visitorName: 'Aki',
     question: '周末可以预约机油更换吗？',
     status: 'resolved',
@@ -66,7 +66,7 @@ export const MOCK_AI_CONVERSATIONS: AiConversation[] = [
   },
   {
     id: 'conv-002',
-    siteId: 'tokyo-gyoseishoshi',
+    siteId: '5',
     visitorName: 'Chen',
     question: '更新签证需要提前多久准备？',
     status: 'open',

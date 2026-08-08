@@ -295,8 +295,8 @@
 
 ## 11. 与数据字典 / DDL 的关系
 
-- Java 字段名与类型以 **`docs/数据字典/`** 与 Flyway DDL 为准；**本轮不改数据字典条目**。
-- 若 3B 实现中发现 **DDL 缺陷**：必须先改 **Flyway（新版本脚本）** → **`数据库模型设计V1.md`** → **`docs/数据字典/`**，再改 Java；**禁止仅改 Entity 不改库**。
+- Java 字段名与类型以 **`docs/website-services/数据字典/`** 与 Flyway DDL 为准；**本轮不改数据字典条目**。
+- 若 3B 实现中发现 **DDL 缺陷**：必须先改 **Flyway（新版本脚本）** → **`数据库模型设计V1.md`** → **`docs/website-services/数据字典/`**，再改 Java；**禁止仅改 Entity 不改库**。
 
 ---
 

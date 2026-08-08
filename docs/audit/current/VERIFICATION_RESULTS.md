@@ -1,8 +1,10 @@
 # Verification Results — Docs Consolidation 2026-08-09
 
 ```yaml
-artifact_type: AUDIT
+artifact_type: VERIFICATION_REPORT
 status: CURRENT
+last_verified: 2026-08-09
+clarification: 命令验证记录，不是 Acceptance Audit。
 ```
 
 | Check | Result |

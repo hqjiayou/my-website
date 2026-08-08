@@ -1,6 +1,8 @@
 package com.mywebsite.admin.controller;
 
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -81,6 +83,52 @@ class AdminRbacSecurityMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.roles[0]").value("editor"))
                 .andExpect(jsonPath("$.data.permissions").isArray())
                 .andExpect(jsonPath("$.data.permissions", hasItem("admin:rbac:check")))
-                .andExpect(jsonPath("$.data.menus").isEmpty());
+                .andExpect(jsonPath("$.data.menus", hasSize(1)))
+                .andExpect(jsonPath("$.data.menus[0].menuCode").value("admin:menu:system"))
+                .andExpect(jsonPath("$.data.menus[0].children", empty()));
+    }
+
+    @Test
+    void authMeSuperAdminMenusContainSystemTree() throws Exception {
+        RSAKey pk = AdminTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
+        String token = AdminTestJwtSigner.signAdminAccess(pk, "test-issuer", "ADMIN", 200L);
+
+        mockMvc.perform(get("/api/admin/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.menus", hasSize(2)))
+                .andExpect(jsonPath("$.data.menus[0].menuCode").value("admin:menu:system"))
+                .andExpect(jsonPath("$.data.menus[0].children", hasSize(4)))
+                .andExpect(jsonPath("$.data.menus[0].children[0].menuCode").value("admin:menu:system.user"))
+                .andExpect(jsonPath("$.data.menus[0].children[0].path").value("/system/users"))
+                .andExpect(jsonPath("$.data.menus[1].menuCode").value("admin:menu:apps"))
+                .andExpect(jsonPath("$.data.menus[1].children", hasSize(2)))
+                .andExpect(jsonPath("$.data.menus[1].children[0].path").value("/apps/sites"))
+                .andExpect(jsonPath("$.data.menus[1].children[1].path").value("/apps/templates"));
+    }
+
+    @Test
+    void listMenusRequiresPermission() throws Exception {
+        RSAKey pk = AdminTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
+        String token = AdminTestJwtSigner.signAdminAccess(pk, "test-issuer", "ADMIN", 100L);
+
+        mockMvc.perform(get("/api/admin/menus").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void listMenusOkForAdminRole() throws Exception {
+        RSAKey pk = AdminTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
+        String token = AdminTestJwtSigner.signAdminAccess(pk, "test-issuer", "ADMIN", 500L);
+
+        mockMvc.perform(get("/api/admin/menus").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data", hasSize(2)))
+                .andExpect(jsonPath("$.data[0].menuCode").value("admin:menu:system"))
+                .andExpect(jsonPath("$.data[0].children", hasSize(4)))
+                .andExpect(jsonPath("$.data[1].menuCode").value("admin:menu:apps"))
+                .andExpect(jsonPath("$.data[1].children", hasSize(2)))
+                .andExpect(jsonPath("$.data[1].children[0].path").value("/apps/sites"))
+                .andExpect(jsonPath("$.data[1].children[1].path").value("/apps/templates"));
     }
 }

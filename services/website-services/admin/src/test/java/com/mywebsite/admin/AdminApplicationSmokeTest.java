@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.mywebsite.admin.mapper.AdminPermissionMapper;
 import com.mywebsite.admin.mapper.AdminRoleMapper;
 import com.mywebsite.admin.mapper.AdminRolePermissionMapper;
+import com.mywebsite.admin.mapper.AdminSiteMapper;
 import com.mywebsite.admin.mapper.AdminUserMapper;
 import com.mywebsite.admin.mapper.AdminUserRoleMapper;
 import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
@@ -24,6 +26,8 @@ class AdminApplicationSmokeTest extends AbstractAdminSpringBootTest {
     void contextLoadsAndRegistersPersistenceBeans() {
         MybatisPlusInterceptor interceptor = applicationContext.getBean(MybatisPlusInterceptor.class);
         assertThat(interceptor.getInterceptors())
+                .anyMatch(inner -> inner instanceof PaginationInnerInterceptor);
+        assertThat(interceptor.getInterceptors())
                 .anyMatch(inner -> inner instanceof OptimisticLockerInnerInterceptor);
 
         assertThat(applicationContext.getBean(AuditMetaObjectHandler.class)).isNotNull();
@@ -33,5 +37,6 @@ class AdminApplicationSmokeTest extends AbstractAdminSpringBootTest {
         assertThat(applicationContext.getBean(AdminPermissionMapper.class)).isNotNull();
         assertThat(applicationContext.getBean(AdminUserRoleMapper.class)).isNotNull();
         assertThat(applicationContext.getBean(AdminRolePermissionMapper.class)).isNotNull();
+        assertThat(applicationContext.getBean(AdminSiteMapper.class)).isNotNull();
     }
 }

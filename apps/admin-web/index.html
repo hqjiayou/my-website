@@ -5,6 +5,26 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>admin-web</title>
+    <script>
+      ;(function () {
+        try {
+          var key = 'admin-web.preferences'
+          var raw = localStorage.getItem(key)
+          if (!raw) return
+          var prefs = JSON.parse(raw)
+          var mode = prefs.themeMode || 'system'
+          var dark =
+            mode === 'dark' ||
+            (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) document.documentElement.classList.add('dark')
+          if (prefs.fontSize) document.documentElement.dataset.fontSize = prefs.fontSize
+          if (prefs.pageDensity) document.documentElement.dataset.density = prefs.pageDensity
+          if (prefs.primaryColor) document.documentElement.dataset.primaryColor = prefs.primaryColor
+        } catch (e) {
+          /* ignore */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

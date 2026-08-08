@@ -1,6 +1,5 @@
 package com.mywebsite.site.controller;
 
-import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.common.api.ApiResponse;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,17 +10,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/site")
 public class SitePingController {
 
-    private final AgentClient agentClient;
-
-    public SitePingController(AgentClient agentClient) {
-        this.agentClient = agentClient;
-    }
-
+    /**
+     * 公开探活：只表示 site 自身就绪，不调用 agent（避免无 internal token 时 503）。
+     */
     @GetMapping("/ping")
     public ApiResponse<Map<String, String>> ping() {
-        return ApiResponse.success(Map.of(
-                "message", "site service ready",
-                "agent", agentClient.ping()
-        ));
+        return ApiResponse.success(Map.of("message", "site service ready"));
     }
 }

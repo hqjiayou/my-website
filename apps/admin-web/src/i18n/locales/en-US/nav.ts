@@ -33,7 +33,6 @@ export default {
     aiConversations: 'Conversations',
     paramsConfig: 'Parameters',
     analytics: 'Analytics',
-    team: 'People',
     system: 'System',
     developer: 'Developer Options',
   },

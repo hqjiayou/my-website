@@ -33,7 +33,6 @@ export default {
     aiConversations: '对话记录',
     paramsConfig: '参数配置',
     analytics: '数据分析',
-    team: '人员管理',
     system: '系统设置',
     developer: '开发者选项',
   },

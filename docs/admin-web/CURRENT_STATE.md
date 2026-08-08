@@ -33,9 +33,10 @@ source_of_truth: apps/admin-web/src
 - `mocks/services/aiMock.ts`（及 ai db/types）— **STILL_REQUIRED**  
 - `mocks/services/siteMock.ts`（**仅** `getSiteRuntimeStatus`）— **STILL_REQUIRED**  
 
-## SAFE_TO_REMOVE（工作区已清理，待与 admin-web REAL WIP 同提交）
+## Mock / legacy（工作区事实）
 
-`contentMock` / `reservationMock` / `fileMock` / `userMock` / `operation/userApi` 及无 consumer 的 db/types。勿单独提交以免与 HEAD 旧 API 树不一致。
+- Orphan mocks / `operation/userApi`：**工作区已删除且无 consumer**（交付动作：与 FORCE REAL / rename WIP 同批提交；**不**建长期 Issue）。
+- 保留：`aiMock`、`siteMock`（runtime only）。
 
 ## 开发规范
 
@@ -43,4 +44,4 @@ source_of_truth: apps/admin-web/src
 
 ## 已知缺口（Issue 指针）
 
-见 [`../overview/ROADMAP.md`](../overview/ROADMAP.md)。
+见 [`../overview/ROADMAP.md`](../overview/ROADMAP.md)：Browser E2E [#2](https://github.com/hqjiayou/my-website/issues/2)、AI LIVE [#5](https://github.com/hqjiayou/my-website/issues/5)。

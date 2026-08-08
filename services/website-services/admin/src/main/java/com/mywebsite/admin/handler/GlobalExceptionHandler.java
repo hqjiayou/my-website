@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -46,6 +47,13 @@ public class GlobalExceptionHandler {
                 ? localizedMessageService.getMessage(ErrorCode.BAD_REQUEST.getMessageKey())
                 : ex.getBindingResult().getFieldErrors().getFirst().getDefaultMessage();
         return ResponseEntity.badRequest().body(new HttpMessageBody<>(ErrorCode.BAD_REQUEST.getCode(), resolved, null));
+    }
+
+    /** 非法 JSON / Appearance 未知键等反序列化失败 → 4xx（fail-closed）。 */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<HttpMessageBody<Void>> handleNotReadable(HttpMessageNotReadableException ex) {
+        String message = localizedMessageService.getMessage(ErrorCode.BAD_REQUEST.getMessageKey());
+        return ResponseEntity.badRequest().body(new HttpMessageBody<>(ErrorCode.BAD_REQUEST.getCode(), message, null));
     }
 
     @ExceptionHandler(Exception.class)

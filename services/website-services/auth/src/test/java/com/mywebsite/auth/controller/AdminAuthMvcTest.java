@@ -13,7 +13,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.auth.AuthApplication;
 import com.mywebsite.auth.entity.AdminUserEntity;
 import com.mywebsite.auth.mapper.AdminUserMapper;
+import com.mywebsite.auth.service.AdminAuthRateLimitService;
 import com.mywebsite.auth.service.AdminRefreshCookieService;
+import com.mywebsite.auth.service.impl.InMemoryAdminAuthRateLimitServiceImpl;
 import com.mywebsite.common.security.JwtClaimConstants;
 import com.mywebsite.common.security.SubjectCodes;
 import jakarta.servlet.http.Cookie;
@@ -65,6 +67,9 @@ class AdminAuthMvcTest {
     private AdminRefreshCookieService adminRefreshCookieService;
 
     @Autowired
+    private AdminAuthRateLimitService rateLimitService;
+
+    @Autowired
     private JwtDecoder jwtDecoder;
 
     @MockBean
@@ -72,6 +77,8 @@ class AdminAuthMvcTest {
 
     @BeforeEach
     void stubAdminUser() {
+        ((InMemoryAdminAuthRateLimitServiceImpl) rateLimitService).clear();
+
         AdminUserEntity user = new AdminUserEntity();
         user.setId(100L);
         user.setUsername("admin_it");
@@ -281,6 +288,30 @@ class AdminAuthMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("success"))
                 .andExpect(jsonPath("$.data").value(nullValue()));
+    }
+
+    @Test
+    void unknownUsernameFailureEnvelopeMatchesKnownUserWrongPassword() throws Exception {
+        Mockito.when(adminUserMapper.selectOne(any())).thenReturn(null);
+        MvcResult unknown = mockMvc.perform(post("/api/auth/admin/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "zh-CN")
+                        .content("{\"username\":\"no_such_user\",\"password\":\"whatever\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.data").value(nullValue()))
+                .andReturn();
+
+        stubAdminUser();
+        MvcResult wrongPassword = mockMvc.perform(post("/api/auth/admin/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "zh-CN")
+                        .content("{\"username\":\"admin_it\",\"password\":\"wrong\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.data").value(nullValue()))
+                .andReturn();
+
+        assertThat(unknown.getResponse().getContentAsString())
+                .isEqualTo(wrongPassword.getResponse().getContentAsString());
     }
 
     @Test

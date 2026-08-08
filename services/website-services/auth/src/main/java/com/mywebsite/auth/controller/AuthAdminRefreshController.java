@@ -4,8 +4,10 @@ import com.mywebsite.auth.dto.AdminRefreshCookieDto;
 import com.mywebsite.auth.dto.AdminRefreshResponseDto;
 import com.mywebsite.auth.service.AdminAuthService;
 import com.mywebsite.auth.service.AdminRefreshCookieService;
+import com.mywebsite.auth.utils.ClientIpUtils;
 import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.api.ResponseMessages;
+import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -40,11 +42,15 @@ public class AuthAdminRefreshController {
         Optional<String> cookieVal =
                 readCookie(request, adminRefreshCookieService.refreshCookieName());
         try {
-            AdminRefreshCookieDto dto = adminAuthService.refresh(cookieVal);
+            AdminRefreshCookieDto dto =
+                    adminAuthService.refresh(cookieVal, ClientIpUtils.resolveClientIp(request));
             adminRefreshCookieService.writeRefreshCookie(response, dto.refreshPlain(), dto.refreshExpiresAt());
             return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, dto.refreshResponse()));
         } catch (BusinessException ex) {
-            adminRefreshCookieService.clearRefreshCookie(response);
+            // 仅认证失败清 Cookie；429 限流不销毁可能仍有效的 refresh
+            if (ex.getCode() == ErrorCode.UNAUTHORIZED.getCode()) {
+                adminRefreshCookieService.clearRefreshCookie(response);
+            }
             throw ex;
         }
     }

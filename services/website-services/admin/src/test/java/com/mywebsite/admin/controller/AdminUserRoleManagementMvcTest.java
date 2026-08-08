@@ -162,6 +162,9 @@ class AdminUserRoleManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.roles[0]").value("admin"))
                 .andExpect(jsonPath("$.data.permissions", hasItem("admin:user:role:view")))
                 .andExpect(jsonPath("$.data.permissions", not(hasItem("admin:rbac:check"))))
-                .andExpect(jsonPath("$.data.menus").isEmpty());
+                .andExpect(jsonPath("$.data.menus", org.hamcrest.Matchers.hasSize(2)))
+                .andExpect(jsonPath("$.data.menus[0].menuCode").value("admin:menu:system"))
+                .andExpect(jsonPath("$.data.menus[0].children", org.hamcrest.Matchers.hasSize(4)))
+                .andExpect(jsonPath("$.data.menus[1].menuCode").value("admin:menu:apps"));
     }
 }

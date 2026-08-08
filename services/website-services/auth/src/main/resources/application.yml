@@ -15,6 +15,8 @@ mywebsite:
       refresh-token-expire-seconds: 604800
       refresh-cookie-name: MYWEBSITE_REFRESH_TOKEN
       refresh-cookie-path: /api/auth/admin
+      site-refresh-cookie-name: MYWEBSITE_SITE_REFRESH_TOKEN
+      site-refresh-cookie-path: /api/auth/site
       refresh-cookie-secure: ${SECURITY_REFRESH_COOKIE_SECURE:true}
       refresh-cookie-http-only: true
       refresh-cookie-same-site: Lax
@@ -65,3 +67,31 @@ security:
     admin-bootstrap-registration-enabled: true
     # 默认关闭：非 bootstrap 的自助注册仅建议本地联调启用。
     admin-open-registration-enabled: false
+    # 认证限流总开关（逃生阀）；关闭后登录 / 注册 / 刷新均不做限流检查与计数。
+    admin-rate-limit-enabled: true
+    # 登录：IP+username / username 跨 IP / IP 跨 username（仅计失败；成功清前两维）
+    admin-login-ip-user-failure-threshold: 5
+    admin-login-ip-user-window-seconds: 300
+    admin-login-user-failure-threshold: 10
+    admin-login-user-window-seconds: 900
+    admin-login-ip-failure-threshold: 20
+    admin-login-ip-window-seconds: 900
+    # 注册：按 IP 计（成功失败都计）
+    admin-register-ip-threshold: 5
+    admin-register-ip-window-seconds: 3600
+    # 刷新：仅失败按 IP 计
+    admin-refresh-ip-failure-threshold: 30
+    admin-refresh-ip-window-seconds: 600
+  site-auth:
+    site-login-max-password-length: 128
+    site-rate-limit-enabled: true
+    # 登录：IP+siteCode+username / siteCode+username / siteCode+IP（仅计失败；成功清前两维）
+    site-login-ip-site-user-failure-threshold: 5
+    site-login-ip-site-user-window-seconds: 300
+    site-login-site-user-failure-threshold: 10
+    site-login-site-user-window-seconds: 900
+    site-login-site-ip-failure-threshold: 20
+    site-login-site-ip-window-seconds: 900
+    # 刷新：仅失败按 IP 计
+    site-refresh-ip-failure-threshold: 30
+    site-refresh-ip-window-seconds: 600

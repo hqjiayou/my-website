@@ -25,7 +25,7 @@ last_verified: 2026-08-09
 | 某次历史开发发生过什么 | [`implementation-history/`](./implementation-history/) |
 | 过去分析 | [`analysis/archive/`](./analysis/archive/) |
 | 验收结果 | [`audit/`](./audit/)（`current/` = 进行中；`archive/` = 历史） |
-| **还没解决什么** | **GitHub Issues**（[`overview/ROADMAP.md`](./overview/ROADMAP.md) 只留 Issue 号） |
+| **还没解决什么** | **GitHub Issues**（权威 Tracker；[`overview/ROADMAP.md`](./overview/ROADMAP.md) 只留 Issue 号） |
 | 本地怎么跑 | [`operations/LOCAL_DEVELOPMENT.md`](./operations/LOCAL_DEVELOPMENT.md) |
 | 文档生命周期规则 | [`rules/DOCUMENT_LIFECYCLE.md`](./rules/DOCUMENT_LIFECYCLE.md) |
 

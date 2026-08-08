@@ -27,6 +27,12 @@ public final class GlobalExceptionHttpStatus {
         if (code == ErrorCode.CONFLICT.getCode()) {
             return HttpStatus.CONFLICT;
         }
+        if (code == ErrorCode.TOO_MANY_REQUESTS.getCode()) {
+            return HttpStatus.TOO_MANY_REQUESTS;
+        }
+        if (code == ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()) {
+            return HttpStatus.SERVICE_UNAVAILABLE;
+        }
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 }

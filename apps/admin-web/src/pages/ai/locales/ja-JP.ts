@@ -1,4 +1,9 @@
 export default {
+  mockNotice: '現在は ACTIVE MOCK データです（実 AI バックエンドなし）。mock をオフにすると失敗し、成功を偽装しません。',
+  loading: '読み込み中…',
+  empty: 'データがありません',
+  error: '読み込みに失敗しました',
+  retry: '再試行',
   settings: {
     title: 'AI 設定',
     description: 'サイトごとの AI モデル、パラメータ、利用状態を管理します。',

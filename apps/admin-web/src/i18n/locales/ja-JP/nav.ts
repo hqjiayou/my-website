@@ -33,7 +33,6 @@ export default {
     aiConversations: '会話記録',
     paramsConfig: 'パラメータ',
     analytics: 'データ分析',
-    team: 'メンバー管理',
     system: 'システム設定',
     developer: '開発者オプション',
   },

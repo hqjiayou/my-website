@@ -1,51 +1,63 @@
 export default {
   list: {
     title: 'テンプレート管理',
-    description:
-      '複数業種サイト向けテンプレートのメタデータ、対応ページ、ブロック機能、デフォルトテーマと有効状態を管理します。',
-    stats: {
-      totalTemplates: 'テンプレート総数',
-      enabled: '有効',
-      draft: '下書き',
-      disabled: '無効',
+    description: 'プラットフォーム標準のサイトテンプレート一覧を確認します。サイト種別・デフォルトテーマ色・状態を含みます。',
+    loading: 'テンプレート一覧を読み込み中...',
+    error: 'テンプレート一覧の読み込みに失敗しました',
+    retry: '再試行',
+    empty: 'テンプレートデータがありません。',
+    filters: {
+      allStatus: 'すべてのステータス',
+      allSiteType: 'すべての種別',
+      search: '検索',
+      reset: 'リセット',
     },
     actions: {
       viewDetail: '詳細を見る',
     },
-    empty: 'テンプレートデータがありません。',
+    messages: {
+      statusUpdated: 'テンプレートのステータスを更新しました',
+    },
+    pagination: {
+      summary: '全 {{total}} 件、{{page}} ページ目（1 ページ {{pageSize}} 件）',
+      prev: '前へ',
+      next: '次へ',
+    },
   },
   detail: {
     title: 'テンプレート詳細',
-    description: 'テンプレートのメタデータ、機能範囲、対象サイト情報を確認します。',
+    description: 'テンプレートのメタデータとステータスを確認します。',
     loading: 'テンプレートデータを読み込み中...',
+    retry: '再試行',
     backToList: 'テンプレート一覧へ戻る',
     notFound: {
       title: 'テンプレートが見つかりません',
-      description: '現在の templateId に一致するテンプレートが存在しません。一覧から再選択してください。',
+      description: 'テンプレートが存在しないか、アクセス権限がありません。一覧から再選択してください。',
     },
     previewTitle: 'テンプレートプレビュー',
-    previewPlaceholder: 'テンプレートプレビューのプレースホルダー',
+    previewPlaceholder: 'プレビュー画像がありません',
     sections: {
       basicInfo: '基本情報',
     },
-    placeholderNotice:
-      '現在はテンプレート管理のプレースホルダー画面です。今後 site-service と連携してテンプレートメタデータと公開状態を管理します。',
+    messages: {
+      statusUpdated: 'テンプレートのステータスを更新しました',
+    },
   },
   common: {
     templateName: 'テンプレート名',
     templateCode: 'テンプレートコード',
-    industry: '業種',
+    siteType: 'サイト種別',
     status: 'ステータス',
     defaultPrimaryColor: 'デフォルトテーマカラー',
-    supportedPages: '対応ページ',
-    supportedBlocks: '対応ブロック',
-    targetSiteTypes: '対象サイト種別',
+    sortOrder: '並び順',
+    version: 'バージョン',
     description: '説明',
+    createdAt: '作成日時',
     updatedAt: '更新日時',
   },
   status: {
-    enabled: '有効',
-    draft: '下書き',
-    disabled: '無効',
+    ENABLED: '有効',
+    DRAFT: '下書き',
+    DISABLED: '無効',
   },
 } as const

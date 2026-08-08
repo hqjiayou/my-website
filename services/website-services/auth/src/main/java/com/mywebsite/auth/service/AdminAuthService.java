@@ -8,11 +8,12 @@ import java.util.Optional;
 
 public interface AdminAuthService {
 
-    AdminLoginCookieDto login(String username, String rawPassword);
+    /** {@code clientIp} 由 controller 解析（见 ClientIpUtils），仅用于限流维度。 */
+    AdminLoginCookieDto login(String username, String rawPassword, String clientIp);
 
-    AdminRefreshCookieDto refresh(Optional<String> refreshTokenPlainOptional);
+    AdminRefreshCookieDto refresh(Optional<String> refreshTokenPlainOptional, String clientIp);
 
     void logout(Optional<String> refreshTokenPlainOptional);
 
-    AdminRegisterResponseDto register(AdminRegisterRequestDto request);
+    AdminRegisterResponseDto register(AdminRegisterRequestDto request, String clientIp);
 }

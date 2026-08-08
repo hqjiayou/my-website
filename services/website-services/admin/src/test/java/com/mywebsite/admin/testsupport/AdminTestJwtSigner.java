@@ -60,4 +60,27 @@ public final class AdminTestJwtSigner {
         jwt.sign(new RSASSASigner(privateKeyJwk.toRSAPrivateKey()));
         return jwt.serialize();
     }
+
+    public static String signSiteAccess(
+            RSAKey privateKeyJwk, String issuer, String audience, long siteUserId, long siteId) throws Exception {
+        Instant now = Instant.now();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(issuer)
+                .subject(SubjectCodes.formatSiteUserSubject(siteUserId))
+                .audience(audience)
+                .jwtID(UUID.randomUUID().toString())
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(now.plusSeconds(3600)))
+                .claim(JwtClaimConstants.SUBJECT_TYPE, SubjectType.SITE.name())
+                .claim(JwtClaimConstants.SITE_ID, siteId)
+                .build();
+        SignedJWT jwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.RS256)
+                        .keyID(AdminJwksTestFixture.KEY_ID)
+                        .type(JOSEObjectType.JWT)
+                        .build(),
+                claims);
+        jwt.sign(new RSASSASigner(privateKeyJwk.toRSAPrivateKey()));
+        return jwt.serialize();
+    }
 }

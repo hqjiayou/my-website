@@ -1,11 +1,13 @@
-# 持久层真实 PostgreSQL 回归验证（`verify-pg`）：连接本地 PostgreSQL 临时库（默认库名 `my_website_3c_verify`），Flyway 迁移与 Mapper 联通性校验。
-# 启用方式：根模块 Maven profile persistence-verify-pg（参见 docs/website-services/数据文档/持久层真实PostgreSQL验证说明.md）
+# 持久层真实 PostgreSQL 回归验证（`verify-pg`）：默认由 Testcontainers 自举一次性 PostgreSQL 容器（可复现、CI 可跑），Flyway 迁移与 Mapper 联通性校验。
+# 启用方式：根模块 Maven profile persistence-verify-pg（参见 docs/website-services/数据文档/持久层真实PostgreSQL验证说明.md）。
+# 指向外部已存在 PG：设置 VERIFY_PG_URL=jdbc:postgresql://host:5432/db + VERIFY_PG_DRIVER=org.postgresql.Driver + VERIFY_PG_USER/VERIFY_PG_PASSWORD。
 spring:
   datasource:
-    url: ${VERIFY_PG_URL:jdbc:postgresql://localhost:5432/my_website_3c_verify}
-    # 与 website-services/.env 中 POSTGRES_*（local-stack Postgres）对齐；可被 VERIFY_PG_* 或环境变量 POSTGRES_USER / POSTGRES_PASSWORD 覆盖。
-    username: ${VERIFY_PG_USER:${POSTGRES_USER:hqjiayou}}
-    password: ${VERIFY_PG_PASSWORD:${POSTGRES_PASSWORD:hqjiayou}}
+    url: ${VERIFY_PG_URL:jdbc:tc:postgresql:16-alpine:///my_website_verify}
+    driver-class-name: ${VERIFY_PG_DRIVER:org.testcontainers.jdbc.ContainerDatabaseDriver}
+    # Testcontainers PostgreSQLContainer 默认账号 test/test；外部 PG 场景由 VERIFY_PG_USER/VERIFY_PG_PASSWORD 覆盖。
+    username: ${VERIFY_PG_USER:test}
+    password: ${VERIFY_PG_PASSWORD:test}
   flyway:
     enabled: true
     locations: classpath:db/migration

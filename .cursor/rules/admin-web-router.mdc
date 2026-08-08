@@ -1,0 +1,14 @@
+---
+description: admin-web router 目录职能与导入约定
+globs: apps/admin-web/src/router/**/*
+alwaysApply: false
+---
+
+# admin-web `router/`
+
+- `config/routePaths.ts`：仅 ROUTES 常量（零依赖）
+- `routes/appRoutes.tsx` + `routes/adminRoutes.tsx`：静态 Route 表；新页面加在 adminRoutes
+- `index.tsx`：仅 AppRouter（含 SessionBridge）
+- `permission/`、`guards/`、`navigation/`：RBAC、守卫、顶栏标题解析
+- 菜单来自接口，但页面组件须在 routes 下注册
+- 禁止 `@/router` barrel re-export routePaths/permission

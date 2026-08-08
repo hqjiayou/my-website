@@ -1,10 +1,12 @@
 # Knowledge Consolidation Report
 
 ```yaml
-artifact_type: AUDIT
+artifact_type: EXECUTION_REPORT
 status: CURRENT
 last_verified: 2026-08-09
 initiative: Full-Stack Documentation Consolidation & Legacy Handoff
+clarification: 本文件是 consolidation 执行声称清单，不是独立验收 AUDIT。独立验收见 POST_CONSOLIDATION_INDEPENDENT_ACCEPTANCE_AUDIT.md；Open Work handoff 见 GITHUB_ISSUE_REASSESSMENT_REPORT.md。
+superseded_open_work_claim: GitHub Issue 交接已由 2026-08-09 reassessment 完成（Issues #1–#5）；本报告内「Issues 未创建」为当时事实，勿再当 CURRENT。
 ```
 
 ## Verdict

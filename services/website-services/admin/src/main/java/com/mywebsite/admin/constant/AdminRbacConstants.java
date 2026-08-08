@@ -7,5 +7,7 @@ public final class AdminRbacConstants {
 
     public static final String STATUS_ACTIVE = "ACTIVE";
 
+    public static final String RESOURCE_TYPE_MENU = "MENU";
+
     private AdminRbacConstants() {}
 }

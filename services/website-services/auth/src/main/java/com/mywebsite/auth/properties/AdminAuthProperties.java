@@ -23,6 +23,39 @@ public class AdminAuthProperties {
      */
     private boolean adminOpenRegistrationEnabled = false;
 
+    /** 认证限流总开关（逃生阀）；关闭后登录 / 注册 / 刷新均不做限流检查与计数。 */
+    private boolean adminRateLimitEnabled = true;
+
+    /** 登录 IP+username 维度：失败次数阈值。 */
+    private int adminLoginIpUserFailureThreshold = 5;
+
+    /** 登录 IP+username 维度：窗口 / cooldown 秒数。 */
+    private int adminLoginIpUserWindowSeconds = 300;
+
+    /** 登录 username（跨 IP）维度：失败次数阈值。 */
+    private int adminLoginUserFailureThreshold = 10;
+
+    /** 登录 username（跨 IP）维度：窗口 / cooldown 秒数。 */
+    private int adminLoginUserWindowSeconds = 900;
+
+    /** 登录 IP（跨 username）维度：失败次数阈值。 */
+    private int adminLoginIpFailureThreshold = 20;
+
+    /** 登录 IP（跨 username）维度：窗口 / cooldown 秒数。 */
+    private int adminLoginIpWindowSeconds = 900;
+
+    /** 注册 IP 维度：次数阈值（成功失败都计）。 */
+    private int adminRegisterIpThreshold = 5;
+
+    /** 注册 IP 维度：窗口 / cooldown 秒数。 */
+    private int adminRegisterIpWindowSeconds = 3600;
+
+    /** 刷新 IP 维度：失败次数阈值（成功刷新不计数）。 */
+    private int adminRefreshIpFailureThreshold = 30;
+
+    /** 刷新 IP 维度：窗口 / cooldown 秒数。 */
+    private int adminRefreshIpWindowSeconds = 600;
+
     public int getAdminLoginMaxPasswordLength() {
         return adminLoginMaxPasswordLength;
     }
@@ -53,5 +86,93 @@ public class AdminAuthProperties {
 
     public void setAdminOpenRegistrationEnabled(boolean adminOpenRegistrationEnabled) {
         this.adminOpenRegistrationEnabled = adminOpenRegistrationEnabled;
+    }
+
+    public boolean isAdminRateLimitEnabled() {
+        return adminRateLimitEnabled;
+    }
+
+    public void setAdminRateLimitEnabled(boolean adminRateLimitEnabled) {
+        this.adminRateLimitEnabled = adminRateLimitEnabled;
+    }
+
+    public int getAdminLoginIpUserFailureThreshold() {
+        return adminLoginIpUserFailureThreshold;
+    }
+
+    public void setAdminLoginIpUserFailureThreshold(int adminLoginIpUserFailureThreshold) {
+        this.adminLoginIpUserFailureThreshold = adminLoginIpUserFailureThreshold;
+    }
+
+    public int getAdminLoginIpUserWindowSeconds() {
+        return adminLoginIpUserWindowSeconds;
+    }
+
+    public void setAdminLoginIpUserWindowSeconds(int adminLoginIpUserWindowSeconds) {
+        this.adminLoginIpUserWindowSeconds = adminLoginIpUserWindowSeconds;
+    }
+
+    public int getAdminLoginUserFailureThreshold() {
+        return adminLoginUserFailureThreshold;
+    }
+
+    public void setAdminLoginUserFailureThreshold(int adminLoginUserFailureThreshold) {
+        this.adminLoginUserFailureThreshold = adminLoginUserFailureThreshold;
+    }
+
+    public int getAdminLoginUserWindowSeconds() {
+        return adminLoginUserWindowSeconds;
+    }
+
+    public void setAdminLoginUserWindowSeconds(int adminLoginUserWindowSeconds) {
+        this.adminLoginUserWindowSeconds = adminLoginUserWindowSeconds;
+    }
+
+    public int getAdminLoginIpFailureThreshold() {
+        return adminLoginIpFailureThreshold;
+    }
+
+    public void setAdminLoginIpFailureThreshold(int adminLoginIpFailureThreshold) {
+        this.adminLoginIpFailureThreshold = adminLoginIpFailureThreshold;
+    }
+
+    public int getAdminLoginIpWindowSeconds() {
+        return adminLoginIpWindowSeconds;
+    }
+
+    public void setAdminLoginIpWindowSeconds(int adminLoginIpWindowSeconds) {
+        this.adminLoginIpWindowSeconds = adminLoginIpWindowSeconds;
+    }
+
+    public int getAdminRegisterIpThreshold() {
+        return adminRegisterIpThreshold;
+    }
+
+    public void setAdminRegisterIpThreshold(int adminRegisterIpThreshold) {
+        this.adminRegisterIpThreshold = adminRegisterIpThreshold;
+    }
+
+    public int getAdminRegisterIpWindowSeconds() {
+        return adminRegisterIpWindowSeconds;
+    }
+
+    public void setAdminRegisterIpWindowSeconds(int adminRegisterIpWindowSeconds) {
+        this.adminRegisterIpWindowSeconds = adminRegisterIpWindowSeconds;
+    }
+
+    public int getAdminRefreshIpFailureThreshold() {
+        return adminRefreshIpFailureThreshold;
+    }
+
+    public void setAdminRefreshIpFailureThreshold(int adminRefreshIpFailureThreshold) {
+        this.adminRefreshIpFailureThreshold = adminRefreshIpFailureThreshold;
+    }
+
+    public int getAdminRefreshIpWindowSeconds() {
+        return adminRefreshIpWindowSeconds;
+    }
+
+    public void setAdminRefreshIpWindowSeconds(int adminRefreshIpWindowSeconds) {
+        this.adminRefreshIpWindowSeconds = adminRefreshIpWindowSeconds;
     }
 }

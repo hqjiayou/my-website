@@ -18,7 +18,7 @@ public final class AdminRbacTestSupport {
         MockHttpServletRequest request = new MockHttpServletRequest();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
         AuthContext.set(new AuthenticatedUser(
-                TokenAudience.ADMIN, SubjectCodes.formatAdminSubject(adminUserId), null, Set.of()));
+                TokenAudience.ADMIN, SubjectCodes.formatAdminSubject(adminUserId), null, null, Set.of()));
     }
 
     public static void clearRequestContext() {

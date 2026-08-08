@@ -11,6 +11,8 @@ mywebsite:
       refresh-token-expire-seconds: 604800
       refresh-cookie-name: MYWEBSITE_REFRESH_TOKEN
       refresh-cookie-path: /api/auth/admin
+      site-refresh-cookie-name: MYWEBSITE_SITE_REFRESH_TOKEN
+      site-refresh-cookie-path: /api/auth/site
       refresh-cookie-secure: false
       refresh-cookie-http-only: true
       refresh-cookie-same-site: Lax
@@ -25,6 +27,9 @@ security:
     admin-register-min-password-length: 8
     admin-bootstrap-registration-enabled: true
     admin-open-registration-enabled: false
+  site-auth:
+    site-login-max-password-length: 128
+    site-rate-limit-enabled: true
 
 mybatis-plus:
   configuration:

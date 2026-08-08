@@ -1,0 +1,22 @@
+---
+description: admin-web 全局样式三层边界（globals / theme / font）
+globs: apps/admin-web/src/assets/styles/**/*
+alwaysApply: false
+---
+
+# admin-web `assets/styles` 分层
+
+仅维护三个全局文件 + `README.md`。**页面/模块专属样式不得放入本目录。**
+
+| 文件 | 职责 |
+|------|------|
+| `globals.css` | 唯一入口：Tailwind import、链式 import、box-sizing、`body`/`#root` |
+| `theme.css` | 色板 token、`.dark`、`data-primary-color`/`data-density`、`@theme inline`、layout 壳层语义类 |
+| `font.css` | `font-family`、`data-font-size` 根字号 |
+
+- 新增全站颜色/密度/主色 → `theme.css`
+- 新增全站字体/字号 → `font.css`
+- 单页样式 → `pages/**` 或组件旁 CSS Modules，禁止 `styles/pages-*.css`
+- 仅 `main.tsx` 引入 `globals.css`
+
+详见 `apps/admin-web/src/assets/styles/README.md`。

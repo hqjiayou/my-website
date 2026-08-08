@@ -25,6 +25,10 @@ spring:
     basename: i18n/common/messages,i18n/admin/messages
     encoding: UTF-8
     fallback-to-system-locale: false
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 21MB
 
 app:
   i18n:
@@ -41,3 +45,13 @@ storage:
     secret-key: test
     bucket: test
     secure: false
+
+admin:
+  media:
+    max-image-bytes: 5242880
+    max-pdf-bytes: 20971520
+    presign-ttl: 10m
+    orphan-retention: 0s
+    orphan-stale-upload: 0s
+    orphan-batch-size: 50
+    orphan-fixed-delay-ms: 3600000

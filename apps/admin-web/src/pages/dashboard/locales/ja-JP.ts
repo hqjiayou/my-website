@@ -1,22 +1,17 @@
 export default {
   title: 'データ概要',
-  description: '主要指標を確認し、各モジュールへすばやく移動できます。',
-  stats: {
-    activeSites: { label: '稼働サイト', value: '24', trend: '先週比 +12%' },
-    todayReservations: { label: '本日の予約', value: '67', trend: '前日比 +8%' },
-    aiSessions: { label: 'AI セッション', value: '193', trend: '前日比 +21%' },
-    uptime: { label: '稼働率', value: '99.95%', trend: '前日比 -0.02%' },
+  description: 'マルチサイト運用指標の入口です。集計 API は未接続のため、以下は実データではありません。',
+  notConnected: {
+    title: '運用指標は未接続',
+    description:
+      '稼働サイト・予約・AI セッション・稼働率などの KPI には専用の集計 API が必要です。完了と誤認しないよう仮数字は表示しません。',
   },
   trend: {
     title: '運用トレンド',
-    description: 'Recharts / Nivo でアクセス・予約・コンバージョンを可視化します。',
+    description: '実時系列データの接続後にチャートを表示します。',
   },
   reminders: {
     title: 'お知らせ',
-    items: [
-      '公開レビュー待ちのサイトが 3 件',
-      'ベクトル化待ちの AI ナレッジが 2 件',
-      'モバイル表示のずれがあるテンプレートが 1 件',
-    ],
+    empty: '実データ源のシステム通知はまだありません。',
   },
 } as const

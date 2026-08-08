@@ -18,4 +18,5 @@ last_verified: 2026-08-09
 
 ```text
 Site Auth: BACKEND_COMPLETE + frontend NOT_IMPLEMENTED
+Tracking: #3
 ```

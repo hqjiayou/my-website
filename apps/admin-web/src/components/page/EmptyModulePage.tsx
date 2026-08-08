@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next'
 
-import { PageHeader } from './PageHeader'
+import { PageHeader } from './pageHeader'
 
 /** 与 `EmptyModulePage` 各路由模块的 i18n 命名空间一致（见 `src/i18n/page-namespaces.ts`）。 */
-export type EmptyModuleNamespace = 'styleSettings' | 'paramsConfig' | 'analytics' | 'team' | 'systemSettings'
+export type EmptyModuleNamespace = 'paramsConfig' | 'analytics' | 'systemSettings' | 'developer'
 
 interface EmptyModulePageProps {
   namespace: EmptyModuleNamespace
