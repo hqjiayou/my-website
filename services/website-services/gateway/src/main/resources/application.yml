@@ -8,6 +8,14 @@ spring:
     gateway:
       server:
         webflux:
+          # SCG 4.3+：未配置 trusted-proxies 时 XForwardedHeadersFilter 不启用，
+          # 客户端伪造的 XFF 可能原样到达 auth，或被剥离导致限流维度退化为网关 IP。
+          # 本地/直连：匹配任意对端以启用「追加 peer IP」；生产请改为前置 LB CIDR/正则。
+          # 可用环境变量 SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES 覆盖。
+          trusted-proxies: ".*"
+          x-forwarded:
+            enabled: true
+            for-append: true
           routes:
             # 顺序敏感：/api/auth/** 须在 /api/admin/**、/api/site/** 之前，以免登录被业务路由吞掉。
             - id: auth-service-api
