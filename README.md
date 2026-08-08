@@ -28,7 +28,7 @@ my-website/
 ├── services
 │   ├── agent-services
 │   └── website-services
-└── doc                       # 兼容跳转占位（正文权威均在 docs/）
+└── docs/website-services/数据字典/   # 表级字典（勿再找已移除的 docs/数据字典 或 doc/）
 ```
 
 **当前系统事实**请读 [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md)。文档地图：[`docs/README.md`](docs/README.md)。未完成工作 → GitHub Issues（见 `docs/overview/ROADMAP.md`）。

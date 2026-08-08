@@ -14,7 +14,7 @@
 | 管理端登录 | **`POST /api/auth/admin/login`** | **auth** |
 | 刷新 Access（Refresh **HttpOnly Cookie**） | **`POST /api/auth/admin/refresh`** | **auth** |
 | 登出（吊销 Refresh、清除 Cookie） | **`POST /api/auth/admin/logout`** | **auth** |
-| 前台登录（占位） | **`POST /api/auth/site/login`** | **auth**（当前 **501**） |
+| 前台登录 | **`POST /api/auth/site/login`**（另有 refresh / logout） | **auth**（SITE JWT + `site_id`；Refresh Cookie `MYWEBSITE_SITE_REFRESH_TOKEN`） |
 | 管理端当前用户上下文 | **`GET /api/admin/auth/me`**（需 Bearer） | **admin** |
 | 前台当前用户上下文（占位） | **`GET /api/site/auth/me`**（需 Bearer） | **site-app** |
 
@@ -241,7 +241,7 @@ Flyway 是唯一数据库结构迁移机制。后续任何表结构变更必须�
 - 本地联调建议：**先启动 `admin`** 完成迁移，再启动 `site-app`。说明见 `site/site-app/src/main/resources/db/README.md`。
 - `admin` 侧开关：`FLYWAY_ENABLED`（默认 `true`）。
 
-首批已落地脚本：`V1__init_platform_core_tables.sql`（8 张表，无种子数据）。执行策略与设计边界见 [`docs/website-services/数据库模型设计V1.md`](../../docs/website-services/数据库模型设计V1.md) §8；**字段级定义见 [`docs/数据字典/`](../../docs/数据字典/)**。
+首批已落地脚本：`V1__init_platform_core_tables.sql`（其后另有 V2–V15+）。执行策略与设计边界见 [`数据库模型设计V1`](../../docs/website-services/设计文档/数据与持久层/数据库模型设计V1.md)；**字段级定义见 [`数据字典`](../../docs/website-services/数据字典/)**。当前完成度：[`docs/overview/CURRENT_STATE.md`](../../docs/overview/CURRENT_STATE.md)。
 
 migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 
@@ -437,7 +437,7 @@ mvn clean install -DskipTests
 
 ### 文档归档约定（必读）
 
-后端说明文档：**设计类正文**权威路径为 **`docs/website-services/设计文档/`**（子目录 **`基础架构/`**、**`数据与持久层/`**、**`认证与安全/`**）；**总导航**见 **[`docs/website-services/README.md`](../../docs/website-services/README.md)**。**`docs/website-services/`** 根目录下同名 `.md` 多为 **跳转入口**。数据字典（随仓库实际存放路径）见 **`docs/website-services/数据字典/`** 或顶层 **`docs/数据字典/`** 跳转说明。不要在 `services/website-services/docs/` 撰写权威正文（该目录仅保留跳转 [`README`](docs/README.md)）。
+后端说明文档：**设计类正文**权威路径为 **`docs/website-services/设计文档/`**；**总导航**见 **[`docs/website-services/README.md`](../../docs/website-services/README.md)**；**当前完成度**见 [`docs/overview/CURRENT_STATE.md`](../../docs/overview/CURRENT_STATE.md)。数据字典权威路径：**`docs/website-services/数据字典/`**（顶层 `docs/数据字典/` 仅为跳转）。
 
 ### Java 持久层（阶段 3A / 3B）
 
@@ -451,20 +451,20 @@ mvn clean install -DskipTests
 
 | 文档 | 职责 |
 | --- | --- |
-| [数据库模型设计 V1](../../docs/website-services/数据库模型设计V1.md) | 规范、蓝图、多站点与 RBAC 边界、暂缓表与阶段说明（含 Flyway §8） |
-| [持久层真实 PostgreSQL 验证说明](../../docs/website-services/数据文档/持久层真实PostgreSQL验证说明.md) | Flyway + Mapper 本地专用验证库、`persistence-verify-pg` Profile、`mvn clean` 与重复 migration 排查 |
-| [数据字典索引](../../docs/数据字典/README.md) | 已落地表的 **字段 / 索引 / 唯一约束 / 外键** 可查手册（按业务域拆分） |
+| [数据库模型设计 V1](../../docs/website-services/设计文档/数据与持久层/数据库模型设计V1.md) | 规范、蓝图、多站点与 RBAC 边界 |
+| [持久层真实 PostgreSQL 验证说明](../../docs/website-services/数据文档/持久层真实PostgreSQL验证说明.md) | Flyway + Mapper / `persistence-verify-pg` |
+| [数据字典索引](../../docs/website-services/数据字典/README.md) | 已落地表字段 / 索引 / 约束手册 |
 
-数据字典分册（首批 8 表）：
+数据字典分册：
 
-- [平台与站点](../../docs/数据字典/平台与站点数据字典.md)（`site`）
-- [Admin 认证授权](../../docs/数据字典/Admin认证授权数据字典.md)（`admin_*` RBAC）
-- [Site 用户](../../docs/数据字典/Site用户数据字典.md)（`site_user`、`site_user_profile`）
+- [平台与站点](../../docs/website-services/数据字典/平台与站点数据字典.md)
+- [Admin 认证授权](../../docs/website-services/数据字典/Admin认证授权数据字典.md)
+- [Site 用户](../../docs/website-services/数据字典/Site用户数据字典.md)
 
-**约定**：凡新增或变更表结构（含字段、索引、唯一约束、外键）或新增 Flyway migration，**必须同步更新** [`docs/数据字典/`](../../docs/数据字典/) 对应条目及 [`数据库模型设计 V1`](../../docs/website-services/数据库模型设计V1.md) 中有字段口径的章节，禁止仅写代码或仅改 SQL。详见 [`docs/数据字典/README.md`](../../docs/数据字典/README.md) 与设计文档 §9。
+**约定**：表结构变更必须同步更新 [`数据字典`](../../docs/website-services/数据字典/) 与模型设计文档；冲突时以 Flyway schema 为准。
 
 ### 其他
 
-- 总体架构：[整体架构说明](../../docs/整体架构说明.md)
-- 后端架构：[架构设计](../../docs/website-services/架构设计.md)（入口；正文：[设计文档/基础架构/架构设计](../../docs/website-services/设计文档/基础架构/架构设计.md)）
-- WSL/Docker：[WSL 与 Docker 环境配置说明](../../docs/website-services/WSL与Docker环境配置说明.md)
+- 总体架构：[整体架构说明](../../docs/website-services/设计文档/基础架构/整体架构说明.md)
+- 后端架构：[架构设计](../../docs/website-services/设计文档/基础架构/架构设计.md)
+- WSL/Docker：[WSL 与 Docker 环境配置说明](../../docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)

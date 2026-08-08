@@ -11,7 +11,7 @@
 
 | 目标 | 说明 |
 | --- | --- |
-| 与数据字典对齐 | Java 字段语义以 `docs/数据字典/` 与 Flyway DDL 为准；类名为设计与协作约定 |
+| 与数据字典对齐 | Java 字段语义以 `docs/website-services/数据字典/` 与 Flyway DDL 为准 |
 | 分层清晰 | **Entity** 止于持久映射；不把数据库行对象透出到 HTTP |
 | MyBatis-Plus 一致 | 主键、逻辑删除、乐观锁、审计填充项目级统一 |
 | 模块边界 | `admin_user` / RBAC 与 `site_user` 隔离；`auth` 不出现具体业务 **Entity** |

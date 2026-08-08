@@ -1,16 +1,24 @@
 # 数据字典（Data Dictionary）
 
-**仓库权威路径（相对仓库根目录）**：`docs/数据字典/`。
+```yaml
+artifact_type: CONTRACT
+status: CURRENT
+last_verified: 2026-08-09
+```
 
-本目录收录 **已与 Flyway migration 对齐** 的表级数据定义，作为 [`../设计文档/数据与持久层/数据库模型设计V1.md`](../设计文档/数据与持久层/数据库模型设计V1.md) 的补充：设计文档侧重规范与蓝图，**数据字典侧重已落地字段、约束与索引的可查手册**。
+**仓库权威路径（相对仓库根目录）**：`docs/website-services/数据字典/`。
+
+（历史链接常写 `docs/数据字典/`——该路径现为跳转 stub，正文只在本目录维护。）
+
+本目录收录 **已与 Flyway migration 对齐** 的表级数据定义，作为 [`../设计文档/数据与持久层/数据库模型设计V1.md`](../设计文档/数据与持久层/数据库模型设计V1.md) 的补充：设计文档侧重规范与蓝图，**数据字典侧重已落地字段、约束与索引的可查手册**。与 Flyway 冲突时以 schema 为准。
 
 ## 归档约定（长期）
 
 | 类别 | 权威路径 |
 | --- | --- |
-| website-services **设计正文**（架构、数据库模型、持久层 Java 约定、环境与流程等） | **`docs/website-services/设计文档/`**（含 **`基础架构/`**、**`数据与持久层/`**、**`认证与安全/`**） |
-| website-services **根目录同名 `.md`** | **仅跳转入口**，勿与 `设计文档/` **并行维护两份正文** |
-| 数据库数据字典（按业务域拆分） | **`docs/数据字典/`**（本目录） |
+| website-services **设计正文** | **`docs/website-services/设计文档/`** |
+| 数据库数据字典（按业务域拆分） | **`docs/website-services/数据字典/`**（本目录） |
+| 全栈当前完成度 | **`docs/overview/CURRENT_STATE.md`** |
 
 **禁止**在 `services/website-services/docs/` 维护权威正文（该路径仅保留跳转说明）。凡新增表、变更字段、索引、唯一约束、外键或新增 Flyway migration，**必须同步更新**本目录对应条目及 **`docs/website-services/设计文档/数据与持久层/数据库模型设计V1.md`** 中与蓝图相关的章节。
 
