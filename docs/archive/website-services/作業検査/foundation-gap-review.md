@@ -1,3 +1,9 @@
+> **Status: SUPERSEDED / HISTORICAL**  
+> **Superseded by:** docs/website-services/CURRENT_STATE.md  
+> Historical snapshot only. Do not use as current implementation truth.  
+> Do not rewrite historical PASS/FAIL conclusions in this file.
+
+---
 # website-services 企业级后端基础架构查漏补缺审查
 
 审查时间：2026-05-16

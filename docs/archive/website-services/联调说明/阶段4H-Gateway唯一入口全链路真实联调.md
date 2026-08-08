@@ -1,3 +1,9 @@
+> **Status: SUPERSEDED / HISTORICAL**  
+> **Superseded by:** docs/website-services/CURRENT_STATE.md  
+> Historical snapshot only. Do not use as current implementation truth.  
+> Do not rewrite historical PASS/FAIL conclusions in this file.
+
+---
 # 阶段 4H：Gateway 唯一入口全链路真实联调
 
 > **文档状态**：当前有效（运行态验收 + 契约口径）  

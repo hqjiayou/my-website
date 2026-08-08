@@ -1,3 +1,9 @@
+> **Status: SUPERSEDED / HISTORICAL**  
+> **Superseded by:** docs/admin-web/CURRENT_STATE.md + docs/contracts/  
+> Historical snapshot only. Do not use as current implementation truth.  
+> Do not rewrite historical PASS/FAIL conclusions in this file.
+
+---
 > 功能注解：约束 admin-web 的 API 分组结构、封装方式与注释规范。
 
 # API 开发规范

@@ -1,3 +1,9 @@
+> **Status: SUPERSEDED / HISTORICAL**  
+> **Superseded by:** docs/website-services/CURRENT_STATE.md  
+> Historical snapshot only. Do not use as current implementation truth.  
+> Do not rewrite historical PASS/FAIL conclusions in this file.
+
+---
 # 阶段 4C：Admin 认证真实联调与安全边界验证
 
 > **文档状态**：历史验证有效 + **入口已多次演进**（§0：**现行路径以 README 为准**）  
