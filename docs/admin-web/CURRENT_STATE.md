@@ -33,9 +33,9 @@ source_of_truth: apps/admin-web/src
 - `mocks/services/aiMock.ts`（及 ai db/types）— **STILL_REQUIRED**  
 - `mocks/services/siteMock.ts`（**仅** `getSiteRuntimeStatus`）— **STILL_REQUIRED**  
 
-## 已删除（SAFE_TO_REMOVE，2026-08-09）
+## SAFE_TO_REMOVE（工作区已清理，待与 admin-web REAL WIP 同提交）
 
-`contentMock` / `reservationMock` / `fileMock` / `userMock` / `operation/userApi` 及无 consumer 的 db/types。
+`contentMock` / `reservationMock` / `fileMock` / `userMock` / `operation/userApi` 及无 consumer 的 db/types。勿单独提交以免与 HEAD 旧 API 树不一致。
 
 ## 开发规范
 
