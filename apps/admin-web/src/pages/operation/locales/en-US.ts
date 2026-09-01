@@ -1,29 +1,68 @@
 export default {
   contents: {
     title: 'Page Contents',
-    description: 'Manage page blocks, copy, and publish state per site.',
-    notConnected: {
-      title: 'Operation content center not connected',
-      description:
-        'There is no real API for a cross-site content list yet. Manage content in the site workspace Contents page (/apps/sites/:siteId/contents).',
+    description: 'View page blocks, copy, and publish state across sites.',
+    aggregateNotice: 'Data is aggregated from per-site REAL APIs. Edit in the site workspace.',
+    empty: 'No cross-site content records',
+    columns: {
+      site: 'Site',
+      title: 'Title',
+      type: 'Type',
+      status: 'Status',
+      updatedAt: 'Updated',
+      actions: 'Actions',
+    },
+    filters: {
+      type: 'Content type',
+      status: 'Status',
+      allTypes: 'All types',
+      allStatuses: 'All statuses',
+      search: 'Filter',
+      reset: 'Reset',
+    },
+    actions: {
+      manage: 'Open site workspace',
     },
   },
   reservations: {
     title: 'Reservations',
-    description: 'Track reservations and handling status across multiple sites.',
-    notConnected: {
-      title: 'Operation reservation center not connected',
-      description:
-        'There is no real API for a cross-site reservation list yet. Manage reservations in the site workspace Reservations page (/apps/sites/:siteId/reservations).',
+    description: 'View reservations and handling status across sites.',
+    aggregateNotice: 'Data is aggregated from per-site REAL APIs. Manage in the site workspace.',
+    empty: 'No cross-site reservation records',
+    columns: {
+      site: 'Site',
+      customer: 'Customer',
+      serviceType: 'Service',
+      reservedAt: 'Reserved at',
+      status: 'Status',
+      actions: 'Actions',
+    },
+    filters: {
+      status: 'Status',
+      allStatuses: 'All statuses',
+      search: 'Filter',
+      reset: 'Reset',
+    },
+    actions: {
+      manage: 'Open site workspace',
     },
   },
   files: {
     title: 'File Assets',
-    description: 'Manage media assets, upload state, and usage centrally.',
-    notConnected: {
-      title: 'Operation file center not connected',
-      description:
-        'There is no real API for a global file list yet. Manage site media in the site workspace Files page (/apps/sites/:siteId/files).',
+    description: 'View media assets and upload state across sites.',
+    aggregateNotice: 'Data is aggregated from per-site REAL APIs. Upload and manage in the site workspace.',
+    empty: 'No cross-site media files',
+    columns: {
+      site: 'Site',
+      filename: 'Filename',
+      contentType: 'Type',
+      fileSize: 'Size',
+      status: 'Status',
+      createdAt: 'Uploaded',
+      actions: 'Actions',
+    },
+    actions: {
+      manage: 'Open site workspace',
     },
   },
 } as const

@@ -19,5 +19,9 @@ last_verified: 2026-08-09
 | Media | `/sites/{id}/media` | `mediaApi` |
 | Contents | `/sites/{id}/contents` | `contentApi` |
 | Reservations | `/sites/{id}/reservations` | `reservationApi` |
+| AI Prompt | `/sites/{id}/ai/prompt-profile` | `aiApi` FORCE REAL |
+| AI Knowledge | `/sites/{id}/ai/knowledge-documents` | `aiApi` FORCE REAL |
+| AI Conversations | `/sites/{id}/ai/conversations`（只读） | `aiApi` FORCE REAL |
+| AI Preview SSE | `POST /sites/{id}/ai/preview/chat/stream`（不落库） | `streamPreviewChat` |
 
 细节字段以各 `Admin*Dtos` 与 admin-web `api/**` 为准。分页见 [`PAGINATION_CONTRACT.md`](./PAGINATION_CONTRACT.md)。

@@ -204,16 +204,14 @@ export default {
   overview: {
     title: 'Site Overview',
     description: 'Review the current site setup status, operations data, and publish checklist.',
+    derivedNotice: 'Publish checklist and today reservations are derived from REAL APIs. Visits / AI stats have no backend yet and show as unavailable.',
     loadingRuntime: 'Loading site runtime status...',
-    notConnected: {
-      title: 'Operational metrics not connected',
-      description: 'runtime-status / KPI APIs are not available yet. This is an explicit placeholder with no fake data.',
-    },
     stats: {
       todayVisits: 'Today Visits',
       todayReservations: 'Today Reservations',
       aiConsultations: 'AI Consultations',
       publishCompletion: 'Publish Completion',
+      unavailable: 'N/A',
     },
     quickActions: {
       title: 'Quick Actions',
@@ -248,7 +246,7 @@ export default {
     },
     ai: {
       description:
-        'Used to configure AI switch, prompts, models, knowledge bases, and conversation records for this site.',
+        'Maintain this site’s prompt, knowledge documents, read-only conversations, and a preview chat that is not persisted.',
     },
     files: {
       description: 'Used to manage media assets such as images and PDFs for this site.',
@@ -432,5 +430,68 @@ export default {
     SALON: 'Salon',
     CLINIC: 'Clinic',
     GYOSEISHOSHI: 'Gyoseishoshi Office',
+  },
+  aiWorkspace: {
+    description:
+      'Prompt and knowledge live in Java. Preview chat is not persisted. The model comes from the AI_MODEL runtime environment variable.',
+    loading: 'Loading…',
+    error: 'Failed to load',
+    retry: 'Retry',
+    noPermission: 'This account has no site AI permissions.',
+    tabs: {
+      prompt: 'Prompt',
+      knowledge: 'Knowledge',
+      conversations: 'Conversations',
+      preview: 'Preview chat',
+    },
+    prompt: {
+      systemPrompt: 'System prompt',
+      temperature: 'Temperature',
+      save: 'Save',
+      saving: 'Saving…',
+      saved: 'Prompt saved',
+    },
+    knowledge: {
+      create: 'New document',
+      edit: 'Edit',
+      delete: 'Delete',
+      save: 'Save',
+      cancel: 'Cancel',
+      created: 'Document created',
+      updated: 'Document updated',
+      deleted: 'Document deleted',
+      confirmDelete: 'Delete this knowledge document?',
+      empty: 'No knowledge documents',
+      allStatus: 'All statuses',
+      titlePlaceholder: 'Document title',
+      columns: {
+        title: 'Title',
+        status: 'Status',
+        updatedAt: 'Updated',
+        actions: 'Actions',
+      },
+      status: {
+        ACTIVE: 'Active',
+        DISABLED: 'Disabled',
+      },
+    },
+    conversations: {
+      empty: 'No conversations',
+      untitled: 'Untitled conversation',
+      selectHint: 'Select a conversation to view messages.',
+      view: 'View',
+      columns: {
+        title: 'Title',
+        siteUserId: 'Site user',
+        lastMessageAt: 'Last message',
+        actions: 'Actions',
+      },
+    },
+    preview: {
+      hint: 'Preview uses this site’s prompt and does not write conversations. The browser never sends systemPrompt.',
+      empty: 'Send a message to start the preview.',
+      placeholder: 'Preview message…',
+      send: 'Send',
+    },
   },
 } as const

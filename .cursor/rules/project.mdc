@@ -28,3 +28,9 @@ alwaysApply: true
 
 - 非显然的边界、安全、兼容、特殊业务逻辑写必要注释。
 - 禁止机械逐行注释。
+
+## Source of Truth（摘要）
+
+- 代码 + DB/Flyway > `docs/overview/CURRENT_STATE.md` > contracts > ADR。
+- 历史目录（`implementation-history/`、`docs/archive/` 等）**不**指导新实现。
+- 改功能时若行为变化，同步相关 CURRENT_STATE / 契约 / 运维变量（任务范围内）。

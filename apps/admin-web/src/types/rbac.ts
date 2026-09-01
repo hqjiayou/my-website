@@ -182,4 +182,11 @@ export const PERMISSION_CODES = {
   reservationCreate: 'admin:reservation:create',
   reservationUpdate: 'admin:reservation:update',
   reservationDelete: 'admin:reservation:delete',
+  aiPromptRead: 'admin:ai-prompt:read',
+  aiPromptUpdate: 'admin:ai-prompt:update',
+  aiKbList: 'admin:ai-kb:list',
+  aiKbCreate: 'admin:ai-kb:create',
+  aiKbUpdate: 'admin:ai-kb:update',
+  aiKbDelete: 'admin:ai-kb:delete',
+  aiConversationList: 'admin:ai-conversation:list',
 } as const

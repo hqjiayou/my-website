@@ -1,29 +1,68 @@
 export default {
   contents: {
     title: '页面内容',
-    description: '按站点管理页面区块、文案内容与发布状态。',
-    notConnected: {
-      title: '运营内容中心未接入',
-      description:
-        '跨站内容列表尚无真实 API。请在站点工作台「页面内容」中管理（/apps/sites/:siteId/contents）。',
+    description: '跨站点查看页面区块、文案内容与发布状态。',
+    aggregateNotice: '数据来自各站点 REAL API 聚合；编辑请进入对应站点工作台。',
+    empty: '暂无跨站内容记录',
+    columns: {
+      site: '站点',
+      title: '标题',
+      type: '类型',
+      status: '状态',
+      updatedAt: '更新时间',
+      actions: '操作',
+    },
+    filters: {
+      type: '内容类型',
+      status: '状态',
+      allTypes: '全部类型',
+      allStatuses: '全部状态',
+      search: '筛选',
+      reset: '重置',
+    },
+    actions: {
+      manage: '进入站点管理',
     },
   },
   reservations: {
     title: '预约管理',
-    description: '查看并跟进多站点预约记录与处理状态。',
-    notConnected: {
-      title: '运营预约中心未接入',
-      description:
-        '跨站预约列表尚无真实 API。请在站点工作台「预约咨询」中管理（/apps/sites/:siteId/reservations）。',
+    description: '跨站点查看预约记录与处理状态。',
+    aggregateNotice: '数据来自各站点 REAL API 聚合；处理请进入对应站点工作台。',
+    empty: '暂无跨站预约记录',
+    columns: {
+      site: '站点',
+      customer: '客户',
+      serviceType: '服务类型',
+      reservedAt: '预约时间',
+      status: '状态',
+      actions: '操作',
+    },
+    filters: {
+      status: '状态',
+      allStatuses: '全部状态',
+      search: '筛选',
+      reset: '重置',
+    },
+    actions: {
+      manage: '进入站点管理',
     },
   },
   files: {
     title: '文件管理',
-    description: '统一管理站点素材、上传状态与使用情况。',
-    notConnected: {
-      title: '运营文件中心未接入',
-      description:
-        '全局文件列表尚无真实 API。请在站点工作台「文件资源」中管理站点媒体（/apps/sites/:siteId/files）。',
+    description: '跨站点查看媒体素材与上传状态。',
+    aggregateNotice: '数据来自各站点 REAL API 聚合；上传与管理请进入对应站点工作台。',
+    empty: '暂无跨站媒体文件',
+    columns: {
+      site: '站点',
+      filename: '文件名',
+      contentType: '类型',
+      fileSize: '大小',
+      status: '状态',
+      createdAt: '上传时间',
+      actions: '操作',
+    },
+    actions: {
+      manage: '进入站点管理',
     },
   },
 } as const

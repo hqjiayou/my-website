@@ -203,16 +203,14 @@ export default {
   overview: {
     title: '站点概览',
     description: '查看当前站点的配置状态、运营数据与发布检查项。',
+    derivedNotice: '发布检查与今日预约来自 REAL API 推导；访问量 / AI 咨询暂无后端，显示为「未接入」。',
     loadingRuntime: '正在加载站点运营状态...',
-    notConnected: {
-      title: '运营指标未接入',
-      description: 'runtime-status / KPI 尚未提供真实 API。当前为显式占位，不会展示假数据。',
-    },
     stats: {
       todayVisits: '今日访问',
       todayReservations: '今日预约',
       aiConsultations: 'AI 咨询',
       publishCompletion: '发布完成度',
+      unavailable: '未接入',
     },
     quickActions: {
       title: '快捷操作',
@@ -245,7 +243,7 @@ export default {
       description: '用于查看当前站点收到的预约、咨询、客户联系方式与处理状态。',
     },
     ai: {
-      description: '用于配置当前站点的 AI 开关、Prompt、模型、知识库与对话记录。',
+      description: '维护当前站点的 Prompt、知识库、只读会话，以及不落库的预览对话。',
     },
     files: {
       description: '用于管理当前站点的图片与 PDF 等媒体资源。',
@@ -429,5 +427,67 @@ export default {
     SALON: '美容院',
     CLINIC: '诊所',
     GYOSEISHOSHI: '行政书士事务所',
+  },
+  aiWorkspace: {
+    description: 'Prompt 与知识库由 Java 保存；预览对话不落库。模型由运行时环境变量 AI_MODEL 决定。',
+    loading: '加载中…',
+    error: '加载失败',
+    retry: '重试',
+    noPermission: '当前账号没有站点 AI 权限。',
+    tabs: {
+      prompt: 'Prompt',
+      knowledge: '知识库',
+      conversations: '会话',
+      preview: '预览对话',
+    },
+    prompt: {
+      systemPrompt: '系统 Prompt',
+      temperature: '温度',
+      save: '保存',
+      saving: '保存中…',
+      saved: 'Prompt 已保存',
+    },
+    knowledge: {
+      create: '新建文档',
+      edit: '编辑',
+      delete: '删除',
+      save: '保存',
+      cancel: '取消',
+      created: '文档已创建',
+      updated: '文档已更新',
+      deleted: '文档已删除',
+      confirmDelete: '确定删除该知识库文档？',
+      empty: '暂无知识库文档',
+      allStatus: '全部状态',
+      titlePlaceholder: '文档标题',
+      columns: {
+        title: '标题',
+        status: '状态',
+        updatedAt: '更新时间',
+        actions: '操作',
+      },
+      status: {
+        ACTIVE: '启用',
+        DISABLED: '停用',
+      },
+    },
+    conversations: {
+      empty: '暂无会话',
+      untitled: '未命名会话',
+      selectHint: '选择一条会话以查看消息。',
+      view: '查看',
+      columns: {
+        title: '标题',
+        siteUserId: '站点用户',
+        lastMessageAt: '最后消息',
+        actions: '操作',
+      },
+    },
+    preview: {
+      hint: '预览使用当前站点 Prompt，不写入会话表。前端不会直传 systemPrompt。',
+      empty: '输入一条消息开始预览。',
+      placeholder: '输入预览消息…',
+      send: '发送',
+    },
   },
 } as const

@@ -1,0 +1,51 @@
+---
+description: agent-services Python AI Execution 硬约束（ADR-0004/0005）
+globs: services/agent-services/**/*
+alwaysApply: false
+---
+
+# agent-services（Python AI Execution）
+
+权威：[`ADR-0004`](../../docs/decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](../../docs/decisions/ADR-0005-java-business-truth-python-ai-execution.md)；设计文档 [`Agent服务技术选型与架构设计V1.md`](../../docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)。
+
+## 边界
+
+- **只做 AI Execution**：模型调用、agent loop、tool 调度、RAG、telemetry。
+- **跨 business request stateless**；禁止直连业务 PostgreSQL。
+- Tools / MCP 回调 Java internal；`siteId` 等 trusted context 由 Java 传入并在 retrieval 层强制过滤。
+- `promptProfile.systemPrompt` 为 Java → Python trusted field；**不接受**前端直传。
+- 无 Provider → BLOCKED（503）；与 `AGENT_INTERNAL_SERVICE_TOKEN` 缺失（启动 fail-fast）严格区分。
+
+## 技术栈
+
+- FastAPI + **Pydantic AI**（`pydantic-ai-slim[mcp]`）；**禁止** LangChain / LiteLLM。
+- 包根 `agent_services/`；internal 入口 `api/internal.py`。
+
+## 目录职责
+
+| 路径 | 职责 |
+|------|------|
+| `agent/runtime.py` `stream_runtime.py` | 同步 / SSE agent loop |
+| `agent/prompt_builder.py` | system prompt 组装（含 skills / todos 注入） |
+| `agent/toolset_factory.py` | business + todo + MCP 工具合并 |
+| `agent/business_tools.py` `tools/business_api.py` | 回调 Java site-app internal |
+| `agent/skills.py` + `skills/*/SKILL.md` | 配置驱动 skill 指令 |
+| `agent/todo_tools.py` `schemas/todo.py` | 单次 run 内 todo 编排 |
+| `agent/mcp_tools.py` | `MCP_SERVERS_JSON` 解析与注册 |
+| `retrieval/` | 派生向量索引（**非**业务 SoT） |
+
+## 契约
+
+- 以 Java `HttpAgentClient` / `AgentChatRequest` 为准；错误体顶层扁平 `errorCode` / `providerStatus`。
+- SSE：`AgentStreamEvent`；`TEXT_DELTA` 同时含 `text` 与 `delta`；`DONE` 可带 `todos` 快照。
+
+## 验收
+
+- 默认：`uv sync --extra dev && uv run python -m pytest -q`
+- Java 契约：`HttpAgentClientPythonContractIT`（变更 internal 契约时须跑）
+
+## 禁止
+
+- 在 Python 持久化 conversation / prompt / KB 主数据 / 业务实体。
+- 为无 Provider 或 blocked 状态伪造 LIVE 成功响应。
+- 引入 LangChain 或平行 HTTP/Agent 框架。

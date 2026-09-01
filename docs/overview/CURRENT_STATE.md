@@ -17,7 +17,7 @@ supersedes:
 
 ## 一句话
 
-多站点平台：`gateway` 统一入口；`auth` 签发 RS256 JWT；`admin` Resource Server + 后台业务；`admin-web` 主纵向域已 FORCE REAL；`site-web` / AI LIVE / Browser E2E 未达产品完成；Auth XFF 已做 gateway `trusted-proxies` 缓解，**仍缺集成断言**（PARTIALLY_RESOLVED）。
+多站点平台：`gateway` 统一入口；`auth` 签发 RS256 JWT；`admin` Resource Server + 后台业务；`admin-web` 主纵向域与站点 AI 管理已 FORCE REAL；`site-web` / AI LIVE（无 `AI_MODEL`）/ Browser E2E 未达产品完成；Auth XFF 已做 gateway `trusted-proxies` 缓解，**仍缺集成断言**（PARTIALLY_RESOLVED）。
 
 ---
 
@@ -25,10 +25,10 @@ supersedes:
 
 | 域 | 状态 | 说明 |
 |----|------|------|
-| **Admin Web** | PARTIAL（主域 COMPLETE_V1；AI/runtime mock；占位页） | 见 [`../admin-web/CURRENT_STATE.md`](../admin-web/CURRENT_STATE.md) |
+| **Admin Web** | PARTIAL（主域 + 站点 AI 管理 FORCE REAL；runtime-status mock；占位页） | 见 [`../admin-web/CURRENT_STATE.md`](../admin-web/CURRENT_STATE.md) |
 | **Site Web** | PROTOTYPE_MOCK / NOT_IMPLEMENTED（auth） | car-web / cake-web 骨架；未接 Site Auth |
 | **Backend (website-services)** | PARTIAL（主业务 COMPLETE_V1；安全门 PARTIALLY_RESOLVED） | 见 [`../website-services/CURRENT_STATE.md`](../website-services/CURRENT_STATE.md) |
-| **Database** | COMPLETE_V1（Flyway V1–V15 已用） | 以 `infra/.../db/migration` 为准 |
+| **Database** | COMPLETE_V1（Flyway 以 `infra/.../db/migration` 为准，当前至 V19） | 以代码为准 |
 | **Auth Admin** | PARTIAL | 登录/刷新/登出/注册门控 REAL；XFF：gateway trusted-proxies 已配置，缺集成测试 |
 | **Auth Site** | BACKEND_COMPLETE | login/refresh/logout/me + aud 隔离；**frontend NOT_IMPLEMENTED** |
 | **RBAC** | COMPLETE_V1 | roles/permissions/me/menus 读；Method Security |
@@ -39,8 +39,8 @@ supersedes:
 | **Media** | COMPLETE_V1 | 服务端 object key；MIME；站点归属 |
 | **Content** | COMPLETE_V1 | CMS CRUD/status |
 | **Reservation** | COMPLETE_V1_ADMIN_SCOPE | 状态：`NEW` / `CONFIRMED` / `DONE` / `CANCELLED`（**不是** COMPLETED）；无公开预约/冲突引擎 |
-| **AI** | EXTERNAL_BLOCKED + frontend mock | Java→agent 诚实失败；admin AI 页仍 mock |
-| **Mock 策略** | Core FORCE REAL；AI/runtime 可 mock | 见 [`../rules/MOCK_POLICY.md`](../rules/MOCK_POLICY.md) |
+| **AI** | PARTIAL_ADMIN_SCOPE；LIVE 仍 EXTERNAL_BLOCKED（无 Provider） | admin Prompt/KB/会话/预览 FORCE REAL；site-web 聊天 NOT_IMPLEMENTED；无 `AI_MODEL` 诚实 503 |
+| **Mock 策略** | Core + 站点 AI 管理 FORCE REAL；runtime-status 可 mock | 见 [`../rules/MOCK_POLICY.md`](../rules/MOCK_POLICY.md) |
 | **Testing** | Vertical/Contract 有；Browser E2E = **NOT_IMPLEMENTED** | 禁止称 MockMvc/build 为 Browser E2E |
 | **External** | PostgreSQL / Redis /（可选 MinIO）/ AI Provider | AI Provider 缺失 → 诚实 503 |
 
@@ -56,7 +56,7 @@ supersedes:
 | Browser E2E golden paths | **NOT_IMPLEMENTED** | [#2](https://github.com/hqjiayou/my-website/issues/2) |
 | site-web authentication integration | FE **NOT_IMPLEMENTED**（BE BACKEND_COMPLETE） | [#3](https://github.com/hqjiayou/my-website/issues/3) |
 | Soft-delete `deleted_at` consistency | **STILL_OPEN**（LOW；非 DB CHECK 不变量） | [#4](https://github.com/hqjiayou/my-website/issues/4) |
-| AI LIVE | **EXTERNAL_BLOCKED** + admin-web mock | [#5](https://github.com/hqjiayou/my-website/issues/5) |
+| AI LIVE | **EXTERNAL_BLOCKED**（无 `AI_MODEL`）；admin 管理页已 REAL | [#5](https://github.com/hqjiayou/my-website/issues/5) |
 | Site runtime-status REAL | **DEFERRED**（REAL 下 null / 占位；产品确认后再开 Issue） | — |
 | Admin user mutation error feedback | **RESOLVED（文档漂移）** — 全局 `mutations.onError`→`handleApiError` | — |
 | Orphan mocks / dead userApi | **RESOLVED in worktree**（待与 FORCE REAL WIP 同交；非 Tracker） | — |

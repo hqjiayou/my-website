@@ -1,0 +1,43 @@
+---
+description: AI 域跨模块边界（Java 业务真相 + agent 客户端 + admin-web AI 页）
+globs: services/website-services/**/*Ai*.java,apps/admin-web/src/pages/ai/**,apps/admin-web/src/pages/apps/sites/siteAi*
+alwaysApply: false
+---
+
+# AI 域（跨模块）
+
+遵守 [`ADR-0004`](../../docs/decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](../../docs/decisions/ADR-0005-java-business-truth-python-ai-execution.md)。
+
+## 模块归属
+
+| 模块 | 职责 |
+|------|------|
+| **admin** | Prompt / KB / Conversation **主数据**；Admin 预览 SSE；RBAC（Flyway 权限） |
+| **site-app** | 站点侧 chat/stream；internal tools 供 Python 回调 |
+| **agent** | `HttpAgentClient`、DTO 契约；**不做**业务编排或持久化 |
+| **agent-services** | Python execution only（见 `agent-services.mdc`） |
+| **admin-web** | AI 管理 UI；`aiApi` **FORCE REAL**（见 `MOCK_POLICY`） |
+
+## Java → Python 请求
+
+- Java 加载 history、prompt profile、trusted `siteId` 后组装 `AgentChatRequest`。
+- 可选：`skills[]`、`todos[]`（Phase 5）；无 Java 持久化表时靠请求体往返。
+- Python 响应 / SSE 中的 `todos` 由 Java 决定是否带入下轮。
+
+## 前端
+
+- 站点 AI 工作台：`pages/apps/sites/siteAi*.tsx`；全局 AI 页：`pages/ai/**`。
+- 预览 SSE 走 assistant-ui 自定义 transport；不得用 mock 冒充 LIVE。
+- 不在页面散落对 Python internal 的直接调用（须经 gateway → Java）。
+
+## 改 AI 功能前必读
+
+1. `docs/contracts/ADMIN_API_CONTRACT.md`（AI 段）
+2. `docs/website-services/CURRENT_STATE.md`
+3. 设计文档 AI 章 §12–§18（Phase 记录）
+
+## 禁止
+
+- 在 agent 模块写 Prompt/Conversation CRUD 或 Flyway。
+- 在 Python 或 admin-web mock 中伪造 Provider LIVE。
+- 前端直传 `systemPrompt` 给 Python。

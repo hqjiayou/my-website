@@ -27,6 +27,10 @@ export function SiteWorkspaceLayout() {
   const canListContent = useHasPermission(PERMISSION_CODES.contentList)
   const canListReservation = useHasPermission(PERMISSION_CODES.reservationList)
   const canListMedia = useHasPermission(PERMISSION_CODES.mediaList)
+  const canAi =
+    useHasPermission(PERMISSION_CODES.aiPromptRead) ||
+    useHasPermission(PERMISSION_CODES.aiKbList) ||
+    useHasPermission(PERMISSION_CODES.aiConversationList)
 
   const { data: site, isPending, isError, error } = useQuery({
     queryKey: ['sites', parsedId],
@@ -44,11 +48,10 @@ export function SiteWorkspaceLayout() {
     ]
     if (canListContent) items.push({ key: 'contents', path: ROUTES.apps.siteContents(site.id) })
     if (canListReservation) items.push({ key: 'reservations', path: ROUTES.apps.siteReservations(site.id) })
-    // AI 工作区子页仍为占位 / mock，不按真实 ACTION 隐藏
-    items.push({ key: 'ai', path: ROUTES.apps.siteAi(site.id) })
+    if (canAi) items.push({ key: 'ai', path: ROUTES.apps.siteAi(site.id) })
     if (canListMedia) items.push({ key: 'files', path: ROUTES.apps.siteFiles(site.id) })
     return items
-  }, [canListContent, canListMedia, canListReservation, site])
+  }, [canAi, canListContent, canListMedia, canListReservation, site])
 
   if (!Number.isFinite(parsedId)) {
     return (

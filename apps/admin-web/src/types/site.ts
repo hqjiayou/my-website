@@ -97,8 +97,8 @@ export interface UpdateSiteStatusInput {
 }
 
 /**
- * runtime-status 尚未接入真实后端；仅 mock 分支返回数据。
- * 放在 types 仅供类型共享，不代表已有 REAL API。
+ * runtime-status 由现有 REAL API 推导；独立端点尚未提供。
+ * 放在 types 仅供类型共享。
  */
 export interface SitePublishChecklist {
   basicInfo: boolean
@@ -110,8 +110,10 @@ export interface SitePublishChecklist {
 
 export interface SiteRuntimeStatus {
   siteId: number
-  visitCountToday: number
-  reservationCountToday: number
-  aiConversationCountToday: number
+  /** 暂无 analytics 后端时为 null，UI 应展示「未接入」而非 0。 */
+  visitCountToday: number | null
+  reservationCountToday: number | null
+  /** 暂无 AI 统计后端时为 null。 */
+  aiConversationCountToday: number | null
   publishChecklist: SitePublishChecklist
 }

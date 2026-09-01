@@ -83,7 +83,14 @@ VALUES
     (51, 'admin:reservation:list', 'List site reservations', 'ACTION', 'reservation:list', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (52, 'admin:reservation:create', 'Create site reservation', 'ACTION', 'reservation:create', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (53, 'admin:reservation:update', 'Update site reservation status', 'ACTION', 'reservation:update', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (54, 'admin:reservation:delete', 'Delete site reservation', 'ACTION', 'reservation:delete', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
+    (54, 'admin:reservation:delete', 'Delete site reservation', 'ACTION', 'reservation:delete', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (55, 'admin:ai-prompt:read', 'Read site AI prompt profile', 'ACTION', 'ai-prompt:read', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (56, 'admin:ai-prompt:update', 'Update site AI prompt profile', 'ACTION', 'ai-prompt:update', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (57, 'admin:ai-kb:list', 'List AI knowledge documents', 'ACTION', 'ai-kb:list', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (58, 'admin:ai-kb:create', 'Create AI knowledge document', 'ACTION', 'ai-kb:create', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (59, 'admin:ai-kb:update', 'Update AI knowledge document', 'ACTION', 'ai-kb:update', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (60, 'admin:ai-kb:delete', 'Delete AI knowledge document', 'ACTION', 'ai-kb:delete', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (61, 'admin:ai-conversation:list', 'List site AI conversations', 'ACTION', 'ai-conversation:list', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
 INSERT INTO site_template (
     id, code, name, site_type, status, description, default_primary_color, sort_order,
@@ -170,6 +177,13 @@ VALUES
     (4, 52, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 53, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 54, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (4, 55, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (4, 56, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (4, 57, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (4, 58, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (4, 59, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (4, 60, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (4, 61, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (1, 1, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (1, 2, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (1, 9, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
@@ -178,7 +192,7 @@ VALUES
 
 ALTER TABLE admin_user ALTER COLUMN id RESTART WITH 501;
 ALTER TABLE admin_role ALTER COLUMN id RESTART WITH 5;
-ALTER TABLE admin_permission ALTER COLUMN id RESTART WITH 55;
+ALTER TABLE admin_permission ALTER COLUMN id RESTART WITH 62;
 ALTER TABLE site ALTER COLUMN id RESTART WITH 1;
 ALTER TABLE site_template ALTER COLUMN id RESTART WITH 7;
 ALTER TABLE media_file ALTER COLUMN id RESTART WITH 1;

@@ -26,6 +26,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.mywebsite</groupId>
+            <artifactId>agent</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>

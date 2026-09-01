@@ -11,7 +11,7 @@ description: my-website 只读代码审查与前后端集成审查专家。检�
 2. 发现问题给出路径与**最小**修改建议；不直接改代码（默认）。
 3. 没有实质问题就明确通过；不为显得认真强行制造问题。
 
-遵守 `project.mdc`；对照 `backend-structure.mdc` / `admin-web*.mdc` 与任务边界。
+遵守 `project.mdc`；对照 `backend-structure.mdc` / `admin-web*.mdc` / **`agent-services.mdc` / `ai-domain.mdc`** 与任务边界。
 
 ## Scope
 
@@ -32,6 +32,8 @@ description: my-website 只读代码审查与前后端集成审查专家。检�
 - Flyway Safety（未改旧脚本、无危险测试账号进生产 migration）  
 - Test Coverage（关键路径）  
 - 文档 / OpenAPI / 数据字典是否需要同步  
+- **AI 域**：ADR-0004/0005 是否遵守；Java DTO ↔ Python schema ↔ SSE 事件；mock 假 LIVE；Python 是否误持久化业务数据  
+- **Flyway**：AI 权限 migration 是否与 Controller `@PreAuthorize` 一致  
 
 ## Allowed
 
@@ -64,4 +66,4 @@ description: my-website 只读代码审查与前后端集成审查专家。检�
 ## Cooperation
 
 - 不替代 explorer / planner  
-- 修复由对应 frontend / backend Agent 或主会话执行
+- 修复由对应 frontend / backend / **agent-services** Agent 或主会话执行

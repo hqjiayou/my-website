@@ -1,7 +1,7 @@
 /**
  * 功能注解：统一导出分组后的 API 模块，供页面层集中引入。
  */
-export { aiApi } from './ai/aiApi'
+export { aiApi, previewChatStreamUrl, streamPreviewChat } from './apps/aiApi'
 export { authApi } from './authApi'
 export { rbacApi } from './rbacApi'
 export {

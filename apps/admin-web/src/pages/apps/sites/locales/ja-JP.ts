@@ -203,16 +203,14 @@ export default {
   overview: {
     title: 'サイト概要',
     description: '現在のサイトの設定状態、運用データ、公開チェック項目を確認します。',
+    derivedNotice: '公開チェックと本日の予約は REAL API から導出しています。アクセス数 / AI 相談はバックエンド未提供のため「未接続」と表示します。',
     loadingRuntime: 'サイト運用ステータスを読み込み中...',
-    notConnected: {
-      title: '運用指標は未接続',
-      description: 'runtime-status / KPI の REAL API はまだありません。偽データは表示せず、明示的なプレースホルダーのみ示します。',
-    },
     stats: {
       todayVisits: '本日のアクセス',
       todayReservations: '本日の予約',
       aiConsultations: 'AI相談',
       publishCompletion: '公開準備率',
+      unavailable: '未接続',
     },
     quickActions: {
       title: 'クイック操作',
@@ -247,7 +245,7 @@ export default {
     },
     ai: {
       description:
-        '現在のサイトの AI 有効化、Prompt、モデル、ナレッジベース、会話履歴を設定するためのページです。',
+        'このサイトの Prompt、ナレッジ、読み取り専用の会話、および保存されないプレビューチャットを管理します。',
     },
     files: {
       description: '現在のサイトの画像・PDF などのメディアを管理するためのページです。',
@@ -431,5 +429,68 @@ export default {
     SALON: '美容サロン',
     CLINIC: 'クリニック',
     GYOSEISHOSHI: '行政書士事務所',
+  },
+  aiWorkspace: {
+    description:
+      'Prompt とナレッジは Java に保存されます。プレビュー会話は永続化しません。モデルは実行時の環境変数 AI_MODEL で決まります。',
+    loading: '読み込み中…',
+    error: '読み込みに失敗しました',
+    retry: '再試行',
+    noPermission: 'このアカウントにはサイト AI 権限がありません。',
+    tabs: {
+      prompt: 'Prompt',
+      knowledge: 'ナレッジ',
+      conversations: '会話',
+      preview: 'プレビュー',
+    },
+    prompt: {
+      systemPrompt: 'システム Prompt',
+      temperature: '温度',
+      save: '保存',
+      saving: '保存中…',
+      saved: 'Prompt を保存しました',
+    },
+    knowledge: {
+      create: '新規ドキュメント',
+      edit: '編集',
+      delete: '削除',
+      save: '保存',
+      cancel: 'キャンセル',
+      created: 'ドキュメントを作成しました',
+      updated: 'ドキュメントを更新しました',
+      deleted: 'ドキュメントを削除しました',
+      confirmDelete: 'このナレッジドキュメントを削除しますか？',
+      empty: 'ナレッジドキュメントがありません',
+      allStatus: 'すべての状態',
+      titlePlaceholder: 'ドキュメントタイトル',
+      columns: {
+        title: 'タイトル',
+        status: '状態',
+        updatedAt: '更新日時',
+        actions: '操作',
+      },
+      status: {
+        ACTIVE: '有効',
+        DISABLED: '無効',
+      },
+    },
+    conversations: {
+      empty: '会話がありません',
+      untitled: '無題の会話',
+      selectHint: '会話を選ぶとメッセージを表示します。',
+      view: '表示',
+      columns: {
+        title: 'タイトル',
+        siteUserId: 'サイトユーザー',
+        lastMessageAt: '最終メッセージ',
+        actions: '操作',
+      },
+    },
+    preview: {
+      hint: 'プレビューはこのサイトの Prompt を使い、会話テーブルには書き込みません。ブラウザから systemPrompt は送りません。',
+      empty: 'メッセージを入力してプレビューを開始します。',
+      placeholder: 'プレビューメッセージ…',
+      send: '送信',
+    },
   },
 } as const

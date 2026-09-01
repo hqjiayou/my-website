@@ -1,23 +1,29 @@
 export default {
-  mockNotice: 'ACTIVE MOCK data only (no real AI backend). With mock off, requests fail instead of faking success.',
   loading: 'Loading…',
   empty: 'No data',
   error: 'Failed to load',
   retry: 'Retry',
+  noSites: 'No sites yet. Create a site first.',
+  siteLabel: 'Site',
   settings: {
-    title: 'AI Settings',
-    description: 'Manage AI model, parameters, and enable state for each site.',
+    title: 'AI Runtime Settings',
+    description: 'Explains how the deployed runtime picks a model. There is no Java AI Config table to edit.',
+    body: 'The model is selected by the agent-services process environment variable AI_MODEL (Pydantic AI spec, no default).',
+    envHint:
+      'Per-site prompt and temperature live under Prompt settings. Java injects them when calling Python; the browser cannot send systemPrompt directly.',
+    blockedHint:
+      'Without AI_MODEL, preview and site chat fail honestly (503 / BLOCKED) instead of faking success.',
   },
   prompts: {
-    title: 'Prompt Testing',
-    description: 'Maintain prompt templates and validate output quality.',
+    title: 'Prompt Settings',
+    description: 'Maintain per-site system prompt and temperature. Java injects them into the Python runtime.',
   },
   knowledgeBases: {
     title: 'Knowledge Bases',
-    description: 'Manage knowledge entries, indexing progress, and quality.',
+    description: 'Maintain per-site knowledge documents (Java is source of truth; the index is a Python derived store).',
   },
   conversations: {
     title: 'Conversations',
-    description: 'Review site-level AI conversations and handling status.',
+    description: 'Read-only site user conversations and messages (conversation truth lives in Java).',
   },
 } as const

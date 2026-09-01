@@ -15,6 +15,7 @@ Router 目录细则见 `admin-web-router.mdc`；全局样式分层见 `admin-web
 - 禁止因页面“有数据”就假设后端已实现。
 - mock → real 对接前先确认真实后端 DTO / API contract。
 - 不在业务页面重造第二套 HTTP Client。
+- AI 域（`aiApi`、站点 AI 工作台）：**FORCE REAL**；见 `docs/rules/MOCK_POLICY.md` 与 `ai-domain.mdc`。
 
 ## Mock
 

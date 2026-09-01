@@ -12,7 +12,7 @@ admin-web 曾用统一 `USE_MOCK` 门控业务 API，导致「页面有数据」
 
 ## Decision
 
-Site / Template / Appearance / Media / Content / Reservation（及 auth/rbac）客户端 **强制 REAL**，不受 `USE_MOCK` 切换。Mock 仅保留 AI 与明确未实现能力（如 runtime-status）。
+Site / Template / Appearance / Media / Content / Reservation（及 auth/rbac）以及站点 AI（Prompt / KB / Conversation / Preview）客户端 **强制 REAL**，不受 `USE_MOCK` 切换。Mock 仅保留明确未实现能力（如 runtime-status）。
 
 ## Consequences
 

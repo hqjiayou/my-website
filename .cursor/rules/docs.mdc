@@ -1,0 +1,25 @@
+---
+description: 文档修改与 Source of Truth 同步（不全文照搬历史）
+globs: docs/**/*
+alwaysApply: false
+---
+
+# 文档（docs/）
+
+## 权威顺序
+
+代码 + Flyway > `docs/overview/CURRENT_STATE.md` > `docs/contracts/` > `docs/decisions/`（ADR）> 域 `CURRENT_STATE`。
+
+## 修改功能时（任务范围内）
+
+- 行为 / API / 环境变量变化 → 同步相关 CURRENT_STATE、契约、`ENVIRONMENT_VARIABLES.md`。
+- AI 域 → 设计文档 AI 章 Phase 记录、ADR-0004/0005（若边界变化）。
+
+## 不得作为当前实现依据
+
+`docs/implementation-history/`、`docs/audit/archive/`、`docs/analysis/archive/`、`docs/archive/`。
+
+## 写法
+
+- 写**当前事实**与**明确未做**；避免把 WIP 写成已完成。
+- 与代码冲突时以代码为准，并在文档中标明漂移或更新文档。

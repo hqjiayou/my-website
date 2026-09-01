@@ -1,0 +1,95 @@
+"""Phase 4 业务工具：Function Tools → Java internal API（httpx MockTransport，不出网）。"""
+
+import json
+
+import httpx
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+from agent_services.agent.business_tools import build_business_toolset
+from agent_services.agent.runtime import ChatReply, run_chat
+from agent_services.tools.business_api import BusinessApiClient, BusinessApiError
+from conftest import make_settings
+
+
+def test_toolset_absent_without_base_url() -> None:
+    assert build_business_toolset(make_settings(), "1") is None
+
+
+def _api_response(data: object) -> httpx.Response:
+    return httpx.Response(200, json={"code": 0, "message": "success", "data": data})
+
+
+def _client_with(handler) -> BusinessApiClient:
+    return BusinessApiClient(
+        "http://java-internal", "test-internal-token", transport=httpx.MockTransport(handler)
+    )
+
+
+async def test_client_sends_token_and_site_scoped_path() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return _api_response({"id": 7, "siteName": "Cake Shop", "siteType": "cake"})
+
+    data = await _client_with(handler).get_site_summary("7")
+    assert data["siteName"] == "Cake Shop"
+    request = captured[0]
+    assert request.url.path == "/internal/site/v1/sites/7"
+    assert request.headers["X-Internal-Service-Token"] == "test-internal-token"
+
+
+async def test_client_raises_on_business_error_body() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"code": 1004, "message": "not found", "data": None})
+
+    try:
+        await _client_with(handler).get_site_summary("404")
+        raise AssertionError("expected BusinessApiError")
+    except BusinessApiError as exc:
+        assert "not found" in str(exc)
+
+
+async def test_create_reservation_tool_calls_java_internal_api() -> None:
+    """FunctionModel 先发 tool call，再产出最终回复；断言 Java internal API 真实被调、site_id 由闭包注入。"""
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return _api_response(
+            {"id": 55, "customerName": "Tanaka", "serviceType": "cut", "status": "NEW"}
+        )
+
+    client = _client_with(handler)
+    toolset = build_business_toolset(make_settings(), "42", client=client)
+    assert toolset is not None
+
+    def model_fn(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        has_tool_result = any("reservation" in repr(m) and "55" in repr(m) for m in messages)
+        if not has_tool_result:
+            return ModelResponse(parts=[
+                ToolCallPart(
+                    tool_name="create_reservation",
+                    args={
+                        "customer_name": "Tanaka",
+                        "phone": "090-0000-0000",
+                        "service_type": "cut",
+                        "reserved_at": "2026-09-02T10:00:00+09:00",
+                    },
+                )
+            ])
+        return ModelResponse(parts=[TextPart("Reservation #55 confirmed.")])
+
+    outcome = await run_chat(
+        FunctionModel(model_fn), site_id="42", message="book me a cut tomorrow 10am", toolsets=[toolset]
+    )
+    assert isinstance(outcome, ChatReply)
+    assert "55" in outcome.reply
+
+    request = captured[0]
+    # site_id 来自请求上下文闭包（trusted），模型参数里没有 site_id
+    assert request.url.path == "/internal/site/v1/sites/42/reservations"
+    payload = json.loads(request.content)
+    assert payload["customerName"] == "Tanaka"
+    assert payload["reservedAt"] == "2026-09-02T10:00:00+09:00"

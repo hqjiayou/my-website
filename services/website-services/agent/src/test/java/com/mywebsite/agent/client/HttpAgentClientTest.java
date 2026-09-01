@@ -19,7 +19,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.RestClient;
 
 class HttpAgentClientTest {
@@ -68,7 +70,12 @@ class HttpAgentClientTest {
 
         RestClient restClient = RestClient.builder()
                 .baseUrl(properties.getBaseUrl())
-                .requestFactory(new JdkClientHttpRequestFactory())
+                .requestFactory(new BufferingClientHttpRequestFactory(new SimpleClientHttpRequestFactory()))
+                .messageConverters(converters -> {
+                    ObjectMapper mapper = new ObjectMapper();
+                    converters.removeIf(MappingJackson2HttpMessageConverter.class::isInstance);
+                    converters.add(new MappingJackson2HttpMessageConverter(mapper));
+                })
                 .build();
         client = new HttpAgentClient(properties, new ObjectMapper(), restClient);
     }
@@ -113,7 +120,12 @@ class HttpAgentClientTest {
         properties.setInternalServiceToken("wrong");
         RestClient restClient = RestClient.builder()
                 .baseUrl(properties.getBaseUrl())
-                .requestFactory(new JdkClientHttpRequestFactory())
+                .requestFactory(new BufferingClientHttpRequestFactory(new SimpleClientHttpRequestFactory()))
+                .messageConverters(converters -> {
+                    ObjectMapper mapper = new ObjectMapper();
+                    converters.removeIf(MappingJackson2HttpMessageConverter.class::isInstance);
+                    converters.add(new MappingJackson2HttpMessageConverter(mapper));
+                })
                 .build();
         HttpAgentClient wrongTokenClient = new HttpAgentClient(properties, new ObjectMapper(), restClient);
 
@@ -134,6 +146,50 @@ class HttpAgentClientTest {
         AgentChatResponse response = client.chat(new AgentChatRequest("10", "hello"));
         assertThat(response.reply()).isEqualTo("hi");
         assertThat(response.providerStatus()).isEqualTo("LIVE");
+    }
+
+    @Test
+    void chatStreamForwardsSseEvents() throws IOException {
+        server.createContext("/internal/v1/chat/stream", exchange -> {
+            String token = exchange.getRequestHeaders().getFirst("X-Internal-Service-Token");
+            if (!"secret-token".equals(token)) {
+                write(exchange, 401, "{\"ok\":false,\"errorCode\":\"UNAUTHORIZED\"}");
+                return;
+            }
+            byte[] body = ("event: START\ndata: {\"siteId\":\"10\"}\n\n"
+                            + "event: TEXT_DELTA\ndata: {\"text\":\"he\"}\n\n"
+                            + "event: TEXT_DELTA\ndata: {\"text\":\"llo\"}\n\n"
+                            + "event: DONE\ndata: {\"reply\":\"hello\",\"providerStatus\":\"LIVE\"}\n\n")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(body);
+            }
+        });
+
+        java.util.List<String> events = new java.util.ArrayList<>();
+        client.chatStream(new AgentChatRequest("10", "hello"), (event, data) -> events.add(event + "|" + data));
+
+        assertThat(events)
+                .containsExactly(
+                        "START|{\"siteId\":\"10\"}",
+                        "TEXT_DELTA|{\"text\":\"he\"}",
+                        "TEXT_DELTA|{\"text\":\"llo\"}",
+                        "DONE|{\"reply\":\"hello\",\"providerStatus\":\"LIVE\"}");
+    }
+
+    @Test
+    void chatStreamMapsBlockedErrorBody() throws IOException {
+        server.createContext("/internal/v1/chat/stream", exchange -> write(
+                exchange,
+                503,
+                "{\"ok\":false,\"errorCode\":\"EXTERNAL_DEPENDENCY_BLOCKED\",\"providerStatus\":\"BLOCKED\",\"message\":\"no key\"}"));
+
+        assertThatThrownBy(() -> client.chatStream(new AgentChatRequest("10", "hello"), (event, data) -> {}))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());
     }
 
     private static void write(com.sun.net.httpserver.HttpExchange exchange, int status, String body)

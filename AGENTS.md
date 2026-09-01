@@ -1,6 +1,6 @@
 # Agent 指引（my-website）
 
-多站点平台 Monorepo。当前主要活跃面：`apps/admin-web`（管理后台）与 `services/website-services`（Java 后端：gateway / auth / admin / site / common / infra）。`site-web` 与 `agent-services` 仍为骨架或 mock，非默认主战场。
+多站点平台 Monorepo。当前主要活跃面：`apps/admin-web`（管理后台）与 `services/website-services`（Java 后端：gateway / auth / admin / site / common / infra / agent）。`services/agent-services` 为 **Python AI Execution Runtime**（internal only，经 Java `HttpAgentClient` 调用）；`site-web` 仍为骨架。
 
 ## Source of Truth 顺序
 
@@ -38,7 +38,10 @@
 |------|------|
 | gateway | 路由 / CORS / RequestId；不做业务与鉴权业务 |
 | auth | 登录 / 刷新 / JWT 签发 / JWKS |
-| admin | 后台 API、RBAC、Resource Server 验签 |
+| admin | 后台 API、RBAC、Resource Server 验签；**AI 业务主数据**（Prompt/KB/Conversation） |
+| site-app | 站点业务 API；站点 AI chat / internal tools |
+| agent | `HttpAgentClient` 与 Java↔Python 契约 DTO |
+| agent-services | Python AI Execution（internal only，经 Java 调用） |
 | common / infra | 横切契约与基础设施；不放单模块业务 |
 | admin-web | 管理后台 UI；经 gateway 调 `/api/**` |
 
@@ -56,9 +59,25 @@
 |------|------|
 | [`.cursor/rules/project.mdc`](.cursor/rules/project.mdc) | 项目级（alwaysApply） |
 | [`.cursor/rules/backend-structure.mdc`](.cursor/rules/backend-structure.mdc) | `website-services` Java |
+| [`.cursor/rules/agent-services.mdc`](.cursor/rules/agent-services.mdc) | `agent-services` Python AI Execution |
+| [`.cursor/rules/ai-domain.mdc`](.cursor/rules/ai-domain.mdc) | AI 跨模块边界（Java + admin-web AI 页） |
 | [`.cursor/rules/admin-web.mdc`](.cursor/rules/admin-web.mdc) | `admin-web` 实现边界 |
 | [`.cursor/rules/admin-web-router.mdc`](.cursor/rules/admin-web-router.mdc) | router 目录 |
 | [`.cursor/rules/admin-web-styles.mdc`](.cursor/rules/admin-web-styles.mdc) | 全局样式分层 |
+| [`.cursor/rules/docs.mdc`](.cursor/rules/docs.mdc) | 文档与 CURRENT_STATE 同步 |
+
+索引与 Agent 协作流见 [`.cursor/README.md`](.cursor/README.md)。
+
+## Cursor Agents（Subagent 角色）
+
+| Agent | 用途 |
+|-------|------|
+| `codebase-explorer` | 只读：定位代码、mock/real、调用链 |
+| `architecture-planner` | 方案：边界、顺序、验收标准 |
+| `admin-backend` | Java admin / Flyway / RBAC / Admin AI API |
+| `admin-frontend` | admin-web UI / API 对接 / i18n |
+| `agent-services` | Python runtime / SSE / RAG / MCP·Skills·Todo |
+| `integration-reviewer` | 合并前契约与边界审查 |
 
 ## 后端权威文档
 
@@ -68,6 +87,12 @@
 2. [`单模块文件结构与AI开发约束规则V1.md`](docs/website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md)（结构总纲，冲突时以此为准）
 3. [`.cursor/rules/backend-structure.mdc`](.cursor/rules/backend-structure.mdc)
 4. [`后端包结构与命名规范V1.md`](docs/website-services/设计文档/基础架构/后端包结构与命名规范V1.md)
+
+修改 `services/agent-services/` 前阅读：
+
+1. [`docs/decisions/ADR-0004`](docs/decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](docs/decisions/ADR-0005-java-business-truth-python-ai-execution.md)
+2. [`Agent服务技术选型与架构设计V1.md`](docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)
+3. [`.cursor/rules/agent-services.mdc`](.cursor/rules/agent-services.mdc)
 
 ## Menu / 5E 现状
 

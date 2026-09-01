@@ -38,6 +38,9 @@ public class SiteSecurityConfig {
                         .permitAll()
                         .requestMatchers("/actuator/**")
                         .permitAll()
+                        // internal API 由 InternalServiceTokenFilter 鉴权（共享 internal token），不走 JWT
+                        .requestMatchers("/internal/**")
+                        .permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                         .permitAll()
                         .anyRequest()

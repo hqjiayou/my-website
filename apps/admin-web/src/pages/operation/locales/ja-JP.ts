@@ -1,29 +1,68 @@
 export default {
   contents: {
     title: 'ページコンテンツ',
-    description: 'サイト単位でページブロック、文言、公開状態を管理します。',
-    notConnected: {
-      title: '運用コンテンツセンターは未接続',
-      description:
-        '横断コンテンツ一覧の実 API は未提供です。サイトワークスペースの「ページコンテンツ」で管理してください（/apps/sites/:siteId/contents）。',
+    description: 'サイト横断でページブロック、文言、公開状態を確認します。',
+    aggregateNotice: '各サイト REAL API から集約しています。編集はサイトワークスペースで行ってください。',
+    empty: '横断コンテンツはありません',
+    columns: {
+      site: 'サイト',
+      title: 'タイトル',
+      type: '種別',
+      status: '状態',
+      updatedAt: '更新日時',
+      actions: '操作',
+    },
+    filters: {
+      type: 'コンテンツ種別',
+      status: '状態',
+      allTypes: 'すべての種別',
+      allStatuses: 'すべての状態',
+      search: '絞り込み',
+      reset: 'リセット',
+    },
+    actions: {
+      manage: 'サイト管理へ',
     },
   },
   reservations: {
     title: '予約管理',
-    description: '複数サイトの予約記録と対応ステータスを確認します。',
-    notConnected: {
-      title: '運用予約センターは未接続',
-      description:
-        '横断予約一覧の実 API は未提供です。サイトワークスペースの「予約相談」で管理してください（/apps/sites/:siteId/reservations）。',
+    description: 'サイト横断で予約記録と対応ステータスを確認します。',
+    aggregateNotice: '各サイト REAL API から集約しています。対応はサイトワークスペースで行ってください。',
+    empty: '横断予約はありません',
+    columns: {
+      site: 'サイト',
+      customer: '顧客',
+      serviceType: 'サービス',
+      reservedAt: '予約日時',
+      status: '状態',
+      actions: '操作',
+    },
+    filters: {
+      status: '状態',
+      allStatuses: 'すべての状態',
+      search: '絞り込み',
+      reset: 'リセット',
+    },
+    actions: {
+      manage: 'サイト管理へ',
     },
   },
   files: {
     title: 'ファイル管理',
-    description: 'サイト素材、アップロード状態、利用状況を一元管理します。',
-    notConnected: {
-      title: '運用ファイルセンターは未接続',
-      description:
-        'グローバルファイル一覧の実 API は未提供です。サイトワークスペースの「ファイルリソース」でメディアを管理してください（/apps/sites/:siteId/files）。',
+    description: 'サイト横断でメディア素材とアップロード状態を確認します。',
+    aggregateNotice: '各サイト REAL API から集約しています。アップロードと管理はサイトワークスペースで行ってください。',
+    empty: '横断メディアはありません',
+    columns: {
+      site: 'サイト',
+      filename: 'ファイル名',
+      contentType: '種別',
+      fileSize: 'サイズ',
+      status: '状態',
+      createdAt: 'アップロード日時',
+      actions: '操作',
+    },
+    actions: {
+      manage: 'サイト管理へ',
     },
   },
 } as const

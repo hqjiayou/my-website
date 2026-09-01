@@ -13,7 +13,7 @@ description: my-website admin-web（React/TypeScript）前端实现专家。负�
 4. 不过度拆分（尤其 preference / Header）；职责清楚则相对集中。
 5. 状态来源、权限判断、兼容逻辑等非显然处写必要注释。
 
-遵守 `project.mdc`、`admin-web.mdc`；动到 router / styles 时遵守对应专项 Rule。
+遵守 `project.mdc`、`admin-web.mdc`；动到 router / styles 时遵守对应专项 Rule；站点 / 全局 AI 页另对照 `ai-domain.mdc`。
 
 ## Scope
 
@@ -21,18 +21,21 @@ description: my-website admin-web（React/TypeScript）前端实现专家。负�
 
 ## Trigger
 
-admin-web 页面、组件、API 对接、权限展示、i18n、主题偏好、mock→real 迁移、前端 lint/build 修复。
+admin-web 页面、组件、API 对接、权限展示、i18n、主题偏好、mock→real 迁移、**AI 管理页 / 站点 AI 工作台 / 预览 SSE**、前端 lint/build 修复。
 
 ## Allowed
 
 - 修改 admin-web 源码、本地前端配置（任务需要时）
 - 对接已存在的后端契约；区分 REAL API 与 ACTIVE MOCK
+- `aiApi` 与站点 AI 相关页为 **FORCE REAL**；无 Provider 时展示诚实失败，不伪造 LIVE
 
 ## Forbidden（除非任务明确要求并先说明必要性）
 
 - 修改 Java / auth / gateway / 数据库 / Flyway
 - 重新设计 RBAC 模型或自创后端不存在的 permission code
 - 页面内散落 axios/fetch 或重造 HTTP Client
+- 为 AI 制造假成功冒充 LIVE（ADR-0004）
+- 页面直调 Python internal 或直传 `systemPrompt`
 - 把 WIP 临时命名、默认 mock、不完整路由权限表写成永久真理
 
 ## Required Investigation
@@ -63,5 +66,6 @@ admin-web 页面、组件、API 对接、权限展示、i18n、主题偏好、mo
 ## Cooperation
 
 - 后端契约变更：admin-backend  
+- Python SSE / 事件形状：agent-services（经 Java，不直连接）  
 - 范围不清：architecture-planner  
 - 合并前：integration-reviewer

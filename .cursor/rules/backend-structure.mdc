@@ -18,7 +18,7 @@ alwaysApply: false
 | site | 前台业务 | 强依赖 admin 实现、无业务时堆 manager/adapter |
 | common | ApiResponse、ErrorCode、common.security 契约 | 业务 DTO/Entity/Mapper/Service |
 | infra | Redis、MyBatis、i18n、OAuth2 RS 辅助；Flyway 脚本宿主 | 业务流程、业务 Entity/Mapper |
-| agent | Agent 客户端 | 业务编排 |
+| agent | `HttpAgentClient`、Agent DTO 契约 | 业务编排、Prompt/Conversation 持久化 |
 
 ## 业务模块包树（admin / auth / site-core / site-app）
 
@@ -59,6 +59,13 @@ alwaysApply: false
 - **写操作未完成**：后续写能力在上述现有结构与 permission 模型上扩展。
 - 禁止另起 `admin.menu.processor.*` / manager / helper 平行架构。
 - 涉及 Menu 写操作时，先读现有 Menu 实现与阶段 5E 设计/路线图文档。
+
+## AI 域（摘要）
+
+- **业务真相在 Java**（admin Prompt/KB/Conversation、site-app chat）；Python 仅 execution（见 `agent-services.mdc`、`ai-domain.mdc`）。
+- Admin AI：`AdminAi*Controller` / `Service` / `Entity` / Flyway 权限在 **admin**。
+- 站点 AI 与 internal tools：**site-app**；调用 Python 经 **agent** 模块 `HttpAgentClient`。
+- 禁止在 agent 模块写业务 CRUD；禁止 Python 直连业务库。
 
 ## 已知例外（勿扩散）
 

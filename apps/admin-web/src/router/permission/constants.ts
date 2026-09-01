@@ -13,4 +13,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   [ROUTES.apps.sites]: PERMISSION_CODES.siteList,
   [ROUTES.apps.siteCreate]: PERMISSION_CODES.siteCreate,
   [ROUTES.apps.templates]: PERMISSION_CODES.templateList,
+  [ROUTES.ai.prompts]: PERMISSION_CODES.aiPromptRead,
+  [ROUTES.ai.knowledgeBases]: PERMISSION_CODES.aiKbList,
+  [ROUTES.ai.conversations]: PERMISSION_CODES.aiConversationList,
 }

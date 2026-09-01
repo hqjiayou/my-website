@@ -1,10 +1,9 @@
 /**
  * 站点管理 API。
  * Site Core（list/get/create/update/delete/status）→ 始终 REAL `/admin/sites`，不受 USE_MOCK 门控。
- * runtime-status 等未真实化能力：mock 分支可用，REAL 模式不请求假数据。
+ * runtime-status：由现有 REAL API 推导（见 siteRuntimeStatus.ts），非独立端点。
  */
-import { USE_MOCK } from '@/config/apiMode'
-import { siteMockService } from '@/mocks/services/siteMock'
+import { deriveSiteRuntimeStatus } from '@/api/apps/siteRuntimeStatus'
 import type {
   CreateSiteInput,
   PageResult,
@@ -70,14 +69,12 @@ const siteHttpService = {
       .then(unwrapData)
   },
 
-  /** Phase 2 未接入；REAL 模式显式返回 null，禁止假 KPI。 */
-  getSiteRuntimeStatus(id: number): Promise<SiteRuntimeStatus | null> {
-    void id
-    return Promise.resolve(null)
+  getSiteRuntimeStatus(id: number): Promise<SiteRuntimeStatus> {
+    return deriveSiteRuntimeStatus(id)
   },
 }
 
-/** Site Core 始终走真实 HTTP；仅未真实化能力保留 mock 门控。 */
+/** Site Core 与 runtime-status 推导均走真实 HTTP / REAL 数据聚合。 */
 export const siteApi = {
   listSites: siteHttpService.listSites,
   getSite: siteHttpService.getSite,
@@ -85,9 +82,7 @@ export const siteApi = {
   updateSite: siteHttpService.updateSite,
   deleteSite: siteHttpService.deleteSite,
   updateSiteStatus: siteHttpService.updateSiteStatus,
-  getSiteRuntimeStatus: USE_MOCK
-    ? (id: number) => siteMockService.getSiteRuntimeStatus(id)
-    : siteHttpService.getSiteRuntimeStatus,
+  getSiteRuntimeStatus: siteHttpService.getSiteRuntimeStatus,
 }
 
 export type {

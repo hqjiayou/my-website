@@ -1,0 +1,51 @@
+[project]
+name = "agent-services"
+version = "0.4.0"
+description = "Python AI Execution Runtime for my-website (internal only)"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic-settings>=2.6.0",
+    "pydantic-ai-slim[mcp]>=2.0.0",
+    "opentelemetry-api>=1.28.0",
+    "opentelemetry-sdk>=1.28.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.28.0",
+    "opentelemetry-instrumentation-fastapi>=0.49b0",
+    "asyncpg>=0.30",
+    "httpx>=0.28.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28.0",
+    "pydantic-evals>=2.0.0",
+    # no-build-isolation 模式下本地 editable 构建所需（见 [tool.uv]）
+    "hatchling>=1.25",
+    "editables>=0.5",
+]
+
+[tool.uv]
+# Windows 应用控制策略会阻止 uv 隔离构建的临时 venv 运行；
+# 本地项目改用项目 venv 直接构建（构建依赖已入 dev extras）
+no-build-isolation-package = ["agent-services"]
+
+[tool.uv.extra-build-dependencies]
+agent-services = ["hatchling"]
+
+[project.scripts]
+agent-services = "agent_services.main:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_services"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

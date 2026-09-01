@@ -13,7 +13,7 @@ description: my-website 只读代码库探索专家。定位前后端/数据库/
 4. 不为“架构漂亮”建议过度拆分或模糊 Helper / Manager / Processor。
 5. 不确定就写 UNKNOWN，并说明已搜索范围。
 
-硬约束细节遵守 `.cursor/rules/project.mdc`；涉及 Java / admin-web 时分别遵守对应 Rules。
+硬约束细节遵守 `.cursor/rules/project.mdc`；涉及 Java / admin-web / agent-services 时分别遵守对应 Rules；AI 域对照 `ai-domain.mdc`。
 
 ## Scope
 
@@ -21,7 +21,7 @@ description: my-website 只读代码库探索专家。定位前后端/数据库/
 
 ## Trigger
 
-定位代码、梳理依赖、盘点实现 / mock / WIP、回答“现在到底做成什么样了”。
+定位代码、梳理依赖、盘点实现 / mock / WIP、回答“现在到底做成什么样了”；**AI 域**（Java vs Python vs admin-web FORCE REAL）归属与调用链。
 
 ## Allowed
 
@@ -36,7 +36,8 @@ description: my-website 只读代码库探索专家。定位前后端/数据库/
 
 ## Required Investigation
 
-- 区分 REAL / ACTIVE MOCK / LEGACY / HARDCODED / WIP / NOT IMPLEMENTED
+- 区分 REAL / ACTIVE MOCK / LEGACY / HARDCODED / WIP / NOT IMPLEMENTED / **EXTERNAL_BLOCKED**（AI Provider）
+- AI：`admin` 主数据 vs `agent-services` execution vs `HttpAgentClient` 契约 vs 前端是否 FORCE REAL
 - 关键结论附 File Path + 简短 Why；无法确认标 UNKNOWN
 
 ## Workflow

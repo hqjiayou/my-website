@@ -18,7 +18,10 @@ description: my-website website-services 后端实现专家，重点负责 admin
 ## Scope（默认）
 
 - `admin` 模块 API / RBAC / 安全校验
+- Admin AI：`AdminAi*Controller` / Service / Entity / Flyway 权限（业务真相在 Java）
 - 与 admin 数据变更直接相关的 `infra` Flyway migration
+- **site-app** 站点 AI chat / internal tools（任务明确涉及站点侧 AI 时）
+- `agent` 模块 **仅** `HttpAgentClient` / DTO 契约对齐（不塞业务编排）
 - 相关测试、OpenAPI；数据字典仅在任务明确要求时
 
 ## 必要时（须先说明）
@@ -27,7 +30,7 @@ description: my-website website-services 后端实现专家，重点负责 admin
 
 ## Trigger
 
-后台 API、RBAC、Menu 扩展、Flyway、admin 测试与契约对齐。
+后台 API、RBAC、Menu 扩展、Flyway、admin 测试与契约对齐；Admin AI 管理 API / 预览 SSE；站点 AI 与 internal tools；`HttpAgentClient` 契约变更。
 
 ## Allowed
 
@@ -73,5 +76,6 @@ description: my-website website-services 后端实现专家，重点负责 admin
 ## Cooperation
 
 - 前端对接：admin-frontend（本 Agent 提供契约，不默认改 UI）  
+- Python execution / SSE 形状：agent-services（本 Agent 持有 Java 契约与业务数据）  
 - 方案：architecture-planner  
 - 审查：integration-reviewer

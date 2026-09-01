@@ -8,7 +8,7 @@
 - `apps/site-web` 是前台子站点集合目录，内部按行业拆分独立站点。
 - `apps/admin-web` 负责总后台与站点后台管理。
 - `services/website-services` 是当前 Java 后端主干，包含**统一网关**、**独立认证服务（`auth`）**、后台 API、前台 API、基础设施接入与后续业务模块骨架；**JWT 为 RS256 + JWKS（Auth 签发，业务服务 JWKS 验签）**。
-- `services/agent-services` 是 Node.js + Fastify 的 AI/Agent 编排服务骨架，当前仍以 mock 能力为主。
+- `services/agent-services` 是 **Python 3.13 + FastAPI + Pydantic AI V2** 的 AI Execution Runtime（internal only）；Java owns business truth，Python owns AI execution（ADR-0005）；无 Provider 时诚实失败（ADR-0004）。
 
 ## 目录结构
 
@@ -84,14 +84,16 @@ Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。
 
 ### services/agent-services
 
-Node.js + Fastify + TypeScript 的 AI/Agent 编排服务，默认端口 `3001`。
+Python 3.13 + FastAPI + Pydantic AI V2 的 AI Execution Runtime，默认端口 `3001`。
 
-当前提供 mock 接口：
+内部接口（需 `X-Internal-Service-Token`）：
 
-- `GET /health`
-- `GET /api/site/:domain/config`
-- `POST /api/site/:siteId/reservations`
-- `POST /api/site/:siteId/ai/chat`
+- `GET /internal/v1/health`
+- `POST /internal/v1/chat`
+
+公开探活：`GET /health`
+
+详见 [`services/agent-services/README.md`](services/agent-services/README.md) 与设计文档 [`docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md`](docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)。
 
 ## 后端调用关系
 
@@ -153,8 +155,9 @@ pnpm dev
 
 ```bash
 cd services/agent-services
-pnpm install
-pnpm dev
+uv sync --extra dev
+cp .env.example .env   # 配置 AGENT_INTERNAL_SERVICE_TOKEN
+uv run agent-services
 ```
 
 ## 本地基础设施

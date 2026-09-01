@@ -14,10 +14,10 @@ supersedes: 总览/当前功能完成度总览.md（作为完成度权威）
 |------|------|------|
 | gateway | PARTIAL | 路由/CORS/RequestId OK；已配 `trusted-proxies` + XFF append（生产需收紧；缺集成断言） |
 | auth | PARTIAL / BACKEND_COMPLETE(site) | Admin+Site 会话；限流取 XFF 末段 |
-| admin | COMPLETE_V1（主域） | Site/User/Template/Appearance/Media/Content/Reservation/RBAC |
-| site-app | PARTIAL | Site AI 路径；业务前台仍扩展中 |
-| common/infra | COMPLETE_V1 底座 | Flyway V1–V15 |
-| agent (Java client) | COMPLETE_V1 path | 诚实失败 |
+| admin | COMPLETE_V1（主域）+ 站点 AI 管理 | Site/User/Template/Appearance/Media/Content/Reservation/RBAC；Prompt/KB/会话/预览 |
+| site-app | PARTIAL | Site AI chat/stream；internal Tools；业务前台仍扩展中 |
+| common/infra | COMPLETE_V1 底座 | Flyway 当前至 V19 |
+| agent (Java client) | COMPLETE_V1 contract | 扁平错误体；SSE 转发；契约 IT |
 
 ## 域完成度（后端）
 

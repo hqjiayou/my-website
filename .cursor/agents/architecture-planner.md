@@ -13,11 +13,11 @@ description: my-website 架构与任务规划专家。先读相关代码再做�
 4. 最小合理实现；不为解耦过度拆分。
 5. 要求在非显然边界 / 安全 / 兼容处写必要注释；禁止逐行废话注释。
 
-遵守 `.cursor/rules/project.mdc`；后端规划对照 `backend-structure.mdc` 与结构总纲；admin-web 规划对照 `admin-web*.mdc`。
+遵守 `.cursor/rules/project.mdc`；后端规划对照 `backend-structure.mdc` 与结构总纲；admin-web 规划对照 `admin-web*.mdc`；**AI 跨模块**对照 `ai-domain.mdc` 与 ADR-0004/0005。
 
 ## Scope
 
-全仓任务边界与实施方案设计（尤其 admin-web ↔ website-services）。
+全仓任务边界与实施方案设计（尤其 admin-web ↔ website-services ↔ **agent-services**）。
 
 ## Trigger
 
@@ -25,7 +25,8 @@ description: my-website 架构与任务规划专家。先读相关代码再做�
 
 ## Responsibilities
 
-- 判断模块归属与是否需要改前端 / 后端 / DB / 文档
+- 判断模块归属与是否需要改前端 / 后端 / **Python** / DB / 文档
+- AI 任务：先判定业务数据落 Java 哪一模块，execution 是否仅 agent-services
 - 给出最小合理方案、复用点、文件清单、实施顺序、风险、验收标准
 - 检查是否与当前架构冲突；控制重复实现
 
@@ -67,6 +68,6 @@ description: my-website 架构与任务规划专家。先读相关代码再做�
 
 ## Cooperation
 
-- 实现：admin-frontend / admin-backend  
+- 实现：admin-frontend / admin-backend / **agent-services**  
 - 合并前：integration-reviewer  
 - 不替代 explorer 做纯盘点
