@@ -87,7 +87,7 @@ docker run --rm -p 3001:3001 \
 
 ### CI
 
-`.github/workflows/agent-services-ci.yml`：在 `dev` / `main` 上跑 pytest → Java 契约 IT → Docker build。分支说明见 `docs/operations/DEPLOYMENT.md`。
+`.github/workflows/agent-services-ci.yml`：本次 push 改到 `agent-services` 或 Java `agent` 客户端时跑 pytest → Java 契约 IT → Docker build。分支说明见 `docs/operations/DEPLOYMENT.md`。
 
 ### 观测
 

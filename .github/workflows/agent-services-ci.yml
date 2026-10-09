@@ -1,45 +1,17 @@
 name: agent-services-ci
 
-# 路径未命中时测试任务跳过，gate 仍成功，供 dev/main 分支保护使用。
+# 只在本次 push 改到 agent-services、Java agent 客户端或本工作流时运行。
 
 on:
   push:
-    branches: [main, master, dev]
-  pull_request:
-    branches: [main, master, dev]
+    paths:
+      - 'services/agent-services/**'
+      - 'services/website-services/agent/**'
+      - '.github/workflows/agent-services-ci.yml'
 
 jobs:
-  changes:
-    name: Detect agent-services changes
-    runs-on: ubuntu-latest
-    outputs:
-      run: ${{ steps.filter.outputs.run }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - id: filter
-        run: |
-          set -eu
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-          else
-            base="${{ github.event.before }}"
-          fi
-          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if git diff --name-only "$base" HEAD | grep -Eq '^(services/agent-services/|services/website-services/agent/|\.github/workflows/agent-services-ci\.yml)'; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
-
   python-tests:
     name: agent-services pytest
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -57,8 +29,7 @@ jobs:
   java-python-contract:
     name: HttpAgentClient ↔ Python contract
     runs-on: ubuntu-latest
-    needs: [changes, python-tests]
-    if: needs.changes.outputs.run == 'true' && needs.python-tests.result == 'success'
+    needs: python-tests
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -83,30 +54,9 @@ jobs:
   docker-build:
     name: Docker image build
     runs-on: ubuntu-latest
-    needs: [changes, python-tests]
-    if: needs.changes.outputs.run == 'true' && needs.python-tests.result == 'success'
+    needs: python-tests
     steps:
       - uses: actions/checkout@v4
       - name: docker build
         working-directory: services/agent-services
         run: docker build -t agent-services:ci .
-
-  gate:
-    name: agent-services-ci
-    needs: [changes, python-tests, java-python-contract, docker-build]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require relevant jobs to pass
-        run: |
-          set -eu
-          if [ "${{ needs.changes.result }}" != "success" ]; then
-            echo "change detection failed"
-            exit 1
-          fi
-          for result in "${{ needs.python-tests.result }}" "${{ needs.java-python-contract.result }}" "${{ needs.docker-build.result }}"; do
-            case "$result" in
-              success|skipped) ;;
-              *) echo "job result: $result"; exit 1 ;;
-            esac
-          done
