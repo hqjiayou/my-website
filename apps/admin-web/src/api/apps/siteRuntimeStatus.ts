@@ -1,4 +1,5 @@
 import { appearanceApi } from '@/api/appearanceApi'
+import { aiApi } from '@/api/apps/aiApi'
 import { contentApi } from '@/api/apps/contentApi'
 import { reservationApi } from '@/api/apps/reservationApi'
 import { siteApi } from '@/api/apps/siteApi'
@@ -15,13 +16,14 @@ function isSameLocalDay(iso: string): boolean {
 }
 
 /**
- * 由现有 REAL API 推导站点概览指标（非独立 runtime-status 端点）。
- * 访问量 / AI 咨询暂无后端，返回 null；禁止伪造 KPI。
+ * 由现有 REAL API 推导站点概览指标（非独立 runtime-status 端点，不读 mock 开关）。
+ * 访问量 / 当日 AI 会话暂无后端，返回 null。
+ * AI 配置：prompt profile 已落库（id 非空）为完成；空壳或无权限时为未完成。
  */
 export async function deriveSiteRuntimeStatus(siteId: number): Promise<SiteRuntimeStatus> {
   const site = await siteApi.getSite(siteId)
 
-  const [appearance, contents, reservations] = await Promise.all([
+  const [appearance, contents, reservations, prompt] = await Promise.all([
     appearanceApi.getAppearance(siteId).catch(() => null),
     contentApi
       .listContents(siteId, { pageNum: 1, pageSize: 50, status: 'PUBLISHED' })
@@ -29,6 +31,7 @@ export async function deriveSiteRuntimeStatus(siteId: number): Promise<SiteRunti
     reservationApi
       .listReservations(siteId, { pageNum: 1, pageSize: 100 })
       .catch(() => ({ records: [], total: 0, pageNum: 1, pageSize: 100 })),
+    aiApi.getPromptProfile(siteId).catch(() => null),
   ])
 
   const reservationCountToday = reservations.records.filter((item) =>
@@ -45,7 +48,7 @@ export async function deriveSiteRuntimeStatus(siteId: number): Promise<SiteRunti
       theme: appearance != null,
       domain: Boolean(site.defaultDomain?.trim()),
       homeContent: contents.records.length > 0,
-      aiConfig: false,
+      aiConfig: prompt?.id != null,
     },
   }
 }

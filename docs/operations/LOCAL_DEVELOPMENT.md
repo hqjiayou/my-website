@@ -45,7 +45,7 @@ pnpm install
 pnpm dev
 ```
 
-核心域与站点 AI 管理 FORCE REAL——本地需可用的 gateway/auth/admin。`VITE_USE_MOCK` 仅影响 runtime-status 等非 FORCE REAL 域。
+核心域、运营聚合与站点 AI 管理 FORCE REAL——本地需可用的 gateway/auth/admin。admin-web 不读取 `VITE_USE_MOCK`。
 
 Phase 3/4 可选：
 

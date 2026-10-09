@@ -16,6 +16,8 @@ export default {
     clearPassword: 'Clear password',
   },
   errors: {
+    usernameRequired: 'Enter a username',
+    passwordRequired: 'Enter a password',
     generic: 'Sign in failed. Please try again.',
     profileLoadFailed: 'Signed in, but loading your profile failed. Ensure the admin service is running.',
   },

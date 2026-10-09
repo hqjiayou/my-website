@@ -16,6 +16,7 @@ export default {
     copy: 'コピー',
     copied: 'コピーしました',
   },
+  breadcrumb: 'パンくず',
   error: {
     network: 'ネットワークエラー。しばらくしてから再試行してください。',
     unauthorized: 'ログインの有効期限が切れました。再度ログインしてください。',

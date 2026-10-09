@@ -3,16 +3,16 @@
 ```yaml
 artifact_type: SPEC
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 ```
 
 ## 原则
 
 - Mock ≠ 后端已完成。  
 - **核心业务域禁止**隐式 Mock fallback。  
-- `VITE_USE_MOCK` 只影响**明确允许** mock 的域（当前：site runtime-status）。  
+- admin-web **不再读取** `VITE_USE_MOCK`。设置该变量不会切换任何数据源。  
 
-## FORCE REAL（不受 USE_MOCK）
+## FORCE REAL
 
 | API 模块 | 路径前缀 |
 |----------|----------|
@@ -25,13 +25,11 @@ last_verified: 2026-08-09
 | `aiApi` | `/admin/sites/{id}/ai/**` |
 | `authApi` / `rbacApi` | `/auth/admin/**`、`/admin/**` RBAC |
 
-## 允许 Mock
+## 无 Mock 域
 
-| 域 | 原因 |
-|----|------|
-| `getSiteRuntimeStatus` | 后端未实现；REAL 模式返回 `null`，禁止假 KPI |
+站点概览指标由 `deriveSiteRuntimeStatus` 用现有 REAL API 推导，不是独立 runtime-status 端点，也不走 mock。访问量与当日 AI 会话无后端时为 `null`。发布清单的 AI 配置以 prompt profile 是否已落库（`id != null`）为准。
 
-`apps/admin-web/src/api/ai/aiApi.ts` 与 `aiMock` 已无页面消费，不得重新接到 FORCE REAL 页。
+旧 `api/ai/aiApi.ts` 与 `mocks/**` 已删除，不得接回页面。
 
 ## 禁止
 

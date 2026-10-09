@@ -1,6 +1,6 @@
 /**
  * 站点 AI 管理 API。
- * Prompt / KB / Conversation / Preview / Runtime → 始终 REAL `/admin/sites/{siteId}/ai/*`，不受 USE_MOCK 门控。
+ * Prompt / KB / Conversation / Preview / Runtime → 始终 REAL `/admin/sites/{siteId}/ai/*`。
  */
 import type { PageResult } from '@/types/site'
 import type { HttpMessageBody } from '@/types/rbac'

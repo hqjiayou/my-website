@@ -50,6 +50,6 @@ last_verified: 2026-10-09
 
 | 变量 | 域 |
 |------|-----|
-| `VITE_USE_MOCK` | admin-web（勿用于核心域与站点 AI 管理假闭环） |
+| `VITE_USE_MOCK` | 已无消费者。admin-web 不因该变量切换 mock / real |
 
 生产网关应配置可信代理 CIDR（XFF）；见 SECURITY。

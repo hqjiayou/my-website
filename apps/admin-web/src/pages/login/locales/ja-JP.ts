@@ -16,6 +16,8 @@ export default {
     clearPassword: 'パスワードをクリア',
   },
   errors: {
+    usernameRequired: 'ユーザー名を入力してください',
+    passwordRequired: 'パスワードを入力してください',
     generic: 'ログインに失敗しました。もう一度お試しください。',
     profileLoadFailed: 'ログインは成功しましたが、アカウント情報の取得に失敗しました。admin サービスが起動しているか確認してください。',
   },

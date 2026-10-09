@@ -1,6 +1,6 @@
 /**
  * 站点内容 API。
- * Content（list/get/create/update/status/delete）→ 始终 REAL `/admin/sites/{siteId}/contents`，不受 USE_MOCK 门控。
+ * Content（list/get/create/update/status/delete）→ 始终 REAL `/admin/sites/{siteId}/contents`。
  */
 import type {
   ContentDetail,

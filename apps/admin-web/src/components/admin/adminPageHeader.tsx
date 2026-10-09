@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
 import { cn } from '@/lib/cn'
@@ -25,10 +26,12 @@ export function AdminPageHeader({
   hint,
   className,
 }: AdminPageHeaderProps) {
+  const { t } = useTranslation('common')
+
   return (
     <header className={cn('mb-6', className)}>
       {breadcrumbs && breadcrumbs.length > 0 ? (
-        <nav className="mb-2 flex flex-wrap items-center gap-1 text-xs text-slate-500" aria-label="Breadcrumb">
+        <nav className="mb-2 flex flex-wrap items-center gap-1 text-xs text-slate-500" aria-label={t('breadcrumb')}>
           {breadcrumbs.map((item, index) => (
             <span key={`${item.label}-${index}`} className="inline-flex items-center gap-1">
               {index > 0 ? <span className="text-slate-300">/</span> : null}

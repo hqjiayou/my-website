@@ -1,6 +1,6 @@
 /**
  * 站点预约 API。
- * Reservation（list/get/create/status/delete）→ 始终 REAL `/admin/sites/{siteId}/reservations`，不受 USE_MOCK 门控。
+ * Reservation（list/get/create/status/delete）→ 始终 REAL `/admin/sites/{siteId}/reservations`。
  */
 import type {
   CreateReservationInput,

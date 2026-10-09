@@ -16,6 +16,8 @@ export default {
     clearPassword: '清空密码',
   },
   errors: {
+    usernameRequired: '请输入用户名',
+    passwordRequired: '请输入密码',
     generic: '登录失败，请稍后重试',
     profileLoadFailed: '登录成功，但加载账号信息失败，请确认 admin 服务已启动',
   },

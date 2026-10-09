@@ -16,6 +16,7 @@ export default {
     copy: 'Copy',
     copied: 'Copied',
   },
+  breadcrumb: 'Breadcrumb',
   error: {
     network: 'Network error. Please try again.',
     unauthorized: 'Session expired. Please sign in again.',

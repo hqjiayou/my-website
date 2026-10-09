@@ -21,6 +21,8 @@ import {
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { SiteAppearancePreview } from '@/pages/apps/style/siteAppearancePreview'
+import { PermissionGate, useHasPermission } from '@/router/permission'
+import { PERMISSION_CODES } from '@/types/rbac'
 
 function cloneConfig(config: AppearanceConfigV1): AppearanceConfigV1 {
   return { ...config }
@@ -160,6 +162,7 @@ function StyleSettingsWorkspace({
   t,
   queryClient,
 }: StyleSettingsWorkspaceProps) {
+  const canUpdate = useHasPermission(PERMISSION_CODES.siteUpdate)
   // 父级以 id+version 作为 key 重建本组件，避免 effect 内同步 setState
   const [draftConfig, setDraftConfig] = useState(() => cloneConfig(appearanceDetail.config))
   const [version, setVersion] = useState(appearanceDetail.version)
@@ -194,6 +197,7 @@ function StyleSettingsWorkspace({
   }
 
   function saveConfig() {
+    if (!canUpdate) return
     if (!PRIMARY_COLOR_PATTERN.test(draftConfig.primaryColor)) {
       toast.warning(t('messages.invalidPrimaryColor'))
       return
@@ -205,14 +209,16 @@ function StyleSettingsWorkspace({
   return (
     <>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={saveConfig}
-          disabled={saveMutation.isPending}
-          className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
-        >
-          {saveMutation.isPending ? t('saving') : t('saveConfig')}
-        </button>
+        <PermissionGate code={PERMISSION_CODES.siteUpdate}>
+          <button
+            type="button"
+            onClick={saveConfig}
+            disabled={saveMutation.isPending}
+            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+          >
+            {saveMutation.isPending ? t('saving') : t('saveConfig')}
+          </button>
+        </PermissionGate>
         <button
           type="button"
           onClick={resetToLoaded}

@@ -1,6 +1,6 @@
 /**
  * 站点管理 API。
- * Site Core（list/get/create/update/delete/status）→ 始终 REAL `/admin/sites`，不受 USE_MOCK 门控。
+ * Site Core（list/get/create/update/delete/status）→ 始终 REAL `/admin/sites`。
  * runtime-status：由现有 REAL API 推导（见 siteRuntimeStatus.ts），非独立端点。
  */
 import { deriveSiteRuntimeStatus } from '@/api/apps/siteRuntimeStatus'

@@ -1,6 +1,6 @@
 /**
  * 站点媒体 API。
- * Media（list/upload/get/preview/delete）→ 始终 REAL `/admin/sites/{siteId}/media`，不受 USE_MOCK 门控。
+ * Media（list/upload/get/preview/delete）→ 始终 REAL `/admin/sites/{siteId}/media`。
  */
 import type {
   MediaDetail,
