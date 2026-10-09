@@ -8,4 +8,6 @@ public interface AdminAiPromptService {
     AdminAiPromptProfileDto getPromptProfile(long siteId);
 
     AdminAiPromptProfileDto upsertPromptProfile(long siteId, AdminAiPromptProfileUpdateRequest request);
+
+    void softDeleteBySiteId(long siteId);
 }

@@ -1,6 +1,6 @@
 ---
 description: website-services 后端结构硬约束（Maven 边界、包树、命名后缀）
-globs: services/website-services/**/*.java
+globs: services/website-services/**/*.java,services/website-services/infra/**/db/migration/*.sql
 alwaysApply: false
 ---
 
@@ -48,6 +48,8 @@ alwaysApply: false
 - 开发 seed（本地脚本）与生产 migration 分开；不在生产 migration 中加入开发管理员密码等不安全测试账号。
 
 ## 新增 / 移动 / 重命名前（五问）
+
+与 `project.mdc`「新建与修改前」同一标准，这里补 Java 落点。
 
 1. 能否放在现有 ServiceImpl？ 2. 是否两处以稳定复用？ 3. 是否跨模块依赖？ 4. 是否符合模块职责？ 5. **后缀是否与目录匹配？**
 

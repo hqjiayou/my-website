@@ -8,7 +8,7 @@ alwaysApply: false
 
 ## 权威顺序
 
-代码 + Flyway > `docs/overview/CURRENT_STATE.md` > `docs/contracts/` > `docs/decisions/`（ADR）> 域 `CURRENT_STATE`。
+同 `.cursor/rules/project.mdc` 的 Source of Truth。
 
 ## 修改功能时（任务范围内）
 

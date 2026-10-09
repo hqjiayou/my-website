@@ -1,7 +1,12 @@
 import type { ChatModelAdapter } from '@assistant-ui/react'
 
 import { streamPreviewChat } from '@/api/apps/aiApi'
-import type { AiPreviewHistoryMessage } from '@/types/ai'
+import type {
+  AiPreviewAgentEvent,
+  AiPreviewHistoryMessage,
+  AiPreviewTodoItem,
+  AiRunUsage,
+} from '@/types/ai'
 
 function textOf(message: {
   content?: string | ReadonlyArray<{ type?: string; text?: string }>
@@ -26,7 +31,75 @@ function parseSseBlock(block: string): { event: string; data: string } | null {
   return { event, data: dataLines.join('\n') }
 }
 
-export function createJavaPreviewAdapter(siteId: number): ChatModelAdapter {
+function parseJson(data: string): Record<string, unknown> | null {
+  try {
+    const value: unknown = JSON.parse(data)
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function toUsage(value: unknown): AiRunUsage | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const num = (key: string) => (typeof raw[key] === 'number' ? (raw[key] as number) : 0)
+  return {
+    requests: num('requests'),
+    toolCalls: num('toolCalls'),
+    inputTokens: num('inputTokens'),
+    outputTokens: num('outputTokens'),
+  }
+}
+
+function toAgentEvent(event: string, payload: Record<string, unknown>): AiPreviewAgentEvent | null {
+  switch (event) {
+    case 'START':
+      return {
+        type: 'start',
+        skillsApplied: stringList(payload.skillsApplied),
+        skillsMissing: stringList(payload.skillsMissing),
+      }
+    case 'TOOL_START':
+      return {
+        type: 'toolStart',
+        toolCallId: String(payload.toolCallId ?? ''),
+        toolName: String(payload.toolName ?? ''),
+      }
+    case 'TOOL_RESULT':
+      return {
+        type: 'toolResult',
+        toolCallId: String(payload.toolCallId ?? ''),
+        toolName: String(payload.toolName ?? ''),
+        ok: payload.ok !== false,
+      }
+    case 'DONE':
+      // agent-services 只在非空时输出 todos：缺省即「本轮结束后无 todo」
+      return {
+        type: 'done',
+        todos: Array.isArray(payload.todos) ? (payload.todos as AiPreviewTodoItem[]) : [],
+        usage: toUsage(payload.usage),
+      }
+    default:
+      return null
+  }
+}
+
+export interface PreviewAdapterOptions {
+  /** 每轮发送时读取最新选择，避免因选择变化重建 runtime（会丢失线程）。 */
+  getSkills: () => string[]
+  getTodos: () => AiPreviewTodoItem[]
+  onAgentEvent: (event: AiPreviewAgentEvent) => void
+}
+
+export function createJavaPreviewAdapter(
+  siteId: number,
+  options: PreviewAdapterOptions,
+): ChatModelAdapter {
   return {
     async *run({ messages, abortSignal }) {
       const last = messages[messages.length - 1]
@@ -36,27 +109,41 @@ export function createJavaPreviewAdapter(siteId: number): ChatModelAdapter {
         return
       }
 
-      const history: AiPreviewHistoryMessage[] = messages.slice(0, -1).flatMap((item) => {
-        const role: AiPreviewHistoryMessage['role'] | null =
-          item.role === 'assistant' ? 'ASSISTANT' : item.role === 'user' ? 'USER' : null
-        if (!role) return []
-        const content = textOf(item).trim()
-        return content ? [{ role, content }] : []
-      })
+      // AdminAiPreviewChatRequest：history ≤ 20，单条 content ≤ 8000。只带最近一轮窗口，避免长线程 400。
+      const history: AiPreviewHistoryMessage[] = messages
+        .slice(0, -1)
+        .flatMap((item) => {
+          const role: AiPreviewHistoryMessage['role'] | null =
+            item.role === 'assistant' ? 'ASSISTANT' : item.role === 'user' ? 'USER' : null
+          if (!role) return []
+          const content = textOf(item).trim().slice(0, 8000)
+          return content ? [{ role, content }] : []
+        })
+        .slice(-20)
+      const skills = options.getSkills()
+      const todos = options.getTodos()
 
       const response = await streamPreviewChat(
         siteId,
-        { message, history: history.length ? history : undefined },
+        {
+          message,
+          history: history.length ? history : undefined,
+          skills: skills.length ? skills : undefined,
+          todos: todos.length ? todos : undefined,
+        },
         abortSignal,
       )
       if (!response.ok || !response.body) {
         let detail = `preview stream failed (${response.status})`
+        let message: string | undefined
         try {
           const payload = (await response.json()) as { message?: string; errorCode?: string }
           detail = payload.errorCode ?? payload.message ?? detail
+          message = payload.message
         } catch {
           // keep default
         }
+        options.onAgentEvent({ type: 'error', errorCode: 'REQUEST_FAILED', message: message ?? detail })
         throw new Error(detail)
       }
 
@@ -74,22 +161,21 @@ export function createJavaPreviewAdapter(siteId: number): ChatModelAdapter {
         for (const block of parts) {
           const parsed = parseSseBlock(block)
           if (!parsed) continue
+          const payload = parseJson(parsed.data)
           if (parsed.event === 'TEXT_DELTA') {
-            try {
-              const payload = JSON.parse(parsed.data) as { delta?: string }
-              text += payload.delta ?? ''
+            const delta = payload?.delta
+            if (typeof delta === 'string') {
+              text += delta
               yield { content: [{ type: 'text' as const, text }] }
-            } catch {
-              // ignore malformed delta
             }
           } else if (parsed.event === 'ERROR') {
-            let code = 'SYSTEM_ERROR'
-            try {
-              code = (JSON.parse(parsed.data) as { errorCode?: string }).errorCode ?? code
-            } catch {
-              // keep default
-            }
+            const code = typeof payload?.errorCode === 'string' ? payload.errorCode : 'SYSTEM_ERROR'
+            const message = typeof payload?.message === 'string' ? payload.message : undefined
+            options.onAgentEvent({ type: 'error', errorCode: code, message })
             throw new Error(code)
+          } else if (payload) {
+            const agentEvent = toAgentEvent(parsed.event, payload)
+            if (agentEvent) options.onAgentEvent(agentEvent)
           }
         }
       }

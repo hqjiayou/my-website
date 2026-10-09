@@ -1,19 +1,41 @@
 """流式 chat 执行：Pydantic AI stream → 应用层 AgentStreamEvent。"""
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
 from pydantic_ai import Agent
+from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
 from pydantic_ai.models import Model
-from pydantic_ai.settings import ModelSettings
 
 from agent_services.agent.prompt_builder import build_prompt_parts
-from agent_services.agent.runtime import build_message_history
+from agent_services.agent.runtime import (
+    BUDGET_EXCEEDED,
+    MAX_TOOL_TRACE,
+    RunBudget,
+    build_agent,
+    build_run_kwargs,
+    tool_succeeded,
+    usage_to_api,
+)
+from agent_services.agent.todo_tools import TodoStore
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
 from agent_services.schemas.stream import AgentStreamEvent, AgentStreamEventType
 from agent_services.schemas.todo import TodoItem
-from agent_services.agent.todo_tools import TodoStore
+
+
+@dataclass(frozen=True)
+class _StreamOutput:
+    reply: str
+    usage: dict[str, int]
+
+
+def _error_event(error_code: str, message: str) -> AgentStreamEvent:
+    return AgentStreamEvent(
+        type=AgentStreamEventType.ERROR,
+        data={"errorCode": error_code, "message": message},
+    )
 
 
 async def stream_chat_events(
@@ -28,7 +50,11 @@ async def stream_chat_events(
     initial_todos: list[TodoItem] | None = None,
     toolsets: list[object] | None = None,
     todo_store: TodoStore | None = None,
+    skills_applied: list[str] | None = None,
+    skills_missing: list[str] | None = None,
+    budget: RunBudget | None = None,
 ) -> AsyncIterator[AgentStreamEvent]:
+    resolved_budget = budget or RunBudget()
     system_prompt, user_message = build_prompt_parts(
         site_id,
         message,
@@ -37,17 +63,16 @@ async def stream_chat_events(
         skill_instructions=skill_instructions,
         todos=initial_todos,
     )
-    yield AgentStreamEvent(type=AgentStreamEventType.START, data={"siteId": site_id})
+    start_data: dict[str, object] = {"siteId": site_id}
+    if skills_applied:
+        start_data["skillsApplied"] = list(skills_applied)
+    if skills_missing:
+        start_data["skillsMissing"] = list(skills_missing)
+    yield AgentStreamEvent(type=AgentStreamEventType.START, data=start_data)
 
-    run_kwargs: dict[str, object] = {}
-    temperature = prompt_profile.temperature if prompt_profile else None
-    if temperature is not None:
-        run_kwargs["model_settings"] = ModelSettings(temperature=temperature)
-    message_history = build_message_history(history)
-    if message_history:
-        run_kwargs["message_history"] = message_history
-
+    run_kwargs = build_run_kwargs(prompt_profile, history, resolved_budget)
     side_events: list[AgentStreamEvent] = []
+    tool_trace: list[dict[str, object]] = []
 
     async def map_tool_events(_ctx: object, events: object) -> None:
         async for event in events:  # type: ignore[union-attr]
@@ -62,57 +87,74 @@ async def stream_chat_events(
                     )
                 )
             elif isinstance(event, FunctionToolResultEvent):
+                ok = tool_succeeded(event.part)
+                if len(tool_trace) < MAX_TOOL_TRACE:
+                    tool_trace.append({"name": event.part.tool_name, "ok": ok})
+                # 只回执行结果标记，不回工具返回内容（防泄露 / 大 payload，§21.4）
                 side_events.append(
                     AgentStreamEvent(
                         type=AgentStreamEventType.TOOL_RESULT,
                         data={
                             "toolName": event.part.tool_name,
                             "toolCallId": event.tool_call_id,
+                            "ok": ok,
                         },
                     )
                 )
 
     run_kwargs["event_stream_handler"] = map_tool_events
+    agent = build_agent(model, system_prompt, toolsets, resolved_budget)
 
-    agent = Agent(
-        model,
-        system_prompt=system_prompt,
-        toolsets=toolsets or None,
-    )
-
-    reply = ""
+    output: _StreamOutput | None = None
     try:
         if execution_needs_agent_context(toolsets or []):
-            async with agent:
-                async for event in _emit_agent_stream(agent, user_message, run_kwargs, side_events):
-                    if isinstance(event, AgentStreamEvent):
-                        yield event
-                    else:
-                        reply = event
+            entered = False
+            try:
+                async with agent:
+                    entered = True
+                    async for event in _emit_agent_stream(agent, user_message, run_kwargs, side_events):
+                        if isinstance(event, AgentStreamEvent):
+                            yield event
+                        else:
+                            output = event
+            except UsageLimitExceeded:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                if not entered:
+                    yield _error_event("MCP_UNAVAILABLE", f"MCP unavailable: {exc}")
+                    return
+                yield _error_event("EXTERNAL_DEPENDENCY_BLOCKED", str(exc))
+                return
         else:
             async for event in _emit_agent_stream(agent, user_message, run_kwargs, side_events):
                 if isinstance(event, AgentStreamEvent):
                     yield event
                 else:
-                    reply = event
+                    output = event
+    except UsageLimitExceeded as exc:
+        # 已流出的部分文本不作为成功回复：没有 DONE，Java 不落库
+        while side_events:
+            yield side_events.pop(0)
+        yield _error_event(BUDGET_EXCEEDED, f"Agent run budget exceeded: {exc}")
+        return
     except Exception as exc:  # noqa: BLE001
-        yield AgentStreamEvent(
-            type=AgentStreamEventType.ERROR,
-            data={"errorCode": "EXTERNAL_DEPENDENCY_BLOCKED", "message": str(exc)},
-        )
+        yield _error_event("EXTERNAL_DEPENDENCY_BLOCKED", str(exc))
         return
 
-    if not reply:
-        yield AgentStreamEvent(
-            type=AgentStreamEventType.ERROR,
-            data={
-                "errorCode": "EXTERNAL_DEPENDENCY_BLOCKED",
-                "message": "AI provider returned an empty response.",
-            },
-        )
+    if output is None or not output.reply:
+        yield _error_event("EXTERNAL_DEPENDENCY_BLOCKED", "AI provider returned an empty response.")
         return
 
-    done_data: dict[str, object] = {"reply": reply, "providerStatus": "LIVE"}
+    done_data: dict[str, object] = {
+        "reply": output.reply,
+        "providerStatus": "LIVE",
+        "usage": output.usage,
+        "tools": tool_trace,
+    }
+    if skills_applied:
+        done_data["skillsApplied"] = list(skills_applied)
+    if skills_missing:
+        done_data["skillsMissing"] = list(skills_missing)
     if todo_store is not None:
         snapshot = todo_store.snapshot()
         if snapshot.items:
@@ -125,7 +167,7 @@ async def _emit_agent_stream(
     user_message: str,
     run_kwargs: dict[str, object],
     side_events: list[AgentStreamEvent],
-) -> AsyncIterator[AgentStreamEvent | str]:
+) -> AsyncIterator[AgentStreamEvent | _StreamOutput]:
     async with agent.run_stream(user_message, **run_kwargs) as stream:
         async for chunk in stream.stream_text(delta=True):
             while side_events:
@@ -137,4 +179,5 @@ async def _emit_agent_stream(
                 )
         while side_events:
             yield side_events.pop(0)
-        yield (await stream.get_output()).strip()
+        reply = (await stream.get_output()).strip()
+        yield _StreamOutput(reply=reply, usage=usage_to_api(stream.usage))

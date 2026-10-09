@@ -4,6 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mywebsite.admin.constant.AdminSiteMessageKeys;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewChatRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewHistoryMessage;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewSkillDto;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewTodoItem;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpReadyDto;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
 import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
 import com.mywebsite.admin.mapper.AdminAiPromptProfileMapper;
 import com.mywebsite.admin.mapper.AdminSiteMapper;
@@ -12,6 +16,7 @@ import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentChatHistoryMessage;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentPromptProfile;
+import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import java.io.IOException;
@@ -51,9 +56,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
 
     @Override
     public SseEmitter previewStream(long siteId, AdminAiPreviewChatRequest request) {
-        if (adminSiteMapper.selectById(siteId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminSiteMessageKeys.SITE_NOT_FOUND);
-        }
+        requireSite(siteId);
         if (request == null || !StringUtils.hasText(request.message())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
@@ -63,10 +66,60 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 null,
                 null,
                 loadPromptProfile(siteId),
-                toHistory(request.history()));
+                toHistory(request.history()),
+                normalizeSkills(request.skills()),
+                toTodos(request.todos()));
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter));
         return emitter;
+    }
+
+    @Override
+    public List<AdminAiPreviewSkillDto> listSkills(long siteId) {
+        requireSite(siteId);
+        return agentClient.listSkills().stream()
+                .map(skill -> new AdminAiPreviewSkillDto(skill.id(), skill.description(), skill.version()))
+                .toList();
+    }
+
+    @Override
+    public AdminAiRuntimeDto runtimeStatus(long siteId) {
+        requireSite(siteId);
+        try {
+            return new AdminAiRuntimeDto(true, null, agentClient.runtimeStatus());
+        } catch (BusinessException ex) {
+            return new AdminAiRuntimeDto(false, toClientErrorCode(ex), null);
+        }
+    }
+
+    @Override
+    public AdminAiMcpReadyDto mcpReady(long siteId) {
+        requireSite(siteId);
+        try {
+            return new AdminAiMcpReadyDto(true, null, agentClient.mcpReady());
+        } catch (BusinessException ex) {
+            return new AdminAiMcpReadyDto(false, toClientErrorCode(ex), null);
+        }
+    }
+
+    private void requireSite(long siteId) {
+        if (adminSiteMapper.selectById(siteId) == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminSiteMessageKeys.SITE_NOT_FOUND);
+        }
+    }
+
+    private static List<AgentTodoItem> toTodos(List<AdminAiPreviewTodoItem> todos) {
+        if (todos == null || todos.isEmpty()) {
+            return null;
+        }
+        List<AgentTodoItem> mapped = new ArrayList<>(todos.size());
+        for (AdminAiPreviewTodoItem item : todos) {
+            if (item == null) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            mapped.add(new AgentTodoItem(item.id().trim(), item.title().trim(), item.status()));
+        }
+        return mapped;
     }
 
     private AgentPromptProfile loadPromptProfile(long siteId) {
@@ -79,6 +132,23 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         }
         Double temperature = profile.getTemperature() == null ? null : profile.getTemperature().doubleValue();
         return new AgentPromptProfile(profile.getSystemPrompt(), temperature);
+    }
+
+    private static List<String> normalizeSkills(List<String> skills) {
+        if (skills == null || skills.isEmpty()) {
+            return null;
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String skill : skills) {
+            if (!StringUtils.hasText(skill)) {
+                continue;
+            }
+            String id = skill.trim();
+            if (!normalized.contains(id)) {
+                normalized.add(id);
+            }
+        }
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private static List<AgentChatHistoryMessage> toHistory(List<AdminAiPreviewHistoryMessage> history) {
@@ -112,10 +182,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         } catch (ClientDisconnectedException ex) {
             emitter.completeWithError(ex.getCause());
         } catch (BusinessException ex) {
-            String errorCode = ex.getCode() == ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()
-                    ? "EXTERNAL_DEPENDENCY_BLOCKED"
-                    : "SYSTEM_ERROR";
-            sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"" + errorCode + "\"}");
+            sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"" + toClientErrorCode(ex) + "\"}");
             emitter.complete();
         } catch (RuntimeException ex) {
             log.warn("admin ai preview stream forwarding failed", ex);
@@ -130,6 +197,17 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         } catch (IOException ignored) {
             // 客户端已断开
         }
+    }
+
+    private static String toClientErrorCode(BusinessException ex) {
+        int code = ex.getCode();
+        if (code == ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()) {
+            return "EXTERNAL_DEPENDENCY_BLOCKED";
+        }
+        if (code == ErrorCode.AGENT_BUDGET_EXCEEDED.getCode()) {
+            return "AGENT_BUDGET_EXCEEDED";
+        }
+        return "SYSTEM_ERROR";
     }
 
     private static final class ClientDisconnectedException extends RuntimeException {

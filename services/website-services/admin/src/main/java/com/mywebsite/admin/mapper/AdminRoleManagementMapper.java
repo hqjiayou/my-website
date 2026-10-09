@@ -10,9 +10,11 @@ public interface AdminRoleManagementMapper {
     @Select(
             """
             SELECT COUNT(*)
-            FROM admin_user_role
-            WHERE admin_role_id = #{roleId}
-              AND deleted = FALSE
+            FROM admin_user_role ur
+            JOIN admin_user u ON u.id = ur.admin_user_id
+            WHERE ur.admin_role_id = #{roleId}
+              AND ur.deleted = FALSE
+              AND u.deleted = FALSE
             """)
     long countActiveUsersByRoleId(@Param("roleId") long roleId);
 }

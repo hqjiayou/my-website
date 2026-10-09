@@ -1,5 +1,8 @@
 """Phase 3 检索：分块、site_id 强制过滤、internal 同步端点、chat 检索增强。"""
 
+import json
+
+import httpx
 from fastapi.testclient import TestClient
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -9,6 +12,7 @@ from agent_services.agent.model_factory import ModelHandle
 from agent_services.agent.runtime import ChatReply, run_chat
 from agent_services.app import create_app
 from agent_services.retrieval.chunking import split_text
+from agent_services.retrieval.embeddings import OpenAIEmbeddingClient
 from agent_services.retrieval.service import RetrievalService
 from agent_services.retrieval.store import RetrievedChunk
 from conftest import TOKEN_HEADER, make_settings
@@ -27,6 +31,30 @@ def test_split_text_empty_returns_no_chunks() -> None:
 def test_split_text_merges_paragraphs_within_limit() -> None:
     chunks = split_text("para one\n\npara two", max_chars=200)
     assert chunks == ["para one\n\npara two"]
+
+
+async def test_embedding_client_posts_openai_compatible_endpoint() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["auth"] = request.headers.get("authorization")
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"data": [{"index": 1, "embedding": [0.2]}, {"index": 0, "embedding": [0.1]}]},
+        )
+
+    client = OpenAIEmbeddingClient(
+        "text-embedding-3-small",
+        api_key="sk-test",
+        base_url="http://embed.local/v1",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    assert await client.embed(["a", "b"]) == [[0.1], [0.2]]
+    assert captured["url"] == "http://embed.local/v1/embeddings"
+    assert captured["auth"] == "Bearer sk-test"
+    assert captured["body"] == {"model": "text-embedding-3-small", "input": ["a", "b"]}
 
 
 def test_split_text_splits_long_paragraph_with_overlap() -> None:

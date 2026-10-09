@@ -2,14 +2,29 @@ package com.mywebsite.agent.client;
 
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
+import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
+import com.mywebsite.agent.dto.AgentRuntimeStatus;
+import com.mywebsite.agent.dto.AgentSkillSummary;
+import java.util.List;
 
 public interface AgentClient {
 
     AgentPingResponse ping();
 
+    /** 运行时快照（Provider / Fallback / MCP / 预算）；不可达时抛 BusinessException。 */
+    AgentRuntimeStatus runtimeStatus();
+
+    /**
+     * MCP 深检。进程可达时返回探测明细（含 503 的 servers）；连不上 agent-services 才抛 BusinessException。
+     */
+    AgentMcpReady mcpReady();
+
     AgentChatResponse chat(AgentChatRequest request);
+
+    /** agent-services 技能目录（平台能力，与站点无关）。 */
+    List<AgentSkillSummary> listSkills();
 
     /**
      * 流式 chat：转发 agent-services 的应用层 SSE 事件。

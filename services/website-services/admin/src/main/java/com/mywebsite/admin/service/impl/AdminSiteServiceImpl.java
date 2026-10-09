@@ -16,6 +16,9 @@ import com.mywebsite.admin.entity.AdminSiteEntity;
 import com.mywebsite.admin.entity.AdminTemplateEntity;
 import com.mywebsite.admin.mapper.AdminSiteMapper;
 import com.mywebsite.admin.mapper.AdminTemplateMapper;
+import com.mywebsite.admin.service.AdminAiConversationService;
+import com.mywebsite.admin.service.AdminAiKnowledgeService;
+import com.mywebsite.admin.service.AdminAiPromptService;
 import com.mywebsite.admin.service.AdminAppearanceService;
 import com.mywebsite.admin.service.AdminContentService;
 import com.mywebsite.admin.service.AdminMediaService;
@@ -38,6 +41,9 @@ public class AdminSiteServiceImpl implements AdminSiteService {
     private final AdminMediaService adminMediaService;
     private final AdminContentService adminContentService;
     private final AdminReservationService adminReservationService;
+    private final AdminAiPromptService adminAiPromptService;
+    private final AdminAiKnowledgeService adminAiKnowledgeService;
+    private final AdminAiConversationService adminAiConversationService;
 
     public AdminSiteServiceImpl(
             AdminSiteMapper adminSiteMapper,
@@ -45,13 +51,19 @@ public class AdminSiteServiceImpl implements AdminSiteService {
             AdminAppearanceService adminAppearanceService,
             AdminMediaService adminMediaService,
             AdminContentService adminContentService,
-            AdminReservationService adminReservationService) {
+            AdminReservationService adminReservationService,
+            AdminAiPromptService adminAiPromptService,
+            AdminAiKnowledgeService adminAiKnowledgeService,
+            AdminAiConversationService adminAiConversationService) {
         this.adminSiteMapper = adminSiteMapper;
         this.adminTemplateMapper = adminTemplateMapper;
         this.adminAppearanceService = adminAppearanceService;
         this.adminMediaService = adminMediaService;
         this.adminContentService = adminContentService;
         this.adminReservationService = adminReservationService;
+        this.adminAiPromptService = adminAiPromptService;
+        this.adminAiKnowledgeService = adminAiKnowledgeService;
+        this.adminAiConversationService = adminAiConversationService;
     }
 
     @Override
@@ -156,6 +168,9 @@ public class AdminSiteServiceImpl implements AdminSiteService {
         adminContentService.softDeleteBySiteId(id);
         adminReservationService.softDeleteBySiteId(id);
         adminMediaService.softDeleteBySiteId(id);
+        adminAiPromptService.softDeleteBySiteId(id);
+        adminAiKnowledgeService.softDeleteBySiteId(id);
+        adminAiConversationService.softDeleteBySiteId(id);
         int deleted = adminSiteMapper.deleteById(id);
         if (deleted == 0) {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminSiteMessageKeys.SITE_NOT_FOUND);

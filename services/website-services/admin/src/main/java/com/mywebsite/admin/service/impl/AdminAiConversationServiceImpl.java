@@ -15,11 +15,23 @@ import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.page.PageResult;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mywebsite.agent.dto.AgentRunMeta;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 public class AdminAiConversationServiceImpl implements AdminAiConversationService {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminAiConversationServiceImpl.class);
 
     private static final int DEFAULT_PAGE_NUM = 1;
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -28,14 +40,17 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
     private final AdminAiConversationMapper conversationMapper;
     private final AdminAiMessageMapper messageMapper;
     private final AdminSiteMapper adminSiteMapper;
+    private final ObjectMapper objectMapper;
 
     public AdminAiConversationServiceImpl(
             AdminAiConversationMapper conversationMapper,
             AdminAiMessageMapper messageMapper,
-            AdminSiteMapper adminSiteMapper) {
+            AdminSiteMapper adminSiteMapper,
+            ObjectMapper objectMapper) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.adminSiteMapper = adminSiteMapper;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -74,8 +89,29 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
                         .eq(AdminAiMessageEntity::getSiteId, siteId)
                         .orderByAsc(AdminAiMessageEntity::getId))
                 .stream()
-                .map(AdminAiConversationServiceImpl::toMessage)
+                .map(this::toMessage)
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public void softDeleteBySiteId(long siteId) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        List<AdminAiMessageEntity> messages = messageMapper.selectList(
+                new LambdaQueryWrapper<AdminAiMessageEntity>().eq(AdminAiMessageEntity::getSiteId, siteId));
+        for (AdminAiMessageEntity message : messages) {
+            message.setDeletedAt(now);
+            messageMapper.updateById(message);
+            messageMapper.deleteById(message.getId());
+        }
+        List<AdminAiConversationEntity> conversations = conversationMapper.selectList(
+                new LambdaQueryWrapper<AdminAiConversationEntity>()
+                        .eq(AdminAiConversationEntity::getSiteId, siteId));
+        for (AdminAiConversationEntity conversation : conversations) {
+            conversation.setDeletedAt(now);
+            conversationMapper.updateById(conversation);
+            conversationMapper.deleteById(conversation.getId());
+        }
     }
 
     private void requireSite(long siteId) {
@@ -94,8 +130,28 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
                 entity.getCreatedAt());
     }
 
-    private static AdminAiMessageDto toMessage(AdminAiMessageEntity entity) {
+    private AdminAiMessageDto toMessage(AdminAiMessageEntity entity) {
         return new AdminAiMessageDto(
-                entity.getId(), entity.getRole(), entity.getContent(), entity.getCreatedAt());
+                entity.getId(),
+                entity.getRole(),
+                entity.getContent(),
+                entity.getCreatedAt(),
+                readAgentMeta(entity));
+    }
+
+    /** 观测数据损坏不影响会话浏览：忽略并记日志。 */
+    private AgentRunMeta readAgentMeta(AdminAiMessageEntity entity) {
+        if (!StringUtils.hasText(entity.getAgentMeta())) {
+            return null;
+        }
+        try {
+            return objectMapper
+                    .readerFor(AgentRunMeta.class)
+                    .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(entity.getAgentMeta());
+        } catch (JsonProcessingException ex) {
+            log.warn("site_ai_message {} has malformed agent_meta, ignored", entity.getId(), ex);
+            return null;
+        }
     }
 }

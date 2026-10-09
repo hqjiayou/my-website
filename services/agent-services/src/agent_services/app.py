@@ -2,12 +2,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from agent_services import __version__
 from agent_services.agent.model_factory import ModelHandle, create_model
 from agent_services.api.errors import register_error_handlers
 from agent_services.api.internal import router as internal_router
 from agent_services.auth.internal_token import assert_token_configured
 from agent_services.config import Settings, get_settings
 from agent_services.observability.otel import setup_otel
+from agent_services.observability.request_id import install_request_id_middleware
 from agent_services.retrieval.service import RetrievalService, create_retrieval_service
 
 
@@ -32,7 +34,7 @@ def create_app(
     # 安全配置错误必须 fail-fast，与 Provider BLOCKED（可正常启动）严格区分
     assert_token_configured(resolved.agent_internal_service_token)
 
-    app = FastAPI(title="agent-services", version="0.3.0", lifespan=_lifespan)
+    app = FastAPI(title="agent-services", version=__version__, lifespan=_lifespan)
     app.state.settings = resolved
     app.state.model_handle = model_handle if model_handle is not None else create_model(resolved)
 
@@ -46,6 +48,8 @@ def create_app(
 
     register_error_handlers(app)
     app.include_router(internal_router)
+    # 须先于 setup_otel：FastAPIInstrumentor 后注册 → 位于外层，中间件内可取到 server span
+    install_request_id_middleware(app)
     setup_otel(app)
 
     @app.get("/health")

@@ -2,13 +2,18 @@
 
 不自建 Provider 抽象层：Model/Provider 两层抽象直接复用 Pydantic AI（设计 V1 §2）。
 无配置 / 凭证缺失 → BLOCKED（ADR-0004），不默认任何模型。
+AI_FALLBACK_MODELS（§22.6）仅在主模型可用时生效：主模型 BLOCKED 时 fallback 不得顶替，
+否则等同“默认模型”，违反 ADR-0004。
 """
 
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, field
 
 from pydantic_ai.models import Model
 
 from agent_services.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -16,10 +21,50 @@ class ModelHandle:
     model: Model | None
     spec: str
     blocked_reason: str | None
+    fallback_specs: tuple[str, ...] = field(default=())
 
     @property
     def live(self) -> bool:
         return self.model is not None
+
+
+def _parse_specs(raw: str) -> list[str]:
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _build_primary(spec: str, settings: Settings) -> Model:
+    api_key = settings.ai_provider_api_key.strip()
+    base_url = settings.ai_provider_base_url.strip()
+    if spec.startswith("openai:") and (api_key or base_url):
+        # OpenAI-compatible 端点显式直配（本地模型 / 代理 / Foundry compatible）
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        provider = OpenAIProvider(
+            api_key=api_key or None,
+            base_url=base_url or None,
+        )
+        return OpenAIChatModel(spec.removeprefix("openai:"), provider=provider)
+    # 其余 spec（azure:/anthropic:/google:/...）走 Pydantic AI 原生推断，
+    # 凭证由各 Provider 的原生环境变量提供
+    from pydantic_ai.models import infer_model
+
+    return infer_model(spec)
+
+
+def _build_fallbacks(settings: Settings, primary_spec: str) -> list[tuple[str, Model]]:
+    """fallback 只走原生推断（凭证用各 Provider 原生环境变量），不复用主模型的 AI_PROVIDER_*。"""
+    from pydantic_ai.models import infer_model
+
+    built: list[tuple[str, Model]] = []
+    for spec in _parse_specs(settings.ai_fallback_models):
+        if spec == primary_spec:
+            continue
+        try:
+            built.append((spec, infer_model(spec)))
+        except Exception as exc:  # noqa: BLE001 — 单个 fallback 无效不影响主模型
+            logger.warning("Ignoring invalid AI_FALLBACK_MODELS entry %s: %s", spec, exc)
+    return built
 
 
 def create_model(settings: Settings) -> ModelHandle:
@@ -41,28 +86,24 @@ def create_model(settings: Settings) -> ModelHandle:
         )
 
     try:
-        api_key = settings.ai_provider_api_key.strip()
-        base_url = settings.ai_provider_base_url.strip()
-        if spec.startswith("openai:") and (api_key or base_url):
-            # OpenAI-compatible 端点显式直配（本地模型 / 代理 / Foundry compatible）
-            from pydantic_ai.models.openai import OpenAIChatModel
-            from pydantic_ai.providers.openai import OpenAIProvider
-
-            provider = OpenAIProvider(
-                api_key=api_key or None,
-                base_url=base_url or None,
-            )
-            model: Model = OpenAIChatModel(spec.removeprefix("openai:"), provider=provider)
-        else:
-            # 其余 spec（azure:/anthropic:/google:/...）走 Pydantic AI 原生推断，
-            # 凭证由各 Provider 的原生环境变量提供
-            from pydantic_ai.models import infer_model
-
-            model = infer_model(spec)
-        return ModelHandle(model=model, spec=spec, blocked_reason=None)
+        primary = _build_primary(spec, settings)
     except Exception as exc:  # noqa: BLE001 — 凭证/spec 错误统一映射 BLOCKED，不让服务启动失败
         return ModelHandle(
             model=None,
             spec=spec,
             blocked_reason=f"AI provider is not configured or invalid: {exc}",
         )
+
+    fallbacks = _build_fallbacks(settings, spec)
+    if not fallbacks:
+        return ModelHandle(model=primary, spec=spec, blocked_reason=None)
+
+    from pydantic_ai.models.fallback import FallbackModel
+
+    # 默认 fallback_on=(ModelAPIError,)：仅 Provider API 错误（含 429/5xx）切换，业务/工具异常不切换
+    return ModelHandle(
+        model=FallbackModel(primary, *(model for _, model in fallbacks)),
+        spec=spec,
+        blocked_reason=None,
+        fallback_specs=tuple(name for name, _ in fallbacks),
+    )

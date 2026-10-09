@@ -2,11 +2,16 @@
 
 当前只支持 openai: 前缀（含 OpenAI-compatible base_url）；
 其它 spec → BLOCKED（诚实失败，不默认任何模型）。
+请求走已声明的 httpx，不依赖未锁定的 openai SDK。
 """
 
 from typing import Protocol
 
+import httpx
+
 from agent_services.config import Settings
+
+_DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
 
 class EmbeddingClient(Protocol):
@@ -14,15 +19,32 @@ class EmbeddingClient(Protocol):
 
 
 class OpenAIEmbeddingClient:
-    def __init__(self, model: str, *, api_key: str | None, base_url: str | None) -> None:
-        from openai import AsyncOpenAI
-
+    def __init__(
+        self,
+        model: str,
+        *,
+        api_key: str | None,
+        base_url: str | None,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        root = (base_url or _DEFAULT_BASE_URL).rstrip("/")
         self._model = model
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        self._api_key = api_key
+        self._url = f"{root}/embeddings"
+        self._client = client or httpx.AsyncClient(timeout=60.0)
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        response = await self._client.embeddings.create(model=self._model, input=texts)
-        return [item.embedding for item in response.data]
+        headers: dict[str, str] = {}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        response = await self._client.post(
+            self._url,
+            headers=headers,
+            json={"model": self._model, "input": texts},
+        )
+        response.raise_for_status()
+        items = sorted(response.json()["data"], key=lambda item: item["index"])
+        return [item["embedding"] for item in items]
 
 
 def create_embedding_client(settings: Settings) -> tuple[EmbeddingClient | None, str | None]:

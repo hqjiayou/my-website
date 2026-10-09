@@ -1,6 +1,6 @@
 /**
  * 站点 AI 管理 API。
- * Prompt / KB / Conversation / Preview → 始终 REAL `/admin/sites/{siteId}/ai/*`，不受 USE_MOCK 门控。
+ * Prompt / KB / Conversation / Preview / Runtime → 始终 REAL `/admin/sites/{siteId}/ai/*`，不受 USE_MOCK 门控。
  */
 import type { PageResult } from '@/types/site'
 import type { HttpMessageBody } from '@/types/rbac'
@@ -11,8 +11,12 @@ import type {
   AiKnowledgeListItem,
   AiKnowledgeListQuery,
   AiMessage,
+  AiPreviewChatInput,
   AiPreviewHistoryMessage,
+  AiPreviewSkill,
   AiPromptProfile,
+  AiMcpReady,
+  AiRuntime,
   CreateAiKnowledgeInput,
   UpdateAiKnowledgeInput,
   UpdateAiPromptProfileInput,
@@ -126,6 +130,20 @@ export const aiApi = {
       .get<HttpMessageBody<AiMessage[]>>(`${aiBase(siteId)}/conversations/${conversationId}/messages`)
       .then(unwrapData)
   },
+
+  listPreviewSkills(siteId: number): Promise<AiPreviewSkill[]> {
+    return httpClient
+      .get<HttpMessageBody<AiPreviewSkill[]>>(`${aiBase(siteId)}/preview/skills`)
+      .then(unwrapData)
+  },
+
+  getRuntime(siteId: number): Promise<AiRuntime> {
+    return httpClient.get<HttpMessageBody<AiRuntime>>(`${aiBase(siteId)}/runtime`).then(unwrapData)
+  },
+
+  probeMcp(siteId: number): Promise<AiMcpReady> {
+    return httpClient.get<HttpMessageBody<AiMcpReady>>(`${aiBase(siteId)}/mcp-ready`).then(unwrapData)
+  },
 }
 
 export function previewChatStreamUrl(siteId: number) {
@@ -136,7 +154,7 @@ export function previewChatStreamUrl(siteId: number) {
 /** SSE 预览走 fetch：axios 默认超时不适合流式响应。 */
 export function streamPreviewChat(
   siteId: number,
-  body: { message: string; history?: AiPreviewHistoryMessage[] },
+  body: AiPreviewChatInput,
   abortSignal?: AbortSignal,
 ): Promise<Response> {
   const token = getAccessToken()

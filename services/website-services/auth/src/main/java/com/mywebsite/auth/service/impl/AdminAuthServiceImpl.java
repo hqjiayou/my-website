@@ -181,6 +181,11 @@ public class AdminAuthServiceImpl implements AdminAuthService {
                 throw unauthorizedRefresh(clientIp);
             }
             case RotateRefreshDto.Rotated ok -> {
+                // 旋转后立刻校验库状态：非 ACTIVE（含已软删）吊销新会话，禁止停用账号续命
+                if (!isRefreshPrincipalActive(ok.adminUserId())) {
+                    refreshSessionService.revokeByRefreshCookie(Optional.of(ok.newRefreshPlain()));
+                    throw unauthorizedRefresh(clientIp);
+                }
                 String accessToken = tokenService.createAccessToken(new IssuedAccessTokenDto(
                         TokenAudience.ADMIN,
                         String.valueOf(ok.adminUserId()),
@@ -197,6 +202,16 @@ public class AdminAuthServiceImpl implements AdminAuthService {
                 yield new AdminRefreshCookieDto(body, ok.newRefreshPlain(), ok.expireAt());
             }
         };
+    }
+
+    /** Refresh 主体仍可用：admin_user 存在且为 ACTIVE。 */
+    private boolean isRefreshPrincipalActive(long adminUserId) {
+        AdminUserEntity user = adminUserMapper.selectById(adminUserId);
+        if (user == null) {
+            return false;
+        }
+        String status = user.getStatus() == null ? "" : user.getStatus().trim().toUpperCase(Locale.ROOT);
+        return AdminAuthConstants.ACTIVE_ADMIN_ACCOUNT_STATUS.equals(status);
     }
 
     @Override

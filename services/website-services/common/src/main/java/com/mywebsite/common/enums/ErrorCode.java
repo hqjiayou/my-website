@@ -17,7 +17,12 @@ public enum ErrorCode {
      * 503；外部依赖未配置或明确不可用（如 AI Provider 无 Key）。
      * 不得用伪造成功响应掩盖该状态。
      */
-    EXTERNAL_DEPENDENCY_BLOCKED(1007, "common.error.external-dependency-blocked");
+    EXTERNAL_DEPENDENCY_BLOCKED(1007, "common.error.external-dependency-blocked"),
+    /**
+     * 422；Agent 单轮运行预算超限（请求数 / 工具调用数 / Token）。
+     * 对应 agent-services {@code AGENT_BUDGET_EXCEEDED}；非依赖故障，也非入参错误。
+     */
+    AGENT_BUDGET_EXCEEDED(1008, "common.error.agent-budget-exceeded");
 
     private final int code;
 

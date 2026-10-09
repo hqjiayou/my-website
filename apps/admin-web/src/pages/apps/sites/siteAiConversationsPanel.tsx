@@ -6,6 +6,8 @@ import { aiApi } from '@/api/apps/aiApi'
 import { DataTable, type DataTableColumn } from '@/components/admin'
 import type { AiConversationListItem } from '@/types/ai'
 
+import { AiRunMetaSummary } from './siteAiRunMeta'
+
 export function SiteAiConversationsPanel({ siteId }: { siteId: number }) {
   const { t } = useTranslation('sites')
   const [pageNum, setPageNum] = useState(1)
@@ -85,6 +87,7 @@ export function SiteAiConversationsPanel({ siteId }: { siteId: number }) {
               <li key={item.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
                 <p className="text-xs font-medium text-slate-500">{item.role}</p>
                 <p className="mt-1 whitespace-pre-wrap text-slate-800">{item.content}</p>
+                {item.agentMeta ? <AiRunMetaSummary meta={item.agentMeta} /> : null}
               </li>
             ))}
           </ul>

@@ -19,6 +19,7 @@ import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.page.PageResult;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -133,6 +134,21 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         removeFromDerivedIndex(siteId, documentId);
+    }
+
+    @Override
+    @Transactional
+    public void softDeleteBySiteId(long siteId) {
+        List<AdminAiKnowledgeDocumentEntity> documents = knowledgeMapper.selectList(
+                new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
+                        .eq(AdminAiKnowledgeDocumentEntity::getSiteId, siteId));
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        for (AdminAiKnowledgeDocumentEntity document : documents) {
+            document.setDeletedAt(now);
+            knowledgeMapper.updateById(document);
+            knowledgeMapper.deleteById(document.getId());
+            removeFromDerivedIndex(siteId, document.getId());
+        }
     }
 
     /**

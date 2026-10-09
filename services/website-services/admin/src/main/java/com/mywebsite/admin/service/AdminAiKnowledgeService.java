@@ -19,4 +19,7 @@ public interface AdminAiKnowledgeService {
             long siteId, long documentId, AdminAiKnowledgeUpdateRequest request);
 
     void deleteDocument(long siteId, long documentId);
+
+    /** 站点删除时软删文档，并 best-effort 移除派生索引。 */
+    void softDeleteBySiteId(long siteId);
 }

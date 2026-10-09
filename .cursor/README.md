@@ -6,10 +6,10 @@
 
 | 文件 | 作用域 | 说明 |
 |------|--------|------|
-| [`project.mdc`](rules/project.mdc) | 全仓 `alwaysApply` | 调查优先、修改边界、不过度拆分 |
-| [`backend-structure.mdc`](rules/backend-structure.mdc) | `services/website-services/**/*.java` | Maven 模块、包树、Flyway |
+| [`project.mdc`](rules/project.mdc) | 全仓 `alwaysApply` | 新建、引用与落点 |
+| [`backend-structure.mdc`](rules/backend-structure.mdc) | `website-services` 的 `*.java` 与 Flyway `*.sql` | Maven 模块、包树、Flyway |
 | [`agent-services.mdc`](rules/agent-services.mdc) | `services/agent-services/**` | Python AI Execution（ADR-0004/0005） |
-| [`ai-domain.mdc`](rules/ai-domain.mdc) | AI 相关 Java + admin-web `ai/**` | 跨模块 AI 归属与契约 |
+| [`ai-domain.mdc`](rules/ai-domain.mdc) | AI Java、`agent` 客户端、`aiApi` / `types/ai`、AI 页 | 跨模块 AI 归属与契约 |
 | [`admin-web.mdc`](rules/admin-web.mdc) | `apps/admin-web/src/**` | API/mock、权限、i18n |
 | [`admin-web-router.mdc`](rules/admin-web-router.mdc) | `router/**` | 路由表与 permission |
 | [`admin-web-styles.mdc`](rules/admin-web-styles.mdc) | `assets/styles/**` | 全局样式三层 |
@@ -24,7 +24,7 @@
 | [`admin-backend`](agents/admin-backend.md) | Java admin、Flyway、RBAC、Admin AI API |
 | [`admin-frontend`](agents/admin-frontend.md) | admin-web UI、mock→real、i18n |
 | [`agent-services`](agents/agent-services.md) | Python runtime、SSE、RAG、MCP/Skills/Todo |
-| [`integration-reviewer`](agents/integration-reviewer.md) | 合并前契约 / 边界 / Flyway / mock 审查 |
+| [`integration-reviewer`](agents/integration-reviewer.md) | 审查四层：单文件、逻辑、功能、模块 |
 
 ## 推荐协作流
 
@@ -33,8 +33,10 @@
                 ↓
     admin-backend / admin-frontend / agent-services（实现）
                 ↓
-         integration-reviewer（审查）
+         integration-reviewer（单文件 / 逻辑 / 功能 / 模块）
 ```
+
+审查分层只写在 [`integration-reviewer`](agents/integration-reviewer.md)，不复制到 Rules。
 
 ## AI 域快速指针
 

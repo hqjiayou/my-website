@@ -33,6 +33,9 @@ public final class GlobalExceptionHttpStatus {
         if (code == ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()) {
             return HttpStatus.SERVICE_UNAVAILABLE;
         }
+        if (code == ErrorCode.AGENT_BUDGET_EXCEEDED.getCode()) {
+            return HttpStatus.UNPROCESSABLE_ENTITY;
+        }
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 }

@@ -11,9 +11,10 @@ import { SiteAiConversationsPanel } from './siteAiConversationsPanel'
 import { SiteAiKnowledgePanel } from './siteAiKnowledgePanel'
 import { SiteAiPreviewChat } from './siteAiPreviewChat'
 import { SiteAiPromptPanel } from './siteAiPromptPanel'
+import { SiteAiRuntimePanel } from './siteAiRuntimePanel'
 import type { SiteWorkspaceOutletContext } from './siteWorkspaceLayout'
 
-type AiTab = 'prompt' | 'knowledge' | 'conversations' | 'preview'
+type AiTab = 'prompt' | 'knowledge' | 'conversations' | 'preview' | 'runtime'
 
 export function SiteAiPage() {
   const { t } = useTranslation('sites')
@@ -28,6 +29,7 @@ export function SiteAiPage() {
     if (canKnowledge) items.push({ id: 'knowledge', label: t('aiWorkspace.tabs.knowledge') })
     if (canConversations) items.push({ id: 'conversations', label: t('aiWorkspace.tabs.conversations') })
     if (canPrompt) items.push({ id: 'preview', label: t('aiWorkspace.tabs.preview') })
+    if (canPrompt) items.push({ id: 'runtime', label: t('aiWorkspace.tabs.runtime') })
     return items
   }, [canConversations, canKnowledge, canPrompt, t])
 
@@ -65,6 +67,7 @@ export function SiteAiPage() {
             {activeTab === 'knowledge' ? <SiteAiKnowledgePanel siteId={site.id} /> : null}
             {activeTab === 'conversations' ? <SiteAiConversationsPanel siteId={site.id} /> : null}
             {activeTab === 'preview' ? <SiteAiPreviewChat siteId={site.id} /> : null}
+            {activeTab === 'runtime' ? <SiteAiRuntimePanel siteId={site.id} /> : null}
           </article>
         </>
       )}

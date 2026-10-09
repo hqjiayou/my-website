@@ -12,7 +12,7 @@ last_verified: 2026-08-09
 |------|------|
 | Site Auth login/refresh/logout/me | **BACKEND_COMPLETE** |
 | site-web 对接 | **NOT_IMPLEMENTED** |
-| Site AI chat/stream | **BACKEND_COMPLETE**（会话落库；无 `AI_MODEL` 时诚实 503） |
+| Site AI chat/stream | **BACKEND_COMPLETE**（会话落库；无 `AI_MODEL` 时诚实 503）。SSE 对终端用户只下发 `START`(`{}`) / `TEXT_DELTA` / `DONE`(`reply`,`providerStatus`) / `CONVERSATION`(`conversationId`) / `ERROR`(`errorCode` ∈ `EXTERNAL_DEPENDENCY_BLOCKED`·`MCP_UNAVAILABLE`·`AGENT_BUDGET_EXCEEDED`·`SYSTEM_ERROR`)；工具事件、用量、skills、原始错误信息不下发 |
 | site-web AI UI | **NOT_IMPLEMENTED** |
 
 Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之亦然）。

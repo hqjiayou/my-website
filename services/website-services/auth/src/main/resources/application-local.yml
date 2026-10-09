@@ -8,10 +8,10 @@ mywebsite:
       privateKeyPath: ${AUTH_JWT_PRIVATE_KEY_PATH:./secrets/local/auth-private.pem}
       publicKeyPath: ${AUTH_JWT_PUBLIC_KEY_PATH:./secrets/local/auth-public.pem}
       keyId: ${AUTH_JWT_KEY_ID:auth-local-rs256-key-1}
-
-security:
-  auth:
-    refresh-cookie-secure: ${SECURITY_REFRESH_COOKIE_SECURE:false}
+  # 绑定 TokenProperties，前缀 mywebsite.security.token。
+  security:
+    token:
+      refresh-cookie-secure: ${SECURITY_REFRESH_COOKIE_SECURE:false}
 
 spring:
   datasource:

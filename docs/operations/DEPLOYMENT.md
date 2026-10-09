@@ -3,13 +3,13 @@
 ```yaml
 artifact_type: RUNBOOK
 status: CURRENT
-last_verified: 2026-09-01
+last_verified: 2026-10-09
 ```
 
 当前仓库以本地/开发运行为主。部署时注意：
 
 1. 仅暴露 **gateway**；auth / admin / site 内网。  
-2. **agent-services 不经 gateway 暴露**；仅 Java `site-app` 内网访问。  
+2. **agent-services 不经 gateway 暴露**；Java `admin` 与 `site-app` 内网访问。  
 3. Flyway 向前迁移；不改已执行脚本。  
 4. Auth 私钥与 JWKS 发布流程。  
 5. `trusted-proxies` 配真实前置 LB CIDR。  
@@ -21,7 +21,7 @@ last_verified: 2026-09-01
 |----|--------|
 | 镜像 | `services/agent-services/Dockerfile`（Python 3.13-slim + uv） |
 | 端口 | `3001`（`PORT`） |
-| 网络 | 内网；调用方仅为 `site-app` 的 `HttpAgentClient` |
+| 网络 | 内网；`admin` 与 `site-app` 经 `HttpAgentClient` 调用 |
 | Liveness | `GET /health`（无鉴权） |
 | Readiness | `GET /internal/v1/health` + `X-Internal-Service-Token`；`providerStatus=LIVE` 方可接 chat |
 | 必需密钥 | `AGENT_INTERNAL_SERVICE_TOKEN`（与 Java `AGENT_INTERNAL_SERVICE_TOKEN` 一致） |
@@ -49,6 +49,6 @@ docker run -d --name agent-services \
 
 检索库若启用：另设 `RETRIEVAL_DATABASE_URL`（专用用户，仅 `agent_retrieval` schema）。
 
-Java `site-app` 配置：`AGENT_BASE_URL=http://<agent-host>:3001`，`AGENT_INTERNAL_SERVICE_TOKEN` 与上相同。
+Java `admin` 与 `site-app` 配置：`AGENT_BASE_URL=http://<agent-host>:3001`，`AGENT_INTERNAL_SERVICE_TOKEN` 与上相同。
 
 CI：`.github/workflows/agent-services-ci.yml`（pytest + Java 契约 IT + docker build）。
