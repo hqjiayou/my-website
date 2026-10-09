@@ -1,0 +1,29 @@
+name: 功能
+description: 新功能或行为变更
+title: "feat: "
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目标
+    validations:
+      required: true
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: 不做的范围
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+    validations:
+      required: true
+  - type: input
+    id: roadmap
+    attributes:
+      label: ROADMAP
+      description: 若需要挂到 docs/overview/ROADMAP.md，写明主题；否则填「不挂」。
+    validations:
+      required: true

@@ -1,0 +1,33 @@
+name: Bug
+description: 缺陷
+title: "fix: "
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: 相关模块
+      options:
+        - admin-web
+        - website-services
+        - agent-services
+        - 其他
+    validations:
+      required: true
