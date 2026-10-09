@@ -1010,3 +1010,19 @@ baseline: pydantic-ai-slim 2.37 / pydantic-evals 2.37 / fastmcp-slim 4.0（以 .
 
 **事后检查**
 - `HttpAgentClientTest` 覆盖 503 体与 DISABLED；`AdminAiManagementMvcTest` 覆盖代理与不可达。admin-web tsc / eslint。
+
+## 27. 运行时升级至 pydantic-ai 2.54（2026-10-09）
+
+**事前分析**
+- 锁定版本为 `pydantic-ai-slim` / `pydantic-evals` / `pydantic-graph` **2.37.0**（2026-09-01）、`fastmcp-slim` **4.0.0**。PyPI 当前稳定版为 **2.54.0**（2026-10-02）与 fastmcp-slim **4.1.0**。
+- 中间版本含两处安全修复：2.52 `web_fetch` 对恶意嵌套 HTML 的 CPU/内存消耗（本服务未注册该工具）；2.53 `ConcurrencyLimitedModel` 流式并发槽在取消后不释放（本服务未使用该包装）。升级同时吸收模型档案与框架缺陷修复。
+- 对照 2.54 源码：`FunctionToolset(timeout=)` 只覆盖函数工具；`MCPToolset` 只有连接级 `init_timeout` / `read_timeout`。工具调用超时仍由 `_TimeoutToolset` 统一包装。`UsageLimits`、`result.usage` property、`FallbackModel`、`Agent.instrument_all` 的用法未变。
+- 明确不引入：`pydantic-ai-harness` / CLAI、durable execution、长期记忆、Human-in-the-loop、历史摘要压缩（仍按 §22.1 / §22.5）。
+
+**事中实施**
+- `pyproject.toml`：`pydantic-ai-slim[mcp]>=2.54.0,<3`、`pydantic-evals>=2.54.0,<3`；包版本 `0.5.3`。
+- `uv.lock`：上述三包 2.54.0，`fastmcp-slim` 4.1.0，`genai-prices` 0.1.9。执行代码无契约变化。
+
+**事后检查**
+- Docker（`ghcr.io/astral-sh/uv:python3.13-bookworm-slim`）pytest **86 passed**。
+- 本机 pytest 仍被 Windows 应用控制拦截（`asyncio` / `_overlapped`），与 §22.10 相同。

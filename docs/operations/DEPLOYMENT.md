@@ -51,4 +51,14 @@ docker run -d --name agent-services \
 
 Java `admin` 与 `site-app` 配置：`AGENT_BASE_URL=http://<agent-host>:3001`，`AGENT_INTERNAL_SERVICE_TOKEN` 与上相同。
 
-CI：`.github/workflows/agent-services-ci.yml`（pytest + Java 契约 IT + docker build）。
+## 分支与 CI
+
+日常集成分支是 `dev`，发版把 `dev` 合并到 `main`。不要把日常提交直接推到 `main`。GitHub 默认分支应为 `dev`。
+
+Actions 在 `dev`、`main` 的 push，以及目标为这两条分支的 Pull Request 上运行。未改到对应路径时，测试任务跳过，同名 gate 仍成功。约定是经 Pull Request 合入 `dev`，发版再合入 `main`，并看这三项检查。私有仓库在当前 GitHub 方案下不能开启分支保护（需要 Pro，或把仓库改为 public），所以这项约定现在还不能在服务器上强制：
+
+| 工作流 | 检查 |
+|--------|------|
+| `.github/workflows/backend-ci.yml` | Java 快速测试 + PostgreSQL 契约测试 |
+| `.github/workflows/agent-services-ci.yml` | pytest + Java 契约 IT + docker build |
+| `.github/workflows/admin-web-ci.yml` | `pnpm lint` + `pnpm build` |

@@ -1,6 +1,6 @@
 # agent-services — Python AI Execution Runtime（internal only）
 
-**Python 3.13 + FastAPI + Pydantic AI V2**。原则：**Java owns business truth, Python owns AI execution**（ADR-0005）。
+**Python 3.13 + FastAPI + Pydantic AI 2.54**（`pydantic-ai-slim[mcp]`，禁止 LangChain / LiteLLM）。原则：**Java owns business truth, Python owns AI execution**（ADR-0005）。
 
 - 设计：[`docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md`](../../docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)
 - 决策：ADR-0004（无 Provider 诚实失败）、ADR-0005（职责边界）
@@ -87,7 +87,7 @@ docker run --rm -p 3001:3001 \
 
 ### CI
 
-`.github/workflows/agent-services-ci.yml`：pytest → Java 契约 IT → Docker build。
+`.github/workflows/agent-services-ci.yml`：在 `dev` / `main` 上跑 pytest → Java 契约 IT → Docker build。分支说明见 `docs/operations/DEPLOYMENT.md`。
 
 ### 观测
 

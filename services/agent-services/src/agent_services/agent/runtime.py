@@ -153,8 +153,9 @@ def build_message_history(history: list[ChatHistoryMessage] | None) -> list[Mode
 class _TimeoutToolset(WrapperToolset):
     """单次工具调用超时 → ModelRetry（模型收到重试提示，TOOL_RESULT.ok=false）。
 
-    Agent(tool_timeout=...) 只作用于 Agent 自身注册的函数工具，不覆盖 toolsets= 传入的
-    外部 toolset（todo / MCP），故在此统一包装。同步工具在线程中执行，超时无法中断线程本身。
+    Agent(tool_timeout=...) 与 FunctionToolset(timeout=...) 只作用于函数工具，
+    不覆盖 MCPToolset（2.54 仍只有连接级 init_timeout / read_timeout），故在此统一包装。
+    同步工具在线程中执行，超时无法中断线程本身。
     """
 
     timeout_seconds: float = 30.0
