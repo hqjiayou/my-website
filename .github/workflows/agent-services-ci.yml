@@ -76,7 +76,9 @@ jobs:
         working-directory: services/website-services
         env:
           AGENT_PYTHON_CONTRACT_IT: 'true'
-        run: mvn -B -ntp -pl agent test -Dtest=HttpAgentClientPythonContractIT
+        run: |
+          mvn -B -ntp -pl agent -am install -DskipTests
+          mvn -B -ntp -pl agent test -Dtest=HttpAgentClientPythonContractIT
 
   docker-build:
     name: Docker image build
