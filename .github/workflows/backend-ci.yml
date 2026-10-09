@@ -82,6 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Require relevant jobs to pass
+        working-directory: .
         run: |
           set -eu
           if [ "${{ needs.changes.result }}" != "success" ]; then
