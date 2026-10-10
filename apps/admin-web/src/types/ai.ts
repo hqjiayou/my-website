@@ -143,6 +143,8 @@ export interface AiRuntimeStatus {
   mcpStatus: string | null
   mcpServers: Array<{ name: string; enabled: boolean }>
   limits: AiRuntimeLimits
+  retrievalStatus: string | null
+  retrievalBlockedReason: string | null
 }
 
 /** reachable=false 时 status 为 null，errorCode 说明原因。 */

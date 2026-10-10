@@ -1,5 +1,6 @@
 """流式 chat 执行：Pydantic AI stream → 应用层 AgentStreamEvent。"""
 
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -9,12 +10,15 @@ from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
 from pydantic_ai.models import Model
 
 from agent_services.agent.prompt_builder import build_prompt_parts
+from agent_services.api.errors import external_failure_message
 from agent_services.agent.runtime import (
     BUDGET_EXCEEDED,
     MAX_TOOL_TRACE,
     RunBudget,
     build_agent,
     build_run_kwargs,
+    budget_exceeded_message,
+    mcp_unavailable_message,
     tool_succeeded,
     usage_to_api,
 )
@@ -23,6 +27,8 @@ from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
 from agent_services.schemas.stream import AgentStreamEvent, AgentStreamEventType
 from agent_services.schemas.todo import TodoItem
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -53,6 +59,7 @@ async def stream_chat_events(
     skills_applied: list[str] | None = None,
     skills_missing: list[str] | None = None,
     budget: RunBudget | None = None,
+    locale: str | None = None,
 ) -> AsyncIterator[AgentStreamEvent]:
     resolved_budget = budget or RunBudget()
     system_prompt, user_message = build_prompt_parts(
@@ -62,6 +69,7 @@ async def stream_chat_events(
         retrieval_context,
         skill_instructions=skill_instructions,
         todos=initial_todos,
+        locale=locale,
     )
     start_data: dict[str, object] = {"siteId": site_id}
     if skills_applied:
@@ -121,9 +129,13 @@ async def stream_chat_events(
                 raise
             except Exception as exc:  # noqa: BLE001
                 if not entered:
-                    yield _error_event("MCP_UNAVAILABLE", f"MCP unavailable: {exc}")
+                    yield _error_event("MCP_UNAVAILABLE", mcp_unavailable_message(exc))
                     return
-                yield _error_event("EXTERNAL_DEPENDENCY_BLOCKED", str(exc))
+                logger.warning("AI provider call failed after MCP connect", exc_info=exc)
+                yield _error_event(
+                    "EXTERNAL_DEPENDENCY_BLOCKED",
+                    external_failure_message("AI provider call failed", exc),
+                )
                 return
         else:
             async for event in _emit_agent_stream(agent, user_message, run_kwargs, side_events):
@@ -135,10 +147,14 @@ async def stream_chat_events(
         # 已流出的部分文本不作为成功回复：没有 DONE，Java 不落库
         while side_events:
             yield side_events.pop(0)
-        yield _error_event(BUDGET_EXCEEDED, f"Agent run budget exceeded: {exc}")
+        yield _error_event(BUDGET_EXCEEDED, budget_exceeded_message(exc))
         return
     except Exception as exc:  # noqa: BLE001
-        yield _error_event("EXTERNAL_DEPENDENCY_BLOCKED", str(exc))
+        logger.warning("AI provider call failed", exc_info=exc)
+        yield _error_event(
+            "EXTERNAL_DEPENDENCY_BLOCKED",
+            external_failure_message("AI provider call failed", exc),
+        )
         return
 
     if output is None or not output.reply:

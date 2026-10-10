@@ -3,9 +3,12 @@
 所有查询强制携带 site_id 过滤——多租户隔离是硬约束，不允许全库检索。
 """
 
+import asyncio
 import json
 from dataclasses import dataclass
 from typing import Protocol
+
+from agent_services.retrieval.embeddings import _finite_floats
 
 
 @dataclass(frozen=True)
@@ -44,13 +47,24 @@ class PgVectorRetrievalStore:
         self._dsn = dsn
         self._dimensions = dimensions
         self._pool = None
+        self._pool_lock = asyncio.Lock()
 
     async def _get_pool(self):
-        if self._pool is None:
+        if self._pool is not None:
+            return self._pool
+        async with self._pool_lock:
+            if self._pool is not None:
+                return self._pool
             import asyncpg
 
-            self._pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=5)
-            await self._ensure_schema()
+            pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=5)
+            self._pool = pool
+            try:
+                await self._ensure_schema()
+            except Exception:
+                self._pool = None
+                await pool.close()
+                raise
         return self._pool
 
     async def _ensure_schema(self) -> None:
@@ -80,9 +94,12 @@ class PgVectorRetrievalStore:
                 "ON agent_retrieval.chunks (site_id, source_id)"
             )
 
-    @staticmethod
-    def _to_vector_literal(embedding: list[float]) -> str:
-        return "[" + ",".join(repr(v) for v in embedding) + "]"
+    def _vector_literal(self, embedding: list[float]) -> str:
+        if len(embedding) != self._dimensions:
+            raise ValueError(
+                f"Embedding dimension {len(embedding)} does not match configured {self._dimensions}."
+            )
+        return "[" + ",".join(repr(value) for value in _finite_floats(embedding)) + "]"
 
     async def upsert_document(
         self,
@@ -110,7 +127,7 @@ class PgVectorRetrievalStore:
                     source_id,
                     index,
                     content,
-                    self._to_vector_literal(embedding),
+                    self._vector_literal(embedding),
                     metadata,
                 )
         return len(chunks)
@@ -136,7 +153,7 @@ class PgVectorRetrievalStore:
                 "WHERE site_id = $1 "
                 "ORDER BY embedding <=> $2::vector LIMIT $3",
                 site_id,
-                self._to_vector_literal(embedding),
+                self._vector_literal(embedding),
                 top_k,
             )
         return [
@@ -150,6 +167,7 @@ class PgVectorRetrievalStore:
         ]
 
     async def close(self) -> None:
-        if self._pool is not None:
-            await self._pool.close()
-            self._pool = None
+        async with self._pool_lock:
+            if self._pool is not None:
+                await self._pool.close()
+                self._pool = None

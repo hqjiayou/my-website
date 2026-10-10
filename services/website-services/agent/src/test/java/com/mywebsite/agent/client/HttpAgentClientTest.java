@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -160,6 +161,40 @@ class HttpAgentClientTest {
                 .extracting(ex -> ((BusinessException) ex).getCode())
                 .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());
         // blocked 不重试
+        assertThat(chatHits.get()).isEqualTo(1);
+    }
+
+    @Test
+    void chatReadTimeoutDoesNotRetry() {
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> {
+            chatHits.incrementAndGet();
+            try {
+                Thread.sleep(2_000);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            write(exchange, 200, "{\"ok\":true,\"data\":{\"reply\":\"late\",\"providerStatus\":\"LIVE\"}}");
+        });
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofMillis(500));
+        factory.setReadTimeout(Duration.ofMillis(300));
+        RestClient restClient = RestClient.builder()
+                .baseUrl(properties.getBaseUrl())
+                .requestFactory(new BufferingClientHttpRequestFactory(factory))
+                .messageConverters(converters -> {
+                    ObjectMapper mapper = new ObjectMapper();
+                    converters.removeIf(MappingJackson2HttpMessageConverter.class::isInstance);
+                    converters.add(new MappingJackson2HttpMessageConverter(mapper));
+                })
+                .build();
+        HttpAgentClient slowClient = new HttpAgentClient(properties, new ObjectMapper(), restClient);
+
+        assertThatThrownBy(() -> slowClient.chat(new AgentChatRequest("10", "hello")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.SYSTEM_ERROR.getCode());
         assertThat(chatHits.get()).isEqualTo(1);
     }
 

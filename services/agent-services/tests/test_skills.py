@@ -8,6 +8,7 @@ from pydantic_ai.models.test import TestModel
 from agent_services.agent.model_factory import ModelHandle
 from agent_services.agent.skills import (
     clear_skills_cache,
+    default_skills_directory,
     discover_skills,
     resolve_skills,
 )
@@ -22,6 +23,11 @@ def _write_skill(root: Path, skill_id: str, body: str, *, frontmatter: str | Non
     if frontmatter:
         content = f"---\n{frontmatter}\n---\n\n{body}"
     (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+
+
+def test_default_skills_directory_points_at_an_existing_catalog() -> None:
+    root = Path(default_skills_directory())
+    assert (root / "orchestration" / "SKILL.md").is_file()
 
 
 def test_resolve_skill_instructions_merges_request_and_defaults(tmp_path: Path) -> None:
@@ -48,6 +54,34 @@ def test_unknown_skill_ids_are_tracked(tmp_path: Path) -> None:
     )
     assert resolution.instructions is None
     assert resolution.missing_ids == ("nope",)
+
+
+def test_symlink_outside_skills_dir_is_skipped(tmp_path: Path) -> None:
+    clear_skills_cache()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "SKILL.md").write_text("SECRET OUTSIDE", encoding="utf-8")
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    try:
+        (skills / "evil").symlink_to(outside, target_is_directory=True)
+    except OSError:
+        return
+    catalog = discover_skills(str(skills))
+    assert "evil" not in catalog
+
+
+def test_frontmatter_accepts_crlf(tmp_path: Path) -> None:
+    clear_skills_cache()
+    skill_dir = tmp_path / "alpha"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_bytes(
+        b'---\r\ndescription: Alpha skill\r\nversion: "2"\r\n---\r\n\r\nBody text here.\r\n'
+    )
+    catalog = discover_skills(str(tmp_path))
+    assert catalog["alpha"].description == "Alpha skill"
+    assert catalog["alpha"].version == "2"
+    assert catalog["alpha"].body == "Body text here."
 
 
 def test_frontmatter_parsed_into_catalog(tmp_path: Path) -> None:

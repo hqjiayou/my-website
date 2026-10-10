@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from pydantic_ai.models import Model
 
+from agent_services.api.errors import external_failure_message
 from agent_services.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,13 @@ class ModelHandle:
     @property
     def live(self) -> bool:
         return self.model is not None
+
+
+def public_model_spec(spec: str) -> str:
+    """健康检查只展示模型名。带 URL 或账号的 spec 不外传。"""
+    if "://" in spec or "@" in spec:
+        return "redacted"
+    return spec
 
 
 def _parse_specs(raw: str) -> list[str]:
@@ -63,7 +71,12 @@ def _build_fallbacks(settings: Settings, primary_spec: str) -> list[tuple[str, M
         try:
             built.append((spec, infer_model(spec)))
         except Exception as exc:  # noqa: BLE001 — 单个 fallback 无效不影响主模型
-            logger.warning("Ignoring invalid AI_FALLBACK_MODELS entry %s: %s", spec, exc)
+            logger.warning(
+                "Ignoring invalid AI_FALLBACK_MODELS entry %s: %s",
+                public_model_spec(spec),
+                type(exc).__name__,
+                exc_info=exc,
+            )
     return built
 
 
@@ -88,10 +101,11 @@ def create_model(settings: Settings) -> ModelHandle:
     try:
         primary = _build_primary(spec, settings)
     except Exception as exc:  # noqa: BLE001 — 凭证/spec 错误统一映射 BLOCKED，不让服务启动失败
+        logger.warning("AI model configuration failed for %s", public_model_spec(spec), exc_info=exc)
         return ModelHandle(
             model=None,
             spec=spec,
-            blocked_reason=f"AI provider is not configured or invalid: {exc}",
+            blocked_reason=external_failure_message("AI provider is not configured or invalid", exc),
         )
 
     fallbacks = _build_fallbacks(settings, spec)

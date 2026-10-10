@@ -494,6 +494,7 @@ export default {
       loadError: '运行时状态加载失败。',
       unreachable: 'agent-services 不可用（{{code}}）。站点 AI 对话将诚实失败，不会返回伪造回复。',
       provider: '模型 Provider',
+      retrieval: '检索索引',
       fallbacks: 'Fallback：{{ids}}',
       noMcp: '未配置 MCP server',
       enabled: '启用',

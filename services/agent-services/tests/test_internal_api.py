@@ -49,6 +49,8 @@ def test_health_reports_blocked_without_model() -> None:
     assert body["service"] == "agent-service"
     assert body["provider"] == "blocked"
     assert body["providerStatus"] == "BLOCKED"
+    assert body["retrievalStatus"] == "BLOCKED"
+    assert "RETRIEVAL_DATABASE_URL" in body["retrievalBlockedReason"]
 
 
 def test_health_reports_live_with_model() -> None:
@@ -96,6 +98,25 @@ def test_chat_success_returns_todos_snapshot_from_request() -> None:
     data = response.json()["data"]
     assert data["todos"] == [{"id": "t1", "title": "Step 1", "status": "IN_PROGRESS"}]
     assert isinstance(data["skillsApplied"], list)
+
+
+def test_chat_accepts_history_longer_than_message_cap() -> None:
+    from agent_services.schemas.chat import MAX_MESSAGE_CHARS
+
+    response = _live_client("ok").post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "next",
+            "history": [
+                {"role": "USER", "content": "earlier"},
+                {"role": "ASSISTANT", "content": "x" * (MAX_MESSAGE_CHARS + 80)},
+            ],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["reply"] == "ok"
 
 
 def test_chat_oversized_request_returns_400_flat_body() -> None:

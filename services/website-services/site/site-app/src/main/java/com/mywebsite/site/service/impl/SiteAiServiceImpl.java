@@ -14,6 +14,7 @@ import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.security.AuthContext;
 import com.mywebsite.common.security.AuthenticatedUser;
 import com.mywebsite.common.security.SubjectCodes;
+import com.mywebsite.infra.service.LocalizedMessageService;
 import com.mywebsite.site.dto.SiteAiChatRequestDto;
 import com.mywebsite.site.dto.SiteAiChatResponseDto;
 import com.mywebsite.site.service.SiteAiConversationService;
@@ -42,9 +43,13 @@ public class SiteAiServiceImpl implements SiteAiService {
     private static final Set<String> CLIENT_ERROR_CODES =
             Set.of("EXTERNAL_DEPENDENCY_BLOCKED", "MCP_UNAVAILABLE", "AGENT_BUDGET_EXCEEDED");
 
+    /** 与 agent-services ChatRequest.message 上限一致。超长在进会话和限流之前拒绝。 */
+    private static final int MAX_MESSAGE_CHARS = 16_000;
+
     private final AgentClient agentClient;
     private final SiteAiRateLimitService rateLimitService;
     private final SiteAiConversationService conversationService;
+    private final LocalizedMessageService localizedMessageService;
     private final ExecutorService siteAiStreamExecutor;
     private final ObjectMapper objectMapper;
 
@@ -52,11 +57,13 @@ public class SiteAiServiceImpl implements SiteAiService {
             AgentClient agentClient,
             SiteAiRateLimitService rateLimitService,
             SiteAiConversationService conversationService,
+            LocalizedMessageService localizedMessageService,
             ExecutorService siteAiStreamExecutor,
             ObjectMapper objectMapper) {
         this.agentClient = agentClient;
         this.rateLimitService = rateLimitService;
         this.conversationService = conversationService;
+        this.localizedMessageService = localizedMessageService;
         this.siteAiStreamExecutor = siteAiStreamExecutor;
         this.objectMapper = objectMapper;
     }
@@ -99,7 +106,7 @@ public class SiteAiServiceImpl implements SiteAiService {
         return new AgentChatRequest(
                 String.valueOf(siteId),
                 message,
-                null,
+                localizedMessageService.currentLanguageTag(),
                 conversationId == null ? null : String.valueOf(conversationId),
                 preparation.promptProfile(),
                 preparation.history().isEmpty() ? null : preparation.history(),
@@ -115,6 +122,9 @@ public class SiteAiServiceImpl implements SiteAiService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         if (request == null || !StringUtils.hasText(request.message())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        if (request.message().trim().length() > MAX_MESSAGE_CHARS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         if (!rateLimitService.tryAcquire(siteId, user.subject())) {
@@ -162,6 +172,19 @@ public class SiteAiServiceImpl implements SiteAiService {
             }
             emitter.complete();
         } catch (ClientDisconnectedException ex) {
+            // DONE 已收到但最后一帧没发出去：回复和工具副作用已经发生，必须落库，避免用户重试再写一次预约。
+            if (doneReply.length() > 0) {
+                try {
+                    conversationService.recordExchange(
+                            preparation.conversation(),
+                            userMessage,
+                            doneReply.toString(),
+                            doneTodos,
+                            doneMeta.get());
+                } catch (RuntimeException recordEx) {
+                    log.warn("site ai stream reply was not stored after client disconnect", recordEx);
+                }
+            }
             emitter.completeWithError(ex.getCause());
         } catch (BusinessException ex) {
             sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"" + toClientErrorCode(ex) + "\"}");

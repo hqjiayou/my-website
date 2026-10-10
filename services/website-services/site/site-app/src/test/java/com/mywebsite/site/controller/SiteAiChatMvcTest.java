@@ -81,6 +81,19 @@ class SiteAiChatMvcTest extends AbstractSiteSpringBootTest {
     }
 
     @Test
+    void chatRejectsMessageLongerThanAgentCap() throws Exception {
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+        String message = "a".repeat(16_001);
+
+        mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"" + message + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()));
+    }
+
+    @Test
     void chatRejectsMismatchedSiteId() throws Exception {
         String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
 

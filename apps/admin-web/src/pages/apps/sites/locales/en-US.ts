@@ -498,6 +498,7 @@ export default {
       loadError: 'Failed to load runtime status.',
       unreachable: 'agent-services is unavailable ({{code}}). Site AI chat will fail honestly instead of returning fake replies.',
       provider: 'Model provider',
+      retrieval: 'Retrieval index',
       fallbacks: 'Fallback: {{ids}}',
       noMcp: 'No MCP servers configured',
       enabled: 'Enabled',

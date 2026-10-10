@@ -137,6 +137,15 @@ export function SiteAiRuntimePanel({ siteId }: { siteId: number }) {
               ids: status.fallbackProviders.length ? status.fallbackProviders.join(', ') : '—',
             })}
           </dd>
+          <dd className="mt-2 flex items-center gap-2 text-xs">
+            <span className="text-slate-500">{t('aiWorkspace.runtime.retrieval')}</span>
+            <span className={`rounded px-1.5 py-0.5 ${statusClass(status.retrievalStatus)}`}>
+              {status.retrievalStatus ?? '—'}
+            </span>
+          </dd>
+          {status.retrievalStatus === 'BLOCKED' && status.retrievalBlockedReason ? (
+            <dd className="mt-1 text-xs text-amber-800">{status.retrievalBlockedReason}</dd>
+          ) : null}
         </div>
 
         <div className="rounded-xl border border-slate-200 p-3">

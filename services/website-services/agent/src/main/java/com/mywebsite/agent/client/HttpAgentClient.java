@@ -395,6 +395,11 @@ public class HttpAgentClient implements AgentClient {
             }
             throw mapped;
         } catch (RestClientException ex) {
+            // POST 已经发出后的读超时可能表示服务端仍在执行（预约等）。重试会造成两次副作用。
+            if ("POST".equals(method) && isReadTimeout(ex)) {
+                log.warn("agent-services read timed out method={} path={}", method, path);
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+            }
             throw new RetryableAgentCallException(new BusinessException(ErrorCode.SYSTEM_ERROR), ex);
         } catch (IOException ex) {
             throw new RetryableAgentCallException(
@@ -449,6 +454,18 @@ public class HttpAgentClient implements AgentClient {
             return new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
         return new BusinessException(ErrorCode.SYSTEM_ERROR);
+    }
+
+    private static boolean isReadTimeout(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof java.net.SocketTimeoutException timeout) {
+                String message = timeout.getMessage();
+                return message != null && message.toLowerCase(java.util.Locale.ROOT).contains("read");
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private static void sleepJitter(int attempt) {

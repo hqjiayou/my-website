@@ -3,10 +3,12 @@
 ```yaml
 artifact_type: RUNBOOK
 status: CURRENT
-last_verified: 2026-10-09
+last_verified: 2026-10-10
 ```
 
-权威列表以各服务 `.env.example` / `application.yml` / `services/website-services/README.md` 为准。
+权威列表以各服务 `.env.example` / `application.yml` / `services/website-services/README.md` 为准。本地怎么配、怎么起见 [`LOCAL_DEVELOPMENT.md`](./LOCAL_DEVELOPMENT.md)。
+
+Java 只读 `services/website-services/.env`。Python 只读进程 cwd 下的 `services/agent-services/.env`。`POSTGRES_*` / `REDIS_PASSWORD` / `MINIO_*` 必须与正在运行的 local-stack 容器一致；`.env.example` 中的 `mywebsite` / `CHANGE_ME` 是占位。`AGENT_INTERNAL_SERVICE_TOKEN` 两边必须相同。
 
 ## website-services（Java）
 
@@ -15,7 +17,7 @@ last_verified: 2026-10-09
 | DB / Redis / JWT / JWKS URI | website-services |
 | `AGENT_BASE_URL` | admin / site-app → agent-services 根地址（默认 `http://127.0.0.1:3001`） |
 | `AGENT_INTERNAL_SERVICE_TOKEN` | admin / site-app 与 agent-services 共享内部鉴权 |
-| `AGENT_CONNECT_TIMEOUT_MS` / `AGENT_READ_TIMEOUT_MS` / `AGENT_RETRY_MAX_ATTEMPTS` | HttpAgentClient 超时与重试 |
+| `AGENT_CONNECT_TIMEOUT_MS` / `AGENT_READ_TIMEOUT_MS` / `AGENT_RETRY_MAX_ATTEMPTS` | HttpAgentClient 超时与重试。读超时默认 120000（须大于工具超时 30s，并与站点 SSE 120s 对齐）。POST 读超时不重试，避免对话副作用执行两次 |
 
 ## agent-services（Python）
 

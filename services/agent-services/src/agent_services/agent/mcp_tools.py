@@ -107,7 +107,8 @@ def parse_mcp_server_configs(raw: str) -> list[McpServerConfig]:
             continue
         name = str(entry.get("name") or f"mcp{index + 1}").strip()
         if not _NAME_RE.match(name):
-            logger.warning("MCP entry name %r invalid, skipped", name)
+            # 非法 name 可能是 URL 或令牌，不写进日志
+            logger.warning("MCP entry name invalid, skipped")
             continue
         if name in seen_names:
             logger.warning("MCP entry name %r duplicated, skipped", name)
@@ -130,9 +131,8 @@ def parse_mcp_server_configs(raw: str) -> list[McpServerConfig]:
             declared = str(raw_transport).strip().lower()
             if declared not in _SUPPORTED_TRANSPORTS:
                 logger.warning(
-                    "MCP entry %r transport=%r is not supported (http|sse only; stdio is future), skipped",
+                    "MCP entry %r transport is not supported (http|sse only; stdio is future), skipped",
                     name,
-                    declared,
                 )
                 continue
 
@@ -207,7 +207,11 @@ def build_mcp_toolsets(settings: Settings) -> list[Any]:
     try:
         configs = parse_mcp_server_configs(raw)
     except (json.JSONDecodeError, ValueError) as exc:
-        logger.warning("Invalid MCP_SERVERS_JSON, skipping MCP toolsets: %s", exc)
+        logger.warning(
+            "Invalid MCP_SERVERS_JSON, skipping MCP toolsets: %s",
+            type(exc).__name__,
+            exc_info=exc,
+        )
         return []
 
     toolsets: list[Any] = []

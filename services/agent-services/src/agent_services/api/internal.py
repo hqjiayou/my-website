@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
@@ -11,7 +12,7 @@ from agent_services.agent.skills import (
 from agent_services.agent.todo_tools import todo_store_from_request
 from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.agent.mcp_tools import mcp_config_snapshot, probe_mcp_ready
-from agent_services.agent.model_factory import ModelHandle
+from agent_services.agent.model_factory import ModelHandle, public_model_spec
 from agent_services.agent.runtime import (
     BUDGET_EXCEEDED,
     ChatBlocked,
@@ -19,7 +20,7 @@ from agent_services.agent.runtime import (
     run_chat,
 )
 from agent_services.agent.stream_runtime import stream_chat_events
-from agent_services.api.errors import InternalApiError
+from agent_services.api.errors import InternalApiError, external_failure_message
 from agent_services.auth.internal_token import require_internal_service_token
 from agent_services.retrieval.service import RetrievalService
 from agent_services.schemas.chat import ChatRequest, ChatSuccessData, ChatUsage, ToolTraceItem
@@ -32,6 +33,8 @@ from agent_services.schemas.health import (
 )
 from agent_services.schemas.retrieval import RetrievalUpsertRequest
 from agent_services.schemas.skills import SkillCatalogItem, SkillCatalogResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/internal/v1",
@@ -127,6 +130,8 @@ async def internal_health(request: Request) -> HealthResponse:
     snapshot = mcp_config_snapshot(request.app.state.settings)
     budget = run_budget_from_settings(request.app.state.settings)
     usage_limits = budget.usage_limits
+    retrieval_service = _retrieval_service_or_none(request)
+    retrieval_reason = getattr(request.app.state, "retrieval_blocked_reason", None)
     return HealthResponse(
         limits=RuntimeLimits(
             maxRequests=usage_limits.request_limit if usage_limits else None,
@@ -135,14 +140,16 @@ async def internal_health(request: Request) -> HealthResponse:
             toolTimeoutSeconds=budget.tool_timeout_seconds,
             historyMaxChars=budget.history_max_chars,
         ),
-        provider=handle.spec,
+        provider=public_model_spec(handle.spec),
         providerStatus="LIVE" if handle.live else "BLOCKED",
-        fallbackProviders=list(handle.fallback_specs),
+        fallbackProviders=[public_model_spec(spec) for spec in handle.fallback_specs],
         timestamp=datetime.now(UTC).isoformat(),
         mcpStatus=snapshot.status,
         mcpServers=[
             McpServerHealth(name=item.name, enabled=item.enabled) for item in snapshot.servers
         ],
+        retrievalStatus="LIVE" if retrieval_service is not None else "BLOCKED",
+        retrievalBlockedReason=None if retrieval_service is not None else retrieval_reason,
     )
 
 
@@ -202,6 +209,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         initial_todos=body.todos,
         toolsets=toolsets,
         budget=run_budget_from_settings(request.app.state.settings),
+        locale=body.locale,
     )
 
     if isinstance(outcome, ChatBlocked):
@@ -259,6 +267,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             skills_applied=list(skill_resolution.applied_ids),
             skills_missing=list(skill_resolution.missing_ids),
             budget=run_budget_from_settings(request.app.state.settings),
+            locale=body.locale,
         ):
             yield event.to_sse()
 
@@ -291,10 +300,11 @@ async def upsert_retrieval_document(
             site_id=site_id, source_id=source_id, title=body.title, content=body.content
         )
     except Exception as exc:  # noqa: BLE001 — embedding/DB 故障对 Java 诚实报 503
+        logger.warning("Retrieval index update failed", exc_info=exc)
         raise InternalApiError(
             status_code=503,
             error_code="EXTERNAL_DEPENDENCY_BLOCKED",
-            message=f"Retrieval index update failed: {exc}",
+            message=external_failure_message("Retrieval index update failed", exc),
             provider_status="BLOCKED",
         ) from exc
     return {"ok": True, "data": {"chunks": chunk_count}}
@@ -316,10 +326,11 @@ async def delete_retrieval_document(
     try:
         await service.delete_document(site_id=site_id, source_id=source_id)
     except Exception as exc:  # noqa: BLE001
+        logger.warning("Retrieval index delete failed", exc_info=exc)
         raise InternalApiError(
             status_code=503,
             error_code="EXTERNAL_DEPENDENCY_BLOCKED",
-            message=f"Retrieval index delete failed: {exc}",
+            message=external_failure_message("Retrieval index delete failed", exc),
             provider_status="BLOCKED",
         ) from exc
     return {"ok": True, "data": None}

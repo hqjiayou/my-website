@@ -49,5 +49,7 @@ class HealthResponse(BaseModel):
     mcp_status: str = Field(default="DISABLED", alias="mcpStatus")
     mcp_servers: list[McpServerHealth] = Field(default_factory=list, alias="mcpServers")
     limits: RuntimeLimits = Field(default_factory=RuntimeLimits)
+    retrieval_status: str = Field(default="BLOCKED", alias="retrievalStatus")
+    retrieval_blocked_reason: str | None = Field(default=None, alias="retrievalBlockedReason")
 
     model_config = {"populate_by_name": True}

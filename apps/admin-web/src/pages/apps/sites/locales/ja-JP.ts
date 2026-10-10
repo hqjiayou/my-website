@@ -497,6 +497,7 @@ export default {
       loadError: 'ランタイム状態の読み込みに失敗しました。',
       unreachable: 'agent-services を利用できません（{{code}}）。サイト AI チャットは偽の応答を返さず、正直に失敗します。',
       provider: 'モデル Provider',
+      retrieval: '検索インデックス',
       fallbacks: 'Fallback：{{ids}}',
       noMcp: 'MCP server は未設定です',
       enabled: '有効',

@@ -1,6 +1,7 @@
+import math
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from agent_services.schemas.todo import MAX_TODO_ITEMS, TodoItem
 
@@ -19,12 +20,35 @@ class PromptProfile(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+    @field_validator("system_prompt")
+    @classmethod
+    def cap_system_prompt(cls, value: str | None) -> str | None:
+        if value is None or len(value) <= MAX_MESSAGE_CHARS:
+            return value
+        return value[:MAX_MESSAGE_CHARS]
+
+    @field_validator("temperature")
+    @classmethod
+    def drop_unusable_temperature(cls, value: float | None) -> float | None:
+        # 管理端写入范围是 0–2。库里的非法值若直接 400，站点每一轮对话都会失败。
+        if value is None or isinstance(value, bool) or not math.isfinite(value) or value < 0 or value > 2:
+            return None
+        return value
+
 
 class ChatHistoryMessage(BaseModel):
     """多轮历史消息；由 Java 从会话真相源加载后随请求传入（Python stateless）。"""
 
     role: Literal["USER", "ASSISTANT"]
-    content: str = Field(max_length=MAX_MESSAGE_CHARS)
+    content: str
+
+    @field_validator("content")
+    @classmethod
+    def cap_stored_content(cls, value: str) -> str:
+        # 已落库的回复可能长于本轮用户消息上限。截断后仍走 trim_history，避免整轮 400 把会话卡死。
+        if len(value) <= MAX_MESSAGE_CHARS:
+            return value
+        return value[:MAX_MESSAGE_CHARS]
 
 
 class ChatRequest(BaseModel):

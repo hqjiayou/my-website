@@ -243,6 +243,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 + "\"todos\":[{\"id\":\"t1\",\"title\":\"Step 1\",\"status\":\"IN_PROGRESS\"}]}";
         MvcResult mvcResult = mockMvc.perform(post("/api/admin/sites/" + siteId + "/ai/preview/chat/stream")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "zh-CN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(request().asyncStarted())
@@ -250,6 +251,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         mockMvc.perform(asyncDispatch(mvcResult)).andExpect(status().isOk());
 
         AgentChatRequest sent = captor.getValue();
+        assertThat(sent.locale()).isEqualTo("zh-CN");
         assertThat(sent.skills()).containsExactly("orchestration");
         assertThat(sent.todos()).containsExactly(new AgentTodoItem("t1", "Step 1", "IN_PROGRESS"));
     }
@@ -289,7 +291,9 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 List.of("anthropic:claude"),
                 "CONFIGURED",
                 List.of(new AgentRuntimeStatus.McpServer("echo", true)),
-                new AgentRuntimeStatus.Limits(10, 20, null, 30.0, 24000)));
+                new AgentRuntimeStatus.Limits(10, 20, null, 30.0, 24000),
+                "BLOCKED",
+                "Retrieval database is not configured (missing RETRIEVAL_DATABASE_URL)."));
 
         mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/runtime")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -298,7 +302,8 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.status.providerStatus").value("LIVE"))
                 .andExpect(jsonPath("$.data.status.fallbackProviders[0]").value("anthropic:claude"))
                 .andExpect(jsonPath("$.data.status.mcpServers[0].name").value("echo"))
-                .andExpect(jsonPath("$.data.status.limits.maxRequests").value(10));
+                .andExpect(jsonPath("$.data.status.limits.maxRequests").value(10))
+                .andExpect(jsonPath("$.data.status.retrievalStatus").value("BLOCKED"));
 
         when(agentClient.runtimeStatus()).thenThrow(new BusinessException(ErrorCode.SYSTEM_ERROR));
         mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/runtime")

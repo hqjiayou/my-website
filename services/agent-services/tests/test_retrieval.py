@@ -12,9 +12,9 @@ from agent_services.agent.model_factory import ModelHandle
 from agent_services.agent.runtime import ChatReply, run_chat
 from agent_services.app import create_app
 from agent_services.retrieval.chunking import split_text
-from agent_services.retrieval.embeddings import OpenAIEmbeddingClient
-from agent_services.retrieval.service import RetrievalService
-from agent_services.retrieval.store import RetrievedChunk
+from agent_services.retrieval.embeddings import OpenAIEmbeddingClient, create_embedding_client
+from agent_services.retrieval.service import RetrievalService, create_retrieval_service
+from agent_services.retrieval.store import PgVectorRetrievalStore, RetrievedChunk
 from conftest import TOKEN_HEADER, make_settings
 
 # ---------------------------------------------------------------- chunking
@@ -55,6 +55,109 @@ async def test_embedding_client_posts_openai_compatible_endpoint() -> None:
     assert captured["url"] == "http://embed.local/v1/embeddings"
     assert captured["auth"] == "Bearer sk-test"
     assert captured["body"] == {"model": "text-embedding-3-small", "input": ["a", "b"]}
+
+
+async def test_embedding_client_batches_long_inputs() -> None:
+    calls: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append(list(body["input"]))
+        data = [{"index": index, "embedding": [float(index)]} for index, _ in enumerate(body["input"])]
+        return httpx.Response(200, json={"data": data})
+
+    client = OpenAIEmbeddingClient(
+        "text-embedding-3-small",
+        api_key="sk-test",
+        base_url="http://embed.local/v1",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        batch_size=2,
+    )
+    assert await client.embed(["a", "b", "c"]) == [[0.0], [1.0], [0.0]]
+    assert calls == [["a", "b"], ["c"]]
+
+
+async def test_embedding_client_rejects_count_mismatch() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [{"index": 0, "embedding": [0.1]}]})
+
+    client = OpenAIEmbeddingClient(
+        "text-embedding-3-small",
+        api_key="sk-test",
+        base_url="http://embed.local/v1",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    try:
+        await client.embed(["a", "b"])
+        raise AssertionError("expected count mismatch")
+    except ValueError as exc:
+        assert "does not match" in str(exc)
+
+
+async def test_embedding_client_closes_owned_client() -> None:
+    client = OpenAIEmbeddingClient("m", api_key="sk-test", base_url="http://embed.local/v1")
+    await client.aclose()
+    assert client._client.is_closed
+
+
+async def test_service_close_closes_embedder() -> None:
+    class ClosingEmbedder(FakeEmbedder):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closed = False
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    embedder = ClosingEmbedder()
+    store = FakeStore()
+    service = RetrievalService(embedder, store)
+    await service.close()
+    assert embedder.closed
+
+
+def test_non_positive_dimensions_block_before_opening_clients() -> None:
+    service, reason = create_retrieval_service(
+        make_settings(
+            retrieval_database_url="postgresql://db.internal/agent",
+            ai_embedding_model="openai:text-embedding-3-small",
+            ai_provider_api_key="sk-test",
+            ai_embedding_dimensions=0,
+        )
+    )
+    assert service is None
+    assert reason == "AI_EMBEDDING_DIMENSIONS must be a positive integer."
+    assert reason is not None and "db.internal" not in reason
+
+
+def test_embedding_spec_with_url_is_not_echoed() -> None:
+    settings = make_settings(
+        ai_embedding_model="https://user:secret@embed.internal/v1",
+        ai_provider_api_key="sk-test",
+    )
+    client, reason = create_embedding_client(settings)
+    assert client is None
+    assert reason is not None
+    assert "secret" not in reason
+    assert "embed.internal" not in reason
+
+
+def test_vector_literal_rejects_non_finite() -> None:
+    store = PgVectorRetrievalStore("postgresql://unused", dimensions=1)
+    try:
+        store._vector_literal([float("nan")])
+        raise AssertionError("expected non-finite rejection")
+    except ValueError as exc:
+        assert "nan" not in str(exc).lower()
+
+
+def test_vector_literal_rejects_wrong_dimension() -> None:
+    store = PgVectorRetrievalStore("postgresql://unused", dimensions=3)
+    try:
+        store._vector_literal([0.1, 0.2])
+        raise AssertionError("expected dimension mismatch")
+    except ValueError as exc:
+        assert "does not match" in str(exc)
 
 
 def test_split_text_splits_long_paragraph_with_overlap() -> None:
@@ -136,6 +239,23 @@ async def test_service_retrieve_context_degrades_on_store_failure() -> None:
 
 
 # ---------------------------------------------------------------- internal API
+
+
+def test_retrieval_upsert_hides_database_url() -> None:
+    class LeakyStore(FakeStore):
+        async def upsert_document(self, **kwargs):
+            raise RuntimeError("postgresql://agent:secret@db.internal/agent_retrieval")
+
+    service, _ = _service(LeakyStore())
+    response = TestClient(create_app(make_settings(), retrieval_service=service)).put(
+        "/internal/v1/retrieval/documents",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "sourceId": "kb:1", "title": "t", "content": "hello"},
+    )
+    body = response.json()
+    assert response.status_code == 503
+    assert body["message"] == "Retrieval index update failed: RuntimeError"
+    assert "secret" not in response.text
 
 
 def test_retrieval_upsert_blocked_without_configuration() -> None:

@@ -18,6 +18,7 @@ import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentPromptProfile;
 import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.common.enums.ErrorCode;
+import com.mywebsite.infra.service.LocalizedMessageService;
 import com.mywebsite.common.exception.BusinessException;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -41,16 +42,19 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     private final AgentClient agentClient;
     private final AdminSiteMapper adminSiteMapper;
     private final AdminAiPromptProfileMapper promptProfileMapper;
+    private final LocalizedMessageService localizedMessageService;
     private final ExecutorService adminAiStreamExecutor;
 
     public AdminAiPreviewServiceImpl(
             AgentClient agentClient,
             AdminSiteMapper adminSiteMapper,
             AdminAiPromptProfileMapper promptProfileMapper,
+            LocalizedMessageService localizedMessageService,
             ExecutorService adminAiStreamExecutor) {
         this.agentClient = agentClient;
         this.adminSiteMapper = adminSiteMapper;
         this.promptProfileMapper = promptProfileMapper;
+        this.localizedMessageService = localizedMessageService;
         this.adminAiStreamExecutor = adminAiStreamExecutor;
     }
 
@@ -63,7 +67,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         AgentChatRequest agentRequest = new AgentChatRequest(
                 String.valueOf(siteId),
                 request.message().trim(),
-                null,
+                localizedMessageService.currentLanguageTag(),
                 null,
                 loadPromptProfile(siteId),
                 toHistory(request.history()),

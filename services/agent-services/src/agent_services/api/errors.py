@@ -28,6 +28,11 @@ class InternalApiError(Exception):
             self.body["providerStatus"] = provider_status
 
 
+def external_failure_message(prefix: str, exc: BaseException) -> str:
+    """回给 Java 或模型的失败说明只含异常类型。str(exc) 常含 URL、DSN 或上游正文。"""
+    return f"{prefix}: {type(exc).__name__}"
+
+
 def _describe_validation_error(exc: RequestValidationError) -> str:
     # 只回字段路径与规则，不回显输入值（可能含用户消息/大 payload）
     parts: list[str] = []

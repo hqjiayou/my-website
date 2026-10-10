@@ -42,6 +42,16 @@ class SkillResolution:
 
 
 def default_skills_directory() -> str:
+    """未设置 AGENT_SKILLS_DIR 时的目录。
+
+    源码布局下 parents[3] 是仓库根。装进 site-packages 后这条路径不再存在，
+    再试镜像里的 /app/skills。
+    """
+    if _SKILLS_ROOT.is_dir():
+        return str(_SKILLS_ROOT)
+    deployed = Path("/app/skills")
+    if deployed.is_dir():
+        return str(deployed)
     return str(_SKILLS_ROOT)
 
 
@@ -50,7 +60,7 @@ def clear_skills_cache() -> None:
 
 
 def _parse_frontmatter(raw: str) -> tuple[dict[str, str], str]:
-    text = raw.strip()
+    text = raw.replace("\r\n", "\n").replace("\r", "\n").strip()
     match = _FRONTMATTER_RE.match(text)
     if not match:
         return {}, text
@@ -68,7 +78,7 @@ def _load_skill_file(skill_id: str, path: Path) -> SkillDefinition | None:
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:
-        logger.warning("Failed to read skill %s: %s", skill_id, exc)
+        logger.warning("Failed to read skill %s: %s", skill_id, type(exc).__name__, exc_info=exc)
         return None
     meta, body = _parse_frontmatter(raw)
     if not body:
@@ -103,6 +113,15 @@ def _catalog_stamp(root: Path) -> tuple[tuple[str, int], ...]:
     return tuple(items)
 
 
+def _is_within(root: Path, path: Path) -> bool:
+    """解析符号链接后仍须落在 skills 目录内，避免把目录外文件读进 system prompt。"""
+    try:
+        path.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def discover_skills(skills_dir: str) -> dict[str, SkillDefinition]:
     """按目录发现 skill；缓存随 skill 文件 mtime 失效。"""
     root = Path(skills_dir)
@@ -117,7 +136,7 @@ def discover_skills(skills_dir: str) -> dict[str, SkillDefinition]:
     try:
         children = sorted(root.iterdir())
     except OSError as exc:
-        logger.warning("Failed to list skills dir %s: %s", skills_dir, exc)
+        logger.warning("Failed to list skills dir: %s", type(exc).__name__, exc_info=exc)
         return {}
 
     for child in children:
@@ -125,6 +144,9 @@ def discover_skills(skills_dir: str) -> dict[str, SkillDefinition]:
             continue
         skill_file = child / "SKILL.md"
         if not skill_file.is_file():
+            continue
+        if not _is_within(root, skill_file):
+            logger.warning("Skill %s escapes the skills directory, skipped", child.name)
             continue
         definition = _load_skill_file(child.name, skill_file)
         if definition is not None:

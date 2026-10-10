@@ -8,7 +8,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.test import TestModel
 
-from agent_services.agent.model_factory import create_model
+from agent_services.agent.model_factory import ModelHandle, create_model
 from agent_services.app import create_app
 from conftest import TOKEN_HEADER, make_settings
 
@@ -52,6 +52,23 @@ def test_blocked_primary_is_not_replaced_by_fallback() -> None:
     handle = create_model(make_settings(ai_model="bad:x", ai_fallback_models="fake:backup"))
     assert not handle.live
     assert handle.fallback_specs == ()
+    assert handle.blocked_reason == "AI provider is not configured or invalid: UserError"
+    assert "bad:x" not in (handle.blocked_reason or "")
+
+
+def test_health_redacts_url_like_model_spec() -> None:
+    handle = ModelHandle(
+        model=TestModel(),
+        spec="https://user:secret@llm.internal/v1",
+        blocked_reason=None,
+        fallback_specs=("https://backup.internal/v1",),
+    )
+    app = create_app(make_settings(), model_handle=handle)
+    body = TestClient(app).get("/internal/v1/health", headers=TOKEN_HEADER).json()
+    assert body["provider"] == "redacted"
+    assert body["fallbackProviders"] == ["redacted"]
+    assert "secret" not in str(body)
+    assert "llm.internal" not in str(body)
 
 
 def test_health_reports_fallback_providers() -> None:

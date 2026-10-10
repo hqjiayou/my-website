@@ -3,7 +3,7 @@ package com.mywebsite.agent.dto;
 import java.util.List;
 
 /**
- * agent-services 运行时快照（internal health，§22.9）：Provider / Fallback / MCP / 生效预算。
+ * agent-services 运行时快照（internal health，§22.9）：Provider / Fallback / MCP / 检索 / 生效预算。
  * 只含配置元数据（spec 名、server 名、数值上限），不含凭证或 URL。
  */
 public record AgentRuntimeStatus(
@@ -12,7 +12,9 @@ public record AgentRuntimeStatus(
         List<String> fallbackProviders,
         String mcpStatus,
         List<McpServer> mcpServers,
-        Limits limits) {
+        Limits limits,
+        String retrievalStatus,
+        String retrievalBlockedReason) {
 
     public AgentRuntimeStatus {
         fallbackProviders = fallbackProviders == null ? List.of() : List.copyOf(fallbackProviders);

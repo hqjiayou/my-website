@@ -220,6 +220,7 @@ async def test_mcp_connect_failure_is_mcp_unavailable() -> None:
     assert isinstance(outcome, ChatBlocked)
     assert outcome.error_code == "MCP_UNAVAILABLE"
     assert "MCP unavailable" in outcome.message
+    assert "127.0.0.1" not in outcome.message
 
 
 async def test_mcp_stream_connect_failure_emits_mcp_unavailable() -> None:
@@ -242,6 +243,7 @@ async def test_mcp_stream_connect_failure_emits_mcp_unavailable() -> None:
     assert events[0].type == AgentStreamEventType.START
     error = next(e for e in events if e.type == AgentStreamEventType.ERROR)
     assert error.data["errorCode"] == "MCP_UNAVAILABLE"
+    assert "127.0.0.1" not in error.data["message"]
 
 
 async def test_mcp_tool_call_emits_tool_sse_events() -> None:

@@ -5,6 +5,7 @@ Python 不保存会话状态（stateless between business requests）；
 运行预算（§22.4）：每轮 UsageLimits + 工具超时；超限诚实失败 AGENT_BUDGET_EXCEEDED。
 """
 
+import logging
 from dataclasses import dataclass, field
 
 import anyio
@@ -25,6 +26,7 @@ from pydantic_ai.toolsets.wrapper import WrapperToolset
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from agent_services.agent.prompt_builder import build_prompt_parts
+from agent_services.api.errors import external_failure_message
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.config import Settings
 from agent_services.observability.request_id import current_request_id
@@ -32,6 +34,8 @@ from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
 from agent_services.schemas.todo import TodoItem
 
 BUDGET_EXCEEDED = "AGENT_BUDGET_EXCEEDED"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -136,6 +140,19 @@ class ChatBlocked:
 ChatOutcome = ChatReply | ChatBlocked
 
 
+def mcp_unavailable_message(exc: BaseException) -> str:
+    """连接失败常把 MCP URL 放进异常正文；只回异常类型。"""
+    return external_failure_message("MCP unavailable", exc)
+
+
+def budget_exceeded_message(exc: BaseException) -> str:
+    """保留限额说明；正文里出现 URL 或凭据形态时只回异常类型。"""
+    detail = " ".join(str(exc).split())
+    if not detail or "://" in detail or "@" in detail:
+        return external_failure_message("Agent run budget exceeded", exc)
+    return f"Agent run budget exceeded: {detail}"
+
+
 def build_message_history(history: list[ChatHistoryMessage] | None) -> list[ModelMessage]:
     """Java 传入的扁平历史 → Pydantic AI ModelMessage；顺序保持原样。"""
     if not history:
@@ -208,6 +225,7 @@ async def run_chat(
     initial_todos: list[TodoItem] | None = None,
     toolsets: list[object] | None = None,
     budget: RunBudget | None = None,
+    locale: str | None = None,
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
     system_prompt, user_message = build_prompt_parts(
@@ -217,6 +235,7 @@ async def run_chat(
         retrieval_context,
         skill_instructions=skill_instructions,
         todos=initial_todos,
+        locale=locale,
     )
     run_kwargs = build_run_kwargs(prompt_profile, history, resolved_budget)
 
@@ -235,17 +254,19 @@ async def run_chat(
             except Exception as exc:  # noqa: BLE001
                 if not entered:
                     return ChatBlocked(
-                        message=f"MCP unavailable: {exc}",
+                        message=mcp_unavailable_message(exc),
                         error_code="MCP_UNAVAILABLE",
                     )
-                return ChatBlocked(message=f"AI provider call failed: {exc}")
+                logger.warning("AI provider call failed after MCP connect", exc_info=exc)
+                return ChatBlocked(message=external_failure_message("AI provider call failed", exc))
         else:
             result = await agent.run(user_message, **run_kwargs)
     except UsageLimitExceeded as exc:
         # 预算超限不是外部依赖故障：单独错误码，便于调用方区分与告警
-        return ChatBlocked(message=f"Agent run budget exceeded: {exc}", error_code=BUDGET_EXCEEDED)
+        return ChatBlocked(message=budget_exceeded_message(exc), error_code=BUDGET_EXCEEDED)
     except Exception as exc:  # noqa: BLE001 — Provider 调用失败 → 诚实 503，不伪造回复
-        return ChatBlocked(message=f"AI provider call failed: {exc}")
+        logger.warning("AI provider call failed", exc_info=exc)
+        return ChatBlocked(message=external_failure_message("AI provider call failed", exc))
 
     text = str(result.output).strip()
     if not text:

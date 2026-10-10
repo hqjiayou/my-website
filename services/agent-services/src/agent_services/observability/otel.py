@@ -35,7 +35,7 @@ def setup_otel(app: FastAPI, service_name: str = "agent-services") -> None:
     trace.set_tracer_provider(provider)
     FastAPIInstrumentor.instrument_app(app)
     _instrument_agents(provider)
-    logger.info("OpenTelemetry enabled endpoint=%s service=%s", endpoint, service_name)
+    logger.info("OpenTelemetry enabled service=%s", service_name)
 
 
 def _instrument_agents(provider: object) -> None:
