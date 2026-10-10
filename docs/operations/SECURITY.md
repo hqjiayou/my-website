@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: SPEC
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 ```
 
 ## 已建立
@@ -16,7 +16,7 @@ last_verified: 2026-08-09
 
 ## Client IP / X-Forwarded-For
 
-**代码侧缓解（2026-08-09）**：gateway 已配置 `spring.cloud.gateway.server.webflux.trusted-proxies`（默认 `.*`，可用环境变量覆盖）并启用 `x-forwarded.for-append`，以使 `XForwardedHeadersFilter` 追加 peer IP；auth `ClientIpUtils` 取 XFF 末段。
+**代码侧（2026-10-10 仍如此）**：gateway `application.yml` 的 `trusted-proxies` 默认 `.*`，`x-forwarded.for-append: true`。auth 取 XFF 末段。生产必须收成前置代理网段。经 gateway 的集成断言仍然没有（Issue #1）。
 
 **仍开放**：经 gateway 的自动化集成断言（TEST_GAP）。生产应将 `trusted-proxies` 收紧为前置 LB CIDR/正则，勿长期使用 `.*`。
 

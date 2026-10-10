@@ -1,11 +1,18 @@
 # 阶段 5A：Admin RBAC 权限体系详细设计
 
-> **文档状态**：当前有效（**5A 设计交付物**；本阶段**不写代码、不改库**）  
-> **前置**：认证阶段 **4F～4I** 已关闭（Auth 唯一认证、Admin Resource Server、Gateway 唯一入口）  
-> **最近同步**：2026-05-20  
-> **下一阶段**：**5C** 角色与权限管理（**5B** 校验底座已完成）→ **5D** / **5E**
+> **文档状态**：原则仍有效（JWT 不带权限列表、MENU 与 ACTION 分离、权限码靠种子）。**5B～5D 与 5E 只读已在代码里**，见下表。本文第 12 节不再是「尚未实施的草图」。  
+> **最近核对**：2026-10-10（对照 `admin` 的 Controller）  
+> **仍未做**：菜单写（`AdminMenuController` 只有 `GET /api/admin/menus`）；后台创建 `permission_code`（`AdminPermissionController` 只有 `GET`，与第 12.2 节「不要在后台造权限码」一致）
 
-**与 5B 的关系**：阶段 **5B** 已将 RBAC 权限校验底座的**实现约束、自查清单与关闭标准**细化到 **[《阶段5B-Admin-RBAC权限校验底座落地说明》](./阶段5B-Admin-RBAC权限校验底座落地说明.md)**；后续 **5B** 实现与审查以该文档 **§7、§17 自查清单**为准。
+| 设计中的接口 | 代码 |
+|--------------|------|
+| 角色 CRUD 与角色权限 | `AdminRoleController` `/api/admin/roles` |
+| 权限只读 | `AdminPermissionController` `GET /api/admin/permissions` |
+| 用户角色 | `AdminUserRoleController` `GET/PUT /api/admin/users/{id}/roles` |
+| 当前用户 | `AdminAuthMeController` `GET /api/admin/auth/me` |
+| 菜单读 | `AdminMenuController` `GET /api/admin/menus` |
+
+**与 5B 的关系**：校验底座的实现约束在 [阶段5B](./阶段5B-Admin-RBAC权限校验底座落地说明.md)。5B 已经落地，该文是当时的自查清单，不是待办。
 
 ---
 
@@ -354,7 +361,7 @@ WHERE ur.admin_user_id = :userId AND ur.deleted = FALSE;
 - **permissions**：`permission_code` 列表（**ACTION** 为主；是否包含 MENU 由产品定，建议 **全部返回** 供前端 `v-if`）
 - **menus**：由 **MENU** 类型权限 + `resource_key` 构建树（**5E** 完善）
 
-**现状**：`AdminAuthMeController` 返回 **硬编码占位**（`SUPER_ADMIN` + 示例 permissions/menus）——**5B 替换为真实查询**。
+**现状（2026-10-10）**：`AdminAuthMeController` 调用 `AdminAuthMeService.loadCurrentAdminContext()`，从库组装用户、角色、权限和菜单。早先的硬编码 `SUPER_ADMIN` 占位已经替换。菜单写接口仍然没有。
 
 ---
 
@@ -451,7 +458,7 @@ WHERE ur.admin_user_id = :userId AND ur.deleted = FALSE;
 
 ---
 
-## 12. API 草图（后续实施）
+## 12. API 草图（已按上表落地，菜单写除外）
 
 > 路径前缀均为 **`/api/admin/**`**，需 **Bearer**；具体 permission 见 **5B** 方法级注解。
 

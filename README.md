@@ -1,11 +1,11 @@
 # my-website
 
-一个“多站点网站合集平台”代码仓库骨架。第一阶段聚焦汽车维修与蛋糕烘焙站点模板，后续可扩展到美容院、诊所、中古车店、行政书士事务所等行业站点。
+一个多站点网站合集平台。平台能力按行业站点扩展（汽车维修、蛋糕烘焙，以及后续美容院、诊所、中古车店、行政书士事务所等）。当前工作区没有行业前台应用。
 
 ## 项目定位
 
 - 用一套平台同时承载多个行业站点，不是单个官网。
-- `apps/site-web` 是前台子站点集合目录，内部按行业拆分独立站点。
+- `apps/site-web` 是前台子站点集合目录。当前工作区没有行业前台应用；恢复后按行业拆分独立站点。
 - `apps/admin-web` 负责总后台与站点后台管理。
 - `services/website-services` 是当前 Java 后端主干，包含**统一网关**、**独立认证服务（`auth`）**、后台 API、前台 API、基础设施接入与后续业务模块骨架；**JWT 为 RS256 + JWKS（Auth 签发，业务服务 JWKS 验签）**。
 - `services/agent-services` 是 **Python 3.13 + FastAPI + Pydantic AI V2** 的 AI Execution Runtime（internal only）；Java owns business truth，Python owns AI execution（ADR-0005）；无 Provider 时诚实失败（ADR-0004）。
@@ -16,38 +16,27 @@
 my-website/
 ├── apps
 │   ├── admin-web
-│   └── site-web
-│       ├── car-web
-│       └── cake-web
-├── docs                    # 全栈文档（地图见 docs/README.md）
-│   ├── overview/           # CURRENT_STATE（最高级 SoT）
-│   ├── contracts/          # 前后端契约
-│   ├── admin-web/ · site-web/ · website-services/
-│   ├── decisions/ · rules/ · testing/ · operations/
-│   └── implementation-history/ · archive/ · audit/
-├── services
-│   ├── agent-services
-│   └── website-services
-└── docs/website-services/数据字典/   # 表级字典（勿再找已移除的 docs/数据字典 或 doc/）
+│   └── site-web          # 当前工作区无行业前台应用
+├── docs                  # 三格：现在 / 规格 / 历史，见 docs/README.md
+└── services
+    ├── agent-services
+    └── website-services
 ```
 
-**当前系统事实**请读 [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md)。文档地图：[`docs/README.md`](docs/README.md)。未完成工作 → GitHub Issues（见 `docs/overview/ROADMAP.md`）。
+**现在是什么**看 [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md)。文档先看 [`docs/README.md`](docs/README.md)，不要从旧总览翻起。未完成工作在 GitHub Issues（[`docs/overview/ROADMAP.md`](docs/overview/ROADMAP.md) 只留 Issue 号）。表级字典在 [`docs/website-services/数据字典/`](docs/website-services/数据字典/)。
 
 ## 子项目职责
 
 ### apps/site-web
 
-前台站点集合目录，当前包含：
-
-- `car-web`：汽车维修行业站点
-- `cake-web`：蛋糕烘焙行业站点
+前台站点集合目录。当前工作区没有行业前台应用（原先的 `car-web`、`cake-web` 骨架已移除）。
 
 前台站点后续优先通过 `website-services/gateway` 访问前台 API。  
-**Site Auth：后端已完成，site-web 前端尚未对接**（见 [`docs/site-web/CURRENT_STATE.md`](docs/site-web/CURRENT_STATE.md)）。
+**Site Auth：后端已完成，前端尚未对接**（见 [`docs/site-web/CURRENT_STATE.md`](docs/site-web/CURRENT_STATE.md)）。
 
 ### apps/admin-web
 
-后台管理系统。主纵向域（Site / User / Template / Appearance / Media / Content / Reservation / RBAC）为 REAL API；AI 等仍可为 mock/占位。
+后台管理系统。主纵向域（Site / User / Template / Appearance / Media / Content / Reservation / RBAC）与站点 AI 管理为真实 API。无 `AI_MODEL` 时预览诚实失败。Analytics / System 等页仍为占位。
 
 专项文档：
 
@@ -118,7 +107,11 @@ admin / site-app / auth
 
 ## 启动命令
 
-启动本地基础设施后，启动 `website-services`：
+完整步骤（local-stack 账号对齐、两份 `.env`、JWT 路径、健康检查）见 [`docs/operations/LOCAL_DEVELOPMENT.md`](docs/operations/LOCAL_DEVELOPMENT.md)。
+
+先启动 local-stack 的 `local-postgres` / `local-redis`。`services/website-services/.env` 的 `POSTGRES_*`、`REDIS_PASSWORD`、`MINIO_*` 必须与容器一致；`.env.example` 的 `mywebsite` / `CHANGE_ME` 不能直接拿来连当前库。`services/agent-services/.env` 单独一份，`AGENT_INTERNAL_SERVICE_TOKEN` 与 Java 侧相同，缺了进程会拒绝启动。
+
+启动 `website-services`（四个终端）：
 
 ```bash
 cd services/website-services
@@ -137,19 +130,7 @@ pnpm install
 pnpm dev
 ```
 
-启动前台站点：
-
-```bash
-cd apps/site-web/car-web
-pnpm install
-pnpm dev
-```
-
-```bash
-cd apps/site-web/cake-web
-pnpm install
-pnpm dev
-```
+工作区没有 site-web 前台应用，不要启动 `car-web` / `cake-web`。
 
 启动 `agent-services`：
 
@@ -168,6 +149,6 @@ uv run agent-services
 - Redis：`local-redis` → `localhost:6379`
 - MinIO / AIStor：`local-aistor` → API `http://localhost:9000`（控制台端口以栈配置为准）
 
-应用在 **`services/website-services/.env`**（范本 `.env.example`）中配置 JDBC / Redis / MinIO 等；与 **local-stack** 目录下的 `.env` **分开维护**。
+应用在 **`services/website-services/.env`**（范本 `.env.example`）中配置 JDBC / Redis / MinIO 等；与 **local-stack** 目录下的 `.env` **分开维护**，也与 **`services/agent-services/.env`** 分开。
 
-更多说明见 [`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。
+更多说明见 [`docs/operations/LOCAL_DEVELOPMENT.md`](docs/operations/LOCAL_DEVELOPMENT.md) 与 [`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。

@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: SPEC
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 ```
 
 - **Server state**：TanStack Query（各页 `queryKey` 尚未完全统一——非阻断）。  

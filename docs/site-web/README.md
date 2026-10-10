@@ -3,14 +3,14 @@
 ```yaml
 artifact_type: REFERENCE
 status: CURRENT
+last_verified: 2026-10-10
 ```
 
-前台多站点目录：`apps/site-web/car-web`、`cake-web`。当前为骨架，**不是**已对接 Auth 的产品前台。
+全库分格见 [`../README.md`](../README.md)。工作区没有行业前台应用。Site Auth 后端已完成，前端未接。
 
-| 文档 | 用途 |
-|------|------|
-| [`CURRENT_STATE.md`](./CURRENT_STATE.md) | 状态 |
-| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | 结构 |
-| [`AUTH_INTEGRATION.md`](./AUTH_INTEGRATION.md) | 认证缺口 |
-| [`API_INTEGRATION.md`](./API_INTEGRATION.md) | API |
-| [`TESTING.md`](./TESTING.md) | 测试 |
+| 格 | 文件 |
+|----|------|
+| 现在 | [`CURRENT_STATE.md`](./CURRENT_STATE.md) |
+| 规格 | [`ARCHITECTURE.md`](./ARCHITECTURE.md)、[`AUTH_INTEGRATION.md`](./AUTH_INTEGRATION.md)、[`API_INTEGRATION.md`](./API_INTEGRATION.md)、[`TESTING.md`](./TESTING.md) |
+
+契约不在本目录，看 [`../contracts/AUTH_CONTRACT.md`](../contracts/AUTH_CONTRACT.md) 和 [`../contracts/SITE_API_CONTRACT.md`](../contracts/SITE_API_CONTRACT.md)。

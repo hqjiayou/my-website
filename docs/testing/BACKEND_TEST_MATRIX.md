@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: REFERENCE
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 ```
 
 | Check | Command |

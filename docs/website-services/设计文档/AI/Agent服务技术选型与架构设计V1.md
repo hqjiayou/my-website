@@ -4,7 +4,7 @@
 artifact_type: SPEC
 status: CURRENT   # Phase 0–5 + §19 MCP + §20 Skills 平台化（2026-09-05）
 owner: platform
-last_verified: 2026-09-01
+last_verified: 2026-10-10
 source_of_truth: services/agent-services（代码优先）+ services/website-services/agent（Java 契约）
 related:
   - docs/decisions/ADR-0004-ai-must-fail-honestly-without-provider.md
@@ -13,6 +13,18 @@ related:
 
 > 本版取代早前 Node/Fastify 骨架方案与首版 Python 草案。核心结论：
 > **Java owns business truth. Python owns AI execution.**
+
+## 0. 阅读边界（2026-10-10 对照 `services/agent-services`）
+
+第 1 节里「工具 / RAG 为未来」、第 4 节「现在不建 `rag/` `tools/` `mcp/`」、第 5 节只有单轮 chat、第 11 节把 MCP 写成尚未触发，都是 Phase 0 快照。当前代码已经超出这些段落。硬边界仍以 ADR-0004、ADR-0005 和第 3 节四条为准。
+
+| 要点 | 代码 |
+|------|------|
+| 目录 | 已有 `retrieval/`、`tools/business_api.py`、`agent/mcp_tools.py`、`agent/skills.py`、`agent/todo_tools.py`、`observability/`。没有 `graph/`、`providers/`、`memory/` |
+| Internal HTTP | `api/internal.py`：`GET /health`、`GET /skills`、`GET /mcp/ready`、`POST /chat`、`POST /chat/stream` |
+| `ChatRequest` | `siteId`、`message`、可选 `locale`、`conversationId`、`promptProfile`、`history`（USER/ASSISTANT）、`skills`、`todos`。成功体还有 `usage`、`tools`、`skillsApplied`、`todos` |
+| 否决项里仍有效的 | 不自建 Provider Protocol；无 `AI_MODEL` 不默认模型；Python 不存会话；不直连业务库；令牌缺失与 Provider 缺失是两种失败 |
+| 否决项里已过时的 | 「初期不用 MCP」。MCP 已接，但是配置驱动的外部工具，不是业务真相 |
 
 ---
 
@@ -265,7 +277,7 @@ LangGraph 引入触发条件（满足其一才评估，且先问 Pydantic AI 自
 - [x] admin `POST /api/admin/sites/{siteId}/ai/preview/chat/stream`（权限 `admin:ai-prompt:read`）
 - [x] admin-web `SiteAiPreviewChat`：`useLocalRuntime` + `createJavaPreviewAdapter`
 
-site-web 仍为骨架，无 SITE JWT 聊天页；P1 前端落在 **admin 站点 AI 预览**。
+工作区没有 site-web 前台应用，因此没有 SITE JWT 聊天页；P1 前端落在 **admin 站点 AI 预览**。
 
 ---
 

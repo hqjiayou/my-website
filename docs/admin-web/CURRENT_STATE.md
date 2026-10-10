@@ -24,9 +24,9 @@ source_of_truth: apps/admin-web/src
 | Media | FORCE REAL | |
 | Content | FORCE REAL | |
 | Reservation | FORCE REAL | status `DONE` |
-| AI | FORCE REAL | `aiApi` → `/admin/sites/{id}/ai/**`；无 `AI_MODEL` 时预览诚实失败 |
-| Analytics / System / Dev / Domain 等 | PLACEHOLDER | Empty / 未接入页 |
-| 运营全局 Contents/Files/Reservations | REAL | `api/operation/*` 跨站聚合；进页分别要 content/reservation/media list |
+| AI 站点工作台与全局 Prompt / 知识库 / 会话 | FORCE REAL | `siteAiPage`、`pages/ai/promptsPage` 等走 `aiApi`。`pages/ai/settingsPage` 只解释环境变量，不调 API |
+| 占位页 | 无后端 | `siteDomainPage`（DNS/CDN 文案）；`ParamsConfigPage`、`AnalyticsPage`、`SystemSettingsPage`、`DeveloperPage` 使用 `EmptyModulePage` |
+| 运营全局 Contents/Files/Reservations | REAL | `api/operation/*` 客户端跨站聚合，无单独跨站后端 |
 
 ## Mock
 
