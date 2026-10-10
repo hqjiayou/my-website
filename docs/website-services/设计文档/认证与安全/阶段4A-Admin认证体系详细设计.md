@@ -14,7 +14,7 @@
 | 读者 | 后端开发与评审 |
 | 关联前置 | 阶段 2B 首批表；阶段 3A/3B 持久层；**持久层真实 PostgreSQL 回归验证**（长期）已就绪 |
 
-本文约定均以 **Admin 领域（管理员账号与权限数据）** 为中心；**认证编排 HTTP**在 **`auth`**（**现行**：**`/api/auth/admin/login`**、**`/api/auth/admin/refresh`**、**`/api/auth/admin/logout`**；经 Gateway：**`/api/auth/**`**）。**业务上下文**：**`GET /api/admin/auth/me`**（**admin**）。权威清单：**[`README`](../../../../services/website-services/README.md)** §认证 HTTP 契约。Site 前台认证保持 **`TokenAudience.SITE`** 分离思路（**`/api/auth/site/login`** 占位）。
+本文约定均以 **Admin 领域（管理员账号与权限数据）** 为中心；**认证编排 HTTP**在 **`auth`**。Admin：`/api/auth/admin/login|refresh|logout|register`。Site：`/api/auth/site/login|refresh|logout`（`AuthSiteLoginController` 等，**不是占位**）。经 Gateway 走 `/api/auth/**`。业务上下文：`GET /api/admin/auth/me`、`GET /api/site/auth/me`。权威清单：[website-services README](../../../../services/website-services/README.md)。
 
 > **阶段 4B.5**：返回给调用方的认证/校验类 **`ApiResponse.message`** 已改为 **`messageKey` + 多模块 `messages*.properties`**（`Accept-Language`，默认回退 **`ja-JP`**）。定案见 **[《后端多语言支持策略设计 V1》](./后端多语言支持策略设计V1.md)**。  
 > **JWT 无效等场景的 RFC 6750 / `WWW-Authenticate`** 仍以本文及阶段 4B 结论为准；4B.5 **不强制**统一为 JSON `ApiResponse` 错误体。

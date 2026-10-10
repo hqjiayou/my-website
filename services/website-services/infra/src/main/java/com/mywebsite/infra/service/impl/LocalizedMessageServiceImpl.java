@@ -53,6 +53,11 @@ public class LocalizedMessageServiceImpl implements LocalizedMessageService {
         }
     }
 
+    @Override
+    public String currentLanguageTag() {
+        return currentLocaleWithoutRequestFallback().toLanguageTag();
+    }
+
     private Locale currentLocaleWithoutRequestFallback() {
         try {
             var attrs = RequestContextHolder.getRequestAttributes();

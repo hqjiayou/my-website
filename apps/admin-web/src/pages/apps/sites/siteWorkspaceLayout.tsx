@@ -27,10 +27,10 @@ export function SiteWorkspaceLayout() {
   const canListContent = useHasPermission(PERMISSION_CODES.contentList)
   const canListReservation = useHasPermission(PERMISSION_CODES.reservationList)
   const canListMedia = useHasPermission(PERMISSION_CODES.mediaList)
-  const canAi =
-    useHasPermission(PERMISSION_CODES.aiPromptRead) ||
-    useHasPermission(PERMISSION_CODES.aiKbList) ||
-    useHasPermission(PERMISSION_CODES.aiConversationList)
+  const canReadPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
+  const canListKb = useHasPermission(PERMISSION_CODES.aiKbList)
+  const canListConversation = useHasPermission(PERMISSION_CODES.aiConversationList)
+  const canAi = canReadPrompt || canListKb || canListConversation
 
   const { data: site, isPending, isError, error } = useQuery({
     queryKey: ['sites', parsedId],

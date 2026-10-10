@@ -5,6 +5,7 @@ Java HttpAgentClient.mapErrorBody 读取顶层 errorCode / providerStatus；
 """
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
@@ -27,7 +28,28 @@ class InternalApiError(Exception):
             self.body["providerStatus"] = provider_status
 
 
+def external_failure_message(prefix: str, exc: BaseException) -> str:
+    """回给 Java 或模型的失败说明只含异常类型。str(exc) 常含 URL、DSN 或上游正文。"""
+    return f"{prefix}: {type(exc).__name__}"
+
+
+def _describe_validation_error(exc: RequestValidationError) -> str:
+    # 只回字段路径与规则，不回显输入值（可能含用户消息/大 payload）
+    parts: list[str] = []
+    for error in exc.errors()[:5]:
+        loc = ".".join(str(item) for item in error.get("loc", ()) if item != "body")
+        parts.append(f"{loc or 'body'}: {error.get('msg', 'invalid')}")
+    return "Invalid request: " + "; ".join(parts) if parts else "Invalid request."
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(InternalApiError)
     async def internal_api_error_handler(_request: Request, exc: InternalApiError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content=exc.body)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "errorCode": "BAD_REQUEST", "message": _describe_validation_error(exc)},
+        )

@@ -1,3 +1,8 @@
+---
+description: Sample reservation-flow guidance (optional demo skill)
+version: "1"
+---
+
 # Reservation assistant
 
 When the user wants to book, reserve, or schedule:

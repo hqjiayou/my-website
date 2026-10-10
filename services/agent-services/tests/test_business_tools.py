@@ -40,6 +40,60 @@ async def test_client_sends_token_and_site_scoped_path() -> None:
     assert request.headers["X-Internal-Service-Token"] == "test-internal-token"
 
 
+async def test_client_encodes_site_id_and_hides_error_body() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        if request.url.path.endswith("/contents"):
+            return httpx.Response(500, text="token=secret-stack")
+        return httpx.Response(200, text="not-json")
+
+    client = _client_with(handler)
+    try:
+        await client.list_site_contents("7/../other")
+        raise AssertionError("expected BusinessApiError")
+    except BusinessApiError as exc:
+        assert "secret-stack" not in str(exc)
+        assert "HTTP 500" in str(exc)
+    assert b"/internal/site/v1/sites/7%2F..%2Fother/contents" in captured[0].url.raw_path
+
+    try:
+        await client.get_site_summary("7")
+        raise AssertionError("expected BusinessApiError")
+    except BusinessApiError as exc:
+        assert "not-json" not in str(exc)
+
+
+async def test_client_hides_url_when_unreachable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(f"dial tcp {request.url}")
+
+    try:
+        await _client_with(handler).get_site_summary("7")
+        raise AssertionError("expected BusinessApiError")
+    except BusinessApiError as exc:
+        assert str(exc) == "Business API unreachable: ConnectError"
+        assert "java-internal" not in str(exc)
+
+
+async def test_client_forwards_short_message_on_http_error() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"code": 1001, "message": "phone: must not be blank", "data": None})
+
+    try:
+        await _client_with(handler).create_reservation(
+            "7",
+            customer_name="Tanaka",
+            phone="",
+            service_type="cut",
+            reserved_at="2026-09-02T10:00:00+09:00",
+        )
+        raise AssertionError("expected BusinessApiError")
+    except BusinessApiError as exc:
+        assert str(exc) == "Business API error: phone: must not be blank"
+
+
 async def test_client_raises_on_business_error_body() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"code": 1004, "message": "not found", "data": None})
@@ -49,6 +103,31 @@ async def test_client_raises_on_business_error_body() -> None:
         raise AssertionError("expected BusinessApiError")
     except BusinessApiError as exc:
         assert "not found" in str(exc)
+
+
+async def test_client_hides_url_and_non_text_business_message() -> None:
+    def url_handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"code": 1, "message": "see https://internal.example/secret", "data": None},
+        )
+
+    try:
+        await _client_with(url_handler).get_site_summary("1")
+        raise AssertionError("expected BusinessApiError")
+    except BusinessApiError as exc:
+        assert str(exc) == "Business API error: request failed"
+        assert "internal.example" not in str(exc)
+
+    def object_handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"code": 1, "message": {"url": "https://db.internal"}, "data": None})
+
+    try:
+        await _client_with(object_handler).get_site_summary("1")
+        raise AssertionError("expected BusinessApiError")
+    except BusinessApiError as exc:
+        assert str(exc) == "Business API error: request failed"
+        assert "db.internal" not in str(exc)
 
 
 async def test_create_reservation_tool_calls_java_internal_api() -> None:

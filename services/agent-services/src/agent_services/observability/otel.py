@@ -34,4 +34,24 @@ def setup_otel(app: FastAPI, service_name: str = "agent-services") -> None:
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)))
     trace.set_tracer_provider(provider)
     FastAPIInstrumentor.instrument_app(app)
-    logger.info("OpenTelemetry enabled endpoint=%s service=%s", endpoint, service_name)
+    _instrument_agents(provider)
+    logger.info("OpenTelemetry enabled service=%s", service_name)
+
+
+def _instrument_agents(provider: object) -> None:
+    """Agent run / 模型请求 / 工具调用 span（GenAI 语义约定，§22.7）。
+
+    默认不记录 prompt / completion / 工具参数正文：可能含终端用户 PII 与知识库内容；
+    仅在排障环境显式设置 AGENT_OTEL_INCLUDE_CONTENT=true。
+    """
+    from pydantic_ai import Agent
+    from pydantic_ai.models.instrumented import InstrumentationSettings
+
+    include_content = os.getenv("AGENT_OTEL_INCLUDE_CONTENT", "").strip().lower() == "true"
+    Agent.instrument_all(
+        InstrumentationSettings(
+            tracer_provider=provider,  # type: ignore[arg-type]
+            include_content=include_content,
+            include_binary_content=include_content,
+        )
+    )

@@ -2,12 +2,18 @@ package com.mywebsite.agent.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.AgentHttpHeaders;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
+import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
+import com.mywebsite.agent.dto.AgentRunMeta;
+import com.mywebsite.agent.dto.AgentRuntimeStatus;
+import com.mywebsite.agent.dto.AgentSkillSummary;
+import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -20,6 +26,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,7 +65,11 @@ public class HttpAgentClient implements AgentClient {
     }
 
     private static ObjectMapper configureObjectMapper(ObjectMapper objectMapper) {
-        return objectMapper.copy().setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        // 新增响应字段（Python 先行扩展）不得打断 Java 解析
+        return objectMapper
+                .copy()
+                .setSerializationInclusion(JsonInclude.Include.NON_NULL)
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     private static RestClient buildRestClient(AgentProperties properties, ObjectMapper objectMapper) {
@@ -89,6 +100,69 @@ public class HttpAgentClient implements AgentClient {
     }
 
     @Override
+    public AgentRuntimeStatus runtimeStatus() {
+        ensureTokenConfigured();
+        JsonNode body = exchangeWithRetry("GET", "/internal/v1/health", null);
+        try {
+            // health 含 ok/service/timestamp 等观测字段；DTO 只取运行时子集
+            return objectMapper
+                    .readerFor(AgentRuntimeStatus.class)
+                    .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(body);
+        } catch (IOException | IllegalArgumentException ex) {
+            log.warn("agent-services returned malformed health body", ex);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+    }
+
+    @Override
+    public AgentMcpReady mcpReady() {
+        ensureTokenConfigured();
+        // 503 + MCP_UNAVAILABLE 仍是一份完整探测报告，不能走 mapErrorBody（会丢掉 servers）
+        String requestId = MDC.get(HttpRequestCorrelation.MDC_REQUEST_ID);
+        try {
+            RestClient.RequestHeadersSpec<?> spec = restClient
+                    .get()
+                    .uri("/internal/v1/mcp/ready")
+                    .header(AgentHttpHeaders.INTERNAL_SERVICE_TOKEN, properties.getInternalServiceToken());
+            if (StringUtils.hasText(requestId)) {
+                spec = spec.header(HttpRequestCorrelation.X_REQUEST_ID, requestId);
+            }
+            String raw = spec.retrieve().body(String.class);
+            return readMcpReady(raw);
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().value() == 503) {
+                try {
+                    return readMcpReady(ex.getResponseBodyAsString());
+                } catch (BusinessException ignored) {
+                    // 不是探测报告，按通用错误映射
+                }
+            }
+            throw mapHttpError(ex);
+        } catch (RestClientException ex) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+    }
+
+    private AgentMcpReady readMcpReady(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+        try {
+            JsonNode node = objectMapper.readTree(raw);
+            if (!node.has("mcpStatus") && !node.has("servers")) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+            }
+            return objectMapper
+                    .readerFor(AgentMcpReady.class)
+                    .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(node);
+        } catch (IOException | IllegalArgumentException ex) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+    }
+
+    @Override
     public AgentChatResponse chat(AgentChatRequest request) {
         if (request == null
                 || !StringUtils.hasText(request.siteId())
@@ -112,7 +186,42 @@ public class HttpAgentClient implements AgentClient {
             // 成功体不得携带非 LIVE 冒充真实接通
             throw new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED);
         }
-        return new AgentChatResponse(reply, conversationId, providerStatus);
+        return new AgentChatResponse(
+                reply,
+                conversationId,
+                providerStatus,
+                readList(data.get("todos"), AgentTodoItem.class),
+                readRunMeta(data));
+    }
+
+    /** 观测元数据格式异常只丢弃元数据，不让已成功的回复失败（与 todos 不同：todos 影响编排正确性）。 */
+    private AgentRunMeta readRunMeta(JsonNode data) {
+        try {
+            return objectMapper.treeToValue(data, AgentRunMeta.class);
+        } catch (IOException | IllegalArgumentException ex) {
+            log.warn("agent-services returned malformed run metadata, ignored", ex);
+            return AgentRunMeta.EMPTY;
+        }
+    }
+
+    @Override
+    public List<AgentSkillSummary> listSkills() {
+        ensureTokenConfigured();
+        JsonNode body = exchangeWithRetry("GET", "/internal/v1/skills", null);
+        return readList(body.path("data").get("skills"), AgentSkillSummary.class);
+    }
+
+    private <T> List<T> readList(JsonNode node, Class<T> elementType) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.convertValue(
+                    node, objectMapper.getTypeFactory().constructCollectionType(List.class, elementType));
+        } catch (IllegalArgumentException ex) {
+            log.warn("agent-services returned malformed {} list", elementType.getSimpleName(), ex);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
     }
 
     private void ensureTokenConfigured() {
@@ -286,6 +395,11 @@ public class HttpAgentClient implements AgentClient {
             }
             throw mapped;
         } catch (RestClientException ex) {
+            // POST 已经发出后的读超时可能表示服务端仍在执行（预约等）。重试会造成两次副作用。
+            if ("POST".equals(method) && isReadTimeout(ex)) {
+                log.warn("agent-services read timed out method={} path={}", method, path);
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+            }
             throw new RetryableAgentCallException(new BusinessException(ErrorCode.SYSTEM_ERROR), ex);
         } catch (IOException ex) {
             throw new RetryableAgentCallException(
@@ -320,9 +434,15 @@ public class HttpAgentClient implements AgentClient {
 
     private BusinessException mapErrorBody(JsonNode node, int httpStatus) {
         String errorCode = textOrNull(node, "errorCode");
+        // MCP 不可用与 Provider BLOCKED 同属外部依赖失败（ADR-0004/§19.10）
         if ("EXTERNAL_DEPENDENCY_BLOCKED".equals(errorCode)
+                || "MCP_UNAVAILABLE".equals(errorCode)
                 || "BLOCKED".equals(textOrNull(node, "providerStatus"))) {
             return new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED);
+        }
+        // 运行预算超限（Python 422 + 明确 errorCode；勿把 FastAPI 校验 422 一律当成预算）
+        if ("AGENT_BUDGET_EXCEEDED".equals(errorCode)) {
+            return new BusinessException(ErrorCode.AGENT_BUDGET_EXCEEDED);
         }
         if ("BAD_REQUEST".equals(errorCode) || httpStatus == 400) {
             return new BusinessException(ErrorCode.BAD_REQUEST);
@@ -334,6 +454,18 @@ public class HttpAgentClient implements AgentClient {
             return new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
         return new BusinessException(ErrorCode.SYSTEM_ERROR);
+    }
+
+    private static boolean isReadTimeout(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof java.net.SocketTimeoutException timeout) {
+                String message = timeout.getMessage();
+                return message != null && message.toLowerCase(java.util.Locale.ROOT).contains("read");
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private static void sleepJitter(int attempt) {

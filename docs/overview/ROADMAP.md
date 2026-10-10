@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: REFERENCE
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 ```
 
 未完成工程 / 产品工作以 **GitHub Issues** 为唯一跟踪源。本文只保留 Issue 号 + 短状态，不复制完整 TODO。
@@ -26,7 +26,7 @@ last_verified: 2026-08-09
 
 | 主题 | 状态 | Issue |
 |------|------|-------|
-| Soft-delete `deleted_at` 一致性（Site/Appearance 等） | STILL_OPEN · LOW | [#4](https://github.com/hqjiayou/my-website/issues/4) |
+| Soft-delete `deleted_at` 一致性（Site/Appearance/User） | RESOLVED（Role / 绑定不在 #4） | [#4](https://github.com/hqjiayou/my-website/issues/4) |
 
 ## 明确不做 / 延期（无 Issue）
 
@@ -42,5 +42,4 @@ last_verified: 2026-08-09
 
 1. [#1](https://github.com/hqjiayou/my-website/issues/1) 关闭 / 证明 Auth IP 信任边界  
 2. [#3](https://github.com/hqjiayou/my-website/issues/3) site-web auth **或** [#2](https://github.com/hqjiayou/my-website/issues/2) Browser E2E（择一/并行）  
-3. [#5](https://github.com/hqjiayou/my-website/issues/5) 在 provider 可用时解除 AI LIVE  
-4. [#4](https://github.com/hqjiayou/my-website/issues/4) 软删时间戳一致性（可穿插）
+3. [#5](https://github.com/hqjiayou/my-website/issues/5) 在 provider 可用时解除 AI LIVE

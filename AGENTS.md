@@ -1,12 +1,12 @@
 # Agent 指引（my-website）
 
-多站点平台 Monorepo。当前主要活跃面：`apps/admin-web`（管理后台）与 `services/website-services`（Java 后端：gateway / auth / admin / site / common / infra / agent）。`services/agent-services` 为 **Python AI Execution Runtime**（internal only，经 Java `HttpAgentClient` 调用）；`site-web` 仍为骨架。
+多站点平台 Monorepo。当前主要活跃面：`apps/admin-web`（管理后台）与 `services/website-services`（Java 后端：gateway / auth / admin / site / common / infra / agent）。`services/agent-services` 为 **Python AI Execution Runtime**（internal only，经 Java `HttpAgentClient` 调用）。`apps/site-web` 当前工作区没有行业前台应用；Site Auth 后端已完成，前端未接。
 
 ## Source of Truth 顺序
 
 | 层次 | 权威 |
 |------|------|
-| **Current Reality** | 代码 + DB/Flyway → [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md) → [`docs/contracts/`](docs/contracts/) → [`docs/decisions/`](docs/decisions/)（ADR） |
+| **Current Reality** | 代码 + DB/Flyway → [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md) → 域 `CURRENT_STATE` → [`docs/contracts/`](docs/contracts/) → [`docs/decisions/`](docs/decisions/)（ADR） |
 | **Open Work** | **GitHub Issues**（[`docs/overview/ROADMAP.md`](docs/overview/ROADMAP.md) 只留 Issue 号） |
 | **High-level Direction** | ROADMAP |
 | **Historical Evidence** | `docs/audit/` · Execution/Verification · `implementation-history/` · `archive/` · `analysis/archive/` — **不指导未来实施** |
@@ -16,21 +16,12 @@
 1. 本文 + `.cursor/rules/`
 2. [`docs/README.md`](docs/README.md)
 3. [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md)
-4. 相关域 `CURRENT_STATE` / [`docs/contracts/`](docs/contracts/) / [`docs/decisions/`](docs/decisions/)
-5. 未决工作：GitHub Issues（经 ROADMAP 指针）
-6. **当前** Task Brief / Instruction（若有）
+4. 相关域 `CURRENT_STATE`
+5. [`docs/contracts/`](docs/contracts/)，然后 [`docs/decisions/`](docs/decisions/)（ADR）
+6. 未决工作：GitHub Issues（经 ROADMAP 指针）
+7. **当前** Task Brief / Instruction（若有）
 
-以下**默认不得**作为当前实现依据：`docs/implementation-history/`、`docs/audit/archive/`、`docs/analysis/archive/`、`docs/archive/`。
-
-## 调查优先
-
-修改前先读取与任务相关的**当前真实代码**。不以文件名、过期文档或历史印象猜测现状。文档与代码冲突时，以代码为准，并标明文档漂移。
-
-## 修改边界
-
-- 只改当前任务必要范围；禁止无关重构与顺手修债。
-- 新增内容必须与模块 / 目录 / 文件职责一致。
-- 发现无关问题 → 记录即可，不自动扩大范围。
+以下**默认不得**作为当前实现依据：`docs/implementation-history/`、`docs/audit/`、`docs/analysis/`、`docs/archive/`。文档先看 [`docs/README.md`](docs/README.md) 的三格（现在 / 规格 / 历史），不要沿总览和整体架构说明再往下找第二份现状。
 
 ## 模块职责（摘要）
 
@@ -45,39 +36,34 @@
 | common / infra | 横切契约与基础设施；不放单模块业务 |
 | admin-web | 管理后台 UI；经 gateway 调 `/api/**` |
 
-## 不过度拆分
-
-职责清楚优先。实现应在职责清楚前提下相对集中。不为“解耦”制造只有转发逻辑的小文件或模糊 Helper / Manager / Processor。
-
-## 必要注释
-
-非显然的边界、安全、兼容、特殊业务逻辑写清楚。禁止逐行废话注释。
+新建、引用和落点以 [`.cursor/rules/project.mdc`](.cursor/rules/project.mdc) 为准。
 
 ## Cursor Rules
 
 | Rule | 作用 |
 |------|------|
-| [`.cursor/rules/project.mdc`](.cursor/rules/project.mdc) | 项目级（alwaysApply） |
-| [`.cursor/rules/backend-structure.mdc`](.cursor/rules/backend-structure.mdc) | `website-services` Java |
+| [`.cursor/rules/project.mdc`](.cursor/rules/project.mdc) | 新建、引用与落点（alwaysApply） |
+| [`.cursor/rules/backend-structure.mdc`](.cursor/rules/backend-structure.mdc) | `website-services` Java 与 Flyway SQL |
 | [`.cursor/rules/agent-services.mdc`](.cursor/rules/agent-services.mdc) | `agent-services` Python AI Execution |
-| [`.cursor/rules/ai-domain.mdc`](.cursor/rules/ai-domain.mdc) | AI 跨模块边界（Java + admin-web AI 页） |
+| [`.cursor/rules/ai-domain.mdc`](.cursor/rules/ai-domain.mdc) | AI 跨模块边界（含 agent 客户端与 `aiApi`） |
 | [`.cursor/rules/admin-web.mdc`](.cursor/rules/admin-web.mdc) | `admin-web` 实现边界 |
 | [`.cursor/rules/admin-web-router.mdc`](.cursor/rules/admin-web-router.mdc) | router 目录 |
 | [`.cursor/rules/admin-web-styles.mdc`](.cursor/rules/admin-web-styles.mdc) | 全局样式分层 |
 | [`.cursor/rules/docs.mdc`](.cursor/rules/docs.mdc) | 文档与 CURRENT_STATE 同步 |
 
-索引与 Agent 协作流见 [`.cursor/README.md`](.cursor/README.md)。
+索引与 Agent 协作流见 [`.cursor/README.md`](.cursor/README.md)。变更审查在 [`.cursor/agents/integration-reviewer.md`](.cursor/agents/integration-reviewer.md)。按域缺陷判定和功能完善盘点在 [`.cursor/agents/area-reviewer.md`](.cursor/agents/area-reviewer.md)。工作方式入口（`/dev`、`/fix`、`/hunt`、`/review`、`/audit`、`/pair`）在 [`.cursor/skills/`](.cursor/skills/)，闸门与续跑在 [`.cursor/hooks.json`](.cursor/hooks.json)，说明见 `.cursor/README.md`。
 
 ## Cursor Agents（Subagent 角色）
 
 | Agent | 用途 |
 |-------|------|
 | `codebase-explorer` | 只读：定位代码、mock/real、调用链 |
-| `architecture-planner` | 方案：边界、顺序、验收标准 |
+| `architecture-planner` | 方案：边界、顺序、验收项（`/dev` 按验收项执行） |
 | `admin-backend` | Java admin / Flyway / RBAC / Admin AI API |
 | `admin-frontend` | admin-web UI / API 对接 / i18n |
 | `agent-services` | Python runtime / SSE / RAG / MCP·Skills·Todo |
-| `integration-reviewer` | 合并前契约与边界审查 |
+| `integration-reviewer` | 变更审查：单文件、逻辑、功能、模块 |
+| `area-reviewer` | 按域：长期缺陷审查，或功能完善盘点 |
 
 ## 后端权威文档
 

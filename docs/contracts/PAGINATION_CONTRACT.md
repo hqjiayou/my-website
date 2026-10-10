@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: CONTRACT
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 ```
 
 常用查询参数：`pageNum`、`pageSize`（1-based pageNum）。
@@ -15,4 +15,4 @@ last_verified: 2026-08-09
 - `pageNum`  
 - `pageSize`  
 
-部分旧/简单列表 API 可能返回裸 `List`（如部分用户列表）——以具体 Controller 为准；新增列表优先 `PageResult`。
+部分列表若仍返回裸 `List`，以该 Controller 为准。新增列表用 `PageResult`。Java 类是 `com.mywebsite.common.page.PageResult`，字段与上表一致。站点列表默认 `pageSize` 20，上限 100（`AdminSiteConstants`）。

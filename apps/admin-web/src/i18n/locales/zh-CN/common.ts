@@ -16,6 +16,7 @@ export default {
     copy: '复制',
     copied: '已复制',
   },
+  breadcrumb: '面包屑',
   error: {
     network: '网络错误，请稍后重试',
     unauthorized: '登录已过期，请重新登录',

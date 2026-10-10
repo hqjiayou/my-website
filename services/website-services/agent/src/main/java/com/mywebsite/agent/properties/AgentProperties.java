@@ -10,7 +10,8 @@ public class AgentProperties {
 
     private long connectTimeoutMs = 2000L;
 
-    private long readTimeoutMs = 20000L;
+    /** 须盖住单次工具超时（默认 30s）以及站点 SSE 的 120s。同步 chat 用它做整段等待。 */
+    private long readTimeoutMs = 120_000L;
 
     /** 与 agent-services AGENT_INTERNAL_SERVICE_TOKEN 共享 */
     private String internalServiceToken = "";

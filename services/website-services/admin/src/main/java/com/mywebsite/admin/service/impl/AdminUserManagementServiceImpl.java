@@ -11,7 +11,9 @@ import com.mywebsite.admin.dto.AdminUserDtos.AdminUserListQuery;
 import com.mywebsite.admin.dto.AdminUserDtos.AdminUserStatusUpdateRequest;
 import com.mywebsite.admin.dto.AdminUserDtos.AdminUserUpdateRequest;
 import com.mywebsite.admin.entity.AdminUserEntity;
+import com.mywebsite.admin.entity.AdminUserRoleEntity;
 import com.mywebsite.admin.mapper.AdminUserMapper;
+import com.mywebsite.admin.mapper.AdminUserRoleMapper;
 import com.mywebsite.admin.service.AdminPermissionQueryService;
 import com.mywebsite.admin.service.AdminUserManagementService;
 import com.mywebsite.common.enums.ErrorCode;
@@ -19,11 +21,14 @@ import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.security.AuthContext;
 import com.mywebsite.common.security.SubjectCodes;
 import com.mywebsite.common.security.TokenAudience;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -31,15 +36,19 @@ public class AdminUserManagementServiceImpl implements AdminUserManagementServic
 
     private final AdminUserMapper adminUserMapper;
 
+    private final AdminUserRoleMapper adminUserRoleMapper;
+
     private final AdminPermissionQueryService adminPermissionQueryService;
 
     private final PasswordEncoder passwordEncoder;
 
     public AdminUserManagementServiceImpl(
             AdminUserMapper adminUserMapper,
+            AdminUserRoleMapper adminUserRoleMapper,
             AdminPermissionQueryService adminPermissionQueryService,
             PasswordEncoder passwordEncoder) {
         this.adminUserMapper = adminUserMapper;
+        this.adminUserRoleMapper = adminUserRoleMapper;
         this.adminPermissionQueryService = adminPermissionQueryService;
         this.passwordEncoder = passwordEncoder;
     }
@@ -137,10 +146,21 @@ public class AdminUserManagementServiceImpl implements AdminUserManagementServic
     }
 
     @Override
+    @Transactional
     public void deleteUser(long id) {
-        requireUser(id);
+        AdminUserEntity user = requireUser(id);
         rejectIfSelf(id, AdminUserMessageKeys.SELF_DELETE_DENIED);
         rejectIfSuperAdmin(id);
+        List<AdminUserRoleEntity> links = adminUserRoleMapper.selectList(
+                new LambdaQueryWrapper<AdminUserRoleEntity>().eq(AdminUserRoleEntity::getAdminUserId, id));
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        for (AdminUserRoleEntity link : links) {
+            link.setDeletedAt(now);
+            adminUserRoleMapper.updateById(link);
+            adminUserRoleMapper.deleteById(link.getId());
+        }
+        user.setDeletedAt(now);
+        adminUserMapper.updateById(user);
         adminUserMapper.deleteById(id);
     }
 

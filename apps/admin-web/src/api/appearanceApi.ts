@@ -1,6 +1,6 @@
 /**
  * 站点外观 API。
- * Appearance（get/put）→ 始终 REAL `/admin/sites/{id}/appearance`，不受 USE_MOCK 门控。
+ * Appearance（get/put）→ 始终 REAL `/admin/sites/{id}/appearance`。
  */
 import type { AppearanceDetail, AppearancePutRequest } from '@/types/appearance'
 import {

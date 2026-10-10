@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: SPEC
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-06
 source_of_truth: services/website-services
 supersedes: 总览/当前功能完成度总览.md（作为完成度权威）
 ```
@@ -13,11 +13,11 @@ supersedes: 总览/当前功能完成度总览.md（作为完成度权威）
 | 模块 | 状态 | 说明 |
 |------|------|------|
 | gateway | PARTIAL | 路由/CORS/RequestId OK；已配 `trusted-proxies` + XFF append（生产需收紧；缺集成断言） |
-| auth | PARTIAL / BACKEND_COMPLETE(site) | Admin+Site 会话；限流取 XFF 末段 |
-| admin | COMPLETE_V1（主域）+ 站点 AI 管理 | Site/User/Template/Appearance/Media/Content/Reservation/RBAC；Prompt/KB/会话/预览 |
-| site-app | PARTIAL | Site AI chat/stream；internal Tools；业务前台仍扩展中 |
-| common/infra | COMPLETE_V1 底座 | Flyway 当前至 V19 |
-| agent (Java client) | COMPLETE_V1 contract | 扁平错误体；SSE 转发；契约 IT |
+| auth | PARTIAL / BACKEND_COMPLETE(site) | Admin+Site 会话；停用或已删账号的 Refresh 吊销；限流取 XFF 末段 |
+| admin | COMPLETE_V1（主域）+ 站点 AI 管理 | Site/User/Template/Appearance/Media/Content/Reservation/RBAC；删站点同时软删 Prompt/KB/会话并 best-effort 清检索索引；Prompt/KB/会话/预览（预览可传 `skills`/`todos`，`locale` 取当前请求 `Accept-Language`（缺省 `ja-JP`），`GET .../ai/preview/skills` 代理技能目录；会话消息含 `agentMeta`；`GET .../ai/runtime` Agent 运行时快照；`GET .../ai/mcp-ready` 手动 MCP 深检） |
+| site-app | PARTIAL | Site AI chat/stream（会话级 Todo 快照 `site_ai_conversation.agent_todos` 跨轮回传；ASSISTANT 消息落 `site_ai_message.agent_meta` 运行元数据（V21，不对终端用户返回）；SSE 对终端用户白名单重写（只含回复文本与错误码，工具轨迹/用量/原始错误不下发）；终端用户不可指定 skills；`locale` 同样取请求 `Accept-Language`）；internal Tools；业务前台仍扩展中 |
+| common/infra | COMPLETE_V1 底座 | Flyway 当前至 V21 |
+| agent (Java client) | COMPLETE_V1 contract | 扁平错误体（`MCP_UNAVAILABLE` → `EXTERNAL_DEPENDENCY_BLOCKED`；`AGENT_BUDGET_EXCEEDED` → ErrorCode 1008）；`runMeta`/`runtimeStatus`；SSE 转发；`listSkills()`；契约 IT（含预算/MCP 短进程用例，CI 启用） |
 
 ## 域完成度（后端）
 

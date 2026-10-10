@@ -1,54 +1,23 @@
 name: backend-ci
 
-# 后端构建保护网：
+# 只在本次 push 改到 website-services 或本工作流时运行。
 # - fast-tests：默认快速层（unit + Mockito + H2），Surefire 排除 verifyPg，不依赖 Docker。
 # - pg-contract-tests：PostgreSQL 契约层（profile persistence-verify-pg），Testcontainers 自举真实 PG 跑 Flyway/约束/触发器/种子。
 # GitHub 托管 ubuntu runner 预装 Docker，Testcontainers 可直接运行。
-# 路径未命中时测试任务跳过，gate 仍成功，供 dev/main 分支保护使用。
 
 on:
   push:
-    branches: [main, master, dev]
-  pull_request:
-    branches: [main, master, dev]
+    paths:
+      - 'services/website-services/**'
+      - '.github/workflows/backend-ci.yml'
 
 defaults:
   run:
     working-directory: services/website-services
 
 jobs:
-  changes:
-    name: Detect backend changes
-    runs-on: ubuntu-latest
-    outputs:
-      run: ${{ steps.filter.outputs.run }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - id: filter
-        working-directory: .
-        run: |
-          set -eu
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-          else
-            base="${{ github.event.before }}"
-          fi
-          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if git diff --name-only "$base" HEAD | grep -Eq '^(services/website-services/|\.github/workflows/backend-ci\.yml)'; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
-
   fast-tests:
     name: Fast tests (unit + H2)
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,8 +31,6 @@ jobs:
 
   pg-contract-tests:
     name: PostgreSQL contract (Testcontainers + Flyway)
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,23 +41,3 @@ jobs:
           cache: maven
       - name: mvn -Ppersistence-verify-pg test (verifyPg only)
         run: mvn -B -ntp -Ppersistence-verify-pg test
-
-  gate:
-    name: backend-ci
-    needs: [changes, fast-tests, pg-contract-tests]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require relevant jobs to pass
-        run: |
-          set -eu
-          if [ "${{ needs.changes.result }}" != "success" ]; then
-            echo "change detection failed"
-            exit 1
-          fi
-          for result in "${{ needs.fast-tests.result }}" "${{ needs.pg-contract-tests.result }}"; do
-            case "$result" in
-              success|skipped) ;;
-              *) echo "job result: $result"; exit 1 ;;
-            esac
-          done

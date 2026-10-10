@@ -16,17 +16,20 @@ import {
   persistLoginUsername,
 } from '@/utils/loginPreferences'
 
-const loginSchema = z.object({
-  username: z.string().min(1, '请输入用户名'),
-  password: z.string().min(1, '请输入密码'),
-  rememberUsername: z.boolean(),
-})
+function createLoginSchema(t: (key: string) => string) {
+  return z.object({
+    username: z.string().min(1, t('errors.usernameRequired')),
+    password: z.string().min(1, t('errors.passwordRequired')),
+    rememberUsername: z.boolean(),
+  })
+}
 
-type LoginFormValues = z.infer<typeof loginSchema>
+type LoginFormValues = z.infer<ReturnType<typeof createLoginSchema>>
 
 export function LoginPage() {
   const navigate = useNavigate()
   const { t } = useTranslation('login')
+  const loginSchema = createLoginSchema(t)
   const setToken = useAuthStore((state) => state.setToken)
   const loadCurrentUser = useAuthStore((state) => state.loadCurrentUser)
   const [submitting, setSubmitting] = useState(false)

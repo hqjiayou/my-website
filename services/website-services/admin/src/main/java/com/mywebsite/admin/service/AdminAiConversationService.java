@@ -11,4 +11,6 @@ public interface AdminAiConversationService {
     PageResult<AdminAiConversationListItemDto> listConversations(long siteId, AdminAiConversationListQuery query);
 
     List<AdminAiMessageDto> listMessages(long siteId, long conversationId);
+
+    void softDeleteBySiteId(long siteId);
 }

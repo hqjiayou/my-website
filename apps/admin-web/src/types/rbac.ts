@@ -152,6 +152,7 @@ export const PERMISSION_CODES = {
   rolePermissionUpdate: 'admin:role:permission:update',
   permissionList: 'admin:permission:list',
   menuList: 'admin:menu:list',
+  dashboardView: 'admin:dashboard:view',
   userList: 'admin:user:list',
   userDetail: 'admin:user:detail',
   userCreate: 'admin:user:create',

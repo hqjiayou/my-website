@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: CONTRACT
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 source_of_truth: Flyway + *Constants.java + apps/admin-web/src/types/*
 ```
 
@@ -21,14 +21,26 @@ source_of_truth: Flyway + *Constants.java + apps/admin-web/src/types/*
 
 **禁止**：`heroStyle`、`logoPlaceholder` 作为当前契约字段。
 
-## Site status
+## Site
 
-以代码 `SITE_STATUS` / DB check 为准（常见 `ACTIVE` / `DISABLED` 等——改动时同步本文件与前端 constants）。
+状态：`ACTIVE` | `DISABLED`（`AdminSiteConstants`）。库没有 CHECK。
 
-## Template / Content / Media
+类型：`CAR_REPAIR` | `USED_CAR` | `CAKE` | `SALON` | `CLINIC` | `GYOSEISHOSHI`。不要用 V1 注释里的 `CAR`。
 
-以对应 `*Constants` 与前端 `*_STATUS_VALUES` 为准；新增枚举必须双边同步。
+## Template
+
+`ENABLED` | `DRAFT` | `DISABLED`（`AdminTemplateConstants`）。
+
+## Content
+
+类型：`hero` | `service` | `case` | `faq` | `news` | `about` | `cta`。
+
+状态：`DRAFT` | `PUBLISHED` | `HIDDEN`。没有 `ARCHIVED`。
+
+## Media
+
+`UPLOADING` | `READY` | `FAILED`。
 
 ## Admin user status
 
-`ACTIVE` | `DISABLED`（以 `rbacApi` / Admin User API 为准）。
+`ACTIVE` | `DISABLED`（`AdminUserConstants`）。

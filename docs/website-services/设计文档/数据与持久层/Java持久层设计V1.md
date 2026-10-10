@@ -3,7 +3,9 @@
 阶段：**3A 已正式关闭**（含 4 条收口修订，见正文 §4.4 / §5.2 / §5.6 / §6 / §8）；**3B 已完成**（`entity` + `mapper` + MP 基础配置 + 冒烟测试；**阶段 3 前置**已统一为常见 Spring Boot 包名与 `XxxEntity` 命名）  
 前置：**阶段 2B 已关闭**（Flyway V1、数据字典、`数据库模型设计V1.md`、真实 PostgreSQL 迁移验证已完成）
 
-本文档约定 Java 持久层的企业级规范；**DDL 不因 Java 调整**，若需改表仍走 Flyway + 数据文档三线同步。
+本文档约定 Java 持久层的企业级规范；**DDL 不因 Java 调整**，若需改表仍走 Flyway。
+
+> **2026-10-10**：第 2 节「首批 8 表」只描述阶段 3A 当时的库。现行表见 [数据库模型设计 V1](./数据库模型设计V1.md) 文首。`auth` 模块里有 `AdminUserEntity`、`SiteUserEntity`、`SiteEntity`，供登录读共享库，不放入 `common`，也不依赖 `admin` jar。
 
 ---
 

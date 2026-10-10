@@ -13,6 +13,8 @@ public class SiteAiMessageEntity extends AbstractAuditableEntity {
     private Long siteId;
     private String role;
     private String content;
+    /** ASSISTANT 消息的 Agent 运行元数据 JSON（V21）；不对终端用户暴露。 */
+    private String agentMeta;
 
     public Long getConversationId() {
         return conversationId;
@@ -44,5 +46,13 @@ public class SiteAiMessageEntity extends AbstractAuditableEntity {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public String getAgentMeta() {
+        return agentMeta;
+    }
+
+    public void setAgentMeta(String agentMeta) {
+        this.agentMeta = agentMeta;
     }
 }

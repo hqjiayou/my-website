@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: SPEC
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 ```
 
 - **栈**：React + Vite + TypeScript + TanStack Query + Zustand + i18n  

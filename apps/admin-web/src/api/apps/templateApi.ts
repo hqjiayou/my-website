@@ -1,6 +1,6 @@
 /**
  * 模板目录 API。
- * Template（list/get/by-code/status）→ 始终 REAL `/admin/templates`，不受 USE_MOCK 门控。
+ * Template（list/get/by-code/status）→ 始终 REAL `/admin/templates`。
  */
 import type { PageResult } from '@/types/site'
 import type {

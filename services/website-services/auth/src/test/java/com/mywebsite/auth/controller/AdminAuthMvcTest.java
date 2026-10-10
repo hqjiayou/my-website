@@ -88,6 +88,7 @@ class AdminAuthMvcTest {
         user.setCreatedAt(OffsetDateTime.now());
         user.setUpdatedAt(OffsetDateTime.now());
         Mockito.when(adminUserMapper.selectOne(any())).thenReturn(user);
+        Mockito.when(adminUserMapper.selectById(100L)).thenReturn(user);
         Mockito.when(adminUserMapper.selectCount(any())).thenReturn(1L);
         Mockito.when(adminUserMapper.updateById(org.mockito.ArgumentMatchers.any(AdminUserEntity.class)))
                 .thenReturn(1);
@@ -348,6 +349,32 @@ class AdminAuthMvcTest {
                 .andExpect(jsonPath("$.data").value(nullValue()));
 
         mockMvc.perform(post("/api/auth/admin/refresh").cookie(rotatedRefresh))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.data").value(nullValue()));
+    }
+
+    @Test
+    void refreshRevokesSessionWhenUserBecomesDisabled() throws Exception {
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/admin/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"admin_it\",\"password\":\"correct-password\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        Cookie refreshCookie = loginResult.getResponse().getCookie(adminRefreshCookieService.refreshCookieName());
+        assertThat(refreshCookie).isNotNull();
+
+        AdminUserEntity disabled = new AdminUserEntity();
+        disabled.setId(100L);
+        disabled.setUsername("admin_it");
+        disabled.setStatus("DISABLED");
+        Mockito.when(adminUserMapper.selectById(100L)).thenReturn(disabled);
+
+        mockMvc.perform(post("/api/auth/admin/refresh").cookie(refreshCookie))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.data").value(nullValue()));
+
+        mockMvc.perform(post("/api/auth/admin/refresh").cookie(refreshCookie))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.data").value(nullValue()));
     }

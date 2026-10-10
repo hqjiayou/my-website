@@ -110,9 +110,10 @@ docker ps
 mvn clean install -DskipTests
 ```
 
-然后按顺序启动：
+然后按顺序启动（先 auth，再业务，最后 gateway）。环境变量与健康检查以 [`docs/operations/LOCAL_DEVELOPMENT.md`](../../../operations/LOCAL_DEVELOPMENT.md) 为准：
 
 ```bash
+mvn -pl auth -am spring-boot:run
 mvn -pl admin -am spring-boot:run
 mvn -pl site/site-app -am spring-boot:run
 mvn -pl gateway -am spring-boot:run
@@ -123,6 +124,7 @@ mvn -pl gateway -am spring-boot:run
 - Gateway：`8080`
 - Admin API：`8081`
 - Site API：`8082`
+- Auth：`8083`
 
 ### 4.3 启动前端应用
 
@@ -134,19 +136,7 @@ pnpm install
 pnpm dev
 ```
 
-```bash
-cd apps/site-web/car-web
-pnpm install
-pnpm dev
-```
-
-```bash
-cd apps/site-web/cake-web
-pnpm install
-pnpm dev
-```
-
-前端联调时优先通过 Gateway 访问后端 API，例如：
+工作区没有 site-web 前台应用。前端联调时优先通过 Gateway 访问后端 API，例如：
 
 - `http://localhost:8080/api/admin/ping`
 - `http://localhost:8080/api/site/ping`
@@ -256,7 +246,7 @@ docker exec -i local-postgres psql -U mywebsite -d postgres -c "CREATE DATABASE 
 
 ## 8. 相关文档
 
-- 总体架构：`./整体架构说明.md`
-- 后端架构：`./架构设计.md`
+- 进程怎么连：`docs/overview/SYSTEM_ARCHITECTURE.md`
+- 模块说明：`./架构设计.md`
+- 本地拉起：`docs/operations/LOCAL_DEVELOPMENT.md`
 - 后端工程说明：`services/website-services/README.md`
-- 本地库缺失补救：`services/website-services/scripts/README.md`

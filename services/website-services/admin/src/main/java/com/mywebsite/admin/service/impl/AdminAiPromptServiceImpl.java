@@ -10,6 +10,9 @@ import com.mywebsite.admin.mapper.AdminSiteMapper;
 import com.mywebsite.admin.service.AdminAiPromptService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -35,6 +38,20 @@ public class AdminAiPromptServiceImpl implements AdminAiPromptService {
             return new AdminAiPromptProfileDto(null, siteId, null, null, null, null);
         }
         return toDto(profile);
+    }
+
+    @Override
+    @Transactional
+    public void softDeleteBySiteId(long siteId) {
+        List<AdminAiPromptProfileEntity> profiles = promptProfileMapper.selectList(
+                new LambdaQueryWrapper<AdminAiPromptProfileEntity>()
+                        .eq(AdminAiPromptProfileEntity::getSiteId, siteId));
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        for (AdminAiPromptProfileEntity profile : profiles) {
+            profile.setDeletedAt(now);
+            promptProfileMapper.updateById(profile);
+            promptProfileMapper.deleteById(profile.getId());
+        }
     }
 
     @Override

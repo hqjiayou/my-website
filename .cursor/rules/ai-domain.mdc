@@ -1,6 +1,6 @@
 ---
 description: AI 域跨模块边界（Java 业务真相 + agent 客户端 + admin-web AI 页）
-globs: services/website-services/**/*Ai*.java,apps/admin-web/src/pages/ai/**,apps/admin-web/src/pages/apps/sites/siteAi*
+globs: services/website-services/**/*Ai*.java,services/website-services/agent/**/*.java,apps/admin-web/src/pages/ai/**,apps/admin-web/src/pages/apps/sites/siteAi*,apps/admin-web/src/api/**/aiApi.ts,apps/admin-web/src/types/ai.ts
 alwaysApply: false
 ---
 
@@ -21,8 +21,8 @@ alwaysApply: false
 ## Java → Python 请求
 
 - Java 加载 history、prompt profile、trusted `siteId` 后组装 `AgentChatRequest`。
-- 可选：`skills[]`、`todos[]`（Phase 5）；无 Java 持久化表时靠请求体往返。
-- Python 响应 / SSE 中的 `todos` 由 Java 决定是否带入下轮。
+- 可选请求字段：`skills[]`、`todos[]`。
+- 站点会话 todos 持久化在 `site_ai_conversation.agent_todos`（V20）；消息级运行元数据在 `site_ai_message.agent_meta`（V21）。是否写入、是否把 todos 带入下一轮，由 Java 决定。
 
 ## 前端
 

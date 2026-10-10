@@ -3,7 +3,7 @@
 > **文档状态**：当前有效（落地记录；架构决策脉络见 [阶段4D](./阶段4D-Auth独立认证服务架构回归设计与迁移方案.md)）  
 > **对应阶段**：4F  
 > **当前适用性**：描述 **当前仓库真实结构**；扩展业务前请先读本文与 [架构设计](../基础架构/架构设计.md)。  
-> **最近同步**：2026-05-17  
+> **最近核对**：2026-10-10。下文是 4F 当时把 Admin 登录收进 `auth` 的记录。Site 登录也已在同一模块：`/api/auth/site/login|refresh|logout`。  
 
 ---
 
@@ -22,7 +22,8 @@
 | **可执行模块** | `gateway`、`auth`、`admin`、`site/site-app` |
 | **Auth 端口** | 默认 **8083**（`AUTH_APP_PORT`） |
 | **Gateway** | **`Path=/api/auth/**`** → `auth`；**`/api/admin/**`** → `admin`；**`/api/site/**`** → `site-app`。须优先匹配 **`/api/auth/**`**（先于 **`/api/admin/**`、`/api/site/**`**）。 |
-| **Admin** | **OAuth2 Resource Server** + 业务 API；**无** **`/api/auth/*`** 编排；含 **`GET /api/admin/auth/me`** |
+| **Auth 认证** | Admin：`/api/auth/admin/login|refresh|logout|register`。Site：`/api/auth/site/login|refresh|logout`（4F 之后补上，不是占位） |
+| **Admin / Site 验签** | 两者都是 Resource Server，不签发 JWT。`GET /api/admin/auth/me`、`GET /api/site/auth/me` 在各自业务进程 |
 | **Flyway** | **Auth** 显式关闭；DDL 仍由 **admin**（等）执行，Auth **可读**同库用户表 |
 | **共享契约** | **`com.mywebsite.common.security`**（Claims、**`SubjectType`**、**`SubjectCodes`**、Audience、`AuthenticatedUser` 等） |
 | **测试** | Auth/Admin 冒烟与契约测随模块迁移；**`mvn -pl auth -am`** 确保 `common`/`infra` 在类路径 |
@@ -32,7 +33,7 @@
 ## 3. Admin「瘦身」摘要
 
 - 移除 **认证主链路控制器/服务** 自 Admin 的 **对外职责**（实现细节以代码为准）：业务服务 **仅验 JWT** 与授权。  
-- **用户表**仍落在共享 schema；**Auth** 自持读 `admin_user` 的 Mapper，**不**依赖 `admin` JAR。
+- **用户表**仍落在共享 schema；**Auth** 自持 `AdminUserEntity`、`SiteUserEntity`、`SiteEntity` 的 Mapper，**不**依赖 `admin` JAR。
 
 ---
 
@@ -46,6 +47,6 @@
 ## 5. 相关文档
 
 - [阶段4D-Auth独立认证服务架构回归设计与迁移方案.md](./阶段4D-Auth独立认证服务架构回归设计与迁移方案.md)（§「4F 实施结果」已并入双向引用）  
-- [架构设计](../基础架构/架构设计.md)  
-- [联调说明/阶段4C](../联调说明/阶段4C-Admin认证真实联调与安全边界验证.md)（历史 HTTP 步骤 + **4F 后入口变化**）  
+- [架构设计](../基础架构/架构设计.md) §1.2  
+- 阶段 4C 联调记录在 `docs/archive/website-services/联调说明/`，不是现行入口  
 - [`services/website-services/README.md`](../../../../services/website-services/README.md)  

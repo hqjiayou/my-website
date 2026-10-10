@@ -49,6 +49,8 @@ def test_health_reports_blocked_without_model() -> None:
     assert body["service"] == "agent-service"
     assert body["provider"] == "blocked"
     assert body["providerStatus"] == "BLOCKED"
+    assert body["retrievalStatus"] == "BLOCKED"
+    assert "RETRIEVAL_DATABASE_URL" in body["retrievalBlockedReason"]
 
 
 def test_health_reports_live_with_model() -> None:
@@ -77,6 +79,61 @@ def test_chat_success_shape_matches_java_contract() -> None:
     assert body["data"]["reply"] == "こんにちは"
     assert body["data"]["conversationId"] == "conv-1"
     assert body["data"]["providerStatus"] == "LIVE"
+
+
+def test_chat_success_returns_todos_snapshot_from_request() -> None:
+    # 关闭 todo 工具，避免 TestModel 自动调用工具改写快照；只验证 Java→Python→Java 往返形状
+    handle = ModelHandle(model=TestModel(custom_output_text="ok"), spec="test:model", blocked_reason=None)
+    client = TestClient(create_app(make_settings(agent_enable_todo_tools=False), model_handle=handle))
+    response = client.post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "continue",
+            "todos": [{"id": "t1", "title": "Step 1", "status": "IN_PROGRESS"}],
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["todos"] == [{"id": "t1", "title": "Step 1", "status": "IN_PROGRESS"}]
+    assert isinstance(data["skillsApplied"], list)
+
+
+def test_chat_accepts_history_longer_than_message_cap() -> None:
+    from agent_services.schemas.chat import MAX_MESSAGE_CHARS
+
+    response = _live_client("ok").post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "next",
+            "history": [
+                {"role": "USER", "content": "earlier"},
+                {"role": "ASSISTANT", "content": "x" * (MAX_MESSAGE_CHARS + 80)},
+            ],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["reply"] == "ok"
+
+
+def test_chat_oversized_request_returns_400_flat_body() -> None:
+    from agent_services.schemas.todo import MAX_TODO_ITEMS
+
+    too_many = [{"id": f"t{i}", "title": "x"} for i in range(MAX_TODO_ITEMS + 1)]
+    response = _live_client().post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={"siteId": "10", "message": "hello", "todos": too_many},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "BAD_REQUEST"
+    assert "todos" in body["message"]
+    assert "detail" not in body
 
 
 def test_chat_blank_input_returns_400_flat_body() -> None:

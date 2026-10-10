@@ -1,5 +1,6 @@
 package com.mywebsite.admin.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -23,7 +24,9 @@ import com.nimbusds.jose.jwk.RSAKey;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import java.util.Map;
 import org.springframework.http.HttpHeaders;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -39,6 +42,9 @@ class AdminUserManagementMvcTest extends AbstractAdminSpringBootTest {
 
     @Autowired
     private AdminUserManagementService userManagementService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private String tokenFor(long userId) throws Exception {
         RSAKey pk = AdminTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
@@ -213,6 +219,11 @@ class AdminUserManagementMvcTest extends AbstractAdminSpringBootTest {
 
         mockMvc.perform(get("/api/admin/users/" + created.id()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
+
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT deleted, deleted_at FROM admin_user WHERE id = ?", created.id());
+        assertThat(row.get("deleted")).isEqualTo(true);
+        assertThat(row.get("deleted_at")).isNotNull();
     }
 
     @Test

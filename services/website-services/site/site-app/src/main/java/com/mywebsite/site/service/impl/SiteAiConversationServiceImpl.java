@@ -1,8 +1,12 @@
 package com.mywebsite.site.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.dto.AgentChatHistoryMessage;
 import com.mywebsite.agent.dto.AgentPromptProfile;
+import com.mywebsite.agent.dto.AgentRunMeta;
+import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.site.dto.SiteAiConversationDto;
@@ -19,6 +23,8 @@ import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -32,17 +38,22 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
     private static final int TITLE_MAX_LENGTH = 60;
     private static final int CONVERSATION_LIST_LIMIT = 50;
 
+    private static final Logger log = LoggerFactory.getLogger(SiteAiConversationServiceImpl.class);
+
     private final SiteAiConversationMapper conversationMapper;
     private final SiteAiMessageMapper messageMapper;
     private final SiteAiPromptProfileMapper promptProfileMapper;
+    private final ObjectMapper objectMapper;
 
     public SiteAiConversationServiceImpl(
             SiteAiConversationMapper conversationMapper,
             SiteAiMessageMapper messageMapper,
-            SiteAiPromptProfileMapper promptProfileMapper) {
+            SiteAiPromptProfileMapper promptProfileMapper,
+            ObjectMapper objectMapper) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.promptProfileMapper = promptProfileMapper;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -58,13 +69,19 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             conversation.setSiteUserId(siteUserId);
             history = List.of();
         }
-        return new ChatPreparation(conversation, history, loadPromptProfile(siteId));
+        return new ChatPreparation(conversation, history, loadPromptProfile(siteId), readTodos(conversation));
     }
 
     @Override
     @Transactional
-    public void recordExchange(SiteAiConversationEntity conversation, String userMessage, String reply) {
+    public void recordExchange(
+            SiteAiConversationEntity conversation,
+            String userMessage,
+            String reply,
+            List<AgentTodoItem> todos,
+            AgentRunMeta runMeta) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        conversation.setAgentTodos(writeTodos(todos));
         if (conversation.getId() == null) {
             conversation.setTitle(truncateTitle(userMessage));
             conversation.setLastMessageAt(now);
@@ -73,8 +90,8 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             conversation.setLastMessageAt(now);
             conversationMapper.updateById(conversation);
         }
-        insertMessage(conversation, SiteAiMessageEntity.ROLE_USER, userMessage);
-        insertMessage(conversation, SiteAiMessageEntity.ROLE_ASSISTANT, reply);
+        insertMessage(conversation, SiteAiMessageEntity.ROLE_USER, userMessage, null);
+        insertMessage(conversation, SiteAiMessageEntity.ROLE_ASSISTANT, reply, writeRunMeta(runMeta));
     }
 
     @Override
@@ -138,12 +155,52 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         return new AgentPromptProfile(profile.getSystemPrompt(), temperature);
     }
 
-    private void insertMessage(SiteAiConversationEntity conversation, String role, String content) {
+    private List<AgentTodoItem> readTodos(SiteAiConversationEntity conversation) {
+        String raw = conversation.getAgentTodos();
+        if (!StringUtils.hasText(raw)) {
+            return List.of();
+        }
+        try {
+            return List.of(objectMapper.readValue(raw, AgentTodoItem[].class));
+        } catch (JsonProcessingException ex) {
+            // 脏快照不阻断聊天：按无 todo 继续，下一轮成功后被覆盖
+            log.warn("site ai conversation {} has malformed agent_todos, ignored", conversation.getId(), ex);
+            return List.of();
+        }
+    }
+
+    private String writeTodos(List<AgentTodoItem> todos) {
+        if (todos == null || todos.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(todos);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize agent todos", ex);
+        }
+    }
+
+    /** 观测数据序列化失败不得让已成功的一轮回滚：记日志后存 NULL。 */
+    private String writeRunMeta(AgentRunMeta runMeta) {
+        if (runMeta == null || runMeta.equals(AgentRunMeta.EMPTY)) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(runMeta);
+        } catch (JsonProcessingException ex) {
+            log.warn("Failed to serialize agent run meta, stored as null", ex);
+            return null;
+        }
+    }
+
+    private void insertMessage(
+            SiteAiConversationEntity conversation, String role, String content, String agentMeta) {
         SiteAiMessageEntity message = new SiteAiMessageEntity();
         message.setConversationId(conversation.getId());
         message.setSiteId(conversation.getSiteId());
         message.setRole(role);
         message.setContent(content);
+        message.setAgentMeta(agentMeta);
         messageMapper.insert(message);
     }
 

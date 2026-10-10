@@ -70,14 +70,124 @@ export interface AiConversationListQuery {
   pageSize?: number
 }
 
+/** Agent 单轮用量；token 由 Provider 回报，未回报时为 0。 */
+export interface AiRunUsage {
+  requests: number
+  toolCalls: number
+  inputTokens: number
+  outputTokens: number
+}
+
+/** 工具轨迹只有名称与成败，不含参数/返回内容。 */
+export interface AiToolCallTrace {
+  name: string
+  ok: boolean
+}
+
+export interface AiRunMeta {
+  usage: AiRunUsage
+  tools: AiToolCallTrace[]
+  skillsApplied: string[]
+}
+
 export interface AiMessage {
   id: number
   role: 'USER' | 'ASSISTANT'
   content: string
   createdAt: string
+  /** 仅 ASSISTANT；历史消息或无数据时为 null / 缺省。 */
+  agentMeta?: AiRunMeta | null
 }
 
 export interface AiPreviewHistoryMessage {
   role: 'USER' | 'ASSISTANT'
   content: string
 }
+
+export const AI_PREVIEW_TODO_STATUS = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+} as const
+
+export type AiPreviewTodoStatus = (typeof AI_PREVIEW_TODO_STATUS)[keyof typeof AI_PREVIEW_TODO_STATUS]
+
+/** agent Todo 快照条目；预览不落库，由前端持有并在下一轮回传。 */
+export interface AiPreviewTodoItem {
+  id: string
+  title: string
+  status: AiPreviewTodoStatus
+}
+
+/** agent-services 技能目录条目（只元数据）。 */
+export interface AiPreviewSkill {
+  id: string
+  description: string | null
+  version: string | null
+}
+
+/** 生效的单轮运行预算；null = 不限（或 agent-services 未回报）。 */
+export interface AiRuntimeLimits {
+  maxRequests: number | null
+  maxToolCalls: number | null
+  maxTotalTokens: number | null
+  toolTimeoutSeconds: number | null
+  historyMaxChars: number | null
+}
+
+export interface AiRuntimeStatus {
+  provider: string | null
+  providerStatus: string | null
+  fallbackProviders: string[]
+  mcpStatus: string | null
+  mcpServers: Array<{ name: string; enabled: boolean }>
+  limits: AiRuntimeLimits
+  retrievalStatus: string | null
+  retrievalBlockedReason: string | null
+}
+
+/** reachable=false 时 status 为 null，errorCode 说明原因。 */
+export interface AiRuntime {
+  reachable: boolean
+  errorCode: string | null
+  status: AiRuntimeStatus | null
+}
+
+/** MCP 深检。reachable=false 表示 agent-services 不可达；probe.ok=false 表示某个 MCP 不通。 */
+export interface AiMcpReadyServer {
+  name: string
+  ok: boolean
+  toolCount: number | null
+  error: string | null
+}
+
+export interface AiMcpReadyProbe {
+  ok: boolean
+  mcpStatus: string | null
+  servers: AiMcpReadyServer[]
+  errorCode: string | null
+  message: string | null
+}
+
+export interface AiMcpReady {
+  reachable: boolean
+  errorCode: string | null
+  probe: AiMcpReadyProbe | null
+}
+
+export interface AiPreviewChatInput {
+  message: string
+  history?: AiPreviewHistoryMessage[]
+  skills?: string[]
+  todos?: AiPreviewTodoItem[]
+}
+
+/** 预览 SSE 中与 Agent 行为相关的事件（文本增量由 assistant-ui 消息承载）。 */
+export type AiPreviewAgentEvent =
+  | { type: 'start'; skillsApplied: string[]; skillsMissing: string[] }
+  | { type: 'toolStart'; toolCallId: string; toolName: string }
+  | { type: 'toolResult'; toolCallId: string; toolName: string; ok: boolean }
+  | { type: 'done'; todos: AiPreviewTodoItem[]; usage: AiRunUsage | null }
+  /** message：Java 推流前失败时为本地化文案；推流中为 agent-services 原始诊断（仅后台可见） */
+  | { type: 'error'; errorCode: string; message?: string }

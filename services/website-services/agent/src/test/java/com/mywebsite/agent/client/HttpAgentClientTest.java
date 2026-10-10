@@ -6,7 +6,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
+import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentPingResponse;
+import com.mywebsite.agent.dto.AgentRunMeta;
+import com.mywebsite.agent.dto.AgentRuntimeStatus;
+import com.mywebsite.agent.dto.AgentSkillSummary;
+import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -15,6 +20,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -96,12 +102,99 @@ class HttpAgentClientTest {
     }
 
     @Test
+    void runtimeStatusMapsHealthWithDefaultsForOlderAgentServices() {
+        AgentRuntimeStatus status = client.runtimeStatus();
+        assertThat(status.providerStatus()).isEqualTo("BLOCKED");
+        assertThat(status.fallbackProviders()).isEmpty();
+        assertThat(status.mcpServers()).isEmpty();
+        assertThat(status.limits()).isEqualTo(AgentRuntimeStatus.Limits.UNKNOWN);
+    }
+
+    @Test
+    void runtimeStatusMapsLimitsAndMcpServers() {
+        server.removeContext("/internal/v1/health");
+        server.createContext("/internal/v1/health", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"provider\":\"openai:gpt-4o\",\"providerStatus\":\"LIVE\","
+                        + "\"fallbackProviders\":[\"anthropic:claude\"],\"mcpStatus\":\"CONFIGURED\","
+                        + "\"mcpServers\":[{\"name\":\"echo\",\"enabled\":true}],"
+                        + "\"limits\":{\"maxRequests\":10,\"maxToolCalls\":null,\"maxTotalTokens\":null,"
+                        + "\"toolTimeoutSeconds\":30.0,\"historyMaxChars\":24000},\"timestamp\":\"t\"}"));
+
+        AgentRuntimeStatus status = client.runtimeStatus();
+        assertThat(status.fallbackProviders()).containsExactly("anthropic:claude");
+        assertThat(status.mcpServers()).containsExactly(new AgentRuntimeStatus.McpServer("echo", true));
+        assertThat(status.limits()).isEqualTo(new AgentRuntimeStatus.Limits(10, null, null, 30.0, 24000));
+    }
+
+    @Test
+    void mcpReadyReads503ProbeBody() throws IOException {
+        server.createContext("/internal/v1/mcp/ready", exchange -> write(
+                exchange,
+                503,
+                "{\"ok\":false,\"errorCode\":\"MCP_UNAVAILABLE\",\"mcpStatus\":\"CONFIGURED\","
+                        + "\"message\":\"MCP server unreachable: dead\","
+                        + "\"servers\":[{\"name\":\"dead\",\"ok\":false,\"error\":\"TimeoutError\"}]}"));
+
+        AgentMcpReady ready = client.mcpReady();
+        assertThat(ready.ok()).isFalse();
+        assertThat(ready.errorCode()).isEqualTo("MCP_UNAVAILABLE");
+        assertThat(ready.servers()).containsExactly(new AgentMcpReady.Server("dead", false, null, "TimeoutError"));
+    }
+
+    @Test
+    void mcpReadyMapsDisabled() throws IOException {
+        server.createContext("/internal/v1/mcp/ready", exchange -> write(
+                exchange, 200, "{\"ok\":true,\"mcpStatus\":\"DISABLED\",\"servers\":[]}"));
+
+        AgentMcpReady ready = client.mcpReady();
+        assertThat(ready.ok()).isTrue();
+        assertThat(ready.mcpStatus()).isEqualTo("DISABLED");
+        assertThat(ready.servers()).isEmpty();
+    }
+
+    @Test
     void chatMapsExternalDependencyBlockedWithoutRetryFlood() {
         assertThatThrownBy(() -> client.chat(new AgentChatRequest("10", "hello")))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getCode())
                 .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());
         // blocked 不重试
+        assertThat(chatHits.get()).isEqualTo(1);
+    }
+
+    @Test
+    void chatReadTimeoutDoesNotRetry() {
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> {
+            chatHits.incrementAndGet();
+            try {
+                Thread.sleep(2_000);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            write(exchange, 200, "{\"ok\":true,\"data\":{\"reply\":\"late\",\"providerStatus\":\"LIVE\"}}");
+        });
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofMillis(500));
+        factory.setReadTimeout(Duration.ofMillis(300));
+        RestClient restClient = RestClient.builder()
+                .baseUrl(properties.getBaseUrl())
+                .requestFactory(new BufferingClientHttpRequestFactory(factory))
+                .messageConverters(converters -> {
+                    ObjectMapper mapper = new ObjectMapper();
+                    converters.removeIf(MappingJackson2HttpMessageConverter.class::isInstance);
+                    converters.add(new MappingJackson2HttpMessageConverter(mapper));
+                })
+                .build();
+        HttpAgentClient slowClient = new HttpAgentClient(properties, new ObjectMapper(), restClient);
+
+        assertThatThrownBy(() -> slowClient.chat(new AgentChatRequest("10", "hello")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.SYSTEM_ERROR.getCode());
         assertThat(chatHits.get()).isEqualTo(1);
     }
 
@@ -146,6 +239,92 @@ class HttpAgentClientTest {
         AgentChatResponse response = client.chat(new AgentChatRequest("10", "hello"));
         assertThat(response.reply()).isEqualTo("hi");
         assertThat(response.providerStatus()).isEqualTo("LIVE");
+        assertThat(response.todos()).isEmpty();
+        assertThat(response.skillsApplied()).isEmpty();
+    }
+
+    @Test
+    void liveSuccessMapsTodosAndSkillsApplied() throws IOException {
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"data\":{\"reply\":\"hi\",\"providerStatus\":\"LIVE\","
+                        + "\"skillsApplied\":[\"orchestration\"],\"skillsMissing\":null,"
+                        + "\"todos\":[{\"id\":\"t1\",\"title\":\"Step 1\",\"status\":\"IN_PROGRESS\",\"extra\":1}]}}"));
+
+        AgentChatResponse response = client.chat(new AgentChatRequest("10", "hello"));
+        assertThat(response.todos()).containsExactly(new AgentTodoItem("t1", "Step 1", "IN_PROGRESS"));
+        assertThat(response.skillsApplied()).containsExactly("orchestration");
+    }
+
+    @Test
+    void liveSuccessMapsUsageAndToolTrace() throws IOException {
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"data\":{\"reply\":\"hi\",\"providerStatus\":\"LIVE\","
+                        + "\"usage\":{\"requests\":2,\"toolCalls\":1,\"inputTokens\":30,\"outputTokens\":5},"
+                        + "\"tools\":[{\"name\":\"list_todos\",\"ok\":true},{\"name\":\"mcp_x\",\"ok\":false}]}}"));
+
+        AgentRunMeta meta = client.chat(new AgentChatRequest("10", "hello")).runMeta();
+        assertThat(meta.usage()).isEqualTo(new AgentRunMeta.Usage(2, 1, 30, 5));
+        assertThat(meta.tools())
+                .containsExactly(
+                        new AgentRunMeta.ToolCall("list_todos", true), new AgentRunMeta.ToolCall("mcp_x", false));
+    }
+
+    @Test
+    void malformedRunMetaIsDroppedWithoutFailingReply() throws IOException {
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"data\":{\"reply\":\"hi\",\"providerStatus\":\"LIVE\",\"usage\":\"oops\"}}"));
+
+        AgentChatResponse response = client.chat(new AgentChatRequest("10", "hello"));
+        assertThat(response.reply()).isEqualTo("hi");
+        assertThat(response.runMeta()).isEqualTo(AgentRunMeta.EMPTY);
+    }
+
+    @Test
+    void budgetExceededMapsToAgentBudgetExceededWithoutRetry() throws IOException {
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> {
+            chatHits.incrementAndGet();
+            write(exchange, 422, "{\"ok\":false,\"errorCode\":\"AGENT_BUDGET_EXCEEDED\",\"message\":\"limit\"}");
+        });
+
+        assertThatThrownBy(() -> client.chat(new AgentChatRequest("10", "hello")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.AGENT_BUDGET_EXCEEDED.getCode());
+        assertThat(chatHits.get()).isEqualTo(1);
+    }
+
+    @Test
+    void listSkillsMapsCatalog() throws IOException {
+        server.createContext("/internal/v1/skills", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"data\":{\"skills\":[{\"id\":\"orchestration\",\"description\":\"plan\",\"version\":\"1\"}]}}"));
+
+        assertThat(client.listSkills()).containsExactly(new AgentSkillSummary("orchestration", "plan", "1"));
+    }
+
+    @Test
+    void chatMapsMcpUnavailableAsExternalDependencyBlocked() throws IOException {
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> write(
+                exchange,
+                503,
+                "{\"ok\":false,\"errorCode\":\"MCP_UNAVAILABLE\",\"message\":\"MCP unavailable: boom\"}"));
+
+        assertThatThrownBy(() -> client.chat(new AgentChatRequest("10", "hello")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());
     }
 
     @Test

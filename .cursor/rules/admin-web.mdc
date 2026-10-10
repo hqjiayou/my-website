@@ -22,7 +22,7 @@ Router 目录细则见 `admin-web-router.mdc`；全局样式分层见 `admin-web
 - mock 是开发阶段实现，不等于正式后端能力。
 - test fixture / 开发 seed 不等于业务 mock。
 - 修改 mock 域前先确认真实 API 是否已存在。
-- 不要把当前 `VITE_USE_MOCK` 默认行为写成永久架构；Rule 要求的是**明确识别** mock / real，不是永远使用 mock。
+- admin-web 当前不读取 `VITE_USE_MOCK`。若再引入 mock，必须标明域并先确认真实 API 是否已存在；不要把 mock 写成永久架构。
 
 ## Permission
 

@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: CONTRACT
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 ```
 
 **仓库权威路径（相对仓库根目录）**：`docs/website-services/数据字典/`。
@@ -24,21 +24,33 @@ last_verified: 2026-08-09
 
 ## 文档索引
 
+已写入手册的表：
+
 | 文档 | 覆盖表 |
 | --- | --- |
 | [平台与站点数据字典](./平台与站点数据字典.md) | `site` |
 | [Admin 认证授权数据字典](./Admin认证授权数据字典.md) | `admin_user`、`admin_role`、`admin_permission`、`admin_user_role`、`admin_role_permission` |
 | [Site 用户数据字典](./Site用户数据字典.md) | `site_user`、`site_user_profile` |
 
-后续新增业务域（内容、媒体、行业表等）请在本目录新增 Markdown，并在本 README 登记索引。
+Flyway 已有、本目录还没有手册的表，以 `services/website-services/infra/src/main/resources/db/migration/` 为准，不要把上面三篇当成全库：
+
+| 迁移 | 表 |
+| --- | --- |
+| V7 | `site_template` |
+| V8 | `site_appearance` |
+| V9 | `media_file` |
+| V11 | `site_content` |
+| V14 | `site_reservation` |
+| V16 | `site_ai_prompt_profile`、`site_ai_conversation`、`site_ai_message` |
+| V18 | `site_ai_knowledge_document` |
+
+V20、V21 改的是已有 AI 表的列，不是新表。当前迁移到 V21。
 
 ## 对应 Migration（代码路径）
 
-DDL 仍位于 Maven 模块内（非文档路径）：
+DDL 在 `services/website-services/infra/src/main/resources/db/migration/`，当前至 V21。
 
-- `services/website-services/infra/src/main/resources/db/migration/V1__init_platform_core_tables.sql`
-
-表、函数 `fn_touch_updated_at` 及关键列均已附加 `COMMENT ON`（具体见脚本末尾补充段）。
+表、函数 `fn_touch_updated_at` 及关键列在 V1 脚本末尾有 `COMMENT ON`。后续表以各自迁移为准。
 
 Flyway 执行策略见 [`services/website-services/README.md`](../../services/website-services/README.md) 与《数据库模型设计 V1》§8。
 

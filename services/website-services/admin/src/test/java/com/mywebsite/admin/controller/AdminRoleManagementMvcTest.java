@@ -13,7 +13,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.admin.dto.AdminRbacDtos.AdminRoleCreateRequest;
 import com.mywebsite.admin.dto.AdminRbacDtos.AdminRolePermissionsUpdateRequest;
 import com.mywebsite.admin.dto.AdminRbacDtos.AdminRoleUpdateRequest;
+import com.mywebsite.admin.dto.AdminRbacDtos.AdminUserRoleUpdateRequest;
+import com.mywebsite.admin.dto.AdminUserDtos.AdminUserCreateRequest;
 import com.mywebsite.admin.service.AdminRoleManagementService;
+import com.mywebsite.admin.service.AdminUserManagementService;
 import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
 import com.mywebsite.admin.testsupport.AdminTestJwtSigner;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -24,6 +27,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @AutoConfigureMockMvc
 @Sql(scripts = {"/rbac/rbac-h2-schema.sql", "/rbac/rbac-h2-data.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
@@ -36,6 +40,9 @@ class AdminRoleManagementMvcTest extends AbstractAdminSpringBootTest {
 
     @Autowired
     private AdminRoleManagementService roleManagementService;
+
+    @Autowired
+    private AdminUserManagementService userManagementService;
 
     private String tokenFor(long userId) throws Exception {
         RSAKey pk = AdminTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
@@ -110,6 +117,37 @@ class AdminRoleManagementMvcTest extends AbstractAdminSpringBootTest {
     void deleteRoleInUseFails() throws Exception {
         mockMvc.perform(delete("/api/admin/roles/4").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(500L)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void deleteRoleSucceedsAfterBoundUserIsDeleted() throws Exception {
+        String token = tokenFor(500L);
+        String roleCode = "tmp_" + Long.toHexString(System.nanoTime());
+        MvcResult createdRole = mockMvc.perform(post("/api/admin/roles")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(
+                                new AdminRoleCreateRequest(roleCode, "Temp", null, "ACTIVE"))))
+                .andExpect(status().isOk())
+                .andReturn();
+        long roleId = MAPPER.readTree(createdRole.getResponse().getContentAsString())
+                .path("data")
+                .path("id")
+                .asLong();
+
+        var user = userManagementService.createUser(
+                new AdminUserCreateRequest("role_holder_" + Long.toHexString(System.nanoTime()), "password99", "Holder", null, null));
+        mockMvc.perform(put("/api/admin/users/" + user.id() + "/roles")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminUserRoleUpdateRequest(List.of(roleCode)))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/admin/users/" + user.id()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/admin/roles/" + roleId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk());
     }
 
     @Test

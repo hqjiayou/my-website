@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: REFERENCE
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 ```
 
 前后端必须共同遵守的契约。细节以 Controller / DTO / Flyway / admin-web `api/*` 为准；本文浓缩易漂移点。

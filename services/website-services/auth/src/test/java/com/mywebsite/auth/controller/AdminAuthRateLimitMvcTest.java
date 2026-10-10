@@ -250,6 +250,7 @@ class AdminAuthRateLimitMvcTest {
         user.setCreatedAt(OffsetDateTime.now());
         user.setUpdatedAt(OffsetDateTime.now());
         Mockito.when(adminUserMapper.selectOne(any())).thenReturn(user);
+        Mockito.when(adminUserMapper.selectById(100L)).thenReturn(user);
         Mockito.when(adminUserMapper.selectCount(any())).thenReturn(1L);
         Mockito.when(adminUserMapper.updateById(org.mockito.ArgumentMatchers.any(AdminUserEntity.class)))
                 .thenReturn(1);

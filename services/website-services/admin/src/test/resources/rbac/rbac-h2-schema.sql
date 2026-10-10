@@ -230,6 +230,7 @@ CREATE TABLE IF NOT EXISTS site_ai_message (
     site_id             BIGINT NOT NULL,
     role                VARCHAR(16) NOT NULL,
     content             CLOB NOT NULL,
+    agent_meta          CLOB,
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by          BIGINT,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

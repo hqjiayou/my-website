@@ -48,6 +48,9 @@ class RetrievalService:
         return [chunk.content for chunk in chunks]
 
     async def close(self) -> None:
+        closer = getattr(self._embedder, "aclose", None)
+        if closer is not None:
+            await closer()
         await self._store.close()
 
 
@@ -56,6 +59,8 @@ def create_retrieval_service(settings: Settings) -> tuple[RetrievalService | Non
     dsn = settings.retrieval_database_url.strip()
     if not dsn:
         return None, "Retrieval database is not configured (missing RETRIEVAL_DATABASE_URL)."
+    if settings.ai_embedding_dimensions < 1:
+        return None, "AI_EMBEDDING_DIMENSIONS must be a positive integer."
     embedder, blocked_reason = create_embedding_client(settings)
     if embedder is None:
         return None, blocked_reason

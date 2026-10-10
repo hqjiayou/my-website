@@ -17,7 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * RBAC 种子 Flyway（V1–V15：含 Site/User/Template/Media/Content/Reservation）在真实 PostgreSQL 上的迁移与数据验证。
+ * RBAC 种子 Flyway（V1–V21：含 Site/User/Template/Media/Content/Reservation/AI）在真实 PostgreSQL 上的迁移与数据验证。
  *
  * <p>默认由 Testcontainers 自举一次性 PostgreSQL（库名 {@code my_website_rbac_verify}）；执行：
  * {@code mvn clean test -Ppersistence-verify-pg -pl admin -am -Dtest=AdminRbacSeedVerifyPgTest}
@@ -86,22 +86,30 @@ class AdminRbacSeedVerifyPgTest {
             "admin:menu:update",
             "admin:menu:delete",
             "admin:menu:sort",
-            "admin:menu:bind");
+            "admin:menu:bind",
+            "admin:ai-prompt:read",
+            "admin:ai-prompt:update",
+            "admin:ai-kb:list",
+            "admin:ai-kb:create",
+            "admin:ai-kb:update",
+            "admin:ai-kb:delete",
+            "admin:ai-conversation:list");
 
-    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 15;
-    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 54;
+    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 21;
+    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 61;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void flywayV1ThroughV15AppliedWithExpectedRbacSeed() {
+    void flywayV1ThroughV21AppliedWithExpectedRbacSeed() {
         List<Map<String, Object>> migrations = jdbcTemplate.queryForList(
                 "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank");
         assertThat(migrations)
                 .extracting(row -> row.get("version"))
                 .contains(
-                        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15");
+                        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
+                        "16", "17", "18", "19", "20", "21");
         assertThat(migrations).allMatch(row -> Boolean.TRUE.equals(row.get("success")));
 
         List<Map<String, Object>> roles = jdbcTemplate.queryForList(

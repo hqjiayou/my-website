@@ -1,20 +1,40 @@
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
-from agent_services.agent.skills import default_skills_directory, resolve_skill_instructions
+from agent_services.agent.skills import (
+    default_skills_directory,
+    list_skill_catalog,
+    resolve_skills,
+)
 from agent_services.agent.todo_tools import todo_store_from_request
 from agent_services.agent.toolset_factory import build_execution_toolsets
-from agent_services.agent.model_factory import ModelHandle
-from agent_services.agent.runtime import ChatBlocked, run_chat
+from agent_services.agent.mcp_tools import mcp_config_snapshot, probe_mcp_ready
+from agent_services.agent.model_factory import ModelHandle, public_model_spec
+from agent_services.agent.runtime import (
+    BUDGET_EXCEEDED,
+    ChatBlocked,
+    run_budget_from_settings,
+    run_chat,
+)
 from agent_services.agent.stream_runtime import stream_chat_events
-from agent_services.api.errors import InternalApiError
+from agent_services.api.errors import InternalApiError, external_failure_message
 from agent_services.auth.internal_token import require_internal_service_token
 from agent_services.retrieval.service import RetrievalService
-from agent_services.schemas.chat import ChatRequest
-from agent_services.schemas.health import HealthResponse
+from agent_services.schemas.chat import ChatRequest, ChatSuccessData, ChatUsage, ToolTraceItem
+from agent_services.schemas.health import (
+    HealthResponse,
+    McpReadyResponse,
+    McpReadyServerStatus,
+    McpServerHealth,
+    RuntimeLimits,
+)
 from agent_services.schemas.retrieval import RetrievalUpsertRequest
+from agent_services.schemas.skills import SkillCatalogItem, SkillCatalogResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/internal/v1",
@@ -54,27 +74,106 @@ def _parse_default_skills(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _skills_dir(request: Request) -> str:
+    settings = request.app.state.settings
+    return settings.agent_skills_dir.strip() or default_skills_directory()
+
+
 def _prepare_execution(request: Request, body: ChatRequest, site_id: str):
     settings = request.app.state.settings
-    skills_dir = settings.agent_skills_dir.strip() or default_skills_directory()
-    skill_instructions = resolve_skill_instructions(
+    skills_dir = _skills_dir(request)
+    resolution = resolve_skills(
         skills_dir=skills_dir,
         requested_skill_ids=body.skills,
         default_skill_ids=_parse_default_skills(settings.agent_default_skills),
     )
+    policy = (settings.agent_skills_unknown_policy or "ignore").strip().lower()
+    if policy == "reject" and resolution.has_missing:
+        raise InternalApiError(
+            status_code=400,
+            error_code="BAD_REQUEST",
+            message=f"Unknown skill ids: {', '.join(resolution.missing_ids)}",
+        )
     todo_store = todo_store_from_request(body.todos)
     toolsets = build_execution_toolsets(settings, site_id, todo_store=todo_store)
-    return skill_instructions, todo_store, toolsets
+    return resolution, todo_store, toolsets
+
+
+def _blocked_to_error(outcome: ChatBlocked) -> InternalApiError:
+    if outcome.error_code == BUDGET_EXCEEDED:
+        # 请求本身可处理但超出本轮预算：非依赖故障，不带 providerStatus=BLOCKED
+        return InternalApiError(status_code=422, error_code=BUDGET_EXCEEDED, message=outcome.message)
+    return InternalApiError(
+        status_code=503,
+        error_code=outcome.error_code,
+        message=outcome.message,
+        provider_status="BLOCKED" if outcome.error_code != "MCP_UNAVAILABLE" else None,
+    )
+
+
+@router.get("/skills")
+async def list_skills(request: Request) -> dict[str, object]:
+    """技能目录（平台能力）；供 Java/预览选择 id，不返回正文（防大 payload）。"""
+    catalog = list_skill_catalog(_skills_dir(request))
+    payload = SkillCatalogResponse(
+        skills=[
+            SkillCatalogItem(id=item.id, description=item.description, version=item.version)
+            for item in catalog
+        ]
+    )
+    return {"ok": True, "data": payload.model_dump(by_alias=True)}
 
 
 @router.get("/health")
 async def internal_health(request: Request) -> HealthResponse:
     handle = _model_handle(request)
+    snapshot = mcp_config_snapshot(request.app.state.settings)
+    budget = run_budget_from_settings(request.app.state.settings)
+    usage_limits = budget.usage_limits
+    retrieval_service = _retrieval_service_or_none(request)
+    retrieval_reason = getattr(request.app.state, "retrieval_blocked_reason", None)
     return HealthResponse(
-        provider=handle.spec,
+        limits=RuntimeLimits(
+            maxRequests=usage_limits.request_limit if usage_limits else None,
+            maxToolCalls=usage_limits.tool_calls_limit if usage_limits else None,
+            maxTotalTokens=usage_limits.total_tokens_limit if usage_limits else None,
+            toolTimeoutSeconds=budget.tool_timeout_seconds,
+            historyMaxChars=budget.history_max_chars,
+        ),
+        provider=public_model_spec(handle.spec),
         providerStatus="LIVE" if handle.live else "BLOCKED",
+        fallbackProviders=[public_model_spec(spec) for spec in handle.fallback_specs],
         timestamp=datetime.now(UTC).isoformat(),
+        mcpStatus=snapshot.status,
+        mcpServers=[
+            McpServerHealth(name=item.name, enabled=item.enabled) for item in snapshot.servers
+        ],
+        retrievalStatus="LIVE" if retrieval_service is not None else "BLOCKED",
+        retrievalBlockedReason=None if retrieval_service is not None else retrieval_reason,
     )
+
+
+@router.get("/mcp/ready")
+async def mcp_ready(request: Request) -> JSONResponse:
+    """可选深检：对 enabled MCP 做短超时 list_tools。不替代 /health。"""
+    report = await probe_mcp_ready(request.app.state.settings)
+    payload = McpReadyResponse(
+        ok=report.ok,
+        mcpStatus=report.status,
+        servers=[
+            McpReadyServerStatus(
+                name=item.name,
+                ok=item.ok,
+                toolCount=item.tool_count,
+                error=item.error,
+            )
+            for item in report.servers
+        ],
+        errorCode=None if report.ok else "MCP_UNAVAILABLE",
+        message=report.message,
+    )
+    body = payload.model_dump(by_alias=True, exclude_none=True)
+    return JSONResponse(status_code=200 if report.ok else 503, content=body)
 
 
 @router.post("/chat")
@@ -97,7 +196,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
             provider_status="BLOCKED",
         )
 
-    skill_instructions, todo_store, toolsets = _prepare_execution(request, body, site_id)
+    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id)
 
     outcome = await run_chat(
         handle.model,  # type: ignore[arg-type]  # live 已保证非 None
@@ -106,29 +205,28 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         prompt_profile=body.prompt_profile,
         history=body.history,
         retrieval_context=await _retrieval_context(request, site_id, message),
-        skill_instructions=skill_instructions,
+        skill_instructions=skill_resolution.instructions,
         initial_todos=body.todos,
         toolsets=toolsets,
+        budget=run_budget_from_settings(request.app.state.settings),
+        locale=body.locale,
     )
 
     if isinstance(outcome, ChatBlocked):
-        raise InternalApiError(
-            status_code=503,
-            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
-            message=outcome.message,
-            provider_status="BLOCKED",
-        )
+        raise _blocked_to_error(outcome)
 
-    data: dict[str, object] = {
-        "reply": outcome.reply,
-        "conversationId": body.conversation_id,
-        "providerStatus": "LIVE",
-    }
     todo_snapshot = todo_store.snapshot()
-    if todo_snapshot.items:
-        data["todos"] = todo_snapshot.to_api()
-
-    return {"ok": True, "data": data}
+    data = ChatSuccessData(
+        reply=outcome.reply,
+        conversation_id=body.conversation_id,
+        provider_status="LIVE",
+        usage=ChatUsage.model_validate(outcome.usage),
+        tools=[ToolTraceItem.model_validate(item) for item in outcome.tools],
+        skills_applied=list(skill_resolution.applied_ids),
+        skills_missing=list(skill_resolution.missing_ids) or None,
+        todos=todo_snapshot.items or None,
+    )
+    return {"ok": True, "data": data.model_dump(by_alias=True)}
 
 
 @router.post("/chat/stream")
@@ -152,7 +250,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
         )
 
     retrieval_context = await _retrieval_context(request, site_id, message)
-    skill_instructions, todo_store, toolsets = _prepare_execution(request, body, site_id)
+    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id)
 
     async def event_generator():
         async for event in stream_chat_events(
@@ -162,10 +260,14 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             prompt_profile=body.prompt_profile,
             history=body.history,
             retrieval_context=retrieval_context,
-            skill_instructions=skill_instructions,
+            skill_instructions=skill_resolution.instructions,
             initial_todos=body.todos,
             toolsets=toolsets,
             todo_store=todo_store,
+            skills_applied=list(skill_resolution.applied_ids),
+            skills_missing=list(skill_resolution.missing_ids),
+            budget=run_budget_from_settings(request.app.state.settings),
+            locale=body.locale,
         ):
             yield event.to_sse()
 
@@ -198,10 +300,11 @@ async def upsert_retrieval_document(
             site_id=site_id, source_id=source_id, title=body.title, content=body.content
         )
     except Exception as exc:  # noqa: BLE001 — embedding/DB 故障对 Java 诚实报 503
+        logger.warning("Retrieval index update failed", exc_info=exc)
         raise InternalApiError(
             status_code=503,
             error_code="EXTERNAL_DEPENDENCY_BLOCKED",
-            message=f"Retrieval index update failed: {exc}",
+            message=external_failure_message("Retrieval index update failed", exc),
             provider_status="BLOCKED",
         ) from exc
     return {"ok": True, "data": {"chunks": chunk_count}}
@@ -223,10 +326,11 @@ async def delete_retrieval_document(
     try:
         await service.delete_document(site_id=site_id, source_id=source_id)
     except Exception as exc:  # noqa: BLE001
+        logger.warning("Retrieval index delete failed", exc_info=exc)
         raise InternalApiError(
             status_code=503,
             error_code="EXTERNAL_DEPENDENCY_BLOCKED",
-            message=f"Retrieval index delete failed: {exc}",
+            message=external_failure_message("Retrieval index delete failed", exc),
             provider_status="BLOCKED",
         ) from exc
     return {"ok": True, "data": None}

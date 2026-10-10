@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     ai_model: str = Field(default="", validation_alias="AI_MODEL")
     ai_provider_api_key: str = Field(default="", validation_alias="AI_PROVIDER_API_KEY")
     ai_provider_base_url: str = Field(default="", validation_alias="AI_PROVIDER_BASE_URL")
+    ai_fallback_models: str = Field(default="", validation_alias="AI_FALLBACK_MODELS")
 
     # Java↔Python 契约集成测试专用：注入 TestModel，避免真实 Provider 调用
     agent_contract_use_test_model: bool = Field(
@@ -41,9 +42,22 @@ class Settings(BaseSettings):
     # ---- Phase 5 Skills / Todo / MCP ----
     agent_skills_dir: str = Field(default="", validation_alias="AGENT_SKILLS_DIR")
     agent_default_skills: str = Field(default="orchestration", validation_alias="AGENT_DEFAULT_SKILLS")
+    # ignore（默认）：未知 skill id 记入 skillsMissing，不失败
+    # reject：请求/默认中含未知 id → 400 BAD_REQUEST
+    agent_skills_unknown_policy: str = Field(
+        default="ignore", validation_alias="AGENT_SKILLS_UNKNOWN_POLICY"
+    )
     agent_enable_todo_tools: bool = Field(default=True, validation_alias="AGENT_ENABLE_TODO_TOOLS")
     # JSON 数组：[{"name":"demo","url":"http://host:port/mcp"}]；缺失 → 不注册 MCP
     mcp_servers_json: str = Field(default="", validation_alias="MCP_SERVERS_JSON")
+
+    # ---- §22 运行预算（每轮；<=0 表示该维度不限）----
+    # 防工具循环 / 成本失控；超限 → AGENT_BUDGET_EXCEEDED（诚实失败，不截断伪造回复）
+    agent_max_requests: int = Field(default=10, validation_alias="AGENT_MAX_REQUESTS")
+    agent_max_tool_calls: int = Field(default=20, validation_alias="AGENT_MAX_TOOL_CALLS")
+    agent_max_total_tokens: int = Field(default=0, validation_alias="AGENT_MAX_TOTAL_TOKENS")
+    agent_tool_timeout_seconds: float = Field(default=30.0, validation_alias="AGENT_TOOL_TIMEOUT_SECONDS")
+    agent_history_max_chars: int = Field(default=24000, validation_alias="AGENT_HISTORY_MAX_CHARS")
 
     uvicorn_workers: int = Field(default=1, validation_alias="UVICORN_WORKERS")
 

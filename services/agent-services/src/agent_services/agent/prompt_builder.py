@@ -1,5 +1,10 @@
+import re
+
 from agent_services.schemas.chat import PromptProfile
 from agent_services.schemas.todo import TodoItem
+
+# 只接受语言标签，避免把任意文本写进 system prompt
+_LOCALE_RE = re.compile(r"^[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8}){0,3}$")
 
 
 def build_prompt_parts(
@@ -9,6 +14,7 @@ def build_prompt_parts(
     retrieval_context: list[str] | None = None,
     skill_instructions: str | None = None,
     todos: list[TodoItem] | None = None,
+    locale: str | None = None,
 ) -> tuple[str, str]:
     system = (
         prompt_profile.system_prompt.strip()
@@ -28,4 +34,6 @@ def build_prompt_parts(
             "prefer it when answering):\n"
             f"{knowledge}"
         )
+    if locale and _LOCALE_RE.fullmatch(locale.strip()):
+        system = f"{system}\n\nReply in this locale: {locale.strip()}."
     return system, user_message.strip()

@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: CONTRACT
 status: CURRENT
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 ```
 
 ## 入口
@@ -35,9 +35,9 @@ last_verified: 2026-08-09
 - `POST /api/auth/site/login`  
 - `POST /api/auth/site/refresh`  
 - `POST /api/auth/site/logout`  
-- `GET` site me（以实现 Controller 为准）  
+- `GET /api/site/auth/me`（`SiteAuthMeController`，在 site-app）
 
-**site-web 前端尚未对接** → 不得描述为完整产品功能。
+**工作区没有 site-web 前台应用**，这些接口还没有产品页面。
 
 ## 限流与 Client IP
 

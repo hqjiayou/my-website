@@ -6,6 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentPingResponse;
+import com.mywebsite.agent.dto.AgentRuntimeStatus;
+import com.mywebsite.agent.dto.AgentSkillSummary;
+import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -21,6 +24,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -119,6 +123,51 @@ class HttpAgentClientPythonContractIT {
         AgentChatResponse response = client.chat(new AgentChatRequest("42", "hello"));
         assertThat(response.reply()).isEqualTo("contract-test-reply");
         assertThat(response.providerStatus()).isEqualTo("LIVE");
+        // §22：成功体带回用量（TestModel 至少 1 次 model request）
+        assertThat(response.runMeta().usage().requests()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    void chatRoundTripsTodosAndReportsSkillsApplied() {
+        AgentTodoItem existing = new AgentTodoItem("t1", "Step 1", "IN_PROGRESS");
+        AgentChatResponse response = client.chat(new AgentChatRequest(
+                "42", "hello", null, null, null, null, List.of("platform-smoke"), List.of(existing)));
+
+        // TestModel 会调用全部工具（可能新增条目），但上轮条目必须原样回到快照中
+        assertThat(response.todos()).contains(existing);
+        assertThat(response.skillsApplied()).contains("platform-smoke");
+        assertThat(response.runMeta().tools()).isNotEmpty();
+        assertThat(response.runMeta().tools()).allSatisfy(tool -> assertThat(tool.name()).isNotBlank());
+    }
+
+    @Test
+    void runtimeStatusReportsLimitsAgainstRealPythonService() {
+        AgentRuntimeStatus status = client.runtimeStatus();
+        assertThat(status.providerStatus()).isEqualTo("LIVE");
+        assertThat(status.limits().maxRequests()).isEqualTo(10);
+        assertThat(status.limits().maxToolCalls()).isEqualTo(20);
+        assertThat(status.limits().toolTimeoutSeconds()).isEqualTo(30.0);
+        assertThat(status.limits().historyMaxChars()).isEqualTo(24000);
+        assertThat(status.mcpStatus()).isEqualTo("DISABLED");
+    }
+
+    @Test
+    void listSkillsReturnsBuiltInCatalog() {
+        List<AgentSkillSummary> skills = client.listSkills();
+        assertThat(skills).extracting(AgentSkillSummary::id).contains("orchestration", "platform-smoke");
+    }
+
+    @Test
+    void oversizedTodosMapToBadRequest() {
+        List<AgentTodoItem> tooMany = new ArrayList<>();
+        for (int i = 0; i <= AgentTodoItem.MAX_ITEMS; i++) {
+            tooMany.add(new AgentTodoItem("t" + i, "x", "PENDING"));
+        }
+        assertThatThrownBy(() -> client.chat(
+                        new AgentChatRequest("42", "hello", null, null, null, null, null, tooMany)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.BAD_REQUEST.getCode());
     }
 
     @Test
@@ -157,7 +206,33 @@ class HttpAgentClientPythonContractIT {
         assertThat(events).isNotEmpty();
         assertThat(events.get(0)).startsWith("START|");
         assertThat(events.get(events.size() - 1)).startsWith("DONE|");
-        assertThat(String.join("\n", events)).contains("contract-test-reply");
+        String joined = String.join("\n", events);
+        assertThat(joined).contains("contract-test-reply");
+        assertThat(joined).contains("\"usage\"");
+        assertThat(joined).contains("\"tools\"");
+    }
+
+    @Test
+    void budgetExceededMapsToAgentBudgetExceededAgainstRealPythonService() throws Exception {
+        // 独立进程：默认 maxRequests=10 不会触发；request_limit=1 + TestModel 调工具 → 第二轮 model 请求超限
+        try (EphemeralAgentProcess proc = EphemeralAgentProcess.start(Map.of("AGENT_MAX_REQUESTS", "1"))) {
+            assertThatThrownBy(() -> proc.client().chat(new AgentChatRequest("42", "hello")))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(ex -> ((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.AGENT_BUDGET_EXCEEDED.getCode());
+        }
+    }
+
+    @Test
+    void mcpUnavailableMapsToExternalDependencyBlockedAgainstRealPythonService() throws Exception {
+        String mcpJson = "[{\"name\":\"dead\",\"url\":\"http://127.0.0.1:1/mcp\",\"enabled\":true}]";
+        try (EphemeralAgentProcess proc = EphemeralAgentProcess.start(Map.of("MCP_SERVERS_JSON", mcpJson))) {
+            assertThat(proc.client().runtimeStatus().mcpStatus()).isEqualTo("CONFIGURED");
+            assertThatThrownBy(() -> proc.client().chat(new AgentChatRequest("42", "hello")))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(ex -> ((BusinessException) ex).getCode())
+                    .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());
+        }
     }
 
     private static String debugChatPost() throws Exception {
@@ -264,5 +339,57 @@ class HttpAgentClientPythonContractIT {
                 "agent-python-contract-log");
         t.setDaemon(true);
         t.start();
+    }
+
+    /** 短生命周期 agent-services：用于覆盖与默认进程配置冲突的契约（预算 / MCP）。 */
+    private static final class EphemeralAgentProcess implements AutoCloseable {
+        private final Process process;
+        private final HttpAgentClient client;
+
+        private EphemeralAgentProcess(Process process, HttpAgentClient client) {
+            this.process = process;
+            this.client = client;
+        }
+
+        static EphemeralAgentProcess start(Map<String, String> extraEnv) throws Exception {
+            int ephemeralPort = findFreePort();
+            Path agentServicesDir = locateAgentServicesDir();
+            ProcessBuilder builder = new ProcessBuilder(buildStartCommand(agentServicesDir, ephemeralPort));
+            builder.directory(agentServicesDir.toFile());
+            builder.environment().put("AGENT_INTERNAL_SERVICE_TOKEN", TOKEN);
+            builder.environment().put("AGENT_CONTRACT_USE_TEST_MODEL", "true");
+            builder.environment().put("PORT", String.valueOf(ephemeralPort));
+            builder.environment().putAll(extraEnv);
+            builder.redirectErrorStream(true);
+            Process process = builder.start();
+            drainProcessOutputAsync(process);
+            waitForHealth(ephemeralPort, Duration.ofSeconds(45));
+
+            AgentProperties properties = new AgentProperties();
+            properties.setBaseUrl("http://127.0.0.1:" + ephemeralPort);
+            properties.setInternalServiceToken(TOKEN);
+            properties.setConnectTimeoutMs(3000);
+            properties.setReadTimeoutMs(15000);
+            properties.setRetryMaxAttempts(0);
+            return new EphemeralAgentProcess(
+                    process, new HttpAgentClient(properties, new com.fasterxml.jackson.databind.ObjectMapper()));
+        }
+
+        HttpAgentClient client() {
+            return client;
+        }
+
+        @Override
+        public void close() {
+            if (process != null && process.isAlive()) {
+                process.destroy();
+                try {
+                    process.waitFor(5, TimeUnit.SECONDS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    process.destroyForcibly();
+                }
+            }
+        }
     }
 }
