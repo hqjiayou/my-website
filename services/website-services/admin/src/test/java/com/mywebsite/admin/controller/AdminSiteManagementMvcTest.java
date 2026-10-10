@@ -1,5 +1,6 @@
 package com.mywebsite.admin.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -12,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mywebsite.admin.dto.AdminAppearanceDtos.AdminAppearanceConfigV1Dto;
 import com.mywebsite.admin.dto.AdminSiteDtos.AdminSiteCreateRequest;
 import com.mywebsite.admin.dto.AdminSiteDtos.AdminSiteStatusUpdateRequest;
 import com.mywebsite.admin.dto.AdminSiteDtos.AdminSiteUpdateRequest;
@@ -21,7 +23,9 @@ import com.nimbusds.jose.jwk.RSAKey;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import java.util.Map;
 import org.springframework.http.HttpHeaders;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -36,6 +40,9 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private String tokenFor(long userId) throws Exception {
         RSAKey pk = AdminTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
@@ -264,6 +271,39 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                                 siteCode, "Second", "GYOSEISHOSHI", null, null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.siteCode").value(siteCode));
+    }
+
+    @Test
+    void softDeleteSiteWithAppearanceSetsDeletedAt() throws Exception {
+        String token = tokenFor(500L);
+        String siteCode = "sda_" + Long.toHexString(System.nanoTime());
+        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminSiteCreateRequest(
+                                siteCode,
+                                "SoftDelAt",
+                                "CAR_REPAIR",
+                                null,
+                                null,
+                                1L,
+                                new AdminAppearanceConfigV1Dto(
+                                        "#B91C1C", "modern", "rounded", "left-text-right-visual")))))
+                .andExpect(status().isOk())
+                .andReturn();
+        long siteId = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
+
+        mockMvc.perform(delete("/api/admin/sites/" + siteId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk());
+
+        Map<String, Object> site = jdbcTemplate.queryForMap(
+                "SELECT deleted, deleted_at FROM site WHERE id = ?", siteId);
+        Map<String, Object> appearance = jdbcTemplate.queryForMap(
+                "SELECT deleted, deleted_at FROM site_appearance WHERE site_id = ?", siteId);
+        assertThat(site.get("deleted")).isEqualTo(true);
+        assertThat(site.get("deleted_at")).isNotNull();
+        assertThat(appearance.get("deleted")).isEqualTo(true);
+        assertThat(appearance.get("deleted_at")).isNotNull();
     }
 
     @Test

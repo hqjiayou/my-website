@@ -148,7 +148,7 @@ public class AdminUserManagementServiceImpl implements AdminUserManagementServic
     @Override
     @Transactional
     public void deleteUser(long id) {
-        requireUser(id);
+        AdminUserEntity user = requireUser(id);
         rejectIfSelf(id, AdminUserMessageKeys.SELF_DELETE_DENIED);
         rejectIfSuperAdmin(id);
         List<AdminUserRoleEntity> links = adminUserRoleMapper.selectList(
@@ -159,6 +159,8 @@ public class AdminUserManagementServiceImpl implements AdminUserManagementServic
             adminUserRoleMapper.updateById(link);
             adminUserRoleMapper.deleteById(link.getId());
         }
+        user.setDeletedAt(now);
+        adminUserMapper.updateById(user);
         adminUserMapper.deleteById(id);
     }
 

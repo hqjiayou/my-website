@@ -16,6 +16,8 @@ import com.mywebsite.admin.mapper.AdminSiteMapper;
 import com.mywebsite.admin.service.AdminAppearanceService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -83,6 +85,8 @@ public class AdminAppearanceServiceImpl implements AdminAppearanceService {
     public void softDeleteBySiteId(long siteId) {
         AdminAppearanceEntity existing = findBySiteId(siteId);
         if (existing != null) {
+            existing.setDeletedAt(OffsetDateTime.now(ZoneOffset.UTC));
+            adminAppearanceMapper.updateById(existing);
             adminAppearanceMapper.deleteById(existing.getId());
         }
     }

@@ -4,7 +4,7 @@
 artifact_type: SPEC
 status: CURRENT
 owner: platform
-last_verified: 2026-08-09
+last_verified: 2026-10-10
 source_of_truth: services/website-services + apps/admin-web + apps/site-web（代码优先）
 supersedes:
   - docs/website-services/总览/当前功能完成度总览.md
@@ -26,7 +26,7 @@ supersedes:
 | 域 | 状态 | 说明 |
 |----|------|------|
 | **Admin Web** | PARTIAL（主域 + 运营聚合 + 站点 AI 管理 FORCE REAL；概览指标由 REAL API 推导；占位页） | 见 [`../admin-web/CURRENT_STATE.md`](../admin-web/CURRENT_STATE.md) |
-| **Site Web** | PROTOTYPE_MOCK / NOT_IMPLEMENTED（auth） | car-web / cake-web 骨架；未接 Site Auth |
+| **Site Web** | NOT_IN_TREE / NOT_IMPLEMENTED（auth） | 工作区已无 `car-web` / `cake-web`；Site Auth 前端未接 |
 | **Backend (website-services)** | PARTIAL（主业务 COMPLETE_V1；安全门 PARTIALLY_RESOLVED） | 见 [`../website-services/CURRENT_STATE.md`](../website-services/CURRENT_STATE.md) |
 | **Database** | COMPLETE_V1（Flyway 以 `infra/.../db/migration` 为准，当前至 V21） | 以代码为准 |
 | **Auth Admin** | PARTIAL | 登录/刷新/登出/注册门控 REAL；XFF：gateway trusted-proxies 已配置，缺集成测试 |
@@ -55,7 +55,7 @@ supersedes:
 | Auth trusted client IP / XFF | **PARTIALLY_RESOLVED**（配置已加；集成断言 / 暴露面硬化 STILL_OPEN） | [#1](https://github.com/hqjiayou/my-website/issues/1) |
 | Browser E2E golden paths | **NOT_IMPLEMENTED** | [#2](https://github.com/hqjiayou/my-website/issues/2) |
 | site-web authentication integration | FE **NOT_IMPLEMENTED**（BE BACKEND_COMPLETE） | [#3](https://github.com/hqjiayou/my-website/issues/3) |
-| Soft-delete `deleted_at` consistency | **STILL_OPEN**（LOW；非 DB CHECK 不变量） | [#4](https://github.com/hqjiayou/my-website/issues/4) |
+| Soft-delete `deleted_at` consistency | **RESOLVED**（Site / Appearance / User 删除用例已写 `deleted_at`；Role / 绑定仍只 `deleteById`，不在 #4 范围） | [#4](https://github.com/hqjiayou/my-website/issues/4) |
 | AI LIVE | **EXTERNAL_BLOCKED**（无 `AI_MODEL`）；admin 管理页已 REAL | [#5](https://github.com/hqjiayou/my-website/issues/5) |
 | Site runtime-status REAL | **DEFERRED**（无独立端点；由现有 REAL API 推导，访问量 / 当日 AI 会话为 null） | — |
 | Admin user mutation error feedback | **RESOLVED（文档漂移）** — 全局 `mutations.onError`→`handleApiError` | — |
@@ -70,6 +70,7 @@ supersedes:
 - [`ADR-0002`](../decisions/ADR-0002-admin-site-jwt-audience-isolation.md) — Admin/Site JWT audience 隔离
 - [`ADR-0003`](../decisions/ADR-0003-media-server-generated-object-key.md) — Media object key 服务端生成
 - [`ADR-0004`](../decisions/ADR-0004-ai-must-fail-honestly-without-provider.md) — AI 无 Provider 诚实失败
+- [`ADR-0005`](../decisions/ADR-0005-java-business-truth-python-ai-execution.md) — Java 持有业务真相，Python 只做 AI 执行
 
 ---
 

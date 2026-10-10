@@ -27,6 +27,8 @@ import com.mywebsite.admin.service.AdminSiteService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.page.PageResult;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -163,7 +165,7 @@ public class AdminSiteServiceImpl implements AdminSiteService {
     @Override
     @Transactional
     public void deleteSite(long id) {
-        requireSite(id);
+        AdminSiteEntity site = requireSite(id);
         adminAppearanceService.softDeleteBySiteId(id);
         adminContentService.softDeleteBySiteId(id);
         adminReservationService.softDeleteBySiteId(id);
@@ -171,6 +173,8 @@ public class AdminSiteServiceImpl implements AdminSiteService {
         adminAiPromptService.softDeleteBySiteId(id);
         adminAiKnowledgeService.softDeleteBySiteId(id);
         adminAiConversationService.softDeleteBySiteId(id);
+        site.setDeletedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        adminSiteMapper.updateById(site);
         int deleted = adminSiteMapper.deleteById(id);
         if (deleted == 0) {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminSiteMessageKeys.SITE_NOT_FOUND);
