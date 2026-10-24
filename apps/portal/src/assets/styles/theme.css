@@ -1,0 +1,23 @@
+/**
+ * 門戶色板。行動版單色，不接後台的密度 / 主色偏好。
+ */
+:root {
+  --background: 244 247 248;
+  --foreground: 20 34 38;
+  --card: 255 255 255;
+  --border: 213 224 226;
+  --muted-foreground: 92 111 115;
+  --primary: 15 61 62;
+  --primary-foreground: 244 251 251;
+  --danger: 159 45 45;
+}
+
+@theme inline {
+  --color-background: rgb(var(--background));
+  --color-foreground: rgb(var(--foreground));
+  --color-card: rgb(var(--card));
+  --color-border: rgb(var(--border));
+  --color-primary: rgb(var(--primary));
+  --color-muted-foreground: rgb(var(--muted-foreground));
+  --color-danger: rgb(var(--danger));
+}
