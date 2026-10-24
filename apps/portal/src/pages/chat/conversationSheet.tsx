@@ -34,10 +34,10 @@ export function ConversationSheet({
         </button>
       </header>
       <div className="safe-x flex gap-2 px-4 py-3">
-        <button type="button" onClick={onCreate} className="h-11 flex-1 rounded-xl bg-primary text-sm text-primary-foreground">
+        <button type="button" onClick={onCreate} className="h-11 flex-1 rounded-control bg-primary text-sm font-medium text-primary-foreground">
           新對話
         </button>
-        <button type="button" onClick={onRefresh} className="h-11 rounded-xl border border-border px-4 text-sm">
+        <button type="button" onClick={onRefresh} className="h-11 rounded-control border border-border bg-surface px-4 text-sm">
           重新整理
         </button>
       </div>
@@ -46,7 +46,7 @@ export function ConversationSheet({
         {error ? (
           <div className="py-6">
             <p className="text-sm text-danger">{error}</p>
-            <button type="button" onClick={onRefresh} className="mt-3 h-10 rounded-xl border border-border px-4 text-sm">
+            <button type="button" onClick={onRefresh} className="mt-3 h-10 rounded-control border border-border bg-surface px-4 text-sm">
               重試
             </button>
           </div>
