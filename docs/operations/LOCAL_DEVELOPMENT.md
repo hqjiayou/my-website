@@ -64,7 +64,7 @@ mvn -pl gateway -am spring-boot:run       # 8080
 cd apps/admin-web && pnpm install && pnpm dev
 ```
 
-admin-web 走 gateway `:8080`，不读取 `VITE_USE_MOCK`。工作区没有 site-web 前台应用，不要再启动 `car-web` / `cake-web`。
+admin-web 走 gateway `:8080`，不读取 `VITE_USE_MOCK`。工作区没有访客前台。
 
 ## 4. 验收
 

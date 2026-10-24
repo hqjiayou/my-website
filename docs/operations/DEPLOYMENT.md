@@ -55,10 +55,12 @@ Java `admin` 与 `site-app` 配置：`AGENT_BASE_URL=http://<agent-host>:3001`�
 
 日常集成分支是 `dev`，发版把 `dev` 合并到 `main`。不要把日常提交直接推到 `main`。GitHub 默认分支应为 `dev`。
 
-Actions 按本次 push 改到的目录触发，不看 Pull Request 里更早的文件。约定是经 Pull Request 合入 `dev`，发版再合入 `main`，并看对应检查。私有仓库在当前 GitHub 方案下不能开启分支保护（需要 Pro，或把仓库改为 public），所以这项约定现在还不能在服务器上强制：
+约定是经 Pull Request 合入 `dev`，发版再合入 `main`，并看对应检查。私有仓库在当前 GitHub 方案下不能开启分支保护（需要 Pro，或把仓库改为 public），所以这项约定现在还不能在服务器上强制。
 
-| 工作流 | 本次 push 包含 | 检查 |
-|--------|----------------|------|
+Actions 有两种触发。指向 `dev` / `main` 的 Pull Request 按整个 PR 的改动匹配路径。`push` 按本次提交改到的路径匹配，功能分支还没开 PR 时也会跑。同一条分支上新的一次运行会取消该事件里尚未结束的上一次。Actions 页也可以手动跑这三条工作流。
+
+| 工作流 | 路径 | 检查 |
+|--------|------|------|
 | `.github/workflows/backend-ci.yml` | `services/website-services/**` | Java 快速测试 + PostgreSQL 契约测试 |
-| `.github/workflows/agent-services-ci.yml` | `services/agent-services/**` 或 `services/website-services/agent/**` | pytest + Java 契约 IT + docker build |
-| `.github/workflows/admin-web-ci.yml` | `apps/admin-web/**` | `pnpm lint` + `pnpm build` |
+| `.github/workflows/agent-services-ci.yml` | `services/agent-services/**` 或 `services/website-services/agent/**` | pytest，然后 Java 契约 IT 与 docker build 并行 |
+| `.github/workflows/admin-web-ci.yml` | `apps/admin-web/**` | `pnpm lint`、导入检查、`pnpm build` |

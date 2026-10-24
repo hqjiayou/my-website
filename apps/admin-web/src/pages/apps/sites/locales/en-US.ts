@@ -63,9 +63,9 @@ export default {
       heroLayout: 'Hero Layout',
     },
     placeholders: {
-      siteName: 'e.g. Tokyo Reliable Auto Repair',
-      siteCode: 'e.g. tokyo-car-repair',
-      domain: 'e.g. car-demo.example.com',
+      siteName: 'e.g. Example Site',
+      siteCode: 'e.g. demo-site',
+      domain: 'e.g. demo.example.com',
       siteDescription: 'Describe the business positioning and services',
       phone: 'e.g. 03-1111-2200',
       address: 'Enter business address',
@@ -176,7 +176,7 @@ export default {
       pendingSave: 'This is a frontend placeholder page. site-service persistence will be connected later.',
       domainFuture:
         'This section will be used to manage custom domain, DNS records, SSL certificates, and publish state.',
-      templateHint: 'Template note: built on industry template and can be overridden by brand settings.',
+      templateHint: 'A template is the starting point. Appearance can be overridden per site.',
       dnsHint: 'DNS placeholder: A/CNAME verification and propagation checks will be added later.',
       cdnHint: 'Cloudflare / CloudFront placeholder: for edge cache and HTTPS acceleration.',
     },

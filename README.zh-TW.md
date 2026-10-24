@@ -2,14 +2,14 @@
 
 [简体中文](README.md) · [繁體中文](README.zh-TW.md) · [English](README.en.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
-一個多站點網站合集平台。平台能力按行業站點擴展（汽車維修、蛋糕烘焙，以及後續美容院、診所、中古車店、行政書士事務所等）。當前工作區沒有行業前台應用。
+一套中央控制的網站集合。一個後台總控（`apps/admin-web`），一個 Java 服務（`services/website-services`），一個 Python AI 執行服務（`services/agent-services`）。當前工作區沒有面向訪客的站點前台。
 
 ## 專案定位
 
-- 用一套平台同時承載多個行業站點，不是單個官網。
-- 行業前台不在當前工作區。恢復後放在 `apps/site-web/`，按行業拆成獨立站點。
-- `apps/admin-web` 負責總後台與站點後台管理。
-- `services/website-services` 是當前 Java 後端主幹，包含**統一閘道**、**獨立認證服務（`auth`）**、後台 API、前台 API、基礎設施接入與後續業務模組骨架；**JWT 為 RS256 + JWKS（Auth 簽發，業務服務 JWKS 驗簽）**。
+- 一個後台總控管理集合裡的各個網站。
+- 當前工作區只有總控後台。訪客前台不在樹裡，站點 API 在 Java `site-app`。
+- `apps/admin-web` 是這套系統的後台總控，同時管平台和各個站點。
+- `services/website-services` 是這套系統的 Java 服務，包含**統一閘道**、**獨立認證服務（`auth`）**、後台 API、站點 API 與基礎設施接入；**JWT 為 RS256 + JWKS（Auth 簽發，業務服務 JWKS 驗簽）**。
 - `services/agent-services` 是 **Python 3.13 + FastAPI + Pydantic AI 2.54** 的 AI Execution Runtime（internal only，不經 gateway 暴露）。Java 持有業務真相，Python 只做 AI 執行（ADR-0005）。沒有 `AI_MODEL` 時行程仍啟動，呼叫誠實失敗（ADR-0004）。
 
 ## 目錄結構
@@ -28,11 +28,11 @@ my-website/
 
 ## 子專案職責
 
-### 行業前台
+### 訪客前台
 
-當前工作區沒有行業前台應用（原先的 `car-web`、`cake-web` 骨架已移除，`apps/site-web/` 也不在樹裡）。
+當前工作區沒有面向訪客的站點前台（`apps/site-web/` 不在樹裡）。
 
-恢復後的前台透過 `website-services/gateway` 存取前台 API。  
+站點 API 經 `website-services/gateway` 存取。  
 **Site Auth：後端已完成（`/api/auth/site/**` 登入 / 重新整理 / 登出，`GET /api/site/auth/me` 在 site-app），前端尚未對接**（見 [`docs/site-web/CURRENT_STATE.md`](docs/site-web/CURRENT_STATE.md)）。
 
 ### apps/admin-web
@@ -62,7 +62,7 @@ Java 21 + Spring Boot 3.5.14 的 Maven 多模組後端工程。
 - `infra`：PostgreSQL、Redis、MinIO / S3 接入、MyBatis-Plus、Flyway、**系統訊息 i18n** 等
 - `agent`：`HttpAgentClient` 與 Java↔Python 契約 DTO，不做業務編排
 - `site/site-core`：站點共享實體與 Mapper（使用者、內容、預約、站點 AI）
-- `site/site-car`、`site/site-cake`：行業模組骨架，當前沒有具體業務
+- `site/site-car`、`site/site-cake`：空模組，只有 `pom.xml`，沒有業務程式
 
 專項文件：
 
@@ -99,7 +99,7 @@ admin-web ──> website-services/gateway:8080 ──> /api/auth/**   → auth:
                                               └──> /api/site/**   → site-app:8082（含 GET /api/site/auth/me）
 ```
 
-行業前台恢復後走同一條 gateway。登入在 auth：`/api/auth/admin/**`、`/api/auth/site/**`。`/me` 不在 auth，而在對應業務服務。
+請求都走同一條 gateway。登入在 auth：`/api/auth/admin/**`、`/api/auth/site/**`。`/me` 不在 auth，而在對應業務服務。
 
 內部 Maven 依賴關係（非 HTTP 拓樸）：
 
@@ -136,7 +136,7 @@ pnpm install
 pnpm dev
 ```
 
-工作區沒有 site-web 前台應用，不要啟動 `car-web` / `cake-web`。
+工作區沒有面向訪客的站點前台。
 
 啟動 `agent-services`：
 

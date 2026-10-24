@@ -15,8 +15,8 @@ last_verified: 2026-10-10
 | 站点 AI | 已有 chat、stream、会话读 | `SiteAiController` |
 | 给 Python 的内部工具 | 已有读站点、读内容、建预约 | `SiteInternalController` `/internal/site/v1/...`，不经对公产品页 |
 | 访客内容 / 预约公开 API | 没有 | 内容与预约的管理接口在 admin |
-| 行业模块 | 无业务 | `site-car`、`site-cake` 无 Controller |
-| 前台应用 | 工作区没有 | `apps/site-web` 无行业站点 |
+| 空模块 | 无业务 | `site-car`、`site-cake` 无 Controller |
+| 前台应用 | 工作区没有 | `apps/site-web` 不在树里 |
 | runtime-status 独立端点 | 没有 | 管理端用现有 API 推导 |
 | `deleted_at` 与 `deleted` | Admin 删站点 / 外观 / 用户已对齐写 `deleted_at`；无 DB CHECK | [#4](https://github.com/hqjiayou/my-website/issues/4) |
 
