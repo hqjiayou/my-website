@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -9,6 +9,9 @@ import { AI_KB_STATUS, AI_KB_STATUS_VALUES, type AiKnowledgeListItem, type AiKno
 import { PermissionGate } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
+const KB_UPLOAD_MAX_BYTES = 1024 * 1024
+const KB_UPLOAD_ACCEPT = '.txt,.md,text/plain,text/markdown'
+
 interface EditorState {
   mode: 'create' | 'edit'
   id?: number
@@ -16,6 +19,38 @@ interface EditorState {
   title: string
   content: string
   status: (typeof AI_KB_STATUS)[keyof typeof AI_KB_STATUS]
+}
+
+interface UploadDialogState {
+  file: File | null
+  title: string
+  fieldError: 'extension' | 'size' | null
+}
+
+function knowledgeFileExtension(filename: string) {
+  const dot = filename.lastIndexOf('.')
+  if (dot < 0 || dot === filename.length - 1) return ''
+  return filename.slice(dot + 1).toLowerCase()
+}
+
+function titleFromFilename(filename: string) {
+  const dot = filename.lastIndexOf('.')
+  if (dot <= 0) return ''
+  return filename.slice(0, dot).trim()
+}
+
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function uploadFieldError(file: File): UploadDialogState['fieldError'] {
+  const extension = knowledgeFileExtension(file.name)
+  if (extension !== 'txt' && extension !== 'md') return 'extension'
+  if (file.size > KB_UPLOAD_MAX_BYTES) return 'size'
+  return null
 }
 
 export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
@@ -27,6 +62,8 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
     status: '',
   })
   const [editor, setEditor] = useState<EditorState | null>(null)
+  const [uploadDialog, setUploadDialog] = useState<UploadDialogState | null>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['sites', siteId, 'ai', 'knowledge', filters],
@@ -63,6 +100,16 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
     },
   })
 
+  const uploadMutation = useMutation({
+    mutationFn: (input: { file: File; title?: string }) =>
+      aiApi.uploadKnowledgeDocument(siteId, input.file, input.title),
+    onSuccess: () => {
+      toast.success(t('aiWorkspace.knowledge.uploaded'))
+      setUploadDialog(null)
+      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: (id: number) => aiApi.deleteKnowledgeDocument(siteId, id),
     onSuccess: () => {
@@ -70,6 +117,41 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
       void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
     },
   })
+
+  const openUpload = useCallback(() => {
+    setUploadDialog({ file: null, title: '', fieldError: null })
+  }, [])
+
+  const closeUpload = useCallback(() => {
+    if (uploadMutation.isPending) return
+    setUploadDialog(null)
+  }, [uploadMutation.isPending])
+
+  function onPickUploadFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setUploadDialog({
+      file,
+      title: titleFromFilename(file.name),
+      fieldError: uploadFieldError(file),
+    })
+  }
+
+  function onUploadSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!uploadDialog?.file || uploadMutation.isPending) return
+    const fieldError = uploadFieldError(uploadDialog.file)
+    if (fieldError) {
+      setUploadDialog({ ...uploadDialog, fieldError })
+      return
+    }
+    const trimmed = uploadDialog.title.trim()
+    uploadMutation.mutate({
+      file: uploadDialog.file,
+      title: trimmed || undefined,
+    })
+  }
 
   const openEditor = useCallback(async (id: number) => {
     const detail = await aiApi.getKnowledgeDocument(siteId, id)
@@ -163,6 +245,14 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
           >
             {t('aiWorkspace.knowledge.create')}
           </button>
+          <button
+            type="button"
+            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            disabled={uploadMutation.isPending}
+            onClick={openUpload}
+          >
+            {t('aiWorkspace.knowledge.upload')}
+          </button>
         </PermissionGate>
       </div>
 
@@ -241,6 +331,92 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
             </button>
           </div>
         </form>
+      ) : null}
+
+      {uploadDialog ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-slate-900/40"
+            aria-label={t('aiWorkspace.knowledge.cancel')}
+            onClick={closeUpload}
+          />
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="knowledge-upload-title"
+            className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
+            onSubmit={onUploadSubmit}
+          >
+            <h2 id="knowledge-upload-title" className="text-base font-semibold text-slate-900">
+              {t('aiWorkspace.knowledge.uploadDialogTitle')}
+            </h2>
+            <p className="text-xs text-slate-500">{t('aiWorkspace.knowledge.uploadHint')}</p>
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept={KB_UPLOAD_ACCEPT}
+              className="hidden"
+              onChange={onPickUploadFile}
+            />
+            <button
+              type="button"
+              disabled={uploadMutation.isPending}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
+              onClick={() => uploadInputRef.current?.click()}
+            >
+              {t('aiWorkspace.knowledge.chooseFile')}
+            </button>
+            {uploadDialog.file ? (
+              <p className="text-sm text-slate-700">
+                {uploadDialog.file.name}
+                <span className="text-slate-500"> · {formatFileSize(uploadDialog.file.size)}</span>
+              </p>
+            ) : null}
+            {uploadDialog.fieldError ? (
+              <p className="text-sm text-rose-700">
+                {uploadDialog.fieldError === 'extension'
+                  ? t('aiWorkspace.knowledge.invalidExtension')
+                  : t('aiWorkspace.knowledge.fileTooLarge')}
+              </p>
+            ) : null}
+            <label className="block">
+              <span className="text-sm font-medium text-slate-800">
+                {t('aiWorkspace.knowledge.titleLabel')}
+              </span>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={uploadDialog.title}
+                disabled={uploadMutation.isPending}
+                onChange={(event) =>
+                  setUploadDialog((prev) => (prev ? { ...prev, title: event.target.value } : prev))
+                }
+                placeholder={t('aiWorkspace.knowledge.titlePlaceholder')}
+              />
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={
+                  uploadMutation.isPending || !uploadDialog.file || uploadDialog.fieldError != null
+                }
+                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {uploadMutation.isPending
+                  ? t('aiWorkspace.knowledge.uploading')
+                  : t('aiWorkspace.knowledge.upload')}
+              </button>
+              <button
+                type="button"
+                disabled={uploadMutation.isPending}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
+                onClick={closeUpload}
+              >
+                {t('aiWorkspace.knowledge.cancel')}
+              </button>
+            </div>
+          </form>
+        </>
       ) : null}
     </div>
   )
