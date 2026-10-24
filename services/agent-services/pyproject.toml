@@ -27,6 +27,9 @@ dev = [
     # no-build-isolation 模式下本地 editable 构建所需（见 [tool.uv]）
     "hatchling>=1.25",
     "editables>=0.5",
+    # CI 工具：lint 与依赖漏洞扫描（版本随 uv.lock 锁定）
+    "ruff>=0.14",
+    "pip-audit>=2.7",
 ]
 
 [tool.uv]
@@ -55,3 +58,11 @@ packages = ["src/agent_services"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ruff]
+# 最小规则集起步：语法/明显错误（E4,E7,E9）、Pyflakes（F）、导入排序（I）。
+# 不启用 E501 与 format 校验，避免一次性大范围改动；扩规则另行评审。
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

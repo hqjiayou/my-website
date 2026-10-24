@@ -26,8 +26,8 @@ from pydantic_ai.toolsets.wrapper import WrapperToolset
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from agent_services.agent.prompt_builder import build_prompt_parts
-from agent_services.api.errors import external_failure_message
 from agent_services.agent.toolset_factory import execution_needs_agent_context
+from agent_services.api.errors import external_failure_message
 from agent_services.config import Settings
 from agent_services.observability.request_id import current_request_id
 from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile

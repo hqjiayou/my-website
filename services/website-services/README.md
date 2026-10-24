@@ -128,11 +128,9 @@ website-services/
   - 承载 `SiteContext`、当前站点上下文、站点配置读取能力
   - **阶段 3B**：首批站点域 **`SiteEntity` / `SiteUserEntity` / `SiteUserProfileEntity`** 及对应 **`Mapper`**（依赖 **`infra`** 基类；见 [`Java 持久层设计 V1`](../../docs/website-services/Java持久层设计V1.md)）
 - `site/site-car`
-  - 汽车站点业务模块骨架
-  - 当前只保留清晰包结构，不实现具体业务
+  - 空模块，只有 `pom.xml`，没有业务代码
 - `site/site-cake`
-  - 蛋糕站点业务模块骨架
-  - 当前只保留清晰包结构，不实现具体业务
+  - 空模块，只有 `pom.xml`，没有业务代码
 
 ### common
 

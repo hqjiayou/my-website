@@ -2,14 +2,14 @@
 
 [简体中文](README.md) · [繁體中文](README.zh-TW.md) · [English](README.en.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
-A multi-site platform. Capabilities grow by industry site (auto repair, cake and baking, and later salons, clinics, used-car dealers, administrative-scrivener offices, and so on). This workspace has no industry storefront app.
+A centrally controlled collection of websites. One admin console (`apps/admin-web`) controls the collection. One Java service (`services/website-services`) serves it. One Python service (`services/agent-services`) runs AI. This workspace has no visitor-facing site app.
 
 ## What this repo is
 
-- One platform hosts many industry sites. It is a platform, and a single marketing site is only one possible tenant.
-- Industry storefronts are absent from this workspace. When they return, they live under `apps/site-web/`, one app per industry.
-- `apps/admin-web` is the platform admin and the per-site admin.
-- `services/website-services` is the Java backend: a **shared gateway**, a **standalone auth service (`auth`)**, admin APIs, site APIs, infrastructure, and industry-module skeletons. **JWT is RS256 + JWKS** (Auth signs; business services verify via JWKS).
+- One admin console controls every site in the collection.
+- This workspace contains the admin console only. Visitor-facing sites are not in the tree. Site APIs live in the Java `site-app`.
+- `apps/admin-web` is that admin console: platform control and per-site control.
+- `services/website-services` is the Java service: a **shared gateway**, a **standalone auth service (`auth`)**, admin APIs, site APIs, and infrastructure. **JWT is RS256 + JWKS** (Auth signs; business services verify via JWKS).
 - `services/agent-services` is the **Python 3.13 + FastAPI + Pydantic AI 2.54** AI Execution Runtime (internal only; it is not published through the gateway). Java owns business truth. Python only executes AI (ADR-0005). With no `AI_MODEL` the process still starts, and calls fail honestly (ADR-0004).
 
 ## Layout
@@ -28,11 +28,11 @@ my-website/
 
 ## Projects
 
-### Industry storefronts
+### Visitor-facing sites
 
-This workspace has no industry storefront. The old `car-web` and `cake-web` skeletons are gone, and `apps/site-web/` is not in the tree.
+This workspace has no visitor-facing site app (`apps/site-web/` is not in the tree).
 
-When a storefront returns, it calls site APIs through `website-services/gateway`.  
+Site APIs are reached through `website-services/gateway`.  
 **Site Auth: the backend is done** (`/api/auth/site/**` for login / refresh / logout; `GET /api/site/auth/me` on site-app). **The frontend is not wired** (see [`docs/site-web/CURRENT_STATE.md`](docs/site-web/CURRENT_STATE.md)).
 
 ### apps/admin-web
@@ -62,7 +62,7 @@ Shared and reserved modules:
 - `infra`: PostgreSQL, Redis, MinIO / S3, MyBatis-Plus, Flyway, **system-message i18n**
 - `agent`: `HttpAgentClient` and the Java↔Python contract DTOs; it does not orchestrate business flows
 - `site/site-core`: shared site entities and mappers (users, content, reservations, site AI)
-- `site/site-car`, `site/site-cake`: industry skeletons with no business logic yet
+- `site/site-car`, `site/site-cake`: empty modules (`pom.xml` only), no business code
 
 Docs:
 
@@ -99,7 +99,7 @@ admin-web ──> website-services/gateway:8080 ──> /api/auth/**   → auth:
                                               └──> /api/site/**   → site-app:8082 (includes GET /api/site/auth/me)
 ```
 
-A restored industry storefront uses the same gateway. Login lives on auth: `/api/auth/admin/**` and `/api/auth/site/**`. `/me` lives on the matching business service, on admin or site-app.
+Every request uses the same gateway. Login lives on auth: `/api/auth/admin/**` and `/api/auth/site/**`. `/me` lives on the matching business service, on admin or site-app.
 
 Maven dependencies inside the build (this is not the HTTP topology):
 
@@ -136,7 +136,7 @@ pnpm install
 pnpm dev
 ```
 
-This workspace has no site-web storefront. Leave `car-web` and `cake-web` unstarted.
+This workspace has no visitor-facing site app.
 
 Start `agent-services`:
 
