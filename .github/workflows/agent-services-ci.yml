@@ -124,7 +124,6 @@ jobs:
         run: uv sync --frozen --extra dev
       - name: Export runtime requirements
         run: uv export --frozen --no-dev --no-emit-project --format requirements-txt -o /tmp/requirements-audit.txt
-      # 报告模式：存量漏洞清理前不阻断；清理完成另行去掉 continue-on-error。
-      - name: pip-audit (report-only)
-        continue-on-error: true
+      # 阻断模式：运行时依赖出现已知漏洞即红灯（存量 21 项已在依赖修复 PR 清零）。
+      - name: pip-audit
         run: uv run pip-audit -r /tmp/requirements-audit.txt
