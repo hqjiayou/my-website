@@ -7,10 +7,13 @@ import com.mywebsite.common.security.AuthContext;
 import com.mywebsite.common.security.AuthenticatedUser;
 import com.mywebsite.common.security.SubjectCodes;
 import com.mywebsite.site.dto.SiteAuthMeResponseDto;
+import com.mywebsite.site.dto.SiteAuthMeSiteDto;
 import com.mywebsite.site.dto.SiteAuthMeUserDto;
 import com.mywebsite.site.dto.SiteMenuNodeDto;
+import com.mywebsite.site.entity.SiteEntity;
 import com.mywebsite.site.entity.SiteUserEntity;
 import com.mywebsite.site.entity.SiteUserProfileEntity;
+import com.mywebsite.site.mapper.SiteMapper;
 import com.mywebsite.site.mapper.SiteUserMapper;
 import com.mywebsite.site.mapper.SiteUserProfileMapper;
 import com.mywebsite.site.service.SiteAuthMeService;
@@ -28,9 +31,13 @@ public class SiteAuthMeServiceImpl implements SiteAuthMeService {
 
     private final SiteUserProfileMapper siteUserProfileMapper;
 
-    public SiteAuthMeServiceImpl(SiteUserMapper siteUserMapper, SiteUserProfileMapper siteUserProfileMapper) {
+    private final SiteMapper siteMapper;
+
+    public SiteAuthMeServiceImpl(
+            SiteUserMapper siteUserMapper, SiteUserProfileMapper siteUserProfileMapper, SiteMapper siteMapper) {
         this.siteUserMapper = siteUserMapper;
         this.siteUserProfileMapper = siteUserProfileMapper;
+        this.siteMapper = siteMapper;
     }
 
     @Override
@@ -72,6 +79,13 @@ public class SiteAuthMeServiceImpl implements SiteAuthMeService {
         List<String> permissions = List.of();
         List<SiteMenuNodeDto> menus = List.of();
 
-        return new SiteAuthMeResponseDto(user, roles, permissions, menus);
+        // 站点行缺失时 site 为 null，不让 /me 因站点资料缺口整体失败
+        SiteEntity siteEntity = siteMapper.selectById(jwtSiteId);
+        SiteAuthMeSiteDto site = null;
+        if (siteEntity != null && siteEntity.getId() != null) {
+            site = new SiteAuthMeSiteDto(siteEntity.getId(), siteEntity.getSiteCode(), siteEntity.getSiteName());
+        }
+
+        return new SiteAuthMeResponseDto(user, roles, permissions, menus, site);
     }
 }

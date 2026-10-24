@@ -1,15 +1,18 @@
 import { create } from 'zustand'
 
 import { authApi } from '@/api/authApi'
-import type { SiteAuthUser } from '@/types/api'
+import type { SiteAuthMe, SiteAuthUser } from '@/types/api'
 import { refreshAccessToken } from '@/utils/http/axios'
 import { clearAccessToken, getAccessToken, setAccessToken, subscribeAccessToken } from '@/utils/token'
 
 export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated'
 
+type SessionSite = NonNullable<SiteAuthMe['site']>
+
 interface AuthState {
   accessToken: string | null
   user: SiteAuthUser | null
+  site: SessionSite | null
   status: AuthStatus
   bootstrap: () => Promise<void>
   establishSession: (accessToken: string) => Promise<boolean>
@@ -20,6 +23,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set, get) => ({
   accessToken: null,
   user: null,
+  site: null,
   status: 'idle',
 
   bootstrap: async () => {
@@ -29,7 +33,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const token = await refreshAccessToken()
       const me = await authApi.me()
-      set({ accessToken: token, user: me.user, status: 'authenticated' })
+      set({ accessToken: token, user: me.user, site: me.site ?? null, status: 'authenticated' })
     } catch {
       get().clearAuth()
     }
@@ -40,7 +44,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ accessToken, status: 'loading' })
     try {
       const me = await authApi.me()
-      set({ user: me.user, status: 'authenticated' })
+      set({ user: me.user, site: me.site ?? null, status: 'authenticated' })
       return true
     } catch {
       get().clearAuth()
@@ -50,7 +54,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearAuth: () => {
     clearAccessToken()
-    set({ accessToken: null, user: null, status: 'unauthenticated' })
+    set({ accessToken: null, user: null, site: null, status: 'unauthenticated' })
   },
 
   logout: async () => {

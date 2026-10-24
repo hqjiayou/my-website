@@ -22,6 +22,11 @@ export interface SiteAuthMe {
   roles: string[]
   permissions: string[]
   menus: SiteMenuNode[]
+  site?: {
+    siteId: number
+    siteCode: string
+    siteName: string
+  } | null
 }
 
 export interface SiteMenuNode {
