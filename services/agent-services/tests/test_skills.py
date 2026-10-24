@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.models.test import TestModel
 
@@ -13,7 +14,6 @@ from agent_services.agent.skills import (
     resolve_skills,
 )
 from agent_services.app import create_app
-from conftest import TOKEN_HEADER, make_settings
 
 
 def _write_skill(root: Path, skill_id: str, body: str, *, frontmatter: str | None = None) -> None:

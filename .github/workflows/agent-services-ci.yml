@@ -75,3 +75,51 @@ jobs:
       - name: docker build
         working-directory: services/agent-services
         run: docker build -t agent-services:ci .
+      # 报告模式：只输出 HIGH/CRITICAL 且有修复版本的漏洞，不阻断合并；
+      # 存量清理后另行收紧为 exit-code 1。
+      - name: Trivy image scan (report-only)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: agent-services:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '0'
+
+  lint:
+    name: agent-services ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/agent-services
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.13'
+      - name: uv sync
+        run: uv sync --frozen --extra dev
+      - name: ruff check
+        run: uv run ruff check src tests
+
+  dependency-audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/agent-services
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.13'
+      - name: uv sync
+        run: uv sync --frozen --extra dev
+      - name: Export runtime requirements
+        run: uv export --frozen --no-dev --no-emit-project --format requirements-txt -o /tmp/requirements-audit.txt
+      # 报告模式：存量漏洞（基线见 PR 说明）清理前不阻断；清理完成另行去掉 continue-on-error。
+      - name: pip-audit (report-only)
+        continue-on-error: true
+        run: uv run pip-audit -r /tmp/requirements-audit.txt

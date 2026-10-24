@@ -1,11 +1,11 @@
 """SSE /internal/v1/chat/stream 契约测试。"""
 
+from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.models.test import TestModel
 
 from agent_services.agent.model_factory import ModelHandle
 from agent_services.app import create_app
-from conftest import TOKEN_HEADER, make_settings
 
 
 def test_chat_stream_emits_application_events() -> None:

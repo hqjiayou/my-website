@@ -1,8 +1,8 @@
 import pytest
+from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 
 from agent_services.app import create_app
-from conftest import TOKEN_HEADER, make_settings
 
 
 def test_missing_token_config_fails_startup() -> None:

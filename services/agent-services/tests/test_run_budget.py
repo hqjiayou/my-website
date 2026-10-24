@@ -2,6 +2,7 @@
 
 import asyncio
 
+from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
@@ -22,7 +23,6 @@ from agent_services.agent.stream_runtime import stream_chat_events
 from agent_services.app import create_app
 from agent_services.schemas.chat import ChatHistoryMessage
 from agent_services.schemas.stream import AgentStreamEventType
-from conftest import TOKEN_HEADER, make_settings
 
 
 def _h(role: str, content: str) -> ChatHistoryMessage:

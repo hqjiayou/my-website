@@ -4,13 +4,6 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from agent_services.agent.skills import (
-    default_skills_directory,
-    list_skill_catalog,
-    resolve_skills,
-)
-from agent_services.agent.todo_tools import todo_store_from_request
-from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.agent.mcp_tools import mcp_config_snapshot, probe_mcp_ready
 from agent_services.agent.model_factory import ModelHandle, public_model_spec
 from agent_services.agent.runtime import (
@@ -19,11 +12,23 @@ from agent_services.agent.runtime import (
     run_budget_from_settings,
     run_chat,
 )
+from agent_services.agent.skills import (
+    default_skills_directory,
+    list_skill_catalog,
+    resolve_skills,
+)
 from agent_services.agent.stream_runtime import stream_chat_events
+from agent_services.agent.todo_tools import todo_store_from_request
+from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.api.errors import InternalApiError, external_failure_message
 from agent_services.auth.internal_token import require_internal_service_token
 from agent_services.retrieval.service import RetrievalService
-from agent_services.schemas.chat import ChatRequest, ChatSuccessData, ChatUsage, ToolTraceItem
+from agent_services.schemas.chat import (
+    ChatRequest,
+    ChatSuccessData,
+    ChatUsage,
+    ToolTraceItem,
+)
 from agent_services.schemas.health import (
     HealthResponse,
     McpReadyResponse,

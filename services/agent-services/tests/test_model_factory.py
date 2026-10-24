@@ -1,7 +1,8 @@
 """§22.6 T3：主模型 + Fallback 链；主模型 BLOCKED 时 fallback 不得顶替（ADR-0004）。"""
 
-import pytest
 import pydantic_ai.models
+import pytest
+from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import Model
@@ -10,7 +11,6 @@ from pydantic_ai.models.test import TestModel
 
 from agent_services.agent.model_factory import ModelHandle, create_model
 from agent_services.app import create_app
-from conftest import TOKEN_HEADER, make_settings
 
 
 @pytest.fixture(autouse=True)
