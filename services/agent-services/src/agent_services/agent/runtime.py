@@ -103,8 +103,16 @@ MAX_TOOL_TRACE = 50
 
 
 def tool_succeeded(part: ToolReturnPart | RetryPromptPart) -> bool:
-    """框架层重试（参数校验失败 / MCP 工具报错 / 超时）或平台工具约定的 {"error": ...} 返回 → 失败。"""
+    """框架层重试（参数校验失败 / MCP 工具报错 / 超时）或平台工具约定的 {"error": ...} 返回 → 失败。
+
+    2.60 起工具超时与框架重试不再单独产出 RetryPromptPart，而是
+    ToolReturnPart(outcome='retried', retry=...)；outcome / retry 防御式读取，
+    2.54 对象没有这些字段时不抛错。
+    """
     if isinstance(part, RetryPromptPart):
+        return False
+    # 任一成立即失败：outcome 标记 retried，或携带框架重试信息（2.60 为 RetryInfo）
+    if getattr(part, "outcome", None) == "retried" or getattr(part, "retry", None) is not None:
         return False
     content = part.content
     return not (isinstance(content, dict) and "error" in content)
