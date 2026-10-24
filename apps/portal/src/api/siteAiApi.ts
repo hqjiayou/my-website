@@ -6,6 +6,7 @@ import type {
   SiteKnowledgeSearchResult,
 } from '@/types/api'
 import { httpClient } from '@/utils/http/axios'
+import { ApiError } from '@/utils/http/apiError'
 import { streamSiteChat, type SiteSseEvent } from '@/utils/http/sse'
 import { unwrapData } from '@/utils/http/unwrap'
 
@@ -22,6 +23,26 @@ export const siteAiApi = {
     return httpClient
       .get<HttpMessageBody<SiteAiMessage[]>>(`/api/site/${siteId}/ai/conversations/${conversationId}/messages`)
       .then(unwrapData)
+  },
+
+  renameConversation(siteId: string, conversationId: string, title: string) {
+    return httpClient
+      .patch<HttpMessageBody<SiteAiConversation>, { title: string }>(
+        `/api/site/${siteId}/ai/conversations/${conversationId}`,
+        { title },
+      )
+      .then(unwrapData)
+  },
+
+  /** 成功体 data 为 null，不能走 unwrapData（空 data 会被当成失败）。 */
+  deleteConversation(siteId: string, conversationId: string) {
+    return httpClient
+      .delete<HttpMessageBody<null>>(`/api/site/${siteId}/ai/conversations/${conversationId}`)
+      .then((body) => {
+        if (body.code != null && body.code !== 0) {
+          throw new ApiError(body.message || '請求失敗', { code: body.code })
+        }
+      })
   },
 
   searchKnowledge(siteId: string, query: string, topK: number) {

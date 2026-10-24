@@ -111,6 +111,12 @@ export const httpClient = {
   post<T, B = unknown>(url: string, data?: B, config?: Omit<AxiosRequestConfig, 'url' | 'method' | 'data'>) {
     return requestData<T>({ ...config, method: 'post', url, data })
   },
+  patch<T, B = unknown>(url: string, data?: B, config?: Omit<AxiosRequestConfig, 'url' | 'method' | 'data'>) {
+    return requestData<T>({ ...config, method: 'patch', url, data })
+  },
+  delete<T>(url: string, config?: Omit<AxiosRequestConfig, 'url' | 'method'>) {
+    return requestData<T>({ ...config, method: 'delete', url })
+  },
 }
 
 declare module 'axios' {

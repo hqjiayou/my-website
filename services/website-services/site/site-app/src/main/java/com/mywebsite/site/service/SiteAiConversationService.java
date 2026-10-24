@@ -30,6 +30,15 @@ public interface SiteAiConversationService {
 
     List<SiteAiMessageDto> listMessages(long siteId, long siteUserId, long conversationId);
 
+    /** 按 (siteId, siteUserId) 作用域重命名；title 由实现 trim 后写回。不存在或非本人为 NOT_FOUND。 */
+    SiteAiConversationDto renameConversation(long siteId, long siteUserId, long conversationId, String title);
+
+    /**
+     * 硬删本人会话。不存在或非本人为 NOT_FOUND，且不删除任何行。
+     * {@code site_ai_message.conversation_id} 为 ON DELETE RESTRICT，须先删消息再删会话。
+     */
+    void deleteConversation(long siteId, long siteUserId, long conversationId);
+
     record ChatPreparation(
             SiteAiConversationEntity conversation,
             List<AgentChatHistoryMessage> history,

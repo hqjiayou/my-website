@@ -1,8 +1,11 @@
 package com.mywebsite.site.controller;
 
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,9 +13,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
+import com.mywebsite.site.service.SiteAiConversationService;
+import com.mywebsite.site.service.SiteAiConversationService.ChatPreparation;
 import com.mywebsite.site.testsupport.AbstractSiteSpringBootTest;
 import com.mywebsite.site.testsupport.SiteTestJwtSigner;
 import com.nimbusds.jose.jwk.RSAKey;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +26,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 @AutoConfigureMockMvc
@@ -27,6 +34,12 @@ class SiteAiChatMvcTest extends AbstractSiteSpringBootTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private SiteAiConversationService conversationService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     /** 仅预算用例覆盖；其余用例仍走 AbstractSiteSpringBootTest 的 agent stub。 */
     @MockBean
@@ -103,5 +116,45 @@ class SiteAiChatMvcTest extends AbstractSiteSpringBootTest {
                         .content("{\"message\":\"hello\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(ErrorCode.FORBIDDEN.getCode()));
+    }
+
+    @Test
+    void renameConversationRouteTrimsTitle() throws Exception {
+        ChatPreparation prepared = conversationService.prepare(10L, 200L, null);
+        conversationService.recordExchange(prepared.conversation(), "hello", "ok", List.of(), null);
+        long id = prepared.conversation().getId();
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+
+        mockMvc.perform(patch("/api/site/10/ai/conversations/" + id)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"  renamed  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title").value("renamed"))
+                .andExpect(jsonPath("$.data.id").value(id));
+
+        assertEquals(
+                "renamed",
+                jdbcTemplate.queryForObject("SELECT title FROM site_ai_conversation WHERE id = ?", String.class, id));
+    }
+
+    @Test
+    void deleteConversationRouteRemovesMessagesAndConversation() throws Exception {
+        ChatPreparation prepared = conversationService.prepare(10L, 200L, null);
+        conversationService.recordExchange(prepared.conversation(), "hello", "ok", List.of(), null);
+        long id = prepared.conversation().getId();
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+
+        mockMvc.perform(delete("/api/site/10/ai/conversations/" + id)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(nullValue()));
+
+        Number conversations = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM site_ai_conversation WHERE id = ?", Number.class, id);
+        Number messages = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM site_ai_message WHERE conversation_id = ?", Number.class, id);
+        assertEquals(0L, conversations.longValue());
+        assertEquals(0L, messages.longValue());
     }
 }

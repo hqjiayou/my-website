@@ -10,6 +10,7 @@ import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.site.dto.SiteAiConversationDto;
+import com.mywebsite.site.dto.SiteAiConversationRenameRequestDto;
 import com.mywebsite.site.dto.SiteAiMessageDto;
 import com.mywebsite.site.entity.SiteAiConversationEntity;
 import com.mywebsite.site.entity.SiteAiMessageEntity;
@@ -35,7 +36,8 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
     /** 每次 chat 携带的最大历史条数（含 USER/ASSISTANT），控制上下文成本。 */
     private static final int HISTORY_LIMIT = 20;
 
-    private static final int TITLE_MAX_LENGTH = 60;
+    /** 与 {@link SiteAiConversationRenameRequestDto#TITLE_MAX_LENGTH} 同一上限：生成标题截断，重命名由 DTO 拒绝更长值。 */
+    private static final int TITLE_MAX_LENGTH = SiteAiConversationRenameRequestDto.TITLE_MAX_LENGTH;
     private static final int CONVERSATION_LIST_LIMIT = 50;
 
     private static final Logger log = LoggerFactory.getLogger(SiteAiConversationServiceImpl.class);
@@ -102,10 +104,7 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                         .eq(SiteAiConversationEntity::getSiteUserId, siteUserId)
                         .orderByDesc(SiteAiConversationEntity::getLastMessageAt)
                         .last("LIMIT " + CONVERSATION_LIST_LIMIT));
-        return conversations.stream()
-                .map(c -> new SiteAiConversationDto(
-                        c.getId(), c.getTitle(), c.getLastMessageAt(), c.getCreatedAt()))
-                .toList();
+        return conversations.stream().map(SiteAiConversationServiceImpl::toDto).toList();
     }
 
     @Override
@@ -118,6 +117,23 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                 .stream()
                 .map(m -> new SiteAiMessageDto(m.getId(), m.getRole(), m.getContent(), m.getCreatedAt()))
                 .toList();
+    }
+
+    @Override
+    public SiteAiConversationDto renameConversation(
+            long siteId, long siteUserId, long conversationId, String title) {
+        SiteAiConversationEntity conversation = requireOwnConversation(siteId, siteUserId, conversationId);
+        conversation.setTitle(title.trim());
+        conversationMapper.updateById(conversation);
+        return toDto(conversation);
+    }
+
+    @Override
+    @Transactional
+    public void deleteConversation(long siteId, long siteUserId, long conversationId) {
+        requireOwnConversation(siteId, siteUserId, conversationId);
+        messageMapper.deleteByConversationId(conversationId);
+        conversationMapper.deleteByIdPhysical(conversationId);
     }
 
     private SiteAiConversationEntity requireOwnConversation(long siteId, long siteUserId, long conversationId) {
@@ -202,6 +218,14 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         message.setContent(content);
         message.setAgentMeta(agentMeta);
         messageMapper.insert(message);
+    }
+
+    private static SiteAiConversationDto toDto(SiteAiConversationEntity conversation) {
+        return new SiteAiConversationDto(
+                conversation.getId(),
+                conversation.getTitle(),
+                conversation.getLastMessageAt(),
+                conversation.getCreatedAt());
     }
 
     private static long parseId(String conversationId) {
