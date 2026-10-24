@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,6 +60,27 @@ class Settings(BaseSettings):
     agent_history_max_chars: int = Field(default=24000, validation_alias="AGENT_HISTORY_MAX_CHARS")
 
     uvicorn_workers: int = Field(default=1, validation_alias="UVICORN_WORKERS")
+
+    @field_validator("agent_skills_unknown_policy", mode="before")
+    @classmethod
+    def normalize_agent_skills_unknown_policy(cls, value: object) -> object:
+        # 启动校验与运行时比较必须看到同一标准形；只在 assert 里 lower 会让 Reject 被当成 ignore。
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
+
+SKILLS_UNKNOWN_POLICIES = frozenset({"ignore", "reject"})
+
+
+def assert_skills_unknown_policy(policy: str) -> None:
+    """启动期校验：未知 skill 策略只允许 ignore / reject，非法值 fail-fast。"""
+    normalized = policy.strip().lower()
+    if normalized in SKILLS_UNKNOWN_POLICIES:
+        return
+    raise RuntimeError(
+        f"AGENT_SKILLS_UNKNOWN_POLICY has invalid value {policy!r}. Allowed values: ignore, reject."
+    )
 
 
 @lru_cache

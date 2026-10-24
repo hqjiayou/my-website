@@ -21,7 +21,7 @@ related:
 | 要点 | 代码 |
 |------|------|
 | 目录 | 已有 `retrieval/`、`tools/business_api.py`、`agent/mcp_tools.py`、`agent/skills.py`、`agent/todo_tools.py`、`observability/`。没有 `graph/`、`providers/`、`memory/` |
-| Internal HTTP | `api/internal.py`：`GET /health`、`GET /skills`、`GET /mcp/ready`、`POST /chat`、`POST /chat/stream` |
+| Internal HTTP | `api/internal.py`：`GET /health`、`GET /skills`、`GET /mcp/ready`、`POST /chat`、`POST /chat/stream`、`PUT /retrieval/documents`、`DELETE /retrieval/documents` |
 | `ChatRequest` | `siteId`、`message`、可选 `locale`、`conversationId`、`promptProfile`、`history`（USER/ASSISTANT）、`skills`、`todos`。成功体还有 `usage`、`tools`、`skillsApplied`、`todos` |
 | 否决项里仍有效的 | 不自建 Provider Protocol；无 `AI_MODEL` 不默认模型；Python 不存会话；不直连业务库；令牌缺失与 Provider 缺失是两种失败 |
 | 否决项里已过时的 | 「初期不用 MCP」。MCP 已接，但是配置驱动的外部工具，不是业务真相 |

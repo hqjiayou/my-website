@@ -63,6 +63,18 @@ class ChatRequest(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+    @field_validator("todos")
+    @classmethod
+    def reject_duplicate_todo_ids(cls, value: list[TodoItem] | None) -> list[TodoItem] | None:
+        if not value:
+            return value
+        seen: set[str] = set()
+        for item in value:
+            if item.id in seen:
+                raise ValueError(f"duplicate todo id: {item.id}")
+            seen.add(item.id)
+        return value
+
 
 class ChatUsage(BaseModel):
     """单轮用量（§22.4）；token 数由 Provider 回报，未回报时为 0。"""

@@ -1,4 +1,11 @@
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    RetryInfo,
+    TextPart,
+    ToolReturnPart,
+)
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 
@@ -9,6 +16,7 @@ from agent_services.agent.runtime import (
     budget_exceeded_message,
     build_message_history,
     run_chat,
+    tool_trace_from_messages,
 )
 from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
 
@@ -136,3 +144,19 @@ def test_build_message_history_roles_and_order() -> None:
 def test_build_message_history_empty() -> None:
     assert build_message_history(None) == []
     assert build_message_history([]) == []
+
+
+def test_retried_tool_return_is_failed_in_non_stream_trace() -> None:
+    """2.60+ 超时/框架重试是 ToolReturnPart(outcome='retried', retry=RetryInfo)，轨迹须记失败。"""
+    # 超时在 2.61 记为 cause='model_retry'；content 是纯文本，不能靠 {"error": ...} 判失败
+    request = ModelRequest(
+        parts=[
+            ToolReturnPart(
+                tool_name="slow",
+                content="Tool timed out after 0.1s.",
+                outcome="retried",
+                retry=RetryInfo(cause="model_retry"),
+            )
+        ]
+    )
+    assert tool_trace_from_messages([request]) == [{"name": "slow", "ok": False}]

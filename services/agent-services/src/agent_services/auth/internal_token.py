@@ -19,8 +19,9 @@ def assert_token_configured(token: str) -> None:
 def require_internal_service_token(request: Request) -> None:
     expected: str = request.app.state.settings.agent_internal_service_token.strip()
     provided = request.headers.get(INTERNAL_SERVICE_TOKEN_HEADER, "")
-    # constant-time compare，避免时序侧信道；token 永不写日志
-    if not provided or not secrets.compare_digest(provided, expected):
+    # compare_digest 只接受 ASCII str，非 ASCII 会 TypeError 变成未捕获 500。
+    # 先编成 UTF-8 bytes，校验失败仍是 401；token 永不写日志。
+    if not provided or not secrets.compare_digest(provided.encode("utf-8"), expected.encode("utf-8")):
         raise InternalApiError(
             status_code=401,
             error_code="UNAUTHORIZED",

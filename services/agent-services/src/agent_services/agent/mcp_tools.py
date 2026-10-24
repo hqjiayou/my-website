@@ -125,6 +125,10 @@ def parse_mcp_server_configs(raw: str) -> list[McpServerConfig]:
                 )
             )
             continue
+        if enabled is not True:
+            # 只接受 JSON 布尔。字符串 "false" / "true"、数字 0 等按未启用跳过，缺省仍为启用。
+            logger.warning("MCP entry %r enabled is not a JSON boolean, skipped", name)
+            continue
 
         raw_transport = entry.get("transport")
         if raw_transport is not None and str(raw_transport).strip():

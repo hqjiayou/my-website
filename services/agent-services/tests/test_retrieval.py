@@ -17,8 +17,13 @@ from agent_services.retrieval.embeddings import (
     OpenAIEmbeddingClient,
     create_embedding_client,
 )
-from agent_services.retrieval.service import RetrievalService, create_retrieval_service
+from agent_services.retrieval.service import (
+    MAX_UPSERT_CHUNKS,
+    RetrievalService,
+    create_retrieval_service,
+)
 from agent_services.retrieval.store import PgVectorRetrievalStore, RetrievedChunk
+from agent_services.schemas.retrieval import MAX_CONTENT_LENGTH
 
 # ---------------------------------------------------------------- chunking
 
@@ -272,6 +277,46 @@ def test_retrieval_upsert_blocked_without_configuration() -> None:
     body = response.json()
     assert body["errorCode"] == "EXTERNAL_DEPENDENCY_BLOCKED"
     assert body["providerStatus"] == "BLOCKED"
+
+
+def test_retrieval_upsert_rejects_oversized_content() -> None:
+    response = TestClient(create_app(make_settings())).put(
+        "/internal/v1/retrieval/documents",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "1",
+            "sourceId": "kb:1",
+            "title": "t",
+            "content": "x" * (MAX_CONTENT_LENGTH + 1),
+        },
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "BAD_REQUEST"
+    assert "content" in body["message"]
+    assert "detail" not in body
+    assert len(response.content) < 2000
+
+
+def test_retrieval_upsert_rejects_too_many_chunks() -> None:
+    paragraph = "p" * 501
+    content = "\n\n".join([paragraph] * (MAX_UPSERT_CHUNKS + 1))
+    assert len(content) <= MAX_CONTENT_LENGTH
+    assert len(split_text(content)) > MAX_UPSERT_CHUNKS
+
+    service, store = _service()
+    response = TestClient(create_app(make_settings(), retrieval_service=service)).put(
+        "/internal/v1/retrieval/documents",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "sourceId": "kb:1", "title": "t", "content": content},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "BAD_REQUEST"
+    assert "detail" not in body
+    assert store.docs == {}
 
 
 def test_retrieval_upsert_and_delete_with_service() -> None:

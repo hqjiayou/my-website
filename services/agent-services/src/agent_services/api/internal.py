@@ -22,7 +22,10 @@ from agent_services.agent.todo_tools import todo_store_from_request
 from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.api.errors import InternalApiError, external_failure_message
 from agent_services.auth.internal_token import require_internal_service_token
-from agent_services.retrieval.service import RetrievalService
+from agent_services.retrieval.service import (
+    RetrievalChunkLimitExceeded,
+    RetrievalService,
+)
 from agent_services.schemas.chat import (
     ChatRequest,
     ChatSuccessData,
@@ -304,6 +307,8 @@ async def upsert_retrieval_document(
         chunk_count = await service.upsert_document(
             site_id=site_id, source_id=source_id, title=body.title, content=body.content
         )
+    except RetrievalChunkLimitExceeded as exc:
+        raise InternalApiError(status_code=400, error_code="BAD_REQUEST", message=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 — embedding/DB 故障对 Java 诚实报 503
         logger.warning("Retrieval index update failed", exc_info=exc)
         raise InternalApiError(

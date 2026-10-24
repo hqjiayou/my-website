@@ -148,6 +148,66 @@ def test_chat_blank_input_returns_400_flat_body() -> None:
     assert "detail" not in body
 
 
+def test_chat_duplicate_todo_ids_return_400_flat_body() -> None:
+    response = _live_client().post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "hello",
+            "todos": [
+                {"id": "t1", "title": "A", "status": "PENDING"},
+                {"id": "t1", "title": "B", "status": "PENDING"},
+            ],
+        },
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "BAD_REQUEST"
+    assert "duplicate todo id" in body["message"]
+    assert "detail" not in body
+
+
+def test_chat_blank_todo_title_returns_400_flat_body() -> None:
+    response = _live_client().post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "hello",
+            "todos": [{"id": "t1", "title": "   ", "status": "PENDING"}],
+        },
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "BAD_REQUEST"
+    assert "title" in body["message"]
+    assert "detail" not in body
+
+
+def test_unhandled_exception_returns_flat_500_without_detail(caplog) -> None:
+    app = create_app(make_settings())
+
+    @app.get("/_test_unhandled")
+    async def _test_unhandled() -> dict[str, str]:
+        raise RuntimeError("secret boom detail")
+
+    with caplog.at_level("ERROR"):
+        response = TestClient(app, raise_server_exceptions=False).get("/_test_unhandled")
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body == {"ok": False, "errorCode": "INTERNAL_ERROR", "message": "Internal error."}
+    assert "detail" not in body
+    assert "secret" not in response.text
+    assert "RuntimeError" not in response.text
+    logged = "\n".join((record.exc_text or "") + record.getMessage() for record in caplog.records)
+    assert "secret boom detail" in logged
+    assert "Traceback" in logged
+
+
 def test_invalid_ai_model_spec_starts_blocked_not_crash() -> None:
     # spec 非法/凭证缺失 → 服务正常启动 + BLOCKED，而非启动失败（与 token 缺失语义相反）
     client = TestClient(create_app(make_settings(ai_model="openai:gpt-4o-mini")))
