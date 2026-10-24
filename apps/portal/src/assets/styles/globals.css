@@ -1,0 +1,46 @@
+/**
+ * 全域入口：Tailwind、主題、安全區域。頁面樣式留在各自元件的 className 裡。
+ */
+@import 'tailwindcss';
+@import './theme.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-family:
+    'Segoe UI',
+    'PingFang SC',
+    'Noto Sans SC',
+    sans-serif;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+.safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
