@@ -3,7 +3,8 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { siteAiApi } from '@/api/siteAiApi'
 import { BottomNav } from '@/components/bottomNav'
 import { Screen } from '@/components/screen'
-import { readPortalSiteId } from '@/config/env'
+import { resolvePortalSiteId } from '@/config/env'
+import { useAuthStore } from '@/stores/authStore'
 import type { SiteKnowledgeHit } from '@/types/api'
 import { formatSimilarityPercent } from '@/utils/formatSimilarity'
 import { errorMessage } from '@/utils/http/apiError'
@@ -12,7 +13,7 @@ const TOP_K = 10
 const PREVIEW_CHARS = 180
 
 export function KnowledgePage() {
-  const site = useMemo(() => readPortalSiteId(), [])
+  const site = useMemo(() => resolvePortalSiteId(useAuthStore.getState().site?.siteId), [])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)

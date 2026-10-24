@@ -20,6 +20,20 @@ export function readPortalSiteId(): PortalSiteId {
   return { ok: true, siteId: raw }
 }
 
+/** 優先使用會話 siteId（轉成字串），沒有時後備 readPortalSiteId。 */
+export function resolvePortalSiteId(sessionSiteId: number | null | undefined): PortalSiteId {
+  if (sessionSiteId != null && Number.isSafeInteger(sessionSiteId) && SITE_ID_PATTERN.test(String(sessionSiteId))) {
+    return { ok: true, siteId: String(sessionSiteId) }
+  }
+  const fromEnv = readPortalSiteId()
+  if (fromEnv.ok) return fromEnv
+  return {
+    ok: false,
+    message:
+      '未取得站點資訊。請重新登入以取得目前站點，或設定正整數環境變數 VITE_PORTAL_SITE_ID 作為後備，用於 /api/site/{siteId}/ai/**。',
+  }
+}
+
 /** 只讀 JWT payload 的 site_id，不驗簽。存取控制以伺服器端為準。 */
 export function readAccessTokenSiteId(token: string | null): string | null {
   if (!token) return null

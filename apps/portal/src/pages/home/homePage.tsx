@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { BottomNav } from '@/components/bottomNav'
 import { Screen } from '@/components/screen'
-import { readAccessTokenSiteId, readPortalSiteId } from '@/config/env'
+import { readAccessTokenSiteId, resolvePortalSiteId } from '@/config/env'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
 import { errorMessage } from '@/utils/http/apiError'
@@ -11,9 +11,10 @@ import { errorMessage } from '@/utils/http/apiError'
 export function HomePage() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
+  const sessionSite = useAuthStore((state) => state.site)
   const accessToken = useAuthStore((state) => state.accessToken)
   const logout = useAuthStore((state) => state.logout)
-  const site = readPortalSiteId()
+  const site = resolvePortalSiteId(sessionSite?.siteId)
   const tokenSiteId = readAccessTokenSiteId(accessToken)
   const [logoutError, setLogoutError] = useState<string | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -32,6 +33,7 @@ export function HomePage() {
 
   const displayName = user?.displayName || user?.username || '已登入'
   const siteMismatch = site.ok && tokenSiteId !== null && tokenSiteId !== site.siteId
+  const siteIdFromSession = sessionSite != null && site.ok && String(sessionSite.siteId) === site.siteId
 
   return (
     <Screen>
@@ -104,18 +106,36 @@ export function HomePage() {
           </dl>
 
           <h2 className="mt-4 text-sm font-medium">目前站點</h2>
-          {site.ok ? (
+          {sessionSite ? (
+            <dl className="mt-3 flex flex-col gap-2 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">站點名稱</dt>
+                <dd className="mt-0.5">{sessionSite.siteName}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">站點代碼</dt>
+                <dd className="mt-0.5 break-all">{sessionSite.siteCode}</dd>
+              </div>
+            </dl>
+          ) : site.ok ? (
             <p className="mt-1 text-lg font-medium">站點 ID {site.siteId}</p>
           ) : (
             <p className="mt-1 text-sm leading-6 text-danger">{site.message}</p>
           )}
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            契約沒有站點清單，也沒有回傳站點名稱的 API，所以這裡只顯示環境變數裡的站點 ID。
-          </p>
+          {sessionSite ? null : (
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              契約沒有站點清單，也沒有回傳站點名稱的 API，所以這裡只顯示環境變數裡的站點 ID。
+            </p>
+          )}
+          {sessionSite && !site.ok ? (
+            <p className="mt-2 text-sm leading-6 text-danger">{site.message}</p>
+          ) : null}
           {tokenSiteId ? <p className="mt-2 text-sm text-muted-foreground">登入權杖 site_id：{tokenSiteId}</p> : null}
           {siteMismatch ? (
             <p className="mt-2 text-sm leading-6 text-danger">
-              權杖裡的 site_id 與 VITE_PORTAL_SITE_ID 不一致。站點 AI 會依路徑上的站點 ID 驗證，存取會被拒絕。
+              {siteIdFromSession
+                ? '權杖裡的 site_id 與目前站點不一致。站點 AI 會依路徑上的站點 ID 驗證，存取會被拒絕。'
+                : '權杖裡的 site_id 與 VITE_PORTAL_SITE_ID 不一致。站點 AI 會依路徑上的站點 ID 驗證，存取會被拒絕。'}
             </p>
           ) : null}
         </section>

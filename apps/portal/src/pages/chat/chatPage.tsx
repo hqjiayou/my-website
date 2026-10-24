@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
 import { BottomNav } from '@/components/bottomNav'
-import { readPortalSiteId } from '@/config/env'
+import { resolvePortalSiteId } from '@/config/env'
+import { useAuthStore } from '@/stores/authStore'
 import type { SiteAiCitation, SiteAiConversation } from '@/types/api'
 import { formatSimilarityPercent } from '@/utils/formatSimilarity'
 import { errorMessage } from '@/utils/http/apiError'
@@ -27,7 +28,7 @@ interface SendFailure {
 }
 
 export function ChatPage() {
-  const site = useMemo(() => readPortalSiteId(), [])
+  const site = useMemo(() => resolvePortalSiteId(useAuthStore.getState().site?.siteId), [])
   useKeyboardInset()
 
   const [conversations, setConversations] = useState<SiteAiConversation[]>([])
