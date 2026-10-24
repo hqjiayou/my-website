@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: CONTRACT
 status: CURRENT
-last_verified: 2026-10-10
+last_verified: 2026-10-24
 ```
 
 前缀：`/api/site/**`（业务）+ `/api/auth/site/**`（认证）。
@@ -12,7 +12,16 @@ last_verified: 2026-10-10
 |------|------|
 | Site Auth login/refresh/logout/me | **BACKEND_COMPLETE** |
 | site-web 对接 | **NOT_IN_TREE**（工作区无前台应用） |
-| Site AI chat/stream | **BACKEND_COMPLETE**（会话落库；无 `AI_MODEL` 时诚实 503）。SSE 对终端用户只下发 `START`(`{}`) / `TEXT_DELTA` / `DONE`(`reply`,`providerStatus`,`citations`——仅本轮实际采用知识库 grounding 时出现，每项 `sourceId`/`chunkIndex`/`score`) / `CONVERSATION`(`conversationId`) / `ERROR`(`errorCode` ∈ `EXTERNAL_DEPENDENCY_BLOCKED`·`MCP_UNAVAILABLE`·`AGENT_BUDGET_EXCEEDED`·`SYSTEM_ERROR`)；工具事件、用量、skills、原始错误信息不下发 |
+| Site AI chat/stream | **BACKEND_COMPLETE**（会话落库；无 `AI_MODEL` 时诚实 503）。SSE 对终端用户只下发 `START`(`{}`) / `TEXT_DELTA` / `DONE`(`reply`,`providerStatus`,`citations`——仅本轮实际采用知识库 grounding 时出现，每项 `sourceId`/`chunkIndex`/`score`) / `CONVERSATION`(`conversationId`) / `ERROR`(`errorCode` ∈ `EXTERNAL_DEPENDENCY_BLOCKED`·`MCP_UNAVAILABLE`·`AGENT_BUDGET_EXCEEDED`·`SYSTEM_ERROR`)；工具事件、用量、skills、原始错误信息不下发。会话管理见下 |
 | 访客内容 / 预约公开 API | **没有**。管理端在 `/api/admin/sites/{id}/contents|reservations`。Agent 建预约走 `POST /internal/site/v1/sites/{siteId}/reservations` |
 
 Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之亦然）。
+
+### Site AI 会话
+
+与 `GET /api/site/{siteId}/ai/conversations` 同级。不存在或不属于当前站点用户时为 NOT_FOUND，且不删除任何数据。
+
+| 方法 | 路径 | 请求 / 响应 |
+|------|------|-------------|
+| PATCH | `/api/site/{siteId}/ai/conversations/{conversationId}` | 请求体 `title`（非空白，最长 60）；成功返回更新后的会话 |
+| DELETE | `/api/site/{siteId}/ai/conversations/{conversationId}` | 无请求体；成功时 `data` 为 null |

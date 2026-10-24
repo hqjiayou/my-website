@@ -9,6 +9,7 @@ import com.mywebsite.common.security.SubjectCodes;
 import com.mywebsite.site.dto.SiteAiChatRequestDto;
 import com.mywebsite.site.dto.SiteAiChatResponseDto;
 import com.mywebsite.site.dto.SiteAiConversationDto;
+import com.mywebsite.site.dto.SiteAiConversationRenameRequestDto;
 import com.mywebsite.site.dto.SiteAiMessageDto;
 import com.mywebsite.site.dto.SiteKnowledgeSearchRequestDto;
 import com.mywebsite.site.dto.SiteKnowledgeSearchResponseDto;
@@ -18,7 +19,9 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -67,6 +70,22 @@ public class SiteAiController {
             @PathVariable("siteId") long siteId, @PathVariable("conversationId") long conversationId) {
         return ApiResponse.success(
                 conversationService.listMessages(siteId, requireSiteUserId(siteId), conversationId));
+    }
+
+    @PatchMapping("/{siteId}/ai/conversations/{conversationId}")
+    public ApiResponse<SiteAiConversationDto> renameConversation(
+            @PathVariable("siteId") long siteId,
+            @PathVariable("conversationId") long conversationId,
+            @Valid @RequestBody SiteAiConversationRenameRequestDto request) {
+        return ApiResponse.success(conversationService.renameConversation(
+                siteId, requireSiteUserId(siteId), conversationId, request.title()));
+    }
+
+    @DeleteMapping("/{siteId}/ai/conversations/{conversationId}")
+    public ApiResponse<Void> deleteConversation(
+            @PathVariable("siteId") long siteId, @PathVariable("conversationId") long conversationId) {
+        conversationService.deleteConversation(siteId, requireSiteUserId(siteId), conversationId);
+        return ApiResponse.success();
     }
 
     private static long requireSiteUserId(long siteId) {

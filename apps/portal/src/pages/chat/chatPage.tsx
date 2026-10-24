@@ -224,6 +224,24 @@ export function ChatPage() {
     void send(draft)
   }
 
+  async function renameConversation(id: string, title: string) {
+    if (!site.ok) return
+    const updated = await siteAiApi.renameConversation(site.siteId, id, title)
+    setConversations((current) =>
+      current.map((item) => (String(item.id) === id ? { ...item, title: updated.title } : item)),
+    )
+  }
+
+  async function removeConversation(id: string) {
+    if (!site.ok) return
+    if (sending && id === activeId) {
+      throw new Error('正在產生回覆，請稍後再刪除')
+    }
+    await siteAiApi.deleteConversation(site.siteId, id)
+    setConversations((current) => current.filter((item) => String(item.id) !== id))
+    if (id === activeId) startNewChat()
+  }
+
   const activeTitle =
     conversations.find((item) => String(item.id) === activeId)?.title?.trim() || (activeId ? '對話' : '新對話')
 
@@ -359,15 +377,19 @@ export function ChatPage() {
       <BottomNav pinned={false} />
 
       <ConversationSheet
+        key={sheetOpen ? 'open' : 'closed'}
         open={sheetOpen}
         items={conversations}
         loading={listLoading}
         error={listError}
         activeId={activeId}
+        deleteLockedId={sending ? activeId : null}
         onClose={() => setSheetOpen(false)}
         onRefresh={() => void loadConversations(site.siteId)}
         onCreate={startNewChat}
         onOpen={(id) => void openConversation(id)}
+        onRename={renameConversation}
+        onDelete={removeConversation}
       />
     </div>
   )
