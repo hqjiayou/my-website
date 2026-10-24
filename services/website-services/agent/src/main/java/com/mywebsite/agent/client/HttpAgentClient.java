@@ -7,9 +7,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.AgentHttpHeaders;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
+import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
+import com.mywebsite.agent.dto.AgentRetrievalHit;
+import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
+import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
 import com.mywebsite.agent.dto.AgentSkillSummary;
@@ -191,7 +195,8 @@ public class HttpAgentClient implements AgentClient {
                 conversationId,
                 providerStatus,
                 readList(data.get("todos"), AgentTodoItem.class),
-                readRunMeta(data));
+                readRunMeta(data),
+                readList(data.get("citations"), AgentCitation.class));
     }
 
     /** 观测元数据格式异常只丢弃元数据，不让已成功的回复失败（与 todos 不同：todos 影响编排正确性）。 */
@@ -253,6 +258,22 @@ public class HttpAgentClient implements AgentClient {
                 + "&sourceId="
                 + java.net.URLEncoder.encode(sourceId, StandardCharsets.UTF_8);
         exchangeWithRetry("DELETE", path, null);
+    }
+
+    @Override
+    public AgentRetrievalSearchResult searchRetrieval(AgentRetrievalSearchRequest request) {
+        if (request == null || !StringUtils.hasText(request.siteId()) || !StringUtils.hasText(request.query())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        ensureTokenConfigured();
+        JsonNode body = exchangeWithRetry("POST", "/internal/v1/retrieval/search", request);
+        // 契约体是 {hits, degraded}；若包在与 chat 相同的 {ok, data} 信封里，取 data
+        JsonNode payload = body.has("hits") ? body : body.path("data");
+        if (!payload.isObject()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+        return new AgentRetrievalSearchResult(
+                readList(payload.get("hits"), AgentRetrievalHit.class), payload.path("degraded").asBoolean(false));
     }
 
     @Override

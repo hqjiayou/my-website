@@ -16,6 +16,7 @@ public class SiteReservationEntity extends AbstractAuditableEntity {
     private OffsetDateTime reservedAt;
     private String status;
     private String note;
+    private String idempotencyKey;
 
     public Long getSiteId() {
         return siteId;
@@ -71,5 +72,13 @@ public class SiteReservationEntity extends AbstractAuditableEntity {
 
     public void setNote(String note) {
         this.note = note;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
     }
 }

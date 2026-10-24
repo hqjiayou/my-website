@@ -10,8 +10,11 @@ import com.mywebsite.site.dto.SiteAiChatRequestDto;
 import com.mywebsite.site.dto.SiteAiChatResponseDto;
 import com.mywebsite.site.dto.SiteAiConversationDto;
 import com.mywebsite.site.dto.SiteAiMessageDto;
+import com.mywebsite.site.dto.SiteKnowledgeSearchRequestDto;
+import com.mywebsite.site.dto.SiteKnowledgeSearchResponseDto;
 import com.mywebsite.site.service.SiteAiConversationService;
 import com.mywebsite.site.service.SiteAiService;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.http.MediaType;
@@ -45,6 +48,12 @@ public class SiteAiController {
     public SseEmitter chatStream(
             @PathVariable("siteId") long siteId, @RequestBody SiteAiChatRequestDto request) {
         return siteAiService.chatStream(siteId, request);
+    }
+
+    @PostMapping("/{siteId}/ai/knowledge/search")
+    public ApiResponse<SiteKnowledgeSearchResponseDto> searchKnowledge(
+            @PathVariable("siteId") long siteId, @Valid @RequestBody SiteKnowledgeSearchRequestDto request) {
+        return ApiResponse.success(siteAiService.searchKnowledge(siteId, request));
     }
 
     @GetMapping("/{siteId}/ai/conversations")

@@ -7,6 +7,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
+import com.mywebsite.agent.dto.AgentCitation;
+import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
+import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.common.enums.ErrorCode;
@@ -17,6 +20,8 @@ import com.mywebsite.common.security.SubjectCodes;
 import com.mywebsite.infra.service.LocalizedMessageService;
 import com.mywebsite.site.dto.SiteAiChatRequestDto;
 import com.mywebsite.site.dto.SiteAiChatResponseDto;
+import com.mywebsite.site.dto.SiteKnowledgeSearchRequestDto;
+import com.mywebsite.site.dto.SiteKnowledgeSearchResponseDto;
 import com.mywebsite.site.service.SiteAiConversationService;
 import com.mywebsite.site.service.SiteAiConversationService.ChatPreparation;
 import com.mywebsite.site.service.SiteAiRateLimitService;
@@ -83,7 +88,43 @@ public class SiteAiServiceImpl implements SiteAiService {
         return new SiteAiChatResponseDto(
                 response.reply(),
                 String.valueOf(preparation.conversation().getId()),
-                response.providerStatus());
+                response.providerStatus(),
+                toCitations(response.citations()));
+    }
+
+    @Override
+    public SiteKnowledgeSearchResponseDto searchKnowledge(long siteId, SiteKnowledgeSearchRequestDto request) {
+        AuthenticatedUser user = requireSiteMember(siteId);
+        requireSiteUserId(user);
+        if (request == null || !StringUtils.hasText(request.query())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        String query = request.query().trim();
+        if (query.length() > SiteKnowledgeSearchRequestDto.MAX_QUERY_CHARS) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        AgentRetrievalSearchResult result = agentClient.searchRetrieval(
+                new AgentRetrievalSearchRequest(String.valueOf(siteId), query, clampTopK(request.topK())));
+        List<SiteKnowledgeSearchResponseDto.Hit> hits = result.hits().stream()
+                .map(hit -> new SiteKnowledgeSearchResponseDto.Hit(
+                        hit.sourceId(), hit.chunkIndex(), hit.score(), hit.content()))
+                .toList();
+        return new SiteKnowledgeSearchResponseDto(hits, result.degraded());
+    }
+
+    /** 与内容列表 limit 相同：越界夹进 1..{@link SiteKnowledgeSearchRequestDto#MAX_TOP_K}，null 交给 Python 默认。 */
+    private static Integer clampTopK(Integer topK) {
+        if (topK == null) {
+            return null;
+        }
+        return Math.min(Math.max(topK, 1), SiteKnowledgeSearchRequestDto.MAX_TOP_K);
+    }
+
+    private static List<SiteAiChatResponseDto.Citation> toCitations(List<AgentCitation> citations) {
+        return citations.stream()
+                .map(citation -> new SiteAiChatResponseDto.Citation(
+                        citation.sourceId(), citation.chunkIndex(), citation.score()))
+                .toList();
     }
 
     @Override
@@ -116,11 +157,7 @@ public class SiteAiServiceImpl implements SiteAiService {
     }
 
     private AuthenticatedUser validateChatAccess(long siteId, SiteAiChatRequestDto request) {
-        AuthenticatedUser user =
-                AuthContext.currentUser().orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        if (user.siteIdOrNull() == null || !Objects.equals(user.siteIdOrNull(), siteId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
+        AuthenticatedUser user = requireSiteMember(siteId);
         if (request == null || !StringUtils.hasText(request.message())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
@@ -129,6 +166,15 @@ public class SiteAiServiceImpl implements SiteAiService {
         }
         if (!rateLimitService.tryAcquire(siteId, user.subject())) {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS);
+        }
+        return user;
+    }
+
+    private static AuthenticatedUser requireSiteMember(long siteId) {
+        AuthenticatedUser user =
+                AuthContext.currentUser().orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        if (user.siteIdOrNull() == null || !Objects.equals(user.siteIdOrNull(), siteId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return user;
     }
@@ -209,8 +255,9 @@ public class SiteAiServiceImpl implements SiteAiService {
     }
 
     /**
-     * 终端用户只看到回复文本与错误码（§22.8）：工具轨迹 / 用量 / skills / todos / 原始错误信息
+     * 终端用户只看到回复文本、citations 与错误码（§22.8）：工具轨迹 / 用量 / skills / todos / 原始错误信息
      * 仅供后台观测（admin 预览原样透传）。返回 null = 不下发；未知事件默认不下发，防 Python 新增字段自动外泄。
+     * DONE 在这里重写，不是透传 Python payload。
      */
     private String toClientEventData(String event, JsonNode data, String rawJson) {
         return switch (event) {
@@ -220,6 +267,7 @@ public class SiteAiServiceImpl implements SiteAiService {
                 ObjectNode done = objectMapper.createObjectNode();
                 done.put("reply", extractReply(data));
                 done.put("providerStatus", data.path("providerStatus").asText("LIVE"));
+                done.set("citations", objectMapper.valueToTree(extractCitations(data)));
                 yield done.toString();
             }
             case "ERROR" -> {
@@ -243,6 +291,30 @@ public class SiteAiServiceImpl implements SiteAiService {
     private static String extractReply(JsonNode done) {
         JsonNode reply = done.get("reply");
         return reply == null || reply.isNull() ? "" : reply.asText();
+    }
+
+    private List<SiteAiChatResponseDto.Citation> extractCitations(JsonNode done) {
+        JsonNode citations = done.get("citations");
+        if (citations == null || !citations.isArray()) {
+            return List.of();
+        }
+        try {
+            AgentCitation[] parsed = objectMapper.treeToValue(citations, AgentCitation[].class);
+            if (parsed == null) {
+                return List.of();
+            }
+            List<SiteAiChatResponseDto.Citation> mapped = new ArrayList<>();
+            for (AgentCitation citation : parsed) {
+                if (citation != null) {
+                    mapped.add(new SiteAiChatResponseDto.Citation(
+                            citation.sourceId(), citation.chunkIndex(), citation.score()));
+                }
+            }
+            return List.copyOf(mapped);
+        } catch (IOException | IllegalArgumentException ex) {
+            log.warn("site ai stream DONE carried malformed citations, ignored", ex);
+            return List.of();
+        }
     }
 
     private List<AgentTodoItem> extractTodos(JsonNode done) {

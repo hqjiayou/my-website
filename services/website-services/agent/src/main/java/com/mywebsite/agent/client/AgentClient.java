@@ -5,6 +5,8 @@ import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
+import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
+import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
 import com.mywebsite.agent.dto.AgentSkillSummary;
 import java.util.List;
@@ -37,4 +39,7 @@ public interface AgentClient {
 
     /** 从派生索引移除文档。 */
     void deleteRetrievalDocument(String siteId, String sourceId);
+
+    /** 知识检索。检索未配置时抛 BusinessException（EXTERNAL_DEPENDENCY_BLOCKED，与 upsert 相同）。 */
+    AgentRetrievalSearchResult searchRetrieval(AgentRetrievalSearchRequest request);
 }
