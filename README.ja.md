@@ -2,14 +2,14 @@
 
 [简体中文](README.md) · [繁體中文](README.zh-TW.md) · [English](README.en.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
-複数サイトを載せるプラットフォームです。機能は業種サイト単位で広がります（自動車整備、ケーキ・製菓、その後は美容院、クリニック、中古車販売、行政書士事務所など）。このワークスペースに業種向けストアフロントはありません。
+ウェブサイトを一つの管理画面で中央制御する集合です。総控は `apps/admin-web`、Java サービスは `services/website-services`、AI 実行は Python の `services/agent-services` です。このワークスペースに来訪者向けフロントはありません。
 
 ## 位置づけ
 
-- 一つのプラットフォームで複数の業種サイトを載せる。単体のコーポレートサイト専用ではない。
-- 業種ストアフロントはこのワークスペースにない。戻すときは `apps/site-web/` に置き、業種ごとに独立したアプリにする。
-- `apps/admin-web` は全体管理とサイト管理の両方を担う。
-- `services/website-services` が現在の Java バックエンド本体。**共通ゲートウェイ**、**独立した認証サービス（`auth`）**、管理 API、サイト API、インフラ接続、今後の業務モジュールの骨組みを含む。**JWT は RS256 + JWKS**（Auth が署名し、業務サービスは JWKS で検証する）。
+- 一つの総控が、集合内の各サイトを管理する。
+- このワークスペースにあるフロントは総控だけ。来訪者向けサイトはツリーにない。サイト API は Java の `site-app`。
+- `apps/admin-web` がその総控（プラットフォームと各サイト）。
+- `services/website-services` がこのシステムの Java サービス。**共通ゲートウェイ**、**独立した認証サービス（`auth`）**、管理 API、サイト API、インフラ接続を含む。**JWT は RS256 + JWKS**（Auth が署名し、業務サービスは JWKS で検証する）。
 - `services/agent-services` は **Python 3.13 + FastAPI + Pydantic AI 2.54** の AI Execution Runtime（internal only。gateway には出さない）。業務の正は Java、AI 実行だけが Python（ADR-0005）。`AI_MODEL` がなくてもプロセスは起動し、呼び出しは正直に失敗する（ADR-0004）。
 
 ## ディレクトリ
@@ -28,11 +28,11 @@ my-website/
 
 ## 各プロジェクト
 
-### 業種ストアフロント
+### 来訪者向けサイト
 
-このワークスペースに業種向けフロントはない（以前の `car-web` と `cake-web` の骨組みは削除済みで、`apps/site-web/` もツリーにない）。
+このワークスペースに来訪者向けフロントはない（`apps/site-web/` はツリーにない）。
 
-戻したあとは `website-services/gateway` 経由でサイト API を呼ぶ。  
+サイト API は `website-services/gateway` 経由で呼ぶ。  
 **Site Auth のバックエンドは完了**（`/api/auth/site/**` がログイン / リフレッシュ / ログアウト、`GET /api/site/auth/me` は site-app）。**フロントは未接続**（[`docs/site-web/CURRENT_STATE.md`](docs/site-web/CURRENT_STATE.md)）。
 
 ### apps/admin-web
@@ -62,7 +62,7 @@ Java 21 + Spring Boot 3.5.14 の Maven マルチモジュール。
 - `infra`: PostgreSQL、Redis、MinIO / S3、MyBatis-Plus、Flyway、**システムメッセージの i18n**
 - `agent`: `HttpAgentClient` と Java↔Python 契約 DTO。業務オーケストレーションはしない
 - `site/site-core`: サイト共通のエンティティと Mapper（ユーザー、コンテンツ、予約、サイト AI）
-- `site/site-car`、`site/site-cake`: 業種モジュールの骨組み。具体的な業務はまだない
+- `site/site-car`、`site/site-cake`: 空モジュール。`pom.xml` のみで、業務コードはない
 
 文書:
 
@@ -99,7 +99,7 @@ admin-web ──> website-services/gateway:8080 ──> /api/auth/**   → auth:
                                               └──> /api/site/**   → site-app:8082（GET /api/site/auth/me を含む）
 ```
 
-業種ストアフロントを戻したあとも同じ gateway を使う。ログインは auth の `/api/auth/admin/**` と `/api/auth/site/**`。`/me` は auth にはなく、対応する業務サービスにある。
+リクエストは同じ gateway を通る。ログインは auth の `/api/auth/admin/**` と `/api/auth/site/**`。`/me` は auth にはなく、対応する業務サービスにある。
 
 Maven の内部依存（HTTP トポロジではない）:
 
@@ -136,7 +136,7 @@ pnpm install
 pnpm dev
 ```
 
-このワークスペースに site-web のストアフロントはない。`car-web` と `cake-web` は起動しない。
+このワークスペースに来訪者向けフロントはない。
 
 `agent-services` を起動する:
 

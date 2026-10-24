@@ -1,31 +1,36 @@
 name: agent-services-ci
 
-# 只在本次变更改到 agent-services、Java agent 客户端或本工作流时运行（push 与 PR 同规则）。
+# Python AI 执行服务 services/agent-services，以及 Java HttpAgentClient 契约。
+# - pull_request：按指向 dev / main 的整个 PR 改动触发，不只看最后一次 push。
+# - push：按本次 push 改到的路径触发（含尚未开 PR 的功能分支）。
+# pytest 通过后，Java 契约 IT 与 Docker 镜像构建并行。
 
 on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'services/agent-services/**'
+      - 'services/website-services/agent/**'
+      - '.github/workflows/agent-services-ci.yml'
   push:
     paths:
       - 'services/agent-services/**'
       - 'services/website-services/agent/**'
       - '.github/workflows/agent-services-ci.yml'
-  pull_request:
-    paths:
-      - 'services/agent-services/**'
-      - 'services/website-services/agent/**'
-      - '.github/workflows/agent-services-ci.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   python-tests:
     name: agent-services pytest
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: services/agent-services
@@ -42,8 +47,8 @@ jobs:
   java-python-contract:
     name: HttpAgentClient ↔ Python contract
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     needs: python-tests
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -68,8 +73,8 @@ jobs:
   docker-build:
     name: Docker image build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     needs: python-tests
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: docker build
@@ -119,7 +124,7 @@ jobs:
         run: uv sync --frozen --extra dev
       - name: Export runtime requirements
         run: uv export --frozen --no-dev --no-emit-project --format requirements-txt -o /tmp/requirements-audit.txt
-      # 报告模式：存量漏洞（基线见 PR 说明）清理前不阻断；清理完成另行去掉 continue-on-error。
+      # 报告模式：存量漏洞清理前不阻断；清理完成另行去掉 continue-on-error。
       - name: pip-audit (report-only)
         continue-on-error: true
         run: uv run pip-audit -r /tmp/requirements-audit.txt
