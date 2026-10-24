@@ -36,6 +36,9 @@ public class SiteSecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.requestMatchers(HttpMethod.GET, "/api/site/ping")
                         .permitAll()
+                        // 公开内容只读：仅 GET。其他方法仍要认证。
+                        .requestMatchers(HttpMethod.GET, "/api/site/public/**")
+                        .permitAll()
                         .requestMatchers("/actuator/**")
                         .permitAll()
                         // internal API 由 InternalServiceTokenFilter 鉴权（共享 internal token），不走 JWT

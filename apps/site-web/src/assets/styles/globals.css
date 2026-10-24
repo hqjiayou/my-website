@@ -1,0 +1,33 @@
+/**
+ * 全域入口：Tailwind、主題、基礎重置與字體。
+ */
+@import 'tailwindcss';
+@import './theme.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-family:
+    'Segoe UI',
+    'PingFang TC',
+    'Noto Sans TC',
+    sans-serif;
+}
+
+#root {
+  min-height: 100dvh;
+}
