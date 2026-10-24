@@ -6,7 +6,7 @@ status: CURRENT
 last_verified: 2026-10-10
 ```
 
-全库分格见 [`../README.md`](../README.md)。工作区没有行业前台应用。Site Auth 后端已完成，前端未接。
+全库分格见 [`../README.md`](../README.md)。工作区没有访客前台。Site Auth 后端已完成，前端未接。
 
 | 格 | 文件 |
 |----|------|

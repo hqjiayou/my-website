@@ -1,6 +1,6 @@
 # Agent 指引（my-website）
 
-多站点平台 Monorepo。当前主要活跃面：`apps/admin-web`（管理后台）与 `services/website-services`（Java 后端：gateway / auth / admin / site / common / infra / agent）。`services/agent-services` 为 **Python AI Execution Runtime**（internal only，经 Java `HttpAgentClient` 调用）。`apps/site-web` 当前工作区没有行业前台应用；Site Auth 后端已完成，前端未接。
+中央控制的网站集合 Monorepo。一个后台总控 `apps/admin-web`，一个 Java 服务 `services/website-services`（gateway / auth / admin / site / common / infra / agent），一个 Python AI `services/agent-services`（internal only，经 Java `HttpAgentClient` 调用）。当前工作区没有访客前台；Site Auth 后端已完成，前端未接。
 
 ## Source of Truth 顺序
 

@@ -89,7 +89,7 @@
 
 - 前台站点业务、`site-app` HTTP 入口  
 - `site-core` 站点域共用 entity / mapper / 上下文  
-- `site-car` / `site-cake` 行业骨架  
+- `site-car` / `site-cake` 空模块（只有 pom，无业务代码）  
 
 **禁止**
 
@@ -433,7 +433,7 @@ JWT 签发配置可保留 **`config/jwt`**（与 admin 的 `AdminJwtDecoderConfi
 
 1. **site-app**：HTTP、config、security、handler、dto（压平）  
 2. **site-core**：entity、mapper、`core.context`（站点上下文）  
-3. **site-car / site-cake**：行业能力，依赖 site-core  
+3. **site-car / site-cake**：空模块，依赖 site-core；当前没有业务代码  
 4. 有业务后再补 `service` / `impl`；**禁止**过早 manager / adapter  
 5. **禁止** `dto/authme` 等子包（**后续收敛**，见 §17）
 

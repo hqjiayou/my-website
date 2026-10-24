@@ -1,7 +1,7 @@
 export default {
   list: {
     title: '站点管理',
-    description: '管理多个行业站点的核心信息、状态与工作台入口。',
+    description: '管理网站集合中各站点的核心信息、状态与工作台入口。',
     createSite: '创建站点',
     empty: '暂无站点',
     permissionHint: '按钮可见性由当前账号 permissions 控制，最终以后端鉴权为准。',
@@ -63,9 +63,9 @@ export default {
       heroLayout: 'Hero 布局',
     },
     placeholders: {
-      siteName: '例如：东京安心汽车维修工厂',
-      siteCode: '例如：tokyo-car-repair',
-      domain: '例如：car-demo.example.com',
+      siteName: '例如：示例站点',
+      siteCode: '例如：demo-site',
+      domain: '例如：demo.example.com',
       siteDescription: '请输入站点定位与业务简介',
       phone: '例如：03-1111-2200',
       address: '请输入营业地址',
@@ -175,7 +175,7 @@ export default {
     placeholders: {
       pendingSave: '当前为前端占位页面，后续将接入 site-service 保存站点基础信息。',
       domainFuture: '后续将用于配置自定义域名、DNS 解析、SSL 证书与发布状态。',
-      templateHint: '模板风格说明：以行业模板为基础，可进行品牌化覆盖。',
+      templateHint: '模板作为站点的起点，外观可以按站点覆盖。',
       dnsHint: 'DNS 配置占位：A/CNAME 记录校验与解析状态将在后续接入。',
       cdnHint: 'Cloudflare / CloudFront 配置占位：用于边缘缓存与 HTTPS 加速。',
     },
