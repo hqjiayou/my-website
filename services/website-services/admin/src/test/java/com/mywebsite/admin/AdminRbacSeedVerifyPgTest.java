@@ -17,7 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * RBAC 种子 Flyway（V1–V21：含 Site/User/Template/Media/Content/Reservation/AI）在真实 PostgreSQL 上的迁移与数据验证。
+ * RBAC 种子 Flyway（V1–V22：含 Site/User/Template/Media/Content/Reservation/AI）在真实 PostgreSQL 上的迁移与数据验证。
  *
  * <p>默认由 Testcontainers 自举一次性 PostgreSQL（库名 {@code my_website_rbac_verify}）；执行：
  * {@code mvn clean test -Ppersistence-verify-pg -pl admin -am -Dtest=AdminRbacSeedVerifyPgTest}
@@ -95,7 +95,7 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-kb:delete",
             "admin:ai-conversation:list");
 
-    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 21;
+    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 22;
     private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 61;
 
     @Autowired

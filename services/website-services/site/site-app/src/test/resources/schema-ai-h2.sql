@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS site_reservation (
     reserved_at         TIMESTAMP WITH TIME ZONE NOT NULL,
     status              VARCHAR(32) NOT NULL,
     note                TEXT,
+    idempotency_key     VARCHAR(128),
     created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     created_by          BIGINT,
     updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),

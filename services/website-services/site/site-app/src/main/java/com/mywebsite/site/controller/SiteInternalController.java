@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -47,7 +48,8 @@ public class SiteInternalController {
     @PostMapping("/reservations")
     public ApiResponse<InternalReservationDto> createReservation(
             @PathVariable("siteId") long siteId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody InternalReservationCreateRequest request) {
-        return ApiResponse.success(siteInternalService.createReservation(siteId, request));
+        return ApiResponse.success(siteInternalService.createReservation(siteId, request, idempotencyKey));
     }
 }
