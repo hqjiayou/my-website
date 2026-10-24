@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 TodoStatus = Literal["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"]
 
@@ -14,6 +14,17 @@ class TodoItem(BaseModel):
     id: str = Field(min_length=1, max_length=MAX_TODO_ID_LENGTH)
     title: str = Field(min_length=1, max_length=MAX_TODO_TITLE_LENGTH)
     status: TodoStatus = "PENDING"
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def strip_title(cls, value: object) -> object:
+        # 与 add_todo 一致：先 strip，空标题拒绝；长度约束作用在清洗后的文本上。
+        if not isinstance(value, str):
+            return value
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("title is required")
+        return cleaned
 
 
 class TodoSnapshot(BaseModel):

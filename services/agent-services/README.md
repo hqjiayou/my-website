@@ -14,6 +14,8 @@
 - `POST /internal/v1/chat` — 成功 `{"ok":true,"data":{reply,conversationId,providerStatus:"LIVE",usage,tools,skillsApplied,skillsMissing,todos}}`（`tools` 只有 `{name,ok}`）；错误体为**顶层扁平** `{ok,errorCode,message[,providerStatus]}`；运行预算超限 → **422** `AGENT_BUDGET_EXCEEDED`
 - `POST /internal/v1/chat/stream` — SSE：`START` / `TEXT_DELTA` / `TOOL_START` / `TOOL_RESULT`（`ok`，不含工具返回内容）/ `DONE`（`todos`/`usage`/`tools`）/ `ERROR`（预算超限时无 DONE）
 - `GET /internal/v1/skills` — 技能目录（只元数据）
+- `PUT /internal/v1/retrieval/documents` — 写入派生索引文档（`siteId`、`sourceId`、`title`、`content`）；成功 `{"ok":true,"data":{"chunks"}}`
+- `DELETE /internal/v1/retrieval/documents` — 删除派生索引文档（query `siteId`、`sourceId`）；成功 `{"ok":true,"data":null}`
 - 请求上限（纵深防御，§21.4）：`message`/history 单条 ≤16000 字符、history ≤50、skills ≤16、todos ≤20；超限或字段非法 → **400** `BAD_REQUEST`（扁平体，非 FastAPI 422）
 
 公开探活：`GET /health`（无鉴权，只报进程存活）

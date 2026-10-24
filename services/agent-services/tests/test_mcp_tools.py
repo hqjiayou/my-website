@@ -77,6 +77,35 @@ def test_invalid_mcp_json_is_skipped() -> None:
     assert mcp_config_snapshot(make_settings(mcp_servers_json="{")).status == "INVALID_CONFIG"
 
 
+def test_enabled_string_false_is_skipped(caplog) -> None:
+    payload = json.dumps(
+        [
+            {"name": "strfalse", "url": "http://127.0.0.1:3999/mcp", "enabled": "false"},
+            {"name": "on", "url": "http://127.0.0.1:3999/mcp"},
+        ]
+    )
+    with caplog.at_level("WARNING"):
+        configs = parse_mcp_server_configs(payload)
+    assert [item.name for item in configs] == ["on"]
+    assert configs[0].enabled is True
+    assert len(build_mcp_toolsets(make_settings(mcp_servers_json=payload))) == 1
+    assert any("not a JSON boolean" in record.message for record in caplog.records)
+
+
+def test_enabled_zero_is_skipped(caplog) -> None:
+    payload = json.dumps(
+        [
+            {"name": "zero", "url": "http://127.0.0.1:1/mcp", "enabled": 0},
+            {"name": "on", "url": "http://127.0.0.1:3999/mcp"},
+        ]
+    )
+    with caplog.at_level("WARNING"):
+        configs = parse_mcp_server_configs(payload)
+    assert [item.name for item in configs] == ["on"]
+    assert len(build_mcp_toolsets(make_settings(mcp_servers_json=payload))) == 1
+    assert any("not a JSON boolean" in record.message for record in caplog.records)
+
+
 def test_parse_respects_enabled_false_and_headers_and_prefix() -> None:
     payload = json.dumps(
         [

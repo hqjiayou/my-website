@@ -10,6 +10,11 @@ from agent_services.retrieval.store import RetrievalStore, RetrievedChunk
 logger = logging.getLogger(__name__)
 
 DEFAULT_TOP_K = 4
+MAX_UPSERT_CHUNKS = 256
+
+
+class RetrievalChunkLimitExceeded(Exception):
+    """单文档分块数超过护栏。这是请求问题，由 API 映射为 400，不是外部依赖故障。"""
 
 
 class RetrievalService:
@@ -22,6 +27,10 @@ class RetrievalService:
         if not chunks:
             await self._store.delete_document(site_id=site_id, source_id=source_id)
             return 0
+        if len(chunks) > MAX_UPSERT_CHUNKS:
+            raise RetrievalChunkLimitExceeded(
+                f"Document exceeds the maximum of {MAX_UPSERT_CHUNKS} chunks."
+            )
         embeddings = await self._embedder.embed(chunks)
         return await self._store.upsert_document(
             site_id=site_id,
