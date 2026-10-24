@@ -20,6 +20,7 @@ from agent_services.retrieval.embeddings import (
     create_embedding_client,
 )
 from agent_services.retrieval.service import (
+    DEFAULT_TOP_K,
     MAX_UPSERT_CHUNKS,
     RetrievalService,
     create_retrieval_service,
@@ -360,6 +361,7 @@ class FakeStore:
     def __init__(self) -> None:
         self.docs: dict[tuple[str, str], list[str]] = {}
         self.search_calls: list[str] = []
+        self.search_top_ks: list[int] = []
 
     async def upsert_document(self, *, site_id, source_id, title, chunks, embeddings) -> int:
         assert len(chunks) == len(embeddings)
@@ -371,6 +373,7 @@ class FakeStore:
 
     async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
         self.search_calls.append(site_id)
+        self.search_top_ks.append(top_k)
         results = []
         for (sid, source_id), chunks in self.docs.items():
             if sid != site_id:  # site_id 强制过滤
@@ -615,3 +618,226 @@ async def test_stream_done_always_includes_retrieval_degraded() -> None:
 
     assert await done_flag(False) is False
     assert await done_flag(True) is True
+
+
+async def test_service_repeat_upsert_keeps_only_the_latest_document() -> None:
+    service, store = _service()
+    await service.upsert_document(site_id="1", source_id="kb:1", title="t", content="alpha facts")
+    await service.upsert_document(site_id="1", source_id="kb:1", title="t", content="beta facts")
+    assert store.docs[("1", "kb:1")] == ["beta facts"]
+    hits = await service.search(site_id="1", query="facts")
+    assert [hit.content for hit in hits] == ["beta facts"]
+
+
+def _search_client(service: RetrievalService) -> TestClient:
+    return TestClient(create_app(make_settings(), retrieval_service=service))
+
+
+def test_retrieval_search_returns_hits() -> None:
+    service, store = _service()
+    client = _search_client(service)
+    created = client.put(
+        "/internal/v1/retrieval/documents",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "sourceId": "kb:1", "title": "t", "content": "alpha facts"},
+    )
+    assert created.status_code == 200
+
+    response = client.post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "query": "alpha"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "hits": [
+            {
+                "sourceId": "kb:1",
+                "chunkIndex": 0,
+                "score": 0.9,
+                "content": "alpha facts",
+            }
+        ],
+        "degraded": False,
+    }
+    assert store.search_top_ks == [DEFAULT_TOP_K]
+
+
+def test_retrieval_search_degrades_when_embedding_fails() -> None:
+    class FailingEmbedder(FakeEmbedder):
+        async def embed_query(self, text: str) -> list[float]:
+            raise RuntimeError("embed down")
+
+    service = RetrievalService(FailingEmbedder(), FakeStore())
+    response = _search_client(service).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "query": "alpha"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"hits": [], "degraded": True}
+    assert service.degraded is True
+    assert service.last_error == "RuntimeError"
+
+
+def test_retrieval_search_requires_internal_token() -> None:
+    response = _search_client(_service()[0]).post(
+        "/internal/v1/retrieval/search",
+        json={"siteId": "1", "query": "alpha"},
+    )
+    assert response.status_code == 401
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "UNAUTHORIZED"
+    assert "detail" not in body
+
+
+def test_retrieval_search_blank_query_is_422() -> None:
+    response = _search_client(_service()[0]).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "query": "  "},
+    )
+    assert response.status_code == 422
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "BAD_REQUEST"
+    assert "query" in body["message"]
+    assert "detail" not in body
+
+
+def test_retrieval_search_clamps_top_k() -> None:
+    service, store = _service()
+    response = _search_client(service).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "query": "alpha", "topK": 50},
+    )
+    assert response.status_code == 200
+    assert store.search_top_ks == [20]
+
+
+_CITATION_HITS = [
+    RetrievedChunk("s", 0, "low", 0.1),
+    RetrievedChunk("s", 0, "high", 0.95),
+    RetrievedChunk("b", 1, "b", 0.5),
+    RetrievedChunk("c", 0, "c", 0.4),
+    RetrievedChunk("d", 0, "d", 0.3),
+    RetrievedChunk("e", 0, "e", 0.2),
+    RetrievedChunk("f", 0, "f", 0.15),
+]
+
+_EXPECTED_CITATIONS = [
+    {"sourceId": "s", "chunkIndex": 0, "score": 0.95},
+    {"sourceId": "b", "chunkIndex": 1, "score": 0.5},
+    {"sourceId": "c", "chunkIndex": 0, "score": 0.4},
+    {"sourceId": "d", "chunkIndex": 0, "score": 0.3},
+    {"sourceId": "e", "chunkIndex": 0, "score": 0.2},
+]
+
+
+class _ManyHitStore(FakeStore):
+    async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        self.search_calls.append(site_id)
+        self.search_top_ks.append(top_k)
+        return list(_CITATION_HITS)
+
+
+def _live_retrieval_client(service: RetrievalService) -> TestClient:
+    handle = ModelHandle(
+        model=TestModel(custom_output_text="answered"), spec="test:model", blocked_reason=None
+    )
+    return TestClient(create_app(make_settings(), model_handle=handle, retrieval_service=service))
+
+
+def _done_event_data(body: str) -> dict[str, object]:
+    for block in body.split("\n\n"):
+        lines = [line for line in block.splitlines() if line]
+        if not lines or lines[0] != "event: DONE":
+            continue
+        data = "".join(line.removeprefix("data: ") for line in lines if line.startswith("data: "))
+        return json.loads(data)
+    raise AssertionError("DONE event missing")
+
+
+def test_chat_citations_follow_adopted_chunks_and_cap() -> None:
+    client = _live_retrieval_client(RetrievalService(FakeEmbedder(), _ManyHitStore()))
+    response = client.post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "message": "hello"},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["retrievalDegraded"] is False
+    assert data["citations"] == _EXPECTED_CITATIONS
+    assert all("content" not in item for item in data["citations"])
+
+
+def test_chat_omits_citations_without_grounding() -> None:
+    client = _live_retrieval_client(_service()[0])
+    response = client.post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "message": "hello"},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["retrievalDegraded"] is False
+    assert "citations" not in data
+
+    class BrokenStore(FakeStore):
+        async def search(self, **kwargs):
+            raise RuntimeError("db down")
+
+    degraded = _live_retrieval_client(RetrievalService(FakeEmbedder(), BrokenStore()))
+    failed = degraded.post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "message": "hello"},
+    )
+    assert failed.status_code == 200
+    body = failed.json()["data"]
+    assert body["retrievalDegraded"] is True
+    assert "citations" not in body
+
+
+def test_stream_citations_follow_adopted_chunks_and_cap() -> None:
+    client = _live_retrieval_client(RetrievalService(FakeEmbedder(), _ManyHitStore()))
+    with client.stream(
+        "POST",
+        "/internal/v1/chat/stream",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "message": "hello"},
+    ) as response:
+        assert response.status_code == 200
+        done = _done_event_data(response.read().decode("utf-8"))
+    assert done["retrievalDegraded"] is False
+    assert done["citations"] == _EXPECTED_CITATIONS
+
+
+def test_stream_omits_citations_without_grounding() -> None:
+    client = _live_retrieval_client(_service()[0])
+    with client.stream(
+        "POST",
+        "/internal/v1/chat/stream",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "message": "hello"},
+    ) as response:
+        done = _done_event_data(response.read().decode("utf-8"))
+    assert "citations" not in done
+
+    class BrokenStore(FakeStore):
+        async def search(self, **kwargs):
+            raise RuntimeError("db down")
+
+    degraded = _live_retrieval_client(RetrievalService(FakeEmbedder(), BrokenStore()))
+    with degraded.stream(
+        "POST",
+        "/internal/v1/chat/stream",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "message": "hello"},
+    ) as response:
+        failed = _done_event_data(response.read().decode("utf-8"))
+    assert failed["retrievalDegraded"] is True
+    assert "citations" not in failed

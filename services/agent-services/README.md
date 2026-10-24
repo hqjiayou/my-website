@@ -11,11 +11,15 @@
 
 - `GET /internal/v1/health` — `providerStatus: LIVE|BLOCKED`、`fallbackProviders`、`mcpStatus`/`mcpServers`（仅配置态）、`limits`（生效预算，null = 不限）
 - `GET /internal/v1/mcp/ready` — 对 enabled MCP 短超时 `list_tools`；失败 **503** `MCP_UNAVAILABLE` + `servers` 明细（不含 URL）
-- `POST /internal/v1/chat` — 成功 `{"ok":true,"data":{reply,conversationId,providerStatus:"LIVE",usage,tools,skillsApplied,skillsMissing,todos}}`（`tools` 只有 `{name,ok}`）；错误体为**顶层扁平** `{ok,errorCode,message[,providerStatus]}`；运行预算超限 → **422** `AGENT_BUDGET_EXCEEDED`
-- `POST /internal/v1/chat/stream` — SSE：`START` / `TEXT_DELTA` / `TOOL_START` / `TOOL_RESULT`（`ok`，不含工具返回内容）/ `DONE`（`todos`/`usage`/`tools`）/ `ERROR`（预算超限时无 DONE）
+- `POST /internal/v1/chat` — 成功 `{"ok":true,"data":{reply,conversationId,providerStatus:"LIVE",usage,tools,skillsApplied,skillsMissing,todos}}`（`tools` 只有 `{name,ok}`）；本轮采用了检索片段时 `data` 另含 `citations`（`sourceId`/`chunkIndex`/`score`，按 score 降序，最多 5 条；未采用或检索降级时不出现该字段）；错误体为**顶层扁平** `{ok,errorCode,message[,providerStatus]}`；运行预算超限 → **422** `AGENT_BUDGET_EXCEEDED`
+- `POST /internal/v1/chat/stream` — SSE：`START` / `TEXT_DELTA` / `TOOL_START` / `TOOL_RESULT`（`ok`，不含工具返回内容）/ `DONE`（`todos`/`usage`/`tools`，采用检索片段时另含 `citations`）/ `ERROR`（预算超限时无 DONE）
 - `GET /internal/v1/skills` — 技能目录（只元数据）
 - `PUT /internal/v1/retrieval/documents` — 写入派生索引文档（`siteId`、`sourceId`、`title`、`content`）；成功 `{"ok":true,"data":{"chunks"}}`
 - `DELETE /internal/v1/retrieval/documents` — 删除派生索引文档（query `siteId`、`sourceId`）；成功 `{"ok":true,"data":null}`
+- `POST /internal/v1/retrieval/search` — `{siteId, query, topK?}` → `{hits:[{sourceId,chunkIndex,score,content}], degraded}`；嵌入或向量库失败时 **200**、`hits=[]`、`degraded=true`（不回 500）。`query` 上限与文档 `content` 相同；`topK` 缺省 4，大于 20 夹制到 20
+
+预约写入（工具 `create_reservation` → Java `POST /internal/site/v1/sites/{siteId}/reservations`）带 `Idempotency-Key`：`rsv-` + sha256(siteId 与排序键 JSON 拼接)。同一参数重试得到同一 key。Java 业务 API 需 honor 此 header 后才不会重复建单；Java 侧为后续工作包，本服务只负责发送。
+
 - 请求上限（纵深防御，§21.4）：`message`/history 单条 ≤16000 字符、history ≤50、skills ≤16、todos ≤20；超限或字段非法 → **400** `BAD_REQUEST`（扁平体，非 FastAPI 422）
 
 公开探活：`GET /health`（无鉴权，只报进程存活）
@@ -148,5 +152,6 @@ uv run --extra dev python scripts/run_mcp_echo.py
 
 - 目录：`skills/{id}/SKILL.md`；可选 frontmatter `description` / `version`
 - 默认：`AGENT_DEFAULT_SKILLS`；请求体 `skills[]`；未知 id：`AGENT_SKILLS_UNKNOWN_POLICY=ignore|reject`
+- 注入上限：`AGENT_SKILLS_MAX_INSTRUCTION_CHARS`（默认 12000，须为正整数）。超出则按解析顺序整段跳过，并在提示末尾标记；第一个 skill 单独超限时截断该段
 - 目录 API：`GET /internal/v1/skills`（仅元数据）
 - 响应/SSE：`skillsApplied` / `skillsMissing`

@@ -17,6 +17,7 @@ from agent_services.agent.runtime import (
     budget_exceeded_message,
     build_agent,
     build_run_kwargs,
+    grounding_citations,
     mcp_unavailable_message,
     tool_succeeded,
     usage_to_api,
@@ -24,6 +25,7 @@ from agent_services.agent.runtime import (
 from agent_services.agent.todo_tools import TodoStore
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.api.errors import external_failure_message
+from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
 from agent_services.schemas.stream import AgentStreamEvent, AgentStreamEventType
 from agent_services.schemas.todo import TodoItem
@@ -52,6 +54,7 @@ async def stream_chat_events(
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
+    retrieval_chunks: list[RetrievedChunk] | None = None,
     retrieval_degraded: bool = False,
     skill_instructions: str | None = None,
     initial_todos: list[TodoItem] | None = None,
@@ -61,6 +64,7 @@ async def stream_chat_events(
     skills_missing: list[str] | None = None,
     budget: RunBudget | None = None,
     locale: str | None = None,
+    skills_max_instruction_chars: int | None = None,
 ) -> AsyncIterator[AgentStreamEvent]:
     resolved_budget = budget or RunBudget()
     system_prompt, user_message = build_prompt_parts(
@@ -71,6 +75,7 @@ async def stream_chat_events(
         skill_instructions=skill_instructions,
         todos=initial_todos,
         locale=locale,
+        skills_max_instruction_chars=skills_max_instruction_chars,
     )
     start_data: dict[str, object] = {"siteId": site_id}
     if skills_applied:
@@ -178,6 +183,9 @@ async def stream_chat_events(
         snapshot = todo_store.snapshot()
         if snapshot.items:
             done_data["todos"] = snapshot.to_api()
+    citations = grounding_citations(retrieval_context, retrieval_chunks)
+    if citations:
+        done_data["citations"] = citations
     yield AgentStreamEvent(type=AgentStreamEventType.DONE, data=done_data)
 
 

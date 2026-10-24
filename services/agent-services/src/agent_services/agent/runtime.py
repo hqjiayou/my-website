@@ -30,6 +30,7 @@ from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.api.errors import external_failure_message
 from agent_services.config import Settings
 from agent_services.observability.request_id import current_request_id
+from agent_services.retrieval.store import RetrievedChunk, citation_sources
 from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
 from agent_services.schemas.todo import TodoItem
 
@@ -130,11 +131,23 @@ def tool_trace_from_messages(messages: list[ModelMessage]) -> list[dict[str, obj
     return trace[:MAX_TOOL_TRACE]
 
 
+def grounding_citations(
+    retrieval_context: list[str] | None,
+    retrieval_chunks: list[RetrievedChunk] | None,
+) -> list[dict[str, object]] | None:
+    """本轮确实把 chunks 写进提示时才给出引用；降级或未检索时调用方应传入空上下文。"""
+    if not retrieval_context or not retrieval_chunks:
+        return None
+    citations = citation_sources(retrieval_chunks)
+    return citations or None
+
+
 @dataclass(frozen=True)
 class ChatReply:
     reply: str
     usage: dict[str, int] = field(default_factory=dict)
     tools: list[dict[str, object]] = field(default_factory=list)
+    citations: list[dict[str, object]] | None = None
 
 
 @dataclass(frozen=True)
@@ -229,11 +242,13 @@ async def run_chat(
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
+    retrieval_chunks: list[RetrievedChunk] | None = None,
     skill_instructions: str | None = None,
     initial_todos: list[TodoItem] | None = None,
     toolsets: list[object] | None = None,
     budget: RunBudget | None = None,
     locale: str | None = None,
+    skills_max_instruction_chars: int | None = None,
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
     system_prompt, user_message = build_prompt_parts(
@@ -244,6 +259,7 @@ async def run_chat(
         skill_instructions=skill_instructions,
         todos=initial_todos,
         locale=locale,
+        skills_max_instruction_chars=skills_max_instruction_chars,
     )
     run_kwargs = build_run_kwargs(prompt_profile, history, resolved_budget)
 
@@ -283,4 +299,5 @@ async def run_chat(
         reply=text,
         usage=usage_to_api(result.usage),
         tools=tool_trace_from_messages(result.new_messages()),
+        citations=grounding_citations(retrieval_context, retrieval_chunks),
     )

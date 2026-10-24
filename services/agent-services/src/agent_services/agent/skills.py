@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 _SKILLS_ROOT = Path(__file__).resolve().parents[3] / "skills"
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 _NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+_SKILL_SECTION_SPLIT = re.compile(r"\n\n(?=## Skill: )")
+_SECTION_TRUNCATED_MARK = "[... truncated]"
 
 # skills_dir → (stamp, catalog)；stamp 为 (相对路径, mtime) 元组，避免 XOR 碰撞
 _catalog_cache: dict[str, tuple[tuple[tuple[str, int], ...], dict[str, "SkillDefinition"]]] = {}
@@ -207,6 +209,43 @@ def resolve_skills(
         missing_ids=tuple(missing),
         instructions="\n\n".join(sections),
     )
+
+
+def _omitted_skills_mark(omitted: int) -> str:
+    return f"[skills truncated: {omitted} skill(s) omitted due to instruction budget]"
+
+
+def limit_skill_instructions(instructions: str, max_chars: int) -> str:
+    """按既有解析顺序把 skill 段纳入字符预算。
+
+    字符数按注入正文（含 ``## Skill:`` 标题与段间空行）计算。装不下的段整段跳过，
+    不从段中间截断；跳过数量写在末尾一行。若第一段本身就超过预算，只保留该段并
+    截断到上限，末尾加 ``[... truncated]``，其余段记入跳过数。
+    """
+    sections = _SKILL_SECTION_SPLIT.split(instructions) if instructions else []
+    if not sections:
+        return ""
+    if len(sections[0]) > max_chars:
+        text = sections[0][:max_chars] + _SECTION_TRUNCATED_MARK
+        omitted = len(sections) - 1
+        if omitted:
+            text = f"{text}\n{_omitted_skills_mark(omitted)}"
+        return text
+
+    included: list[str] = []
+    used = 0
+    omitted = 0
+    for section in sections:
+        extra = len(section) if not included else 2 + len(section)
+        if used + extra <= max_chars:
+            included.append(section)
+            used += extra
+        else:
+            omitted += 1
+    text = "\n\n".join(included)
+    if omitted:
+        text = f"{text}\n{_omitted_skills_mark(omitted)}"
+    return text
 
 
 def resolve_skill_instructions(

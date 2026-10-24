@@ -9,7 +9,11 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from agent_services.agent.business_tools import build_business_toolset
 from agent_services.agent.runtime import ChatReply, run_chat
-from agent_services.tools.business_api import BusinessApiClient, BusinessApiError
+from agent_services.tools.business_api import (
+    BusinessApiClient,
+    BusinessApiError,
+    reservation_idempotency_key,
+)
 
 
 def test_toolset_absent_without_base_url() -> None:
@@ -169,6 +173,61 @@ async def test_create_reservation_tool_calls_java_internal_api() -> None:
     request = captured[0]
     # site_id 来自请求上下文闭包（trusted），模型参数里没有 site_id
     assert request.url.path == "/internal/site/v1/sites/42/reservations"
+    assert request.headers["Idempotency-Key"] == reservation_idempotency_key(
+        "42",
+        {
+            "customerName": "Tanaka",
+            "phone": "090-0000-0000",
+            "serviceType": "cut",
+            "reservedAt": "2026-09-02T10:00:00+09:00",
+        },
+    )
     payload = json.loads(request.content)
     assert payload["customerName"] == "Tanaka"
     assert payload["reservedAt"] == "2026-09-02T10:00:00+09:00"
+
+
+def test_reservation_idempotency_key_ignores_dict_order() -> None:
+    left = {"phone": "1", "customerName": "A", "reservedAt": "t", "serviceType": "cut"}
+    right = {"serviceType": "cut", "reservedAt": "t", "customerName": "A", "phone": "1"}
+    assert reservation_idempotency_key("9", left) == reservation_idempotency_key("9", right)
+    assert reservation_idempotency_key("9", left).startswith("rsv-")
+    assert len(reservation_idempotency_key("9", left)) == 4 + 64
+    changed = dict(left)
+    changed["phone"] = "2"
+    assert reservation_idempotency_key("9", left) != reservation_idempotency_key("9", changed)
+    assert reservation_idempotency_key("9", left) != reservation_idempotency_key("8", left)
+
+
+async def test_create_reservation_sends_stable_idempotency_key() -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return _api_response({"id": 1})
+
+    client = _client_with(handler)
+    kwargs = {
+        "customer_name": "Tanaka",
+        "phone": "090",
+        "service_type": "cut",
+        "reserved_at": "2026-09-02T10:00:00+09:00",
+    }
+    await client.create_reservation("7", **kwargs)
+    await client.create_reservation("7", **kwargs)
+    await client.create_reservation("7", **kwargs, note="window")
+    await client.create_reservation("8", **kwargs)
+
+    keys = [request.headers["Idempotency-Key"] for request in captured]
+    payload = {
+        "customerName": "Tanaka",
+        "phone": "090",
+        "serviceType": "cut",
+        "reservedAt": "2026-09-02T10:00:00+09:00",
+    }
+    assert keys[0] == keys[1] == reservation_idempotency_key("7", payload)
+    assert keys[2] == reservation_idempotency_key("7", {**payload, "note": "window"})
+    assert keys[2] != keys[0]
+    assert keys[3] == reservation_idempotency_key("8", payload)
+    assert keys[3] != keys[0]
+    assert captured[0].headers["X-Internal-Service-Token"] == "test-internal-token"

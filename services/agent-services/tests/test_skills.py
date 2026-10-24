@@ -2,18 +2,25 @@
 
 from pathlib import Path
 
+import pytest
 from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 
 from agent_services.agent.model_factory import ModelHandle
+from agent_services.agent.prompt_builder import build_prompt_parts
 from agent_services.agent.skills import (
     clear_skills_cache,
     default_skills_directory,
     discover_skills,
+    limit_skill_instructions,
     resolve_skills,
 )
 from agent_services.app import create_app
+from agent_services.config import Settings
 
 
 def _write_skill(root: Path, skill_id: str, body: str, *, frontmatter: str | None = None) -> None:
@@ -168,3 +175,111 @@ def test_reject_unknown_skills_returns_400(tmp_path: Path) -> None:
     assert response.status_code == 400
     assert response.json()["errorCode"] == "BAD_REQUEST"
     assert "nope" in response.json()["message"]
+
+
+def test_skill_instruction_budget_under_limit_matches_resolved_text(tmp_path: Path) -> None:
+    clear_skills_cache()
+    _write_skill(tmp_path, "one", "Do one.")
+    _write_skill(tmp_path, "two", "Do two.")
+    resolution = resolve_skills(
+        skills_dir=str(tmp_path),
+        requested_skill_ids=["one", "two"],
+        default_skill_ids=None,
+    )
+    raw = resolution.instructions
+    assert raw is not None
+    assert limit_skill_instructions(raw, 12000) == raw
+    plain, user = build_prompt_parts("1", "  hi  ", skill_instructions=raw)
+    capped, capped_user = build_prompt_parts(
+        "1", "  hi  ", skill_instructions=raw, skills_max_instruction_chars=12000
+    )
+    assert capped == plain
+    assert capped_user == user == "hi"
+    assert "# Active skills" in capped
+    assert "Do one." in capped and "Do two." in capped
+    assert "[skills truncated:" not in capped
+    assert "[... truncated]" not in capped
+
+
+def test_skill_instruction_budget_skips_sections_that_do_not_fit() -> None:
+    first = "## Skill: one\n\n" + ("A" * 10)
+    second = "## Skill: two\n\n" + ("B" * 40)
+    third = "## Skill: three\n\n" + ("C" * 5)
+    max_chars = len(first) + 2 + len(third)
+    assert len(first) + 2 + len(second) > max_chars
+    raw = "\n\n".join([first, second, third])
+    text = limit_skill_instructions(raw, max_chars)
+    assert text == (
+        f"{first}\n\n{third}\n[skills truncated: 1 skill(s) omitted due to instruction budget]"
+    )
+    assert "B" * 40 not in text
+    assert "[... truncated]" not in text
+    system, _ = build_prompt_parts("1", "hi", skill_instructions=raw, skills_max_instruction_chars=max_chars)
+    assert text in system
+
+
+def test_oversized_first_skill_is_truncated_without_splitting_later_ones() -> None:
+    first = "## Skill: big\n\n" + ("B" * 50)
+    second = "## Skill: tiny\n\nTINY"
+    max_chars = 12
+    text = limit_skill_instructions(f"{first}\n\n{second}", max_chars)
+    assert text == (
+        first[:max_chars]
+        + "[... truncated]\n"
+        "[skills truncated: 1 skill(s) omitted due to instruction budget]"
+    )
+    assert "TINY" not in text
+    assert "## Skill: tiny" not in text
+
+    only = limit_skill_instructions(first, max_chars)
+    assert only == first[:max_chars] + "[... truncated]"
+    assert "skill(s) omitted" not in only
+
+
+def test_invalid_skills_instruction_budget_fails_startup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for value in (0, -3):
+        with pytest.raises(RuntimeError, match="AGENT_SKILLS_MAX_INSTRUCTION_CHARS"):
+            create_app(make_settings(agent_skills_max_instruction_chars=value))
+    for value in ("nope", 1.5):
+        with pytest.raises(ValidationError):
+            create_app(make_settings(agent_skills_max_instruction_chars=value))
+    # 部署實際路徑是環境變數字面量：非整數一律在 Settings 建構期失敗。
+    monkeypatch.setenv("AGENT_SKILLS_MAX_INSTRUCTION_CHARS", "true")
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_chat_applies_skill_instruction_budget(tmp_path: Path) -> None:
+    clear_skills_cache()
+    _write_skill(tmp_path, "big", "B" * 80)
+    _write_skill(tmp_path, "tiny", "TINY-BODY")
+    seen: list[str] = []
+
+    def model_fn(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        seen.append(repr(messages))
+        return ModelResponse(parts=[TextPart("ok")])
+
+    app = create_app(
+        settings=make_settings(
+            ai_model="test",
+            agent_skills_dir=str(tmp_path),
+            agent_default_skills="",
+            agent_skills_max_instruction_chars=30,
+        ),
+        model_handle=ModelHandle(model=FunctionModel(model_fn), spec="test", blocked_reason=None),
+    )
+    response = TestClient(app).post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "message": "hello", "skills": ["big", "tiny"]},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["skillsApplied"] == ["big", "tiny"]
+    blob = "\n".join(seen)
+    assert "[... truncated]" in blob
+    assert "[skills truncated: 1 skill(s) omitted due to instruction budget]" in blob
+    assert "TINY-BODY" not in blob
+    assert "## Skill: tiny" not in blob

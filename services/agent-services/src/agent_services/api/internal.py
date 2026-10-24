@@ -26,7 +26,9 @@ from agent_services.retrieval.service import (
     RetrievalChunkLimitExceeded,
     RetrievalService,
 )
+from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.chat import (
+    ChatCitation,
     ChatRequest,
     ChatSuccessData,
     ChatUsage,
@@ -39,7 +41,12 @@ from agent_services.schemas.health import (
     McpServerHealth,
     RuntimeLimits,
 )
-from agent_services.schemas.retrieval import RetrievalUpsertRequest
+from agent_services.schemas.retrieval import (
+    RetrievalSearchHit,
+    RetrievalSearchRequest,
+    RetrievalSearchResponse,
+    RetrievalUpsertRequest,
+)
 from agent_services.schemas.skills import SkillCatalogItem, SkillCatalogResponse
 
 logger = logging.getLogger(__name__)
@@ -73,12 +80,15 @@ def _require_retrieval_service(request: Request) -> RetrievalService:
 
 async def _retrieval_context(
     request: Request, site_id: str, message: str
-) -> tuple[list[str] | None, bool]:
+) -> tuple[list[str] | None, bool, list[RetrievedChunk] | None]:
     service = _retrieval_service_or_none(request)
     if service is None:
-        return None, False
-    contexts = await service.retrieve_context(site_id=site_id, query=message)
-    return contexts, service.degraded
+        return None, False, None
+    chunks = await service.retrieve_chunks(site_id=site_id, query=message)
+    # 降级或没有命中时不把 chunks 交给 runtime，避免拼出假 citations。
+    if service.degraded or not chunks:
+        return None, service.degraded, None
+    return [chunk.content for chunk in chunks], False, chunks
 
 
 def _parse_default_skills(raw: str) -> list[str]:
@@ -210,7 +220,9 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
 
     skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id)
 
-    retrieval_context, retrieval_degraded = await _retrieval_context(request, site_id, message)
+    retrieval_context, retrieval_degraded, retrieval_chunks = await _retrieval_context(
+        request, site_id, message
+    )
     outcome = await run_chat(
         handle.model,  # type: ignore[arg-type]  # live 已保证非 None
         site_id=site_id,
@@ -218,11 +230,13 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         prompt_profile=body.prompt_profile,
         history=body.history,
         retrieval_context=retrieval_context,
+        retrieval_chunks=retrieval_chunks,
         skill_instructions=skill_resolution.instructions,
         initial_todos=body.todos,
         toolsets=toolsets,
         budget=run_budget_from_settings(request.app.state.settings),
         locale=body.locale,
+        skills_max_instruction_chars=request.app.state.settings.agent_skills_max_instruction_chars,
     )
 
     if isinstance(outcome, ChatBlocked):
@@ -239,8 +253,15 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         skills_missing=list(skill_resolution.missing_ids) or None,
         todos=todo_snapshot.items or None,
         retrieval_degraded=retrieval_degraded,
+        citations=[ChatCitation.model_validate(item) for item in outcome.citations]
+        if outcome.citations
+        else None,
     )
-    return {"ok": True, "data": data.model_dump(by_alias=True)}
+    payload = data.model_dump(by_alias=True)
+    # 有采用才出现，与 SSE 加法字段一致；不要把 null 写进既有响应。
+    if not payload.get("citations"):
+        payload.pop("citations", None)
+    return {"ok": True, "data": payload}
 
 
 @router.post("/chat/stream")
@@ -263,7 +284,9 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             provider_status="BLOCKED",
         )
 
-    retrieval_context, retrieval_degraded = await _retrieval_context(request, site_id, message)
+    retrieval_context, retrieval_degraded, retrieval_chunks = await _retrieval_context(
+        request, site_id, message
+    )
     skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id)
 
     async def event_generator():
@@ -274,6 +297,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             prompt_profile=body.prompt_profile,
             history=body.history,
             retrieval_context=retrieval_context,
+            retrieval_chunks=retrieval_chunks,
             retrieval_degraded=retrieval_degraded,
             skill_instructions=skill_resolution.instructions,
             initial_todos=body.todos,
@@ -283,6 +307,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             skills_missing=list(skill_resolution.missing_ids),
             budget=run_budget_from_settings(request.app.state.settings),
             locale=body.locale,
+            skills_max_instruction_chars=request.app.state.settings.agent_skills_max_instruction_chars,
         ):
             yield event.to_sse()
 
@@ -351,3 +376,37 @@ async def delete_retrieval_document(
             provider_status="BLOCKED",
         ) from exc
     return {"ok": True, "data": None}
+
+
+@router.post("/retrieval/search")
+async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> dict[str, object]:
+    """内部知识检索。嵌入或向量库失败时沿用 retrieve_chunks 的 degraded，不回 500。"""
+    site_id = body.site_id.strip()
+    query = body.query.strip()
+    if not query:
+        raise InternalApiError(
+            status_code=422,
+            error_code="BAD_REQUEST",
+            message="query must not be blank.",
+        )
+    if not site_id:
+        raise InternalApiError(
+            status_code=400,
+            error_code="BAD_REQUEST",
+            message="siteId is required.",
+        )
+    service = _require_retrieval_service(request)
+    chunks = await service.retrieve_chunks(site_id=site_id, query=query, top_k=body.top_k)
+    payload = RetrievalSearchResponse(
+        hits=[
+            RetrievalSearchHit(
+                source_id=chunk.source_id,
+                chunk_index=chunk.chunk_index,
+                score=chunk.score,
+                content=chunk.content,
+            )
+            for chunk in chunks
+        ],
+        degraded=service.degraded,
+    )
+    return payload.model_dump(by_alias=True)

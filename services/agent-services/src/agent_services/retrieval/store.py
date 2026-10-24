@@ -19,6 +19,26 @@ class RetrievedChunk:
     score: float
 
 
+CITATION_LIMIT = 5
+
+
+def citation_sources(
+    chunks: list[RetrievedChunk], *, limit: int = CITATION_LIMIT
+) -> list[dict[str, object]]:
+    """同一 (source_id, chunk_index) 只留最高分，再按 score 降序取前 limit 条。"""
+    chosen: dict[tuple[str, int], RetrievedChunk] = {}
+    for chunk in chunks:
+        key = (chunk.source_id, chunk.chunk_index)
+        previous = chosen.get(key)
+        if previous is None or chunk.score > previous.score:
+            chosen[key] = chunk
+    ranked = sorted(chosen.values(), key=lambda item: (-item.score, item.source_id, item.chunk_index))
+    return [
+        {"sourceId": item.source_id, "chunkIndex": item.chunk_index, "score": item.score}
+        for item in ranked[:limit]
+    ]
+
+
 class RetrievalStore(Protocol):
     async def upsert_document(
         self,
@@ -113,6 +133,13 @@ class PgVectorRetrievalStore:
         pool = await self._get_pool()
         metadata = json.dumps({"title": title})
         async with pool.acquire() as conn, conn.transaction():
+            # 同一文件的删除与插入都在这个事务里。锁键是 site_id:source_id 的 64-bit hash，
+            # 只串行化这一份文件；事务提交或回滚时 pg_advisory_xact_lock 自动释放，其它 source 不互相阻塞。
+            # 本机单测没有 pgvector，不会执行到这里。
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                f"{site_id}:{source_id}",
+            )
             await conn.execute(
                 "DELETE FROM agent_retrieval.chunks WHERE site_id = $1 AND source_id = $2",
                 site_id,

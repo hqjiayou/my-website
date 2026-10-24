@@ -1,5 +1,6 @@
 import re
 
+from agent_services.agent.skills import limit_skill_instructions
 from agent_services.schemas.chat import PromptProfile
 from agent_services.schemas.todo import TodoItem
 
@@ -15,6 +16,7 @@ def build_prompt_parts(
     skill_instructions: str | None = None,
     todos: list[TodoItem] | None = None,
     locale: str | None = None,
+    skills_max_instruction_chars: int | None = None,
 ) -> tuple[str, str]:
     system = (
         prompt_profile.system_prompt.strip()
@@ -22,7 +24,11 @@ def build_prompt_parts(
         else f"You are the assistant for site: {site_id}. Answer in a concise and helpful way."
     )
     if skill_instructions:
-        system = f"{system}\n\n# Active skills\n\n{skill_instructions}"
+        text = skill_instructions
+        if skills_max_instruction_chars is not None:
+            text = limit_skill_instructions(text, skills_max_instruction_chars)
+        if text:
+            system = f"{system}\n\n# Active skills\n\n{text}"
     if todos:
         lines = "\n".join(f"- [{item.status}] {item.id}: {item.title}" for item in todos)
         system = f"{system}\n\n# Current todos (from trusted context)\n{lines}"
