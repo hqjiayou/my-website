@@ -94,7 +94,7 @@ export function LoginPage() {
           </Field>
 
           {formError ? (
-            <p className="rounded-xl bg-[rgb(159_45_45/0.08)] px-3 py-2 text-sm text-danger" role="alert">
+            <p className="rounded-control bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
               {formError}
             </p>
           ) : null}
@@ -102,7 +102,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="mt-2 h-12 rounded-xl bg-primary text-base font-medium text-primary-foreground disabled:opacity-60"
+            className="mt-2 h-12 rounded-control bg-primary text-base font-medium text-primary-foreground disabled:opacity-60"
           >
             {submitting ? '正在登入…' : '登入'}
           </button>
@@ -131,4 +131,4 @@ function safeNextPath(state: unknown): string {
 }
 
 const inputClass =
-  'h-12 w-full rounded-xl border border-border bg-card px-3 text-base font-normal text-foreground outline-none focus:border-primary'
+  'h-12 w-full rounded-control border border-border bg-surface px-3 text-base font-normal text-foreground outline-none focus:border-primary'

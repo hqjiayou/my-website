@@ -1,5 +1,5 @@
 import { apiUrl } from '@/config/env'
-import type { SiteAiChatRequest } from '@/types/api'
+import type { SiteAiChatRequest, SiteAiCitation } from '@/types/api'
 import { getAccessToken } from '@/utils/token'
 
 import { ApiError } from './apiError'
@@ -10,7 +10,7 @@ const STREAM_TIMEOUT_MS = 130_000
 export type SiteSseEvent =
   | { event: 'START' }
   | { event: 'TEXT_DELTA'; delta: string }
-  | { event: 'DONE'; reply: string; providerStatus: string }
+  | { event: 'DONE'; reply: string; providerStatus: string; citations?: SiteAiCitation[] }
   | { event: 'CONVERSATION'; conversationId: string }
   | { event: 'ERROR'; errorCode: string }
 
@@ -142,6 +142,7 @@ function toSiteEvent(eventName: string, data: unknown): SiteSseEvent | null {
         event: 'DONE',
         reply: readString(record, 'reply'),
         providerStatus: readString(record, 'providerStatus'),
+        citations: readCitations(record),
       }
     case 'CONVERSATION':
       return { event: 'CONVERSATION', conversationId: readConversationId(record) }
@@ -172,6 +173,31 @@ function readConversationId(record: Record<string, unknown>): string {
 function readString(record: Record<string, unknown>, key: string): string {
   const value = record[key]
   return typeof value === 'string' ? value : ''
+}
+
+/**
+ * 沒有 grounding 時 citations 不出現，Java 也可能送空陣列。
+ * 缺失、非陣列，或沒有任何格式正確的項目時為 undefined，不讓 DONE 解析失敗。
+ */
+function readCitations(record: Record<string, unknown>): SiteAiCitation[] | undefined {
+  if (!Object.prototype.hasOwnProperty.call(record, 'citations') || record.citations == null) return undefined
+  if (!Array.isArray(record.citations)) return undefined
+  const citations: SiteAiCitation[] = []
+  for (const item of record.citations) {
+    const citation = readCitation(item)
+    if (!citation) continue
+    citations.push(citation)
+  }
+  return citations.length > 0 ? citations : undefined
+}
+
+function readCitation(value: unknown): SiteAiCitation | null {
+  if (!isRecord(value)) return null
+  const { sourceId, chunkIndex, score } = value
+  if (typeof sourceId !== 'string' || sourceId.length === 0) return null
+  if (typeof chunkIndex !== 'number' || !Number.isInteger(chunkIndex)) return null
+  if (typeof score !== 'number' || !Number.isFinite(score)) return null
+  return { sourceId, chunkIndex, score }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

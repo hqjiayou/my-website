@@ -1,4 +1,10 @@
-import type { HttpMessageBody, SiteAiChatRequest, SiteAiConversation, SiteAiMessage } from '@/types/api'
+import type {
+  HttpMessageBody,
+  SiteAiChatRequest,
+  SiteAiConversation,
+  SiteAiMessage,
+  SiteKnowledgeSearchResult,
+} from '@/types/api'
 import { httpClient } from '@/utils/http/axios'
 import { streamSiteChat, type SiteSseEvent } from '@/utils/http/sse'
 import { unwrapData } from '@/utils/http/unwrap'
@@ -15,6 +21,15 @@ export const siteAiApi = {
   listMessages(siteId: string, conversationId: string) {
     return httpClient
       .get<HttpMessageBody<SiteAiMessage[]>>(`/api/site/${siteId}/ai/conversations/${conversationId}/messages`)
+      .then(unwrapData)
+  },
+
+  searchKnowledge(siteId: string, query: string, topK: number) {
+    return httpClient
+      .post<HttpMessageBody<SiteKnowledgeSearchResult>, { query: string; topK: number }>(
+        `/api/site/${siteId}/ai/knowledge/search`,
+        { query, topK },
+      )
       .then(unwrapData)
   },
 

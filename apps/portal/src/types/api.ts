@@ -57,3 +57,22 @@ export interface SiteAiChatRequest {
   message: string
   conversationId?: string
 }
+
+/** 本輪實際採用的知識庫引用。歷史訊息介面不回這個欄位。 */
+export interface SiteAiCitation {
+  sourceId: string
+  chunkIndex: number
+  score: number
+}
+
+export interface SiteKnowledgeHit {
+  sourceId: string
+  chunkIndex: number
+  score: number
+  content: string
+}
+
+export interface SiteKnowledgeSearchResult {
+  hits: SiteKnowledgeHit[]
+  degraded: boolean
+}

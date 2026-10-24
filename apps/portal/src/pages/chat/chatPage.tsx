@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
+import { BottomNav } from '@/components/bottomNav'
 import { readPortalSiteId } from '@/config/env'
-import { ROUTES } from '@/router/config/routePaths'
-import type { SiteAiConversation } from '@/types/api'
+import type { SiteAiCitation, SiteAiConversation } from '@/types/api'
+import { formatSimilarityPercent } from '@/utils/formatSimilarity'
 import { errorMessage } from '@/utils/http/apiError'
 
 import { ConversationSheet } from './conversationSheet'
@@ -18,6 +18,7 @@ interface ChatTurn {
   content: string
   pending?: boolean
   providerStatus?: string
+  citations?: SiteAiCitation[]
 }
 
 interface SendFailure {
@@ -26,7 +27,6 @@ interface SendFailure {
 }
 
 export function ChatPage() {
-  const navigate = useNavigate()
   const site = useMemo(() => readPortalSiteId(), [])
   useKeyboardInset()
 
@@ -184,6 +184,7 @@ export function ChatPage() {
                       content: event.reply || item.content,
                       pending: false,
                       providerStatus: event.providerStatus,
+                      citations: event.citations,
                     }
                   : item,
               ),
@@ -227,11 +228,9 @@ export function ChatPage() {
 
   if (!site.ok) {
     return (
-      <div className="safe-top safe-x safe-bottom mx-auto flex min-h-dvh w-full max-w-lg flex-col px-5 py-6">
-        <button type="button" onClick={() => navigate(ROUTES.home)} className="h-10 self-start text-sm text-primary">
-          返回
-        </button>
+      <div className="safe-top safe-x with-bottom-nav mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-background px-page py-6 text-foreground">
         <p className="mt-6 text-sm leading-6 text-danger">{site.message}</p>
+        <BottomNav />
       </div>
     )
   }
@@ -242,11 +241,8 @@ export function ChatPage() {
       style={{ height: 'calc(100dvh - var(--keyboard-inset, 0px))' }}
     >
       <header className="safe-top safe-x flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <button type="button" onClick={() => navigate(ROUTES.home)} className="h-11 px-2 text-sm text-primary">
-          返回
-        </button>
-        <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{activeTitle}</h1>
-        <button type="button" onClick={() => setSheetOpen(true)} className="h-11 px-2 text-sm text-primary">
+        <h1 className="min-w-0 flex-1 truncate px-2 text-base font-semibold">{activeTitle}</h1>
+        <button type="button" onClick={() => setSheetOpen(true)} className="h-11 shrink-0 px-2 text-sm font-medium text-primary">
           歷史
         </button>
       </header>
@@ -263,7 +259,7 @@ export function ChatPage() {
               <button
                 type="button"
                 onClick={() => void openConversation(activeId)}
-                className="mt-3 h-10 rounded-xl border border-border px-4 text-sm"
+                className="mt-3 h-10 rounded-control border border-border bg-surface px-4 text-sm"
               >
                 重試
               </button>
@@ -272,15 +268,17 @@ export function ChatPage() {
         ) : null}
         <ul className="flex flex-col gap-3">
           {messages.map((message) => {
-            const visible = Boolean(message.content) || message.pending || message.providerStatus !== undefined
+            const hasCitations = !message.pending && message.role === 'ASSISTANT' && (message.citations?.length ?? 0) > 0
+            const visible =
+              Boolean(message.content) || message.pending || message.providerStatus !== undefined || hasCitations
             if (!visible) return null
             return (
             <li
               key={message.id}
               className={
                 message.role === 'USER'
-                  ? 'ml-10 rounded-2xl bg-primary px-3 py-2 text-sm leading-6 text-primary-foreground'
-                  : 'mr-6 rounded-2xl border border-border bg-card px-3 py-2 text-sm leading-6'
+                  ? 'ml-10 rounded-panel bg-primary px-3 py-2 text-sm leading-6 text-primary-foreground'
+                  : 'mr-6 rounded-panel border border-border bg-surface px-3 py-2 text-sm leading-6'
               }
             >
               <p className="mb-1 text-xs opacity-70">{roleLabel(message.role)}</p>
@@ -288,6 +286,21 @@ export function ChatPage() {
                 {message.content || (message.pending ? '正在產生…' : '')}
               </p>
               {message.pending && message.content ? <p className="mt-1 text-xs text-muted-foreground">正在產生…</p> : null}
+              {hasCitations ? (
+                <div className="mt-2">
+                  <p className="text-xs text-muted-foreground">參考來源</p>
+                  <ul className="mt-1 flex flex-wrap gap-1">
+                    {message.citations?.map((citation, index) => (
+                      <li
+                        key={`${citation.sourceId}-${citation.chunkIndex}-${index}`}
+                        className="max-w-full break-all rounded-pill bg-primary-soft px-2 py-0.5 text-xs text-primary"
+                      >
+                        {citation.sourceId} {formatSimilarityPercent(citation.score)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {message.providerStatus !== undefined && message.providerStatus !== 'LIVE' ? (
                 <p className="mt-2 text-xs text-danger">
                   {message.providerStatus ? `AI 服務狀態：${message.providerStatus}` : '尚未回傳 AI 服務狀態'}
@@ -298,13 +311,13 @@ export function ChatPage() {
           })}
         </ul>
         {failure ? (
-          <div className="mt-3 rounded-xl bg-[rgb(159_45_45/0.08)] px-3 py-2" role="alert">
+          <div className="mt-3 rounded-control bg-danger-soft px-3 py-2" role="alert">
             <p className="text-sm text-danger">{failure.message}</p>
             <button
               type="button"
               onClick={() => void send(failure.retryText)}
               disabled={sending}
-              className="mt-2 h-10 rounded-xl border border-[rgb(159_45_45/0.35)] px-4 text-sm text-danger disabled:opacity-60"
+              className="mt-2 h-10 rounded-control border border-danger-line px-4 text-sm text-danger disabled:opacity-60"
             >
               重試
             </button>
@@ -313,7 +326,7 @@ export function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      <form onSubmit={onSubmit} className="safe-x safe-bottom shrink-0 border-t border-border bg-card px-3 pt-3">
+      <form onSubmit={onSubmit} className="safe-x shrink-0 border-t border-border bg-surface px-3 py-3">
         <div className="flex items-end gap-2">
           <label className="sr-only" htmlFor="chat-draft">
             訊息
@@ -331,17 +344,18 @@ export function ChatPage() {
                 void send(draft)
               }
             }}
-            className="max-h-32 min-h-12 flex-1 resize-none rounded-xl border border-border bg-background px-3 py-3 text-base outline-none focus:border-primary"
+            className="max-h-32 min-h-12 flex-1 resize-none rounded-control border border-border bg-background px-3 py-3 text-base outline-none focus:border-primary"
           />
           <button
             type="submit"
             disabled={sending || !draft.trim()}
-            className="h-12 shrink-0 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            className="h-12 shrink-0 rounded-control bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-60"
           >
             {sending ? '傳送中' : '傳送'}
           </button>
         </div>
       </form>
+      <BottomNav pinned={false} />
 
       <ConversationSheet
         open={sheetOpen}
