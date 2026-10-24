@@ -10,20 +10,20 @@ from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
 from pydantic_ai.models import Model
 
 from agent_services.agent.prompt_builder import build_prompt_parts
-from agent_services.api.errors import external_failure_message
 from agent_services.agent.runtime import (
     BUDGET_EXCEEDED,
     MAX_TOOL_TRACE,
     RunBudget,
+    budget_exceeded_message,
     build_agent,
     build_run_kwargs,
-    budget_exceeded_message,
     mcp_unavailable_message,
     tool_succeeded,
     usage_to_api,
 )
 from agent_services.agent.todo_tools import TodoStore
 from agent_services.agent.toolset_factory import execution_needs_agent_context
+from agent_services.api.errors import external_failure_message
 from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
 from agent_services.schemas.stream import AgentStreamEvent, AgentStreamEventType
 from agent_services.schemas.todo import TodoItem
@@ -52,6 +52,7 @@ async def stream_chat_events(
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
+    retrieval_degraded: bool = False,
     skill_instructions: str | None = None,
     initial_todos: list[TodoItem] | None = None,
     toolsets: list[object] | None = None,
@@ -161,11 +162,13 @@ async def stream_chat_events(
         yield _error_event("EXTERNAL_DEPENDENCY_BLOCKED", "AI provider returned an empty response.")
         return
 
+    # 与同步 chat 一样恒带 retrievalDegraded（false 表示本轮检索未降级）
     done_data: dict[str, object] = {
         "reply": output.reply,
         "providerStatus": "LIVE",
         "usage": output.usage,
         "tools": tool_trace,
+        "retrievalDegraded": retrieval_degraded,
     }
     if skills_applied:
         done_data["skillsApplied"] = list(skills_applied)

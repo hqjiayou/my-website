@@ -24,6 +24,8 @@ _NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _SUPPORTED_TRANSPORTS = frozenset({"http", "sse"})
 # 深检默认短超时：不进 /health，避免拖慢探活（§19.6）
 MCP_READY_DEFAULT_TIMEOUT_SECONDS = 3.0
+# 全部 enabled server 并行探测的总预算；到点未完成的记为失败，避免慢服务器耗时相加
+READY_PROBE_TOTAL_TIMEOUT_SECONDS = 10.0
 
 McpStatus = Literal["DISABLED", "CONFIGURED", "INVALID_CONFIG"]
 
@@ -259,9 +261,29 @@ async def probe_mcp_ready(settings: Settings) -> McpReadyReport:
     if not configs:
         return McpReadyReport(ok=True, status="DISABLED")
 
+    slots: list[McpReadyServer | None] = [None] * len(configs)
+
+    async def _run(index: int, config: McpServerConfig) -> None:
+        slots[index] = await _probe_one(config)
+
+    try:
+        with anyio.fail_after(READY_PROBE_TOTAL_TIMEOUT_SECONDS):
+            async with anyio.create_task_group() as tg:
+                for index, config in enumerate(configs):
+                    tg.start_soon(_run, index, config)
+    except TimeoutError:
+        logger.warning(
+            "MCP ready probe exceeded total timeout of %ss",
+            READY_PROBE_TOTAL_TIMEOUT_SECONDS,
+        )
+
     results: list[McpReadyServer] = []
-    for config in configs:
-        results.append(await _probe_one(config))
+    for config, item in zip(configs, slots, strict=True):
+        if item is None:
+            logger.warning("MCP ready probe timed out for %s", config.name)
+            results.append(McpReadyServer(name=config.name, ok=False, error="probe timed out"))
+        else:
+            results.append(item)
     failed = [item.name for item in results if not item.ok]
     if failed:
         return McpReadyReport(

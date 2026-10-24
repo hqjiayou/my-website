@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import json
+import time
 
+import anyio
+import pytest
+from conftest import TOKEN_HEADER, make_settings
+from fastapi.testclient import TestClient
 from pydantic_ai.mcp import MCPToolset
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -11,16 +16,21 @@ from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets import FunctionToolset
 
 from agent_services.agent.mcp_tools import (
+    McpReadyServer,
     build_mcp_toolsets,
     has_mcp_toolsets,
     mcp_config_snapshot,
     parse_mcp_server_configs,
+    probe_mcp_ready,
 )
-from agent_services.agent.runtime import ChatBlocked, ChatReply, _TimeoutToolset, run_chat
+from agent_services.agent.runtime import (
+    ChatBlocked,
+    ChatReply,
+    _TimeoutToolset,
+    run_chat,
+)
 from agent_services.app import create_app
 from agent_services.testing.mcp_echo import build_echo_mcp_toolset
-from conftest import TOKEN_HEADER, make_settings
-from fastapi.testclient import TestClient
 
 
 def test_build_mcp_toolsets_empty_when_unconfigured() -> None:
@@ -313,6 +323,63 @@ async def test_mcp_tool_call_emits_tool_sse_events() -> None:
         e.type == AgentStreamEventType.DONE and e.data.get("reply") == "mcp-stream-ok"
         for e in events
     )
+
+
+async def test_mcp_ready_probes_run_in_parallel(monkeypatch: pytest.MonkeyPatch) -> None:
+    delay = 0.3
+    inflight = 0
+    peak = 0
+
+    async def fake_probe(config):
+        nonlocal inflight, peak
+        inflight += 1
+        peak = max(peak, inflight)
+        await anyio.sleep(delay)
+        inflight -= 1
+        return McpReadyServer(name=config.name, ok=True, tool_count=1)
+
+    monkeypatch.setattr("agent_services.agent.mcp_tools._probe_one", fake_probe)
+    payload = json.dumps(
+        [
+            {"name": "slow-a", "url": "http://127.0.0.1:9/mcp"},
+            {"name": "slow-b", "url": "http://127.0.0.1:9/mcp"},
+        ]
+    )
+    started = time.perf_counter()
+    report = await probe_mcp_ready(make_settings(mcp_servers_json=payload))
+    elapsed = time.perf_counter() - started
+
+    assert peak == 2
+    # 串行至少 2 * delay；并行应接近单次 delay，留出调度余量
+    assert elapsed < delay * 2 * 0.75
+    assert report.ok is True
+    assert [item.name for item in report.servers] == ["slow-a", "slow-b"]
+
+
+async def test_mcp_ready_total_timeout_marks_unfinished_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_probe(config):
+        if config.name == "slow":
+            await anyio.sleep(2)
+        return McpReadyServer(name=config.name, ok=True, tool_count=1)
+
+    monkeypatch.setattr("agent_services.agent.mcp_tools._probe_one", fake_probe)
+    monkeypatch.setattr("agent_services.agent.mcp_tools.READY_PROBE_TOTAL_TIMEOUT_SECONDS", 0.2)
+    payload = json.dumps(
+        [
+            {"name": "fast", "url": "http://127.0.0.1:9/mcp"},
+            {"name": "slow", "url": "http://127.0.0.1:9/mcp"},
+        ]
+    )
+    report = await probe_mcp_ready(make_settings(mcp_servers_json=payload))
+    assert report.ok is False
+    assert report.status == "CONFIGURED"
+    assert [item.name for item in report.servers] == ["fast", "slow"]
+    assert report.servers[0].ok is True
+    assert report.servers[1].ok is False
+    assert report.servers[1].error == "probe timed out"
+    assert report.message is not None and "slow" in report.message
 
 
 def test_health_disabled_when_all_entries_disabled() -> None:

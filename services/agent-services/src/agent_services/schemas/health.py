@@ -51,5 +51,6 @@ class HealthResponse(BaseModel):
     limits: RuntimeLimits = Field(default_factory=RuntimeLimits)
     retrieval_status: str = Field(default="BLOCKED", alias="retrievalStatus")
     retrieval_blocked_reason: str | None = Field(default=None, alias="retrievalBlockedReason")
+    retrieval_degraded: bool = Field(default=False, alias="retrievalDegraded")
 
     model_config = {"populate_by_name": True}

@@ -4,13 +4,6 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from agent_services.agent.skills import (
-    default_skills_directory,
-    list_skill_catalog,
-    resolve_skills,
-)
-from agent_services.agent.todo_tools import todo_store_from_request
-from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.agent.mcp_tools import mcp_config_snapshot, probe_mcp_ready
 from agent_services.agent.model_factory import ModelHandle, public_model_spec
 from agent_services.agent.runtime import (
@@ -19,11 +12,26 @@ from agent_services.agent.runtime import (
     run_budget_from_settings,
     run_chat,
 )
+from agent_services.agent.skills import (
+    default_skills_directory,
+    list_skill_catalog,
+    resolve_skills,
+)
 from agent_services.agent.stream_runtime import stream_chat_events
+from agent_services.agent.todo_tools import todo_store_from_request
+from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.api.errors import InternalApiError, external_failure_message
 from agent_services.auth.internal_token import require_internal_service_token
-from agent_services.retrieval.service import RetrievalChunkLimitExceeded, RetrievalService
-from agent_services.schemas.chat import ChatRequest, ChatSuccessData, ChatUsage, ToolTraceItem
+from agent_services.retrieval.service import (
+    RetrievalChunkLimitExceeded,
+    RetrievalService,
+)
+from agent_services.schemas.chat import (
+    ChatRequest,
+    ChatSuccessData,
+    ChatUsage,
+    ToolTraceItem,
+)
 from agent_services.schemas.health import (
     HealthResponse,
     McpReadyResponse,
@@ -63,11 +71,14 @@ def _require_retrieval_service(request: Request) -> RetrievalService:
     return service
 
 
-async def _retrieval_context(request: Request, site_id: str, message: str) -> list[str] | None:
+async def _retrieval_context(
+    request: Request, site_id: str, message: str
+) -> tuple[list[str] | None, bool]:
     service = _retrieval_service_or_none(request)
     if service is None:
-        return None
-    return await service.retrieve_context(site_id=site_id, query=message)
+        return None, False
+    contexts = await service.retrieve_context(site_id=site_id, query=message)
+    return contexts, service.degraded
 
 
 def _parse_default_skills(raw: str) -> list[str]:
@@ -150,6 +161,7 @@ async def internal_health(request: Request) -> HealthResponse:
         ],
         retrievalStatus="LIVE" if retrieval_service is not None else "BLOCKED",
         retrievalBlockedReason=None if retrieval_service is not None else retrieval_reason,
+        retrievalDegraded=retrieval_service.degraded if retrieval_service is not None else False,
     )
 
 
@@ -198,13 +210,14 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
 
     skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id)
 
+    retrieval_context, retrieval_degraded = await _retrieval_context(request, site_id, message)
     outcome = await run_chat(
         handle.model,  # type: ignore[arg-type]  # live 已保证非 None
         site_id=site_id,
         message=message,
         prompt_profile=body.prompt_profile,
         history=body.history,
-        retrieval_context=await _retrieval_context(request, site_id, message),
+        retrieval_context=retrieval_context,
         skill_instructions=skill_resolution.instructions,
         initial_todos=body.todos,
         toolsets=toolsets,
@@ -225,6 +238,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         skills_applied=list(skill_resolution.applied_ids),
         skills_missing=list(skill_resolution.missing_ids) or None,
         todos=todo_snapshot.items or None,
+        retrieval_degraded=retrieval_degraded,
     )
     return {"ok": True, "data": data.model_dump(by_alias=True)}
 
@@ -249,7 +263,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             provider_status="BLOCKED",
         )
 
-    retrieval_context = await _retrieval_context(request, site_id, message)
+    retrieval_context, retrieval_degraded = await _retrieval_context(request, site_id, message)
     skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id)
 
     async def event_generator():
@@ -260,6 +274,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             prompt_profile=body.prompt_profile,
             history=body.history,
             retrieval_context=retrieval_context,
+            retrieval_degraded=retrieval_degraded,
             skill_instructions=skill_resolution.instructions,
             initial_todos=body.todos,
             toolsets=toolsets,

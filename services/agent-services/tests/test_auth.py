@@ -1,11 +1,11 @@
 import json
 
 import pytest
+from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 
 from agent_services.app import create_app
 from agent_services.config import Settings
-from conftest import TOKEN_HEADER, make_settings
 
 
 def test_missing_token_config_fails_startup() -> None:
@@ -31,6 +31,37 @@ def test_mixed_case_skills_unknown_policy_is_stored_canonical() -> None:
     settings = Settings(agent_skills_unknown_policy=" Reject ")
     assert settings.agent_skills_unknown_policy == "reject"
     create_app(make_settings(agent_skills_unknown_policy=" Reject "))
+
+
+def test_contract_test_model_refused_in_production() -> None:
+    with pytest.raises(RuntimeError, match="AGENT_CONTRACT_USE_TEST_MODEL") as exc_info:
+        create_app(
+            make_settings(
+                agent_contract_use_test_model=True,
+                deployment_environment="production",
+            )
+        )
+    message = str(exc_info.value)
+    assert "local/test" in message
+    assert "production" in message
+
+
+def test_contract_test_model_allowed_in_local() -> None:
+    create_app(
+        make_settings(
+            agent_contract_use_test_model=True,
+            deployment_environment="local",
+        )
+    )
+
+
+def test_contract_test_model_off_allows_production() -> None:
+    create_app(
+        make_settings(
+            agent_contract_use_test_model=False,
+            deployment_environment="production",
+        )
+    )
 
 
 def test_request_without_token_is_401_flat_body() -> None:
