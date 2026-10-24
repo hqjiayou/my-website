@@ -4,6 +4,8 @@
 禁止直连 Java 业务数据库。
 """
 
+import hashlib
+import json
 import logging
 from typing import Any
 from urllib.parse import quote
@@ -17,6 +19,17 @@ logger = logging.getLogger(__name__)
 
 class BusinessApiError(RuntimeError):
     """Java internal API 调用失败；工具层向模型返回可读错误，不伪造成功。"""
+
+
+def reservation_idempotency_key(site_id: str, payload: dict[str, Any]) -> str:
+    """rsv- + sha256(site_id 与排序键 JSON 拼接)。同一参数得到同一 key。
+
+    Java 业务 API 需 honor Idempotency-Key 后，重试才不会重复建单。
+    Java 侧为后续工作包；这里只负责算出 key 并放进请求头。
+    """
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    digest = hashlib.sha256(f"{site_id}{canonical}".encode()).hexdigest()
+    return f"rsv-{digest}"
 
 
 def _http_error_message(response: httpx.Response) -> str:
@@ -63,10 +76,17 @@ class BusinessApiClient:
             transport=self._transport,
         )
 
-    async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        headers: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> Any:
         async with self._client() as client:
             try:
-                response = await client.request(method, path, **kwargs)
+                response = await client.request(method, path, headers=headers, **kwargs)
             except httpx.HTTPError as exc:
                 logger.warning("Business API unreachable", exc_info=exc)
                 raise BusinessApiError(external_failure_message("Business API unreachable", exc)) from exc
@@ -113,4 +133,10 @@ class BusinessApiClient:
         }
         if note:
             payload["note"] = note
-        return await self._request("POST", self._site_path(site_id, "/reservations"), json=payload)
+        # 见 reservation_idempotency_key：Java 需 honor Idempotency-Key 才完整幂等。
+        return await self._request(
+            "POST",
+            self._site_path(site_id, "/reservations"),
+            json=payload,
+            headers={"Idempotency-Key": reservation_idempotency_key(site_id, payload)},
+        )

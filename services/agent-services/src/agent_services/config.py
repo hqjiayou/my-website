@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     agent_skills_unknown_policy: str = Field(
         default="ignore", validation_alias="AGENT_SKILLS_UNKNOWN_POLICY"
     )
+    # 注入系统提示的 skill 正文总字符上限。必须为正整数；0、负数与非整数字面量启动失败。
+    agent_skills_max_instruction_chars: int = Field(
+        default=12000, validation_alias="AGENT_SKILLS_MAX_INSTRUCTION_CHARS"
+    )
     agent_enable_todo_tools: bool = Field(default=True, validation_alias="AGENT_ENABLE_TODO_TOOLS")
     # JSON 数组：[{"name":"demo","url":"http://host:port/mcp"}]；缺失 → 不注册 MCP
     mcp_servers_json: str = Field(default="", validation_alias="MCP_SERVERS_JSON")
@@ -93,6 +97,14 @@ def assert_skills_unknown_policy(policy: str) -> None:
     raise RuntimeError(
         f"AGENT_SKILLS_UNKNOWN_POLICY has invalid value {policy!r}. Allowed values: ignore, reject."
     )
+
+
+def assert_skills_max_instruction_chars(value: int) -> None:
+    """启动期校验：skill 注入预算必须是正整数，非法值 fail-fast。"""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise RuntimeError(
+            "AGENT_SKILLS_MAX_INSTRUCTION_CHARS must be a positive integer."
+        )
 
 
 def assert_contract_test_model_allowed(settings: Settings) -> None:

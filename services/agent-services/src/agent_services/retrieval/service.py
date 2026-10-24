@@ -57,13 +57,15 @@ class RetrievalService:
         embedding = await self._embedder.embed_query(query)
         return await self._store.search(site_id=site_id, embedding=embedding, top_k=top_k)
 
-    async def retrieve_context(self, *, site_id: str, query: str) -> list[str]:
-        """chat 检索增强：失败降级为无上下文（派生索引问题不阻断对话），记录日志。
+    async def retrieve_chunks(
+        self, *, site_id: str, query: str, top_k: int = DEFAULT_TOP_K
+    ) -> list[RetrievedChunk]:
+        """与 retrieve_context 同一条降级路径：嵌入或向量库失败时返回空列表并置 degraded。
 
-        最近一次失败置 degraded 并记下异常类型名；成功则清除。返回值仍是上下文列表。
+        chat grounding 与 POST /retrieval/search 都走这里，避免另写一套错误格式。
         """
         try:
-            chunks = await self.search(site_id=site_id, query=query)
+            chunks = await self.search(site_id=site_id, query=query, top_k=top_k)
         except Exception as exc:  # noqa: BLE001
             self._degraded = True
             self._last_error = type(exc).__name__
@@ -71,6 +73,14 @@ class RetrievalService:
             return []
         self._degraded = False
         self._last_error = None
+        return chunks
+
+    async def retrieve_context(self, *, site_id: str, query: str) -> list[str]:
+        """chat 检索增强：失败降级为无上下文（派生索引问题不阻断对话），记录日志。
+
+        最近一次失败置 degraded 并记下异常类型名；成功则清除。返回值仍是上下文列表。
+        """
+        chunks = await self.retrieve_chunks(site_id=site_id, query=query)
         return [chunk.content for chunk in chunks]
 
     async def close(self) -> None:

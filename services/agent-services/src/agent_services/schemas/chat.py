@@ -94,6 +94,16 @@ class ToolTraceItem(BaseModel):
     ok: bool
 
 
+class ChatCitation(BaseModel):
+    """本轮 grounding 实际采用的来源。无采用时响应里不出现该字段。"""
+
+    source_id: str = Field(alias="sourceId")
+    chunk_index: int = Field(alias="chunkIndex")
+    score: float
+
+    model_config = {"populate_by_name": True}
+
+
 class ChatSuccessData(BaseModel):
     reply: str
     conversation_id: str | None = Field(default=None, alias="conversationId")
@@ -104,6 +114,7 @@ class ChatSuccessData(BaseModel):
     skills_missing: list[str] | None = Field(default=None, alias="skillsMissing")
     todos: list[TodoItem] | None = None
     retrieval_degraded: bool = Field(default=False, alias="retrievalDegraded")
+    citations: list[ChatCitation] | None = None
 
     model_config = {"populate_by_name": True}
 

@@ -10,6 +10,7 @@ from agent_services.auth.internal_token import assert_token_configured
 from agent_services.config import (
     Settings,
     assert_contract_test_model_allowed,
+    assert_skills_max_instruction_chars,
     assert_skills_unknown_policy,
     get_settings,
 )
@@ -39,6 +40,7 @@ def create_app(
     # 安全配置错误必须 fail-fast，与 Provider BLOCKED（可正常启动）严格区分
     assert_token_configured(resolved.agent_internal_service_token)
     assert_skills_unknown_policy(resolved.agent_skills_unknown_policy)
+    assert_skills_max_instruction_chars(resolved.agent_skills_max_instruction_chars)
     assert_contract_test_model_allowed(resolved)
 
     app = FastAPI(title="agent-services", version=__version__, lifespan=_lifespan)
