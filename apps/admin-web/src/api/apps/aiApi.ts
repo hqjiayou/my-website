@@ -42,6 +42,8 @@ function unwrapVoid(body: HttpMessageBody<null | void>) {
   }
 }
 
+const UPLOAD_TIMEOUT_MS = 60_000
+
 function aiBase(siteId: number) {
   return `/admin/sites/${siteId}/ai`
 }
@@ -89,6 +91,22 @@ export const aiApi = {
       .post<HttpMessageBody<AiKnowledgeDetail>, CreateAiKnowledgeInput>(
         `${aiBase(siteId)}/knowledge-documents`,
         input,
+      )
+      .then(unwrapData)
+  },
+
+  uploadKnowledgeDocument(siteId: number, file: File, title?: string): Promise<AiKnowledgeDetail> {
+    const form = new FormData()
+    form.append('file', file)
+    const trimmed = title?.trim()
+    if (trimmed) {
+      form.append('title', trimmed)
+    }
+    return httpClient
+      .post<HttpMessageBody<AiKnowledgeDetail>, FormData>(
+        `${aiBase(siteId)}/knowledge-documents/upload`,
+        form,
+        { timeout: UPLOAD_TIMEOUT_MS },
       )
       .then(unwrapData)
   },
