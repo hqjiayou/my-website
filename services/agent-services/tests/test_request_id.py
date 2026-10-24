@@ -1,5 +1,6 @@
 """§22.7 T4：X-Request-Id 绑定到运行上下文 → Agent run metadata。"""
 
+from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -8,7 +9,6 @@ from agent_services.agent.model_factory import ModelHandle
 from agent_services.agent.runtime import RunBudget, build_run_kwargs
 from agent_services.app import create_app
 from agent_services.observability.request_id import current_request_id
-from conftest import TOKEN_HEADER, make_settings
 
 
 def _capturing_app(seen: list[str | None]):

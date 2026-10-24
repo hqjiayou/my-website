@@ -1,17 +1,34 @@
 name: admin-web-ci
 
-# 只在本次 push 改到 admin-web 或本工作流时运行。
+# 后台总控 apps/admin-web。
+# - pull_request：按指向 dev / main 的整个 PR 改动触发，不只看最后一次 push。
+# - push：按本次 push 改到的路径触发（含尚未开 PR 的功能分支）。
+# lint / 导入检查 / build 不是浏览器 E2E。
 
 on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'apps/admin-web/**'
+      - '.github/workflows/admin-web-ci.yml'
   push:
     paths:
       - 'apps/admin-web/**'
       - '.github/workflows/admin-web-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   lint-and-build:
-    name: admin-web lint and build
+    name: admin-web lint, imports, and build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: apps/admin-web
@@ -29,5 +46,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: lint
         run: pnpm lint
+      - name: check imports
+        run: node scripts/check-imports.mjs
+      - name: check import casing
+        run: node scripts/check-import-casing.mjs
       - name: build
         run: pnpm build

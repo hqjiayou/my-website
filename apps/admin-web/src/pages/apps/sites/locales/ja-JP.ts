@@ -63,9 +63,9 @@ export default {
       heroLayout: 'Hero レイアウト',
     },
     placeholders: {
-      siteName: '例: 東京安心カー修理工場',
-      siteCode: '例: tokyo-car-repair',
-      domain: '例: car-demo.example.com',
+      siteName: '例: サンプルサイト',
+      siteCode: '例: demo-site',
+      domain: '例: demo.example.com',
       siteDescription: 'サイトの位置付けとサービス内容を入力してください',
       phone: '例: 03-1111-2200',
       address: '営業住所を入力してください',
@@ -175,7 +175,7 @@ export default {
     placeholders: {
       pendingSave: '現在はフロントエンドのプレースホルダーです。後続で site-service 保存に接続します。',
       domainFuture: '今後、独自ドメイン、DNS 解析、SSL 証明書、公開状態を設定可能にします。',
-      templateHint: 'テンプレート補足: 業種テンプレートを基盤にブランド上書き可能。',
+      templateHint: 'テンプレートは起点です。外観はサイトごとに上書きできます。',
       dnsHint: 'DNS 設定プレースホルダー: A/CNAME レコード検証は後続で対応予定。',
       cdnHint: 'Cloudflare / CloudFront プレースホルダー: エッジキャッシュと HTTPS 高速化用。',
     },

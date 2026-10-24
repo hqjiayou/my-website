@@ -110,7 +110,7 @@ last_verified: 2026-10-10
 | 项目 | 代码 | 现在看 | 规格看 |
 |------|------|--------|--------|
 | admin-web | `apps/admin-web` | `admin-web/CURRENT_STATE.md` | `admin-web/开发规范.md` |
-| site-web | `apps/site-web`（工作区无行业前台） | `site-web/CURRENT_STATE.md` | `contracts/SITE_API_CONTRACT.md`、`contracts/AUTH_CONTRACT.md` |
+| site-web | `apps/site-web`（工作区无访客前台） | `site-web/CURRENT_STATE.md` | `contracts/SITE_API_CONTRACT.md`、`contracts/AUTH_CONTRACT.md` |
 | website-services | `services/website-services` | `website-services/CURRENT_STATE.md` | 上表「平台与模块边界」+ `contracts/` |
 | agent-services | `services/agent-services` | 全栈 `CURRENT_STATE` 的 AI 行 | ADR-0004、ADR-0005、Agent 设计 V1 |
 

@@ -8,7 +8,7 @@ last_verified: 2026-10-10
 
 | 能力 | 状态 |
 |------|------|
-| 行业站点应用（曾有 car / cake 骨架） | **NOT_IN_TREE**（工作区已移除） |
+| 访客前台 | **NOT_IN_TREE**（`apps/site-web/` 不在工作区） |
 | Site Auth（login/refresh/logout/me） | **NOT_IMPLEMENTED**（前端） |
 | Backend Site Auth | **BACKEND_COMPLETE**（见 website-services） |
 | JWT audience SITE / Cookie | 后端已实现；前端未接 |

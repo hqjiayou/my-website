@@ -3,13 +3,13 @@
 import json
 
 import httpx
+from conftest import make_settings
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from agent_services.agent.business_tools import build_business_toolset
 from agent_services.agent.runtime import ChatReply, run_chat
 from agent_services.tools.business_api import BusinessApiClient, BusinessApiError
-from conftest import make_settings
 
 
 def test_toolset_absent_without_base_url() -> None:

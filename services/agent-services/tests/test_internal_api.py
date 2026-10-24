@@ -4,12 +4,12 @@
 Java mapErrorBody 不解析 {"detail": {...}} 嵌套。
 """
 
+from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.models.test import TestModel
 
 from agent_services.agent.model_factory import ModelHandle
 from agent_services.app import create_app
-from conftest import TOKEN_HEADER, make_settings
 
 
 def _blocked_client() -> TestClient:

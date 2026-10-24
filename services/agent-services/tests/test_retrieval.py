@@ -3,6 +3,7 @@
 import json
 
 import httpx
+from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -12,11 +13,17 @@ from agent_services.agent.model_factory import ModelHandle
 from agent_services.agent.runtime import ChatReply, run_chat
 from agent_services.app import create_app
 from agent_services.retrieval.chunking import split_text
-from agent_services.retrieval.embeddings import OpenAIEmbeddingClient, create_embedding_client
-from agent_services.retrieval.service import MAX_UPSERT_CHUNKS, RetrievalService, create_retrieval_service
+from agent_services.retrieval.embeddings import (
+    OpenAIEmbeddingClient,
+    create_embedding_client,
+)
+from agent_services.retrieval.service import (
+    MAX_UPSERT_CHUNKS,
+    RetrievalService,
+    create_retrieval_service,
+)
 from agent_services.retrieval.store import PgVectorRetrievalStore, RetrievedChunk
 from agent_services.schemas.retrieval import MAX_CONTENT_LENGTH
-from conftest import TOKEN_HEADER, make_settings
 
 # ---------------------------------------------------------------- chunking
 

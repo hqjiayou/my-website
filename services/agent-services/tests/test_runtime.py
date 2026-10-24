@@ -1,4 +1,11 @@
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, RetryInfo, TextPart, ToolReturnPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    RetryInfo,
+    TextPart,
+    ToolReturnPart,
+)
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 

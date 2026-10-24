@@ -2,14 +2,14 @@
 
 [简体中文](README.md) · [繁體中文](README.zh-TW.md) · [English](README.en.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
-여러 사이트를 올리는 플랫폼입니다. 기능은 업종 사이트 단위로 늘어납니다(자동차 정비, 케이크·제과, 이후 미용실, 클리닉, 중고차 매장, 행정서사 사무소 등). 이 작업 공간에는 업종 스토어프론트가 없습니다.
+웹사이트 모음을 하나의 관리 화면에서 중앙 제어합니다. 총괄은 `apps/admin-web`, Java 서비스는 `services/website-services`, AI 실행은 Python `services/agent-services`입니다. 이 작업 공간에는 방문자용 프론트가 없습니다.
 
 ## 위치
 
-- 하나의 플랫폼이 여러 업종 사이트를 담습니다. 단일 회사 홈페이지 전용이 아닙니다.
-- 업종 스토어프론트는 이 작업 공간에 없습니다. 다시 넣을 때는 `apps/site-web/` 아래에 두고, 업종마다 독립 앱으로 나눕니다.
-- `apps/admin-web`는 전체 관리와 사이트 관리를 담당합니다.
-- `services/website-services`가 현재 Java 백엔드 본체입니다. **공통 게이트웨이**, **독립 인증 서비스(`auth`)**, 관리 API, 사이트 API, 인프라 연결, 이후 업무 모듈 골격을 포함합니다. **JWT는 RS256 + JWKS**입니다(Auth가 서명하고, 업무 서비스는 JWKS로 검증합니다).
+- 하나의 총괄 관리 화면이 모음 안의 각 사이트를 관리합니다.
+- 이 작업 공간의 프론트는 총괄 관리 화면뿐입니다. 방문자용 사이트는 트리에 없습니다. 사이트 API는 Java `site-app`에 있습니다.
+- `apps/admin-web`가 그 총괄입니다(플랫폼과 각 사이트).
+- `services/website-services`가 이 시스템의 Java 서비스입니다. **공통 게이트웨이**, **독립 인증 서비스(`auth`)**, 관리 API, 사이트 API, 인프라 연결을 포함합니다. **JWT는 RS256 + JWKS**입니다(Auth가 서명하고, 업무 서비스는 JWKS로 검증합니다).
 - `services/agent-services`는 **Python 3.13 + FastAPI + Pydantic AI 2.54** AI Execution Runtime입니다(internal only, gateway로 노출하지 않음). 업무의 원본은 Java가 갖고, Python은 AI 실행만 합니다(ADR-0005). `AI_MODEL`이 없어도 프로세스는 뜨고, 호출은 정직하게 실패합니다(ADR-0004).
 
 ## 디렉터리
@@ -28,11 +28,11 @@ my-website/
 
 ## 하위 프로젝트
 
-### 업종 스토어프론트
+### 방문자용 사이트
 
-이 작업 공간에는 업종 프론트가 없습니다(이전 `car-web`, `cake-web` 골격은 제거되었고, `apps/site-web/`도 트리에 없습니다).
+이 작업 공간에는 방문자용 프론트가 없습니다(`apps/site-web/`는 트리에 없습니다).
 
-다시 넣은 뒤에는 `website-services/gateway`로 사이트 API를 호출합니다.  
+사이트 API는 `website-services/gateway`로 호출합니다.  
 **Site Auth 백엔드는 완료**되었습니다(`/api/auth/site/**`가 로그인 / 갱신 / 로그아웃, `GET /api/site/auth/me`는 site-app). **프론트는 아직 연결되지 않았습니다**([`docs/site-web/CURRENT_STATE.md`](docs/site-web/CURRENT_STATE.md)).
 
 ### apps/admin-web
@@ -62,7 +62,7 @@ Java 21 + Spring Boot 3.5.14 Maven 멀티 모듈 백엔드입니다.
 - `infra`: PostgreSQL, Redis, MinIO / S3, MyBatis-Plus, Flyway, **시스템 메시지 i18n**
 - `agent`: `HttpAgentClient`와 Java↔Python 계약 DTO. 업무 오케스트레이션은 하지 않음
 - `site/site-core`: 사이트 공유 엔티티와 Mapper(사용자, 콘텐츠, 예약, 사이트 AI)
-- `site/site-car`, `site/site-cake`: 업종 모듈 골격. 구체 업무는 아직 없음
+- `site/site-car`, `site/site-cake`: 빈 모듈. `pom.xml`만 있고 업무 코드는 없음
 
 문서:
 
@@ -99,7 +99,7 @@ admin-web ──> website-services/gateway:8080 ──> /api/auth/**   → auth:
                                               └──> /api/site/**   → site-app:8082 (GET /api/site/auth/me 포함)
 ```
 
-업종 스토어프론트를 다시 넣어도 같은 gateway를 탑니다. 로그인은 auth의 `/api/auth/admin/**`, `/api/auth/site/**`입니다. `/me`는 auth에 없고, 대응하는 업무 서비스에 있습니다.
+요청은 같은 gateway를 탑니다. 로그인은 auth의 `/api/auth/admin/**`, `/api/auth/site/**`입니다. `/me`는 auth에 없고, 대응하는 업무 서비스에 있습니다.
 
 Maven 내부 의존(HTTP 토폴로지가 아님):
 
@@ -136,7 +136,7 @@ pnpm install
 pnpm dev
 ```
 
-이 작업 공간에는 site-web 스토어프론트가 없습니다. `car-web`과 `cake-web`은 실행하지 않습니다.
+이 작업 공간에는 방문자용 프론트가 없습니다.
 
 `agent-services` 실행:
 
