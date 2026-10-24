@@ -1,6 +1,6 @@
 name: agent-services-ci
 
-# 只在本次 push 改到 agent-services、Java agent 客户端或本工作流时运行。
+# 只在本次变更改到 agent-services、Java agent 客户端或本工作流时运行（push 与 PR 同规则）。
 
 on:
   push:
@@ -8,11 +8,24 @@ on:
       - 'services/agent-services/**'
       - 'services/website-services/agent/**'
       - '.github/workflows/agent-services-ci.yml'
+  pull_request:
+    paths:
+      - 'services/agent-services/**'
+      - 'services/website-services/agent/**'
+      - '.github/workflows/agent-services-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   python-tests:
     name: agent-services pytest
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: services/agent-services
@@ -29,6 +42,7 @@ jobs:
   java-python-contract:
     name: HttpAgentClient ↔ Python contract
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: python-tests
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +68,7 @@ jobs:
   docker-build:
     name: Docker image build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: python-tests
     steps:
       - uses: actions/checkout@v4

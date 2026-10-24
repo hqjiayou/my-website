@@ -1,17 +1,29 @@
 name: admin-web-ci
 
-# 只在本次 push 改到 admin-web 或本工作流时运行。
+# 只在本次变更改到 admin-web 或本工作流时运行（push 与 PR 同规则）。
 
 on:
   push:
     paths:
       - 'apps/admin-web/**'
       - '.github/workflows/admin-web-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/admin-web/**'
+      - '.github/workflows/admin-web-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint-and-build:
     name: admin-web lint and build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: apps/admin-web

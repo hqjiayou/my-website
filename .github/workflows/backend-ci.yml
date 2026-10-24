@@ -1,6 +1,6 @@
 name: backend-ci
 
-# 只在本次 push 改到 website-services 或本工作流时运行。
+# 只在本次变更改到 website-services 或本工作流时运行（push 与 PR 同规则）。
 # - fast-tests：默认快速层（unit + Mockito + H2），Surefire 排除 verifyPg，不依赖 Docker。
 # - pg-contract-tests：PostgreSQL 契约层（profile persistence-verify-pg），Testcontainers 自举真实 PG 跑 Flyway/约束/触发器/种子。
 # GitHub 托管 ubuntu runner 预装 Docker，Testcontainers 可直接运行。
@@ -10,6 +10,17 @@ on:
     paths:
       - 'services/website-services/**'
       - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'services/website-services/**'
+      - '.github/workflows/backend-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -19,6 +30,7 @@ jobs:
   fast-tests:
     name: Fast tests (unit + H2)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -32,6 +44,7 @@ jobs:
   pg-contract-tests:
     name: PostgreSQL contract (Testcontainers + Flyway)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
