@@ -21,6 +21,16 @@ class RetrievalService:
     def __init__(self, embedder: EmbeddingClient, store: RetrievalStore) -> None:
         self._embedder = embedder
         self._store = store
+        self._degraded = False
+        self._last_error: str | None = None
+
+    @property
+    def degraded(self) -> bool:
+        return self._degraded
+
+    @property
+    def last_error(self) -> str | None:
+        return self._last_error
 
     async def upsert_document(self, *, site_id: str, source_id: str, title: str, content: str) -> int:
         chunks = split_text(content)
@@ -48,12 +58,19 @@ class RetrievalService:
         return await self._store.search(site_id=site_id, embedding=embeddings[0], top_k=top_k)
 
     async def retrieve_context(self, *, site_id: str, query: str) -> list[str]:
-        """chat 检索增强：失败降级为无上下文（派生索引问题不阻断对话），记录日志。"""
+        """chat 检索增强：失败降级为无上下文（派生索引问题不阻断对话），记录日志。
+
+        最近一次失败置 degraded 并记下异常类型名；成功则清除。返回值仍是上下文列表。
+        """
         try:
             chunks = await self.search(site_id=site_id, query=query)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            self._degraded = True
+            self._last_error = type(exc).__name__
             logger.warning("retrieval search failed; continuing without context", exc_info=True)
             return []
+        self._degraded = False
+        self._last_error = None
         return [chunk.content for chunk in chunks]
 
     async def close(self) -> None:

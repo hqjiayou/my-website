@@ -103,6 +103,7 @@ class ChatSuccessData(BaseModel):
     skills_applied: list[str] = Field(default_factory=list, alias="skillsApplied")
     skills_missing: list[str] | None = Field(default=None, alias="skillsMissing")
     todos: list[TodoItem] | None = None
+    retrieval_degraded: bool = Field(default=False, alias="retrievalDegraded")
 
     model_config = {"populate_by_name": True}
 

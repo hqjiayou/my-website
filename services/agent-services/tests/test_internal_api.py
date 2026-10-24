@@ -50,6 +50,7 @@ def test_health_reports_blocked_without_model() -> None:
     assert body["provider"] == "blocked"
     assert body["providerStatus"] == "BLOCKED"
     assert body["retrievalStatus"] == "BLOCKED"
+    assert body["retrievalDegraded"] is False
     assert "RETRIEVAL_DATABASE_URL" in body["retrievalBlockedReason"]
 
 

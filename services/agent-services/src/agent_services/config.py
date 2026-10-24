@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     ai_provider_api_key: str = Field(default="", validation_alias="AI_PROVIDER_API_KEY")
     ai_provider_base_url: str = Field(default="", validation_alias="AI_PROVIDER_BASE_URL")
     ai_fallback_models: str = Field(default="", validation_alias="AI_FALLBACK_MODELS")
+
+    # 与 otel.py 同源。Settings 匹配别名时不区分大小写，且别名与字段名不一致时
+    # 构造参数 deployment_environment= 会被 extra=ignore 丢掉，所以两个名字都接受。
+    deployment_environment: str = Field(
+        default="local",
+        validation_alias=AliasChoices("OTEL_DEPLOYMENT_ENVIRONMENT", "deployment_environment"),
+    )
 
     # Java↔Python 契约集成测试专用：注入 TestModel，避免真实 Provider 调用
     agent_contract_use_test_model: bool = Field(
@@ -80,6 +87,20 @@ def assert_skills_unknown_policy(policy: str) -> None:
         return
     raise RuntimeError(
         f"AGENT_SKILLS_UNKNOWN_POLICY has invalid value {policy!r}. Allowed values: ignore, reject."
+    )
+
+
+def assert_contract_test_model_allowed(settings: Settings) -> None:
+    """契约测试模型只允许本地/测试环境。生产误开会静默用假模型回话。"""
+    if not settings.agent_contract_use_test_model:
+        return
+    environment = settings.deployment_environment.strip().lower()
+    if environment in {"local", "test", "ci", "dev", "development"}:
+        return
+    raise RuntimeError(
+        "AGENT_CONTRACT_USE_TEST_MODEL is only allowed in local/test environments "
+        "(local, test, ci, dev, development); "
+        f"current deployment environment is {settings.deployment_environment!r}."
     )
 
 

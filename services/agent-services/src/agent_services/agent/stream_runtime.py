@@ -52,6 +52,7 @@ async def stream_chat_events(
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
+    retrieval_degraded: bool = False,
     skill_instructions: str | None = None,
     initial_todos: list[TodoItem] | None = None,
     toolsets: list[object] | None = None,
@@ -161,11 +162,13 @@ async def stream_chat_events(
         yield _error_event("EXTERNAL_DEPENDENCY_BLOCKED", "AI provider returned an empty response.")
         return
 
+    # 与同步 chat 一样恒带 retrievalDegraded（false 表示本轮检索未降级）
     done_data: dict[str, object] = {
         "reply": output.reply,
         "providerStatus": "LIVE",
         "usage": output.usage,
         "tools": tool_trace,
+        "retrievalDegraded": retrieval_degraded,
     }
     if skills_applied:
         done_data["skillsApplied"] = list(skills_applied)

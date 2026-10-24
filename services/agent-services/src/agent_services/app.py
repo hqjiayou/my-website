@@ -7,7 +7,12 @@ from agent_services.agent.model_factory import ModelHandle, create_model
 from agent_services.api.errors import register_error_handlers
 from agent_services.api.internal import router as internal_router
 from agent_services.auth.internal_token import assert_token_configured
-from agent_services.config import Settings, assert_skills_unknown_policy, get_settings
+from agent_services.config import (
+    Settings,
+    assert_contract_test_model_allowed,
+    assert_skills_unknown_policy,
+    get_settings,
+)
 from agent_services.observability.otel import setup_otel
 from agent_services.observability.request_id import install_request_id_middleware
 from agent_services.retrieval.service import RetrievalService, create_retrieval_service
@@ -34,6 +39,7 @@ def create_app(
     # 安全配置错误必须 fail-fast，与 Provider BLOCKED（可正常启动）严格区分
     assert_token_configured(resolved.agent_internal_service_token)
     assert_skills_unknown_policy(resolved.agent_skills_unknown_policy)
+    assert_contract_test_model_allowed(resolved)
 
     app = FastAPI(title="agent-services", version=__version__, lifespan=_lifespan)
     app.state.settings = resolved

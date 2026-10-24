@@ -238,12 +238,26 @@ async def test_service_upsert_and_site_scoped_search() -> None:
 
 
 async def test_service_retrieve_context_degrades_on_store_failure() -> None:
-    class BrokenStore(FakeStore):
-        async def search(self, **kwargs):
-            raise RuntimeError("db down")
+    class FlakyStore(FakeStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls = 0
 
-    service, _ = _service(BrokenStore())
+        async def search(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("db down")
+            return await super().search(**kwargs)
+
+    service, _ = _service(FlakyStore())
+    assert service.degraded is False
+    assert service.last_error is None
     assert await service.retrieve_context(site_id="1", query="q") == []
+    assert service.degraded is True
+    assert service.last_error == "RuntimeError"
+    assert await service.retrieve_context(site_id="1", query="q") == []
+    assert service.degraded is False
+    assert service.last_error is None
 
 
 # ---------------------------------------------------------------- internal API
@@ -380,4 +394,57 @@ def test_chat_endpoint_uses_retrieval_service() -> None:
         json={"siteId": "7", "message": "hello"},
     )
     assert response.status_code == 200
-    assert response.json()["data"]["providerStatus"] == "LIVE"
+    data = response.json()["data"]
+    assert data["providerStatus"] == "LIVE"
+    assert data["retrievalDegraded"] is False
+    health = client.get("/internal/v1/health", headers=TOKEN_HEADER)
+    assert health.status_code == 200
+    assert health.json()["retrievalDegraded"] is False
+
+
+def test_chat_reports_retrieval_degraded_without_blocking() -> None:
+    class BrokenStore(FakeStore):
+        async def search(self, **kwargs):
+            raise RuntimeError("db down")
+
+    service, _ = _service(BrokenStore())
+    handle = ModelHandle(
+        model=TestModel(custom_output_text="answered"), spec="test:model", blocked_reason=None
+    )
+    client = TestClient(create_app(make_settings(), model_handle=handle, retrieval_service=service))
+    response = client.post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={"siteId": "7", "message": "hello"},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["providerStatus"] == "LIVE"
+    assert data["retrievalDegraded"] is True
+
+    health = client.get("/internal/v1/health", headers=TOKEN_HEADER)
+    assert health.status_code == 200
+    body = health.json()
+    assert body["retrievalStatus"] == "LIVE"
+    assert body["retrievalDegraded"] is True
+
+
+async def test_stream_done_always_includes_retrieval_degraded() -> None:
+    from agent_services.agent.stream_runtime import stream_chat_events
+    from agent_services.schemas.stream import AgentStreamEventType
+
+    async def done_flag(retrieval_degraded: bool) -> bool:
+        events = [
+            event
+            async for event in stream_chat_events(
+                TestModel(custom_output_text="ok"),
+                site_id="1",
+                message="hello",
+                retrieval_degraded=retrieval_degraded,
+            )
+        ]
+        done = next(event for event in events if event.type == AgentStreamEventType.DONE)
+        return bool(done.data["retrievalDegraded"])
+
+    assert await done_flag(False) is False
+    assert await done_flag(True) is True

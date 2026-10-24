@@ -33,6 +33,37 @@ def test_mixed_case_skills_unknown_policy_is_stored_canonical() -> None:
     create_app(make_settings(agent_skills_unknown_policy=" Reject "))
 
 
+def test_contract_test_model_refused_in_production() -> None:
+    with pytest.raises(RuntimeError, match="AGENT_CONTRACT_USE_TEST_MODEL") as exc_info:
+        create_app(
+            make_settings(
+                agent_contract_use_test_model=True,
+                deployment_environment="production",
+            )
+        )
+    message = str(exc_info.value)
+    assert "local/test" in message
+    assert "production" in message
+
+
+def test_contract_test_model_allowed_in_local() -> None:
+    create_app(
+        make_settings(
+            agent_contract_use_test_model=True,
+            deployment_environment="local",
+        )
+    )
+
+
+def test_contract_test_model_off_allows_production() -> None:
+    create_app(
+        make_settings(
+            agent_contract_use_test_model=False,
+            deployment_environment="production",
+        )
+    )
+
+
 def test_request_without_token_is_401_flat_body() -> None:
     client = TestClient(create_app(make_settings()))
     response = client.post("/internal/v1/chat", json={"siteId": "1", "message": "hello"})
