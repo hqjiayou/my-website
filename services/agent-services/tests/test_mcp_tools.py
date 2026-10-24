@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from conftest import TOKEN_HEADER, make_settings
+from fastapi.testclient import TestClient
 from pydantic_ai.mcp import MCPToolset
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -16,11 +18,14 @@ from agent_services.agent.mcp_tools import (
     mcp_config_snapshot,
     parse_mcp_server_configs,
 )
-from agent_services.agent.runtime import ChatBlocked, ChatReply, _TimeoutToolset, run_chat
+from agent_services.agent.runtime import (
+    ChatBlocked,
+    ChatReply,
+    _TimeoutToolset,
+    run_chat,
+)
 from agent_services.app import create_app
 from agent_services.testing.mcp_echo import build_echo_mcp_toolset
-from conftest import TOKEN_HEADER, make_settings
-from fastapi.testclient import TestClient
 
 
 def test_build_mcp_toolsets_empty_when_unconfigured() -> None:
