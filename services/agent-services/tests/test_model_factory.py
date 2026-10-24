@@ -95,3 +95,56 @@ def test_health_reports_effective_limits_with_null_for_unlimited() -> None:
         "toolTimeoutSeconds": 12.5,
         "historyMaxChars": 1000,
     }
+
+
+def _capture_google_build(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    captured: dict[str, object] = {}
+
+    def fake_build(model_name: str, *, api_key: str | None, base_url: str | None) -> Model:
+        captured["model_name"] = model_name
+        captured["api_key"] = api_key
+        captured["base_url"] = base_url
+        return TestModel(model_name=model_name)
+
+    monkeypatch.setattr("agent_services.agent.model_factory._build_google_model", fake_build)
+    return captured
+
+
+def test_google_model_passes_name_and_direct_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _capture_google_build(monkeypatch)
+    handle = create_model(
+        make_settings(
+            ai_model="google:gemini-3-flash-preview",
+            ai_provider_api_key="test-provider-key",
+            ai_provider_base_url="https://generativelanguage.example/v1beta",
+        )
+    )
+    assert captured == {
+        "model_name": "gemini-3-flash-preview",
+        "api_key": "test-provider-key",
+        "base_url": "https://generativelanguage.example/v1beta",
+    }
+    assert handle.live
+    assert isinstance(handle.model, TestModel)
+    assert handle.spec == "google:gemini-3-flash-preview"
+
+
+def test_google_gla_model_normalizes_name_and_passes_direct_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _capture_google_build(monkeypatch)
+    handle = create_model(
+        make_settings(
+            ai_model="google-gla:gemini-3-flash-preview",
+            ai_provider_api_key="test-provider-key",
+            ai_provider_base_url="https://generativelanguage.example/v1beta",
+        )
+    )
+    assert captured == {
+        "model_name": "gemini-3-flash-preview",
+        "api_key": "test-provider-key",
+        "base_url": "https://generativelanguage.example/v1beta",
+    }
+    assert handle.live
+    assert isinstance(handle.model, TestModel)
+    assert handle.spec == "google-gla:gemini-3-flash-preview"

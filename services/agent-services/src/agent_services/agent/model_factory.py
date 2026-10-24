@@ -40,9 +40,30 @@ def _parse_specs(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _google_model_name(spec: str) -> str | None:
+    """google: 与旧别名 google-gla:。两者都不是前缀包含关系。"""
+    for prefix in ("google-gla:", "google:"):
+        if spec.startswith(prefix):
+            return spec.removeprefix(prefix)
+    return None
+
+
+def _build_google_model(model_name: str, *, api_key: str | None, base_url: str | None) -> Model:
+    """延迟导入，避免其它 provider 路径在模块加载时依赖 google.genai。"""
+    from pydantic_ai.models.google import GoogleModel
+    from pydantic_ai.providers.google import GoogleProvider
+
+    provider = GoogleProvider(api_key=api_key or None, base_url=base_url or None)
+    return GoogleModel(model_name, provider=provider)
+
+
 def _build_primary(spec: str, settings: Settings) -> Model:
     api_key = settings.ai_provider_api_key.strip()
     base_url = settings.ai_provider_base_url.strip()
+    google_name = _google_model_name(spec)
+    if google_name is not None:
+        # 未直配 key 时传 None，GoogleProvider 再读 GOOGLE_API_KEY 或 GEMINI_API_KEY。
+        return _build_google_model(google_name, api_key=api_key or None, base_url=base_url or None)
     if spec.startswith("openai:") and (api_key or base_url):
         # OpenAI-compatible 端点显式直配（本地模型 / 代理 / Foundry compatible）
         from pydantic_ai.models.openai import OpenAIChatModel
@@ -53,8 +74,8 @@ def _build_primary(spec: str, settings: Settings) -> Model:
             base_url=base_url or None,
         )
         return OpenAIChatModel(spec.removeprefix("openai:"), provider=provider)
-    # 其余 spec（azure:/anthropic:/google:/...）走 Pydantic AI 原生推断，
-    # 凭证由各 Provider 的原生环境变量提供
+    # 其余 spec（azure:/anthropic:/...）走 Pydantic AI 原生推断，
+    # 凭证由各 Provider 的原生环境变量提供。fallback 同样不走这里的直配。
     from pydantic_ai.models import infer_model
 
     return infer_model(spec)

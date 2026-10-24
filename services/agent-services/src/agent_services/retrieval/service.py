@@ -41,7 +41,7 @@ class RetrievalService:
             raise RetrievalChunkLimitExceeded(
                 f"Document exceeds the maximum of {MAX_UPSERT_CHUNKS} chunks."
             )
-        embeddings = await self._embedder.embed(chunks)
+        embeddings = await self._embedder.embed_documents(chunks)
         return await self._store.upsert_document(
             site_id=site_id,
             source_id=source_id,
@@ -54,8 +54,8 @@ class RetrievalService:
         await self._store.delete_document(site_id=site_id, source_id=source_id)
 
     async def search(self, *, site_id: str, query: str, top_k: int = DEFAULT_TOP_K) -> list[RetrievedChunk]:
-        embeddings = await self._embedder.embed([query])
-        return await self._store.search(site_id=site_id, embedding=embeddings[0], top_k=top_k)
+        embedding = await self._embedder.embed_query(query)
+        return await self._store.search(site_id=site_id, embedding=embedding, top_k=top_k)
 
     async def retrieve_context(self, *, site_id: str, query: str) -> list[str]:
         """chat 检索增强：失败降级为无上下文（派生索引问题不阻断对话），记录日志。

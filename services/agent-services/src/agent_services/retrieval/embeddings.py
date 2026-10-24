@@ -1,16 +1,23 @@
 """Embedding 客户端：AI_EMBEDDING_MODEL spec → 向量。
 
-当前只支持 openai: 前缀（含 OpenAI-compatible base_url）；
+支持 openai:、google:，以及旧别名 google-gla:。
+直配凭证用 AI_PROVIDER_API_KEY / AI_PROVIDER_BASE_URL。
+Google 未直配 key 时由 Provider 读取 GOOGLE_API_KEY 或 GEMINI_API_KEY。
 其它 spec → BLOCKED（诚实失败，不默认任何模型）。
-请求走已声明的 httpx，不依赖未锁定的 openai SDK。
+OpenAI 请求走已声明的 httpx。Google 走 Pydantic AI Embedder，不自写 Gemini REST。
 """
 
+import logging
 import math
+from collections.abc import Sequence
 from typing import Protocol
 
 import httpx
 
+from agent_services.api.errors import external_failure_message
 from agent_services.config import Settings
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 # OpenAI embeddings 单次 input 上限是 2048；按块发送，避免长文档一次请求被拒。
@@ -19,6 +26,10 @@ _EMBED_BATCH_SIZE = 128
 
 class EmbeddingClient(Protocol):
     async def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
+
+    async def embed_query(self, text: str) -> list[float]: ...
 
 
 class OpenAIEmbeddingClient:
@@ -84,6 +95,72 @@ class OpenAIEmbeddingClient:
             vectors.append(_finite_floats(embedding))
         return vectors
 
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return await self.embed(texts)
+
+    async def embed_query(self, text: str) -> list[float]:
+        vectors = await self.embed([text])
+        if len(vectors) != 1:
+            raise ValueError(f"Embedding response count {len(vectors)} does not match input count 1.")
+        return vectors[0]
+
+
+class GoogleEmbeddingClient:
+    """Gemini 嵌入。文件走 embed_documents，查询走 embed_query，才会带上对应 task type。"""
+
+    def __init__(
+        self,
+        model: str,
+        *,
+        api_key: str | None,
+        base_url: str | None,
+        dimensions: int,
+    ) -> None:
+        from pydantic_ai.embeddings import Embedder
+        from pydantic_ai.embeddings.google import GoogleEmbeddingModel
+        from pydantic_ai.providers.google import GoogleProvider
+
+        provider = GoogleProvider(api_key=api_key or None, base_url=base_url or None)
+        embedding_model = GoogleEmbeddingModel(model, provider=provider)
+        self._embedder = Embedder(embedding_model, settings={"dimensions": dimensions})
+
+    async def aclose(self) -> None:
+        model = getattr(self._embedder, "model", None)
+        provider = getattr(model, "_provider", None)
+        http_client = getattr(provider, "_own_http_client", None)
+        close = getattr(http_client, "aclose", None)
+        if close is not None:
+            await close()
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return await self.embed_documents(texts)
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        result = await self._embedder.embed_documents(texts)
+        return _embedding_vectors(result.embeddings, expected=len(texts))
+
+    async def embed_query(self, text: str) -> list[float]:
+        result = await self._embedder.embed_query(text)
+        return _embedding_vectors(result.embeddings, expected=1)[0]
+
+
+def _embedding_vectors(raw: object, *, expected: int) -> list[list[float]]:
+    if isinstance(raw, (str, bytes)) or not isinstance(raw, Sequence):
+        raise ValueError("Embedding response is missing data.")
+    if len(raw) != expected:
+        raise ValueError(f"Embedding response count {len(raw)} does not match input count {expected}.")
+    vectors: list[list[float]] = []
+    for item in raw:
+        if isinstance(item, list):
+            vectors.append(_finite_floats(item))
+        elif isinstance(item, (str, bytes)) or not isinstance(item, Sequence):
+            raise ValueError("Embedding values must be numbers.")
+        else:
+            vectors.append(_finite_floats(list(item)))
+    return vectors
+
 
 def _finite_floats(values: object) -> list[float]:
     if not isinstance(values, list) or any(
@@ -96,21 +173,53 @@ def _finite_floats(values: object) -> list[float]:
     return [float(value) for value in values]
 
 
+_EMBEDDING_SPEC_HINT = "only 'openai:', 'google:', and 'google-gla:' are supported"
+
+
+def _google_embedding_model_name(spec: str) -> str | None:
+    for prefix in ("google-gla:", "google:"):
+        if spec.startswith(prefix):
+            return spec.removeprefix(prefix)
+    return None
+
+
 def create_embedding_client(settings: Settings) -> tuple[EmbeddingClient | None, str | None]:
     """返回 (client, blocked_reason)；两者互斥。"""
     spec = settings.ai_embedding_model.strip()
     if not spec:
         return None, "Embedding model is not configured (missing AI_EMBEDDING_MODEL)."
-    if not spec.startswith("openai:"):
-        # spec 可能是带账号的 URL；健康检查会把这段原因展示到管理端
-        if "://" in spec or "@" in spec:
-            return None, "Unsupported embedding model spec (only 'openai:' is supported)."
-        return None, f"Unsupported embedding model spec: {spec} (only 'openai:' is supported)."
     api_key = settings.ai_provider_api_key.strip() or None
     base_url = settings.ai_provider_base_url.strip() or None
-    if not api_key and not base_url:
-        return None, "Embedding provider credentials are not configured."
-    return (
-        OpenAIEmbeddingClient(spec.removeprefix("openai:"), api_key=api_key, base_url=base_url),
-        None,
-    )
+    if spec.startswith("openai:"):
+        if not api_key and not base_url:
+            return None, "Embedding provider credentials are not configured."
+        return (
+            OpenAIEmbeddingClient(spec.removeprefix("openai:"), api_key=api_key, base_url=base_url),
+            None,
+        )
+    google_name = _google_embedding_model_name(spec)
+    if google_name is not None:
+        # 没有直配 key / base URL 时仍尝试构造：部署环境可能有 GOOGLE_API_KEY 或 GEMINI_API_KEY。
+        # Provider 在构造当下缺钥会抛错，这里收成不含密钥正文的 BLOCKED。
+        try:
+            return (
+                GoogleEmbeddingClient(
+                    google_name,
+                    api_key=api_key,
+                    base_url=base_url,
+                    dimensions=settings.ai_embedding_dimensions,
+                ),
+                None,
+            )
+        except Exception as exc:  # noqa: BLE001 — 凭证/spec 错误统一映射 BLOCKED
+            visible = "redacted" if "://" in spec or "@" in spec else spec
+            logger.warning(
+                "Embedding model configuration failed for %s: %s",
+                visible,
+                type(exc).__name__,
+            )
+            return None, external_failure_message("Embedding provider is not configured or invalid", exc)
+    # spec 可能是带账号的 URL；健康检查会把这段原因展示到管理端
+    if "://" in spec or "@" in spec:
+        return None, f"Unsupported embedding model spec ({_EMBEDDING_SPEC_HINT})."
+    return None, f"Unsupported embedding model spec: {spec} ({_EMBEDDING_SPEC_HINT})."

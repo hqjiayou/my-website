@@ -3,6 +3,7 @@
 import json
 
 import httpx
+import pytest
 from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -14,6 +15,7 @@ from agent_services.agent.runtime import ChatReply, run_chat
 from agent_services.app import create_app
 from agent_services.retrieval.chunking import split_text
 from agent_services.retrieval.embeddings import (
+    GoogleEmbeddingClient,
     OpenAIEmbeddingClient,
     create_embedding_client,
 )
@@ -150,6 +152,162 @@ def test_embedding_spec_with_url_is_not_echoed() -> None:
     assert "embed.internal" not in reason
 
 
+class _EmbeddingResult:
+    def __init__(self, embeddings: list[list[float]]) -> None:
+        self.embeddings = embeddings
+
+
+class _GoogleEmbedderDouble:
+    """替身 Embedder：只记录 document / query 路径，不发请求。"""
+
+    def __init__(self, model: object, *, settings: object = None) -> None:
+        self.model = model
+        self.settings = settings
+        self.document_calls: list[list[str]] = []
+        self.query_calls: list[str] = []
+        self.document_embeddings: list[list[float]] | None = None
+        self.query_embeddings: list[list[float]] | None = None
+
+    async def embed_documents(self, texts: list[str]) -> _EmbeddingResult:
+        self.document_calls.append(list(texts))
+        embeddings = self.document_embeddings
+        if embeddings is None:
+            embeddings = [[0.1, 0.2] for _ in texts]
+        return _EmbeddingResult(embeddings)
+
+    async def embed_query(self, text: str) -> _EmbeddingResult:
+        self.query_calls.append(text)
+        embeddings = self.query_embeddings if self.query_embeddings is not None else [[0.3, 0.4]]
+        return _EmbeddingResult(embeddings)
+
+
+def _patch_google_embedding_stack(
+    monkeypatch: pytest.MonkeyPatch, *, provider_error: BaseException | None = None
+) -> dict[str, object]:
+    captured: dict[str, object] = {}
+
+    class _Provider:
+        def __init__(self, *, api_key: str | None = None, base_url: str | None = None, **_kwargs: object) -> None:
+            if provider_error is not None:
+                raise provider_error
+            captured["api_key"] = api_key
+            captured["base_url"] = base_url
+
+    class _Model:
+        def __init__(self, model_name: str, *, provider: object) -> None:
+            captured["model_name"] = model_name
+            self.provider = provider
+
+    def _embedder(model: object, *, settings: object = None) -> _GoogleEmbedderDouble:
+        double = _GoogleEmbedderDouble(model, settings=settings)
+        captured["embedder"] = double
+        captured["settings"] = settings
+        return double
+
+    monkeypatch.setattr("pydantic_ai.providers.google.GoogleProvider", _Provider)
+    monkeypatch.setattr("pydantic_ai.embeddings.google.GoogleEmbeddingModel", _Model)
+    monkeypatch.setattr("pydantic_ai.embeddings.Embedder", _embedder)
+    return captured
+
+
+def _google_embedding_client(monkeypatch: pytest.MonkeyPatch) -> tuple[GoogleEmbeddingClient, _GoogleEmbedderDouble]:
+    captured = _patch_google_embedding_stack(monkeypatch)
+    client = GoogleEmbeddingClient(
+        "gemini-embedding-001",
+        api_key="test-provider-key",
+        base_url="https://generativelanguage.example/v1beta",
+        dimensions=768,
+    )
+    embedder = captured["embedder"]
+    assert isinstance(embedder, _GoogleEmbedderDouble)
+    return client, embedder
+
+
+async def test_google_embedding_uses_document_and_query_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, embedder = _google_embedding_client(monkeypatch)
+    assert embedder.settings == {"dimensions": 768}
+    assert await client.embed_documents(["alpha", "beta"]) == [[0.1, 0.2], [0.1, 0.2]]
+    assert await client.embed_query("lookup") == [0.3, 0.4]
+    assert embedder.document_calls == [["alpha", "beta"]]
+    assert embedder.query_calls == ["lookup"]
+
+
+async def test_google_embedding_rejects_count_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, embedder = _google_embedding_client(monkeypatch)
+    embedder.document_embeddings = [[0.1]]
+    try:
+        await client.embed_documents(["a", "b"])
+        raise AssertionError("expected count mismatch")
+    except ValueError as exc:
+        assert "does not match" in str(exc)
+
+    embedder.query_embeddings = []
+    try:
+        await client.embed_query("lookup")
+        raise AssertionError("expected count mismatch")
+    except ValueError as exc:
+        assert "does not match" in str(exc)
+
+
+async def test_google_embedding_rejects_non_finite_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, embedder = _google_embedding_client(monkeypatch)
+    embedder.document_embeddings = [[float("nan")]]
+    try:
+        await client.embed_documents(["a"])
+        raise AssertionError("expected non-finite rejection")
+    except ValueError as exc:
+        assert "must be numbers" in str(exc)
+        assert "nan" not in str(exc).lower()
+
+    embedder.query_embeddings = [[float("inf")]]
+    try:
+        await client.embed_query("lookup")
+        raise AssertionError("expected non-finite rejection")
+    except ValueError as exc:
+        assert "must be numbers" in str(exc)
+
+
+def test_create_embedding_client_accepts_google_and_google_gla(monkeypatch: pytest.MonkeyPatch) -> None:
+    for spec in ("google:gemini-embedding-001", "google-gla:gemini-embedding-001"):
+        captured = _patch_google_embedding_stack(monkeypatch)
+        client, reason = create_embedding_client(
+            make_settings(
+                ai_embedding_model=spec,
+                ai_provider_api_key="test-provider-key",
+                ai_provider_base_url="https://generativelanguage.example/v1beta",
+                ai_embedding_dimensions=768,
+            )
+        )
+        assert reason is None
+        assert isinstance(client, GoogleEmbeddingClient)
+        assert captured["model_name"] == "gemini-embedding-001"
+        assert captured["api_key"] == "test-provider-key"
+        assert captured["base_url"] == "https://generativelanguage.example/v1beta"
+        assert captured["settings"] == {"dimensions": 768}
+
+
+def test_create_embedding_client_google_without_credentials_is_blocked(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    secret_key = "sk-test-sentinel"
+    secret_url = "https://user:secret@embed.internal/v1"
+    _patch_google_embedding_stack(
+        monkeypatch,
+        provider_error=RuntimeError(f"provider failed {secret_key} {secret_url}"),
+    )
+    for spec in ("google:gemini-embedding-001", "google-gla:gemini-embedding-001"):
+        client, reason = create_embedding_client(
+            make_settings(ai_embedding_model=spec, ai_provider_api_key="", ai_provider_base_url="")
+        )
+        assert client is None
+        assert reason == "Embedding provider is not configured or invalid: RuntimeError"
+        assert reason is not None
+        assert secret_key not in reason
+        assert secret_url not in reason
+        assert "secret" not in reason
+        assert "embed.internal" not in reason
+
+
 def test_vector_literal_rejects_non_finite() -> None:
     store = PgVectorRetrievalStore("postgresql://unused", dimensions=1)
     try:
@@ -185,6 +343,15 @@ class FakeEmbedder:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         self.seen.append(texts)
         return [[0.1, 0.2, 0.3] for _ in texts]
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return await self.embed(texts)
+
+    async def embed_query(self, text: str) -> list[float]:
+        vectors = await self.embed([text])
+        if len(vectors) != 1:
+            raise ValueError(f"Embedding response count {len(vectors)} does not match input count 1.")
+        return vectors[0]
 
 
 class FakeStore:
