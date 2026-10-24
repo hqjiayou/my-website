@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     )
 
     # Pydantic AI model spec，例如 "openai:gpt-4o-mini" / "azure:..." / "anthropic:..."
+    # Google 正式路徑："google:gemini-3-flash-preview"（舊別名 "google-gla:..."）。已實測範例，程式不預設模型。
+    # 直配憑證用 AI_PROVIDER_API_KEY；若有 AI_PROVIDER_BASE_URL 也傳給 Google Provider。
+    # 未直配金鑰時，Google Provider 讀 GOOGLE_API_KEY 或 GEMINI_API_KEY。
     # 缺失 → providerStatus=BLOCKED，chat 503（ADR-0004）
     ai_model: str = Field(default="", validation_alias="AI_MODEL")
     ai_provider_api_key: str = Field(default="", validation_alias="AI_PROVIDER_API_KEY")
@@ -38,7 +41,9 @@ class Settings(BaseSettings):
     # ---- Phase 3 检索（agent_retrieval 派生索引）----
     # 独立连接串（专用 DB 用户，禁止授予 Java 业务表权限）；缺失 → 检索 BLOCKED
     retrieval_database_url: str = Field(default="", validation_alias="RETRIEVAL_DATABASE_URL")
-    # 例如 "openai:text-embedding-3-small"；缺失 → 检索 BLOCKED
+    # 例如 "openai:text-embedding-3-small" 或 "google:gemini-embedding-001"（舊別名 "google-gla:..."）
+    # AI_EMBEDDING_DIMENSIONS 必須與向量欄位一致；gemini-embedding-001 可設 768。此欄位預設仍是 1536。
+    # 缺失 → 检索 BLOCKED
     ai_embedding_model: str = Field(default="", validation_alias="AI_EMBEDDING_MODEL")
     ai_embedding_dimensions: int = Field(default=1536, validation_alias="AI_EMBEDDING_DIMENSIONS")
 

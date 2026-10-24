@@ -1,6 +1,6 @@
 # agent-services — Python AI Execution Runtime（internal only）
 
-**Python 3.13 + FastAPI + Pydantic AI 2.54**（`pydantic-ai-slim[mcp]`，禁止 LangChain / LiteLLM）。原则：**Java owns business truth, Python owns AI execution**（ADR-0005）。
+**Python 3.13 + FastAPI + Pydantic AI 2.54**（`pydantic-ai-slim[google,mcp]`，禁止 LangChain / LiteLLM）。原则：**Java owns business truth, Python owns AI execution**（ADR-0005）。
 
 - 设计：[`docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md`](../../docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)
 - 决策：ADR-0004（无 Provider 诚实失败）、ADR-0005（职责边界）
@@ -29,7 +29,9 @@
 
 ## 环境变量
 
-见 [`.env.example`](./.env.example)。`AI_MODEL` 使用 Pydantic AI model spec（`openai:…` / `azure:…` / `anthropic:…`），**无默认模型**。
+见 [`.env.example`](./.env.example)。`AI_MODEL` 使用 Pydantic AI model spec（`openai:…` / `azure:…` / `anthropic:…` / `google:…`），**无默认模型**。
+
+Gemini 是正式支援路徑：`AI_MODEL=google:<model>`，舊別名 `google-gla:<model>`。對話與嵌入的直配憑證都用 `AI_PROVIDER_API_KEY`；若同時設定 `AI_PROVIDER_BASE_URL`，會傳給 Google Provider。未直配金鑰時，Provider 依原生規則讀取 `GOOGLE_API_KEY` 或 `GEMINI_API_KEY`。嵌入範例：`AI_EMBEDDING_MODEL=google:gemini-embedding-001`，`AI_EMBEDDING_DIMENSIONS` 必須與向量欄位一致（`gemini-embedding-001` 可設 `768`）。已實測對話範例為 `google:gemini-3-flash-preview`，部署時仍須明示 `AI_MODEL`。
 
 ## 本地开发
 
@@ -70,6 +72,18 @@ docker run --rm -p 3001:3001 \
   -e AGENT_INTERNAL_SERVICE_TOKEN=CHANGE_ME \
   -e AI_MODEL=openai:gpt-4o-mini \
   -e AI_PROVIDER_API_KEY=sk-... \
+  agent-services:local
+```
+
+Gemini 部署示例（已實測模型名；金鑰也可改放 `GOOGLE_API_KEY` 或 `GEMINI_API_KEY`，不要寫進程式）：
+
+```bash
+docker run --rm -p 3001:3001 \
+  -e AGENT_INTERNAL_SERVICE_TOKEN=CHANGE_ME \
+  -e AI_MODEL=google:gemini-3-flash-preview \
+  -e AI_PROVIDER_API_KEY=... \
+  -e AI_EMBEDDING_MODEL=google:gemini-embedding-001 \
+  -e AI_EMBEDDING_DIMENSIONS=768 \
   agent-services:local
 ```
 
