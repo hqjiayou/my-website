@@ -17,7 +17,7 @@ supersedes:
 
 ## 一句话
 
-中央控制的网站集合：后台总控 `admin-web`；Java `website-services`（`gateway` 统一入口，`auth` 签发 RS256 JWT，`admin` Resource Server + 后台业务）；Python `agent-services` 做 AI 执行。`admin-web` 主纵向域与站点 AI 管理已 FORCE REAL；访客前台 / AI LIVE（无 `AI_MODEL`）/ Browser E2E 未达产品完成；Auth XFF 已做 gateway `trusted-proxies` 缓解，**仍缺集成断言**（PARTIALLY_RESOLVED）。
+中央控制的网站集合：后台总控 `admin-web`；Java `website-services`（`gateway` 统一入口，`auth` 签发 RS256 JWT，`admin` Resource Server + 后台业务）；Python `agent-services` 做 AI 执行。`admin-web` 主纵向域与站点 AI 管理已 FORCE REAL；访客前台 v1 已落地（`apps/site-web` generic 单应用＋公开只读 API，见 site-web CURRENT_STATE）；AI LIVE（无 `AI_MODEL`）/ Browser E2E 未达产品完成；Auth XFF 已做 gateway `trusted-proxies` 缓解，**仍缺集成断言**（PARTIALLY_RESOLVED）。
 
 ---
 
@@ -26,7 +26,7 @@ supersedes:
 | 域 | 状态 | 说明 |
 |----|------|------|
 | **Admin Web** | PARTIAL（主域 + 运营聚合 + 站点 AI 管理 FORCE REAL；概览指标由 REAL API 推导；占位页） | 见 [`../admin-web/CURRENT_STATE.md`](../admin-web/CURRENT_STATE.md) |
-| **Site Web** | NOT_IN_TREE / NOT_IMPLEMENTED（auth） | 工作区没有访客前台；Site Auth 前端未接 |
+| **Site Web** | v1 IN_TREE（公开只读）/ NOT_IMPLEMENTED（auth） | `apps/site-web` 按 siteCode 渲染公开内容（仅 PUBLISHED）；Site Auth 前端未接（登录在 Portal） |
 | **Backend (website-services)** | PARTIAL（主业务 COMPLETE_V1；安全门 PARTIALLY_RESOLVED） | 见 [`../website-services/CURRENT_STATE.md`](../website-services/CURRENT_STATE.md) |
 | **Database** | COMPLETE_V1（Flyway 以 `infra/.../db/migration` 为准，当前至 V21） | 以代码为准 |
 | **Auth Admin** | PARTIAL | 登录/刷新/登出/注册门控 REAL；XFF：gateway trusted-proxies 已配置，缺集成测试 |

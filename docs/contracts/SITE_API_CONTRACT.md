@@ -11,9 +11,9 @@ last_verified: 2026-10-24
 | 能力 | 状态 |
 |------|------|
 | Site Auth login/refresh/logout/me | **BACKEND_COMPLETE** |
-| site-web 对接 | **NOT_IN_TREE**（工作区无前台应用） |
+| site-web 对接 | **IN_TREE**（`apps/site-web` 只接下方匿名公开内容；Site Auth 前端仍未接） |
 | Site AI chat/stream | **BACKEND_COMPLETE**（会话落库；无 `AI_MODEL` 时诚实 503）。SSE 对终端用户只下发 `START`(`{}`) / `TEXT_DELTA` / `DONE`(`reply`,`providerStatus`,`citations`——仅本轮实际采用知识库 grounding 时出现，每项 `sourceId`/`chunkIndex`/`score`) / `CONVERSATION`(`conversationId`) / `ERROR`(`errorCode` ∈ `EXTERNAL_DEPENDENCY_BLOCKED`·`MCP_UNAVAILABLE`·`AGENT_BUDGET_EXCEEDED`·`SYSTEM_ERROR`)；工具事件、用量、skills、原始错误信息不下发。会话管理见下 |
-| 访客内容 / 预约公开 API | **没有**。管理端在 `/api/admin/sites/{id}/contents|reservations`。Agent 建预约走 `POST /internal/site/v1/sites/{siteId}/reservations` |
+| 访客内容 / 预约公开 API | 内容公开读见下方「公开内容」。预约公开 API 仍没有。管理端在 `/api/admin/sites/{id}/contents|reservations`。Agent 建预约走 `POST /internal/site/v1/sites/{siteId}/reservations` |
 
 Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之亦然）。
 
@@ -25,3 +25,13 @@ Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之
 |------|------|-------------|
 | PATCH | `/api/site/{siteId}/ai/conversations/{conversationId}` | 请求体 `title`（非空白，最长 60）；成功返回更新后的会话 |
 | DELETE | `/api/site/{siteId}/ai/conversations/{conversationId}` | 无请求体；成功时 `data` 为 null |
+
+### 公开内容
+
+匿名，只允许 GET。站点不存在或非 ACTIVE 为 404。内容只回 PUBLISHED；不存在、不属于该站或未发布一律 404。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/site/public/{siteCode}` | 匿名。站点摘要：siteCode、siteName、siteType、description |
+| GET | `/api/site/public/{siteCode}/contents` | 匿名。只回 PUBLISHED 列表：id、type、title、coverMediaId、publishedAt（不含 body） |
+| GET | `/api/site/public/{siteCode}/contents/{contentId}` | 匿名。只回该站 PUBLISHED 详情（含 body） |
