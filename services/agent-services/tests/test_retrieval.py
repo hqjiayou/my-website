@@ -44,6 +44,90 @@ def test_split_text_merges_paragraphs_within_limit() -> None:
     assert chunks == ["para one\n\npara two"]
 
 
+def test_split_text_heading_boundaries_prefix_and_stack() -> None:
+    content = (
+        "# 安装\n\n"
+        "安装说明\n\n"
+        "补充一句\n\n"
+        "## 前置条件\n\n"
+        "需要 Python\n\n"
+        "### 版本\n\n"
+        "3.12 以上\n\n"
+        "## 步骤\n\n"
+        "第一步\n\n"
+        "# 使用\n\n"
+        "直接运行"
+    )
+    chunks = split_text(content, max_chars=400)
+    assert chunks == [
+        "§ 安装\n# 安装\n\n安装说明\n\n补充一句",
+        "§ 安装 > 前置条件\n## 前置条件\n\n需要 Python",
+        "§ 安装 > 前置条件 > 版本\n### 版本\n\n3.12 以上",
+        "§ 安装 > 步骤\n## 步骤\n\n第一步",
+        "§ 使用\n# 使用\n\n直接运行",
+    ]
+    assert split_text("前文\n# 安装\n正文", max_chars=200) == [
+        "前文",
+        "§ 安装\n# 安装\n正文",
+    ]
+
+
+def test_split_text_packs_long_single_newline_text_by_line() -> None:
+    line = "列表项" + "甲" * 20
+    lines = [f"{line}{index}" for index in range(6)]
+    content = "\n".join(lines)
+    chunks = split_text(content, max_chars=50, overlap=10)
+    assert chunks == [
+        f"{lines[0]}\n{lines[1]}",
+        f"{lines[2]}\n{lines[3]}",
+        f"{lines[4]}\n{lines[5]}",
+    ]
+    for original in lines:
+        assert sum(original in chunk.split("\n") for chunk in chunks) == 1
+
+
+def test_split_text_sentence_boundary_covers_text() -> None:
+    content = ("甲" * 40) + "。" + ("乙" * 40) + "！" + ("丙" * 40) + "？"
+    max_chars = 70
+    chunks = split_text(content, max_chars=max_chars, overlap=10)
+    assert chunks
+    assert chunks[0][-1] in "。．.!！?？"
+    assert len(chunks[0]) < max_chars
+    assert all(len(chunk) <= max_chars for chunk in chunks)
+
+    position = 0
+    for chunk in chunks:
+        start_min = 0 if position == 0 else max(0, position - len(chunk))
+        found = content.find(chunk, start_min)
+        assert 0 <= found <= position
+        position = max(position, found + len(chunk))
+    assert position == len(content)
+
+    quoted = ("甲" * 40) + "。”" + ("乙" * 40) + "。"
+    quoted_chunks = split_text(quoted, max_chars=70, overlap=8)
+    assert quoted_chunks[0].endswith("。”")
+    assert all(len(chunk) <= 70 for chunk in quoted_chunks)
+
+
+def test_split_text_prefix_counts_toward_max_chars() -> None:
+    paragraph = "甲" * 20
+    content = "# 标题\n\n" + paragraph + "\n\n" + paragraph
+    prefix = "§ 标题\n"
+    max_chars = len(content) + len(prefix) - 1
+    chunks = split_text(content, max_chars=max_chars, overlap=0)
+    assert len(chunks) > 1
+    assert all(chunk.startswith(prefix) for chunk in chunks)
+    assert all(len(chunk) <= max_chars for chunk in chunks)
+
+
+def test_split_text_rejects_invalid_budget() -> None:
+    with pytest.raises(ValueError, match="max_chars must be positive"):
+        split_text("hello", max_chars=0)
+    with pytest.raises(ValueError, match="overlap must be smaller than max_chars"):
+        split_text("hello", max_chars=10, overlap=10)
+    assert split_text("   \n\n  ", max_chars=0, overlap=5) == []
+
+
 async def test_embedding_client_posts_openai_compatible_endpoint() -> None:
     captured: dict[str, object] = {}
 
