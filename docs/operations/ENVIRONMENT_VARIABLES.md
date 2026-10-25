@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: RUNBOOK
 status: CURRENT
-last_verified: 2026-10-10
+last_verified: 2026-10-25
 ```
 
 权威列表以各服务 `.env.example` / `application.yml` / `services/website-services/README.md` 为准。本地怎么配、怎么起见 [`LOCAL_DEVELOPMENT.md`](./LOCAL_DEVELOPMENT.md)。
@@ -31,6 +31,7 @@ Java 只读 `services/website-services/.env`。Python 只读进程 cwd 下的 `s
 | `RETRIEVAL_DATABASE_URL` | 否 | Phase 3 派生索引；缺失 → 检索 BLOCKED（问答仍可用） |
 | `AI_EMBEDDING_MODEL` | 否 | 例 `openai:text-embedding-3-small`；缺失 → 检索 BLOCKED |
 | `AI_EMBEDDING_DIMENSIONS` | 否 | 默认 1536 |
+| `RETRIEVAL_MIN_SCORE` | 否 | 余弦门槛，默认 0.35。低于此分的向量命中不返回，topK 不凑满。`0` 关闭。小于 0、大于 1 或非数字 → 启动 fail-fast。代码型 token（连字符/点号型号如 `XJ-900` 整段保留；另收含数字且长度≥2，或字母数字长度≥4）在嵌入与向量查询都成功后，只按 `site_id` 做字面量子串匹配，`%` `_` `\` 不当通配符；分数取余弦与覆盖率的较大值。未做中文/日文专有名词词法、BM25、rerank |
 | `BUSINESS_API_BASE_URL` | 否 | Phase 4 Tools 回调 Java site-app internal（如 `http://127.0.0.1:8082`）；缺失 → 不注册业务工具 |
 | `AGENT_SKILLS_DIR` | 否 | Skills 目录；Docker 默认 `/app/skills` |
 | `AGENT_HARNESS_DIR` | 否 | 平台 background / guardrails / tool guidance 目录；Docker 默认 `/app/harness`。空则用源码 `harness/` |
@@ -42,8 +43,8 @@ Java 只读 `services/website-services/.env`。Python 只读进程 cwd 下的 `s
 | `AGENT_MAX_TOOL_CALLS` | 否 | 单轮最大成功工具调用数，默认 20；`<=0` 不限 |
 | `AGENT_MAX_TOTAL_TOKENS` | 否 | 单轮最大总 tokens，默认 0（不限） |
 | `AGENT_TOOL_TIMEOUT_SECONDS` | 否 | 单次工具调用超时，默认 30；todo / MCP 均生效；超时 → 模型收到重试提示、`TOOL_RESULT.ok=false` |
-| `AGENT_HISTORY_MAX_CHARS` | 否 | 送模历史字符预算，默认 24000；从最新往前保留并保证 USER 开头；`<=0` 不限 |
-| `AI_FALLBACK_MODELS` | 否 | 逗号分隔 fallback spec；仅主模型 Provider API 错误时切换；主模型 BLOCKED 时不生效；凭证走各 Provider 原生变量 |
+| `AGENT_HISTORY_MAX_CHARS` | 否 | 送模历史字符预算，默认 24000；从最新往前保留并保证 USER 开头；`<=0` 不限。超出时把被裁掉的前缀摘要进本轮系统提示；摘要失败或为空则只裁剪，不阻断对话，不回写会话。未做摘要落库与跨轮复用 |
+| `AI_FALLBACK_MODELS` | 否 | 逗号分隔 fallback spec。进程主模型和 Java 模型入口在构建成功后都挂这条链；仅 Provider API 错误时切换。主模型或入口本身 BLOCKED 时不顶替。备用凭证走各 Provider 原生变量，不复用入口 apiKey |
 | `AGENT_OTEL_INCLUDE_CONTENT` | 否 | 默认 `false`；`true` 时 Agent span 记录 prompt/completion/工具参数正文（含 PII，仅排障） |
 | `PORT` | 否 | 默认 3001 |
 | `UVICORN_WORKERS` | 否 | 默认 1 |

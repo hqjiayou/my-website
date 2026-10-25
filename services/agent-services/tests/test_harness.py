@@ -144,9 +144,11 @@ async def test_run_chat_sends_trimmed_memory_to_the_model(tmp_path) -> None:
         harness_dir=str(tmp_path),
     )
     assert isinstance(outcome, ChatReply)
-    blob = "\n".join(seen)
-    assert "KEEP-ME" in blob
-    assert "DROP-ME" not in blob
+    assert len(seen) == 2
+    assert "DROP-ME" in seen[0]
+    assert "KEEP-ME" not in seen[0]
+    assert "KEEP-ME" in seen[1]
+    assert "DROP-ME" not in seen[1]
 
 
 async def test_run_chat_sends_harness_background_to_the_model(tmp_path) -> None:

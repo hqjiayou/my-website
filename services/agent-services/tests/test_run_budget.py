@@ -40,6 +40,106 @@ def test_trim_history_keeps_newest_within_budget_and_starts_with_user() -> None:
     assert trim_history(None, 100) == []
 
 
+async def test_over_budget_history_puts_dropped_prefix_summary_in_system_prompt(tmp_path) -> None:
+    from agent_services.agent.harness import assemble_harness
+    from agent_services.agent.runtime import summary_for_dropped
+
+    history = [
+        _h("USER", "early fact"),
+        _h("ASSISTANT", "b" * 10),
+        _h("USER", "c" * 10),
+        _h("ASSISTANT", "d" * 10),
+    ]
+    seen: list[list[str]] = []
+
+    async def summarize(dropped: list[ChatHistoryMessage]) -> str:
+        seen.append([item.content for item in dropped])
+        return "EARLIER SUMMARY"
+
+    summary = await summary_for_dropped(history, 25, summarize)
+    assert seen == [["early fact", "b" * 10]]
+    assert summary == "EARLIER SUMMARY"
+
+    harness = assemble_harness(
+        site_id="1",
+        message="now",
+        history=history,
+        budget=RunBudget(history_max_chars=25),
+        history_summary=summary,
+        harness_dir=str(tmp_path),
+    )
+    assert "EARLIER SUMMARY" in harness.system_prompt
+    assert list(harness.memory) == trim_history(history, 25)
+    assert harness.memory[0].role == "USER"
+
+    seen.clear()
+    assert await summary_for_dropped(history, None, summarize) is None
+    assert await summary_for_dropped(history, 1000, summarize) is None
+    assert seen == []
+
+
+async def test_history_summary_failure_does_not_block_chat(tmp_path, monkeypatch) -> None:
+    history = [_h("USER", "DROP-ME"), _h("USER", "KEEP-ME")]
+
+    async def boom(_model, _dropped) -> str:
+        raise RuntimeError("summary down")
+
+    async def blank(_model, _dropped) -> str:
+        return ""
+
+    for summarizer in (boom, blank):
+        monkeypatch.setattr(
+            "agent_services.agent.runtime.summarize_dropped_history",
+            summarizer,
+        )
+        seen: list[str] = []
+
+        def capture(messages: list, _info) -> ModelResponse:
+            seen.append(repr(messages))
+            return ModelResponse(parts=[TextPart("chat-ok")])
+
+        outcome = await run_chat(
+            FunctionModel(capture),
+            site_id="1",
+            message="now",
+            history=history,
+            budget=RunBudget(history_max_chars=7),
+            harness_dir=str(tmp_path),
+        )
+        assert isinstance(outcome, ChatReply)
+        assert not isinstance(outcome, ChatBlocked)
+        assert outcome.reply == "chat-ok"
+        blob = "\n".join(seen)
+        assert "# Earlier conversation" not in blob
+        assert "KEEP-ME" in blob
+
+
+async def test_history_summary_does_not_rewrite_history_or_reply(tmp_path, monkeypatch) -> None:
+    history = [_h("USER", "DROP-ME"), _h("USER", "KEEP-ME")]
+    before = [(item.role, item.content) for item in history]
+
+    async def summarize(_model, _dropped) -> str:
+        return "EARLIER SUMMARY"
+
+    monkeypatch.setattr("agent_services.agent.runtime.summarize_dropped_history", summarize)
+
+    def capture(_messages, _info) -> ModelResponse:
+        return ModelResponse(parts=[TextPart("chat-ok")])
+
+    outcome = await run_chat(
+        FunctionModel(capture),
+        site_id="1",
+        message="now",
+        history=history,
+        budget=RunBudget(history_max_chars=7),
+        harness_dir=str(tmp_path),
+    )
+    assert [(item.role, item.content) for item in history] == before
+    assert isinstance(outcome, ChatReply)
+    assert outcome.reply == "chat-ok"
+    assert outcome.reply != "EARLIER SUMMARY"
+
+
 def _ping_toolset() -> FunctionToolset:
     toolset = FunctionToolset()
 

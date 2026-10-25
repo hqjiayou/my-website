@@ -35,6 +35,7 @@ from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
 from agent_services.schemas.todo import TodoItem
 
 BUDGET_EXCEEDED = "AGENT_BUDGET_EXCEEDED"
+HISTORY_SUMMARY_MAX_CHARS = 1000
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,59 @@ def trim_history(
     while kept and kept[0].role != "USER":
         kept.pop(0)
     return kept
+
+
+def dropped_history(
+    history: list[ChatHistoryMessage] | None, max_chars: int | None
+) -> list[ChatHistoryMessage]:
+    """trim_history 丢掉的前缀。保留项始终是原列表的后缀。"""
+    if not history:
+        return []
+    kept = trim_history(history, max_chars)
+    return list(history[: len(history) - len(kept)])
+
+
+async def summary_for_dropped(
+    history: list[ChatHistoryMessage] | None,
+    max_chars: int | None,
+    summarizer,
+) -> str | None:
+    """没有被裁掉的前缀时不调用摘要。空摘要视为没有。"""
+    dropped = dropped_history(history, max_chars)
+    if not dropped:
+        return None
+    text = await summarizer(dropped)
+    cleaned = "" if text is None else str(text).strip()
+    return cleaned or None
+
+
+async def summarize_dropped_history(model: Model, dropped: list[ChatHistoryMessage]) -> str:
+    """用本轮同一个模型压缩被裁掉的前缀。不把入口或进程密钥写进提示。"""
+    transcript = "\n".join(f"{item.role}: {item.content}" for item in dropped)
+    agent = Agent(
+        model,
+        system_prompt=(
+            "Summarize the earlier conversation in one short paragraph. "
+            "Keep names, decisions, and facts. Do not invent anything."
+        ),
+    )
+    result = await agent.run(transcript)
+    return str(result.output).strip()[:HISTORY_SUMMARY_MAX_CHARS]
+
+
+async def prepare_history_summary(
+    model: Model,
+    history: list[ChatHistoryMessage] | None,
+    max_chars: int | None,
+) -> str | None:
+    async def summarize(dropped: list[ChatHistoryMessage]) -> str:
+        return await summarize_dropped_history(model, dropped)
+
+    try:
+        return await summary_for_dropped(history, max_chars, summarize)
+    except Exception:  # noqa: BLE001 — 摘要失败只放弃摘要，不阻断本轮对话
+        logger.warning("history summary failed; continuing with trimmed history", exc_info=True)
+        return None
 
 
 def usage_to_api(usage: RunUsage) -> dict[str, int]:
@@ -254,6 +308,9 @@ async def run_chat(
     harness_dir: str | None = None,
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
+    history_summary = await prepare_history_summary(
+        model, history, resolved_budget.history_max_chars
+    )
     harness = assemble_harness(
         site_id=site_id,
         message=message,
@@ -269,6 +326,7 @@ async def run_chat(
         toolsets=toolsets,
         budget=resolved_budget,
         harness_dir=harness_dir,
+        history_summary=history_summary,
     )
     run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
 

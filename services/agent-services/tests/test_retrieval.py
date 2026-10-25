@@ -384,6 +384,9 @@ class FakeStore:
                 )
         return results[:top_k]
 
+    async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+        return []
+
     async def close(self) -> None:
         pass
 
@@ -680,6 +683,89 @@ def test_retrieval_search_degrades_when_embedding_fails() -> None:
     assert service.last_error == "RuntimeError"
 
 
+def test_vector_failure_does_not_return_lexical_hits() -> None:
+    class VectorDown(FakeStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.lexical_calls = 0
+
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            raise RuntimeError("db down")
+
+        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+            self.lexical_calls += 1
+            return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
+
+    store = VectorDown()
+    response = _search_client(RetrievalService(FakeEmbedder(), store)).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "7", "query": "XJ-900", "topK": 4},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"hits": [], "degraded": True}
+    assert store.lexical_calls == 0
+
+
+def test_embedder_failure_does_not_call_lexical_search() -> None:
+    class LexicalReady(FakeStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.lexical_calls = 0
+
+        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+            self.lexical_calls += 1
+            return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
+
+    class FailingEmbedder(FakeEmbedder):
+        async def embed_query(self, text: str) -> list[float]:
+            raise RuntimeError("embed down")
+
+    store = LexicalReady()
+    response = _search_client(RetrievalService(FailingEmbedder(), store)).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "7", "query": "XJ-900", "topK": 4},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"hits": [], "degraded": True}
+    assert store.lexical_calls == 0
+
+
+def test_like_literal_pattern_escapes_wildcards() -> None:
+    from agent_services.retrieval.store import (
+        lexical_search_statement,
+        like_literal_pattern,
+    )
+
+    assert like_literal_pattern("100%") == "%100\\%%"
+    assert like_literal_pattern("a_b") == "%a\\_b%"
+    assert like_literal_pattern("a\\b") == "%a\\\\b%"
+
+    token = "100%_a\\b"
+    sql, args = lexical_search_statement("site-7", [token], 20)
+    assert args[0] == "site-7"
+    assert args[1] == like_literal_pattern(token)
+    assert args[2] == 20
+    assert "WHERE site_id = $1 AND" in sql
+    assert "ESCAPE" in sql
+    assert "LIMIT $3" in sql
+    assert sql.index("ORDER BY") < sql.index("LIMIT $3")
+    assert "DESC, source_id, chunk_index" in sql
+    assert "(content ILIKE $2 ESCAPE '\\')::int" in sql
+    assert token not in sql
+    assert "100%" not in sql
+
+    ranked_sql, ranked_args = lexical_search_statement("site-7", ["XJ-900", "900"], 20)
+    assert ranked_args[0] == "site-7"
+    assert [item for item in ranked_args if item == "XJ-900" or item == "900"] == []
+    assert ranked_sql.index("ORDER BY") < ranked_sql.index("LIMIT $4")
+    assert "(content ILIKE $2 ESCAPE '\\')::int" in ranked_sql
+    assert "(content ILIKE $3 ESCAPE '\\')::int" in ranked_sql
+    assert "XJ-900" not in ranked_sql
+    assert "900" not in ranked_sql
+
+
 def test_retrieval_search_requires_internal_token() -> None:
     response = _search_client(_service()[0]).post(
         "/internal/v1/retrieval/search",
@@ -717,6 +803,147 @@ def test_retrieval_search_clamps_top_k() -> None:
     assert store.search_top_ks == [20]
 
 
+def test_retrieval_search_drops_hits_below_min_score() -> None:
+    """查询不含代码 token。store 已给出 0.9 与 0.2 时，响应只留 0.9，且不改字段。"""
+
+    class TwoScoreStore(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            self.search_calls.append(site_id)
+            self.search_top_ks.append(top_k)
+            return [
+                RetrievedChunk("kb:hi", 0, "relevant", 0.9),
+                RetrievedChunk("kb:lo", 0, "unrelated", 0.2),
+            ]
+
+    store = TwoScoreStore()
+    response = _search_client(RetrievalService(FakeEmbedder(), store)).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "query": "hi", "topK": 4},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"hits", "degraded"}
+    assert body == {
+        "hits": [
+            {
+                "sourceId": "kb:hi",
+                "chunkIndex": 0,
+                "score": 0.9,
+                "content": "relevant",
+            }
+        ],
+        "degraded": False,
+    }
+    assert store.search_top_ks == [4]
+
+
+async def test_retrieval_min_score_zero_keeps_low_vector_hits() -> None:
+    class TwoScoreStore(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            return [
+                RetrievedChunk("kb:hi", 0, "relevant", 0.9),
+                RetrievedChunk("kb:lo", 0, "unrelated", 0.2),
+            ]
+
+    service = RetrievalService(FakeEmbedder(), TwoScoreStore(), min_score=0)
+    hits = await service.search(site_id="1", query="hi", top_k=4)
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:hi", 0.9), ("kb:lo", 0.2)]
+
+
+def test_code_tokens_keep_model_numbers_whole() -> None:
+    from agent_services.retrieval.service import code_tokens
+
+    assert code_tokens("XJ-900") == ["XJ-900", "900"]
+    assert code_tokens("v1.2") == ["v1.2", "v1"]
+    assert code_tokens("M3") == ["M3"]
+    assert code_tokens("ABCD") == ["ABCD"]
+    assert code_tokens("hi") == []
+    assert code_tokens("AI") == []
+    assert code_tokens("ab") == []
+
+
+def test_retrieval_search_surfaces_code_token_below_vector_threshold() -> None:
+    """向量通道只有无关 0.9；词法通道带回 XJ-900。topK=1 时只留代码 chunk，score 为覆盖率 1。"""
+
+    class SplitStore(FakeStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.lexical_sites: list[str] = []
+            self.lexical_tokens: list[list[str]] = []
+
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            self.search_calls.append(site_id)
+            self.search_top_ks.append(top_k)
+            return [RetrievedChunk("kb:other", 0, "unrelated prose", 0.9)]
+
+        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+            self.lexical_sites.append(site_id)
+            self.lexical_tokens.append(list(tokens))
+            return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
+
+    store = SplitStore()
+    response = _search_client(RetrievalService(FakeEmbedder(), store)).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "7", "query": "XJ-900", "topK": 1},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "hits": [
+            {
+                "sourceId": "kb:code",
+                "chunkIndex": 0,
+                "score": 1.0,
+                "content": "model XJ-900 specs",
+            }
+        ],
+        "degraded": False,
+    }
+    assert store.lexical_sites == ["7"]
+    assert store.lexical_tokens == [["XJ-900", "900"]]
+
+
+async def test_same_chunk_score_is_max_of_cosine_and_code_coverage() -> None:
+    class BothStore(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.4)]
+
+        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+            return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
+
+    service = RetrievalService(FakeEmbedder(), BothStore())
+    hits = await service.search(site_id="7", query="XJ-900", top_k=4)
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:code", 1.0)]
+
+    class CosineWins(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            return [RetrievedChunk("kb:code", 0, "only ABCD here", 0.92)]
+
+        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+            return [RetrievedChunk("kb:code", 0, "only ABCD here", 0.1)]
+
+    cosine_hits = await RetrievalService(FakeEmbedder(), CosineWins()).search(
+        site_id="7", query="ABCD XJ-900", top_k=4
+    )
+    assert [(hit.source_id, hit.score) for hit in cosine_hits] == [("kb:code", 0.92)]
+
+
+def test_retrieval_min_score_rejects_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic import ValidationError
+
+    from agent_services.config import Settings
+
+    for value in (1.5, -0.01):
+        with pytest.raises(RuntimeError, match="RETRIEVAL_MIN_SCORE"):
+            create_app(make_settings(retrieval_min_score=value))
+    create_app(make_settings(retrieval_min_score=0))
+    for literal in ("nope", "true"):
+        monkeypatch.setenv("RETRIEVAL_MIN_SCORE", literal)
+        with pytest.raises(ValidationError):
+            Settings()
+
+
 _CITATION_HITS = [
     RetrievedChunk("s", 0, "low", 0.1),
     RetrievedChunk("s", 0, "high", 0.95),
@@ -727,12 +954,11 @@ _CITATION_HITS = [
     RetrievedChunk("f", 0, "f", 0.15),
 ]
 
+# 默认门槛 0.35：0.4 留下，0.3 及以下不进 citations。
 _EXPECTED_CITATIONS = [
     {"sourceId": "s", "chunkIndex": 0, "score": 0.95},
     {"sourceId": "b", "chunkIndex": 1, "score": 0.5},
     {"sourceId": "c", "chunkIndex": 0, "score": 0.4},
-    {"sourceId": "d", "chunkIndex": 0, "score": 0.3},
-    {"sourceId": "e", "chunkIndex": 0, "score": 0.2},
 ]
 
 

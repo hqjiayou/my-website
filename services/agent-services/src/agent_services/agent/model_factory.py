@@ -3,7 +3,7 @@
 不自建 Provider 抽象层：Model/Provider 两层抽象直接复用 Pydantic AI（设计 V1 §2）。
 无配置 / 凭证缺失 → BLOCKED（ADR-0004），不默认任何模型。
 AI_FALLBACK_MODELS（§22.6）仅在主模型可用时生效：主模型 BLOCKED 时 fallback 不得顶替，
-否则等同“默认模型”，违反 ADR-0004。
+否则等同“默认模型”，违反 ADR-0004。Java 模型入口同样如此：入口构建成功后才挂备用链。
 """
 
 import logging
@@ -104,7 +104,7 @@ def _build_azure(model_name: str, *, api_key: str, base_url: str) -> Model:
 
 
 def _build_fallbacks(settings: Settings, primary_spec: str) -> list[tuple[str, Model]]:
-    """fallback 只走原生推断（凭证用各 Provider 原生环境变量），不复用主模型的 AI_PROVIDER_*。"""
+    """fallback 只走原生推断。凭证用各 Provider 原生环境变量，不复用主模型的 AI_PROVIDER_*，也不复用入口 apiKey。"""
     from pydantic_ai.models import infer_model
 
     built: list[tuple[str, Model]] = []
@@ -156,9 +156,14 @@ def create_model(settings: Settings) -> ModelHandle:
         )
 
     fallbacks = _build_fallbacks(settings, spec)
+    return _handle_with_fallbacks(primary, spec, fallbacks)
+
+
+def _handle_with_fallbacks(
+    primary: Model, spec: str, fallbacks: list[tuple[str, Model]]
+) -> ModelHandle:
     if not fallbacks:
         return ModelHandle(model=primary, spec=spec, blocked_reason=None)
-
     from pydantic_ai.models.fallback import FallbackModel
 
     # 默认 fallback_on=(ModelAPIError,)：仅 Provider API 错误（含 429/5xx）切换，业务/工具异常不切换
@@ -170,8 +175,18 @@ def create_model(settings: Settings) -> ModelHandle:
     )
 
 
-def create_model_for_entry(*, spec: str, api_key: str, base_url: str | None) -> ModelHandle:
-    """Java 模型入口。不用进程 AI_MODEL，也不挂 AI_FALLBACK_MODELS。"""
+def create_model_for_entry(
+    *,
+    spec: str,
+    api_key: str,
+    base_url: str | None,
+    settings: Settings | None = None,
+) -> ModelHandle:
+    """Java 模型入口。不用进程 AI_MODEL。
+
+    构建成功后挂 AI_FALLBACK_MODELS。入口 spec 或凭证建不起来时仍 BLOCKED，备用模型不顶替。
+    备用模型不使用入口 apiKey。
+    """
     cleaned = spec.strip()
     if not cleaned:
         return ModelHandle(
@@ -188,4 +203,6 @@ def create_model_for_entry(*, spec: str, api_key: str, base_url: str | None) -> 
             spec=cleaned,
             blocked_reason=external_failure_message("AI provider is not configured or invalid", exc),
         )
-    return ModelHandle(model=primary, spec=cleaned, blocked_reason=None)
+    if settings is None:
+        return ModelHandle(model=primary, spec=cleaned, blocked_reason=None)
+    return _handle_with_fallbacks(primary, cleaned, _build_fallbacks(settings, cleaned))

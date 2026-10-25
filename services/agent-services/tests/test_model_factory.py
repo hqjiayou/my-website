@@ -168,6 +168,83 @@ def test_entry_uses_its_own_key_and_skips_process_fallbacks(monkeypatch: pytest.
     assert handle.spec == "google:gemini-3-flash-preview"
 
 
+def test_entry_request_attaches_process_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from agent_services.api.internal import _execution_handle
+    from agent_services.schemas.chat import ChatRequest
+
+    captured = _capture_google_build(monkeypatch)
+    settings = make_settings(
+        ai_fallback_models="fake:backup",
+        ai_provider_api_key="process-key",
+    )
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(settings=settings, model_handle=None))
+    )
+    body = ChatRequest(
+        siteId="1",
+        message="hi",
+        model={
+            "spec": "google:gemini-3-flash-preview",
+            "apiKey": "entry-key",
+            "baseUrl": "https://generativelanguage.example/v1beta",
+        },
+    )
+    handle = _execution_handle(request, body)
+    assert captured["api_key"] == "entry-key"
+    assert captured["base_url"] == "https://generativelanguage.example/v1beta"
+    assert isinstance(handle.model, FallbackModel)
+    assert handle.fallback_specs == ("fake:backup",)
+    assert handle.spec == "google:gemini-3-flash-preview"
+
+
+def test_blocked_entry_is_not_replaced_by_process_fallback() -> None:
+    from types import SimpleNamespace
+
+    from agent_services.api.internal import _execution_handle
+    from agent_services.schemas.chat import ChatRequest
+
+    settings = make_settings(ai_fallback_models="fake:backup")
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(settings=settings, model_handle=None))
+    )
+    body = ChatRequest(
+        siteId="1",
+        message="hi",
+        model={"spec": "bad:x", "apiKey": "entry-key"},
+    )
+    handle = _execution_handle(request, body)
+    assert handle.model is None
+    assert not handle.live
+    assert handle.fallback_specs == ()
+
+
+def test_entry_fallback_builder_does_not_receive_entry_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_fallback: list[tuple[object, ...]] = []
+
+    def infer(spec: str, *args: object, **kwargs: object) -> Model:
+        captured_fallback.append((spec, args, kwargs))
+        if spec.startswith("fake:"):
+            return TestModel(model_name=spec)
+        raise UserError(f"Unknown model: {spec}")
+
+    monkeypatch.setattr(pydantic_ai.models, "infer_model", infer)
+    captured_primary = _capture_google_build(monkeypatch)
+    handle = create_model_for_entry(
+        spec="google:gemini-3-flash-preview",
+        api_key="entry-key",
+        base_url="https://generativelanguage.example/v1beta",
+        settings=make_settings(ai_fallback_models="fake:backup", ai_provider_api_key="process-key"),
+    )
+    assert captured_primary["api_key"] == "entry-key"
+    assert captured_fallback == [("fake:backup", (), {})]
+    assert "entry-key" not in repr(captured_fallback)
+    assert handle.fallback_specs == ("fake:backup",)
+
+
 def test_entry_passes_anthropic_and_azure_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 

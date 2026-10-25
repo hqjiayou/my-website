@@ -82,6 +82,7 @@ def _execution_handle(request: Request, body: ChatRequest) -> ModelHandle:
         spec=selection.spec,
         api_key=selection.api_key,
         base_url=selection.base_url,
+        settings=request.app.state.settings,
     )
 
 

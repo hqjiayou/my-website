@@ -1,7 +1,11 @@
+import math
 from functools import lru_cache
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# 余弦相似度门槛的默认值。0 关闭；低于此分的向量命中不返回，也不另取一批凑满 topK。
+RETRIEVAL_MIN_SCORE_DEFAULT = 0.35
 
 
 class Settings(BaseSettings):
@@ -47,6 +51,9 @@ class Settings(BaseSettings):
     # 缺失 → 检索 BLOCKED
     ai_embedding_model: str = Field(default="", validation_alias="AI_EMBEDDING_MODEL")
     ai_embedding_dimensions: int = Field(default=1536, validation_alias="AI_EMBEDDING_DIMENSIONS")
+    retrieval_min_score: float = Field(
+        default=RETRIEVAL_MIN_SCORE_DEFAULT, validation_alias="RETRIEVAL_MIN_SCORE"
+    )
 
     # ---- Phase 4 业务工具（Function Tools → Java internal API）----
     # Java site-app internal API 根地址；缺失 → 不注册业务工具（纯问答仍可用）
@@ -100,6 +107,14 @@ def assert_skills_unknown_policy(policy: str) -> None:
     raise RuntimeError(
         f"AGENT_SKILLS_UNKNOWN_POLICY has invalid value {policy!r}. Allowed values: ignore, reject."
     )
+
+
+def assert_retrieval_min_score(value: float) -> None:
+    """启动期校验：检索门槛必须落在 0 到 1。0 表示关闭。非法值 fail-fast。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise RuntimeError("RETRIEVAL_MIN_SCORE must be a number from 0 to 1. 0 disables the threshold.")
+    if not math.isfinite(value) or value < 0 or value > 1:
+        raise RuntimeError("RETRIEVAL_MIN_SCORE must be a number from 0 to 1. 0 disables the threshold.")
 
 
 def assert_skills_max_instruction_chars(value: int) -> None:

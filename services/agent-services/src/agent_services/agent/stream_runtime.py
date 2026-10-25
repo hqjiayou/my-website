@@ -19,6 +19,7 @@ from agent_services.agent.runtime import (
     build_run_kwargs,
     grounding_citations,
     mcp_unavailable_message,
+    prepare_history_summary,
     tool_succeeded,
     usage_to_api,
 )
@@ -69,6 +70,9 @@ async def stream_chat_events(
     harness_dir: str | None = None,
 ) -> AsyncIterator[AgentStreamEvent]:
     resolved_budget = budget or RunBudget()
+    history_summary = await prepare_history_summary(
+        model, history, resolved_budget.history_max_chars
+    )
     harness = assemble_harness(
         site_id=site_id,
         message=message,
@@ -84,6 +88,7 @@ async def stream_chat_events(
         toolsets=toolsets,
         budget=resolved_budget,
         harness_dir=harness_dir,
+        history_summary=history_summary,
     )
     system_prompt, user_message = harness.system_prompt, harness.user_message
     start_data: dict[str, object] = {"siteId": site_id}

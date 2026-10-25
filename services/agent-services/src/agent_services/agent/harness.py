@@ -79,6 +79,7 @@ def assemble_harness(
     toolsets: list[object] | None = None,
     budget: RunBudget | None = None,
     harness_dir: str | None = None,
+    history_summary: str | None = None,
 ) -> RequestHarness:
     from agent_services.agent.runtime import RunBudget, trim_history
 
@@ -108,6 +109,7 @@ def assemble_harness(
         tool_file=tool_file,
         tool_guidance=tool_guidance,
         mcp_servers=mcp_servers,
+        history_summary=_history_summary_section(history_summary),
     )
     return RequestHarness(
         system_prompt=system_prompt,
@@ -162,8 +164,13 @@ def _compose(
     tool_file: str,
     tool_guidance: tuple[ToolGuidance, ...],
     mcp_servers: tuple[str, ...],
+    history_summary: str,
 ) -> str:
-    sections = [part for part in (background, guardrails_text, limits_text, site_prompt, tool_file) if part]
+    sections = [
+        part
+        for part in (background, guardrails_text, limits_text, history_summary, site_prompt, tool_file)
+        if part
+    ]
     if tool_guidance:
         lines = [
             f"- {item.name}: {item.description}" if item.description else f"- {item.name}"
@@ -173,6 +180,12 @@ def _compose(
     if mcp_servers:
         sections.append("# MCP servers\n\n" + "\n".join(f"- {name}" for name in mcp_servers))
     return "\n\n".join(sections)
+
+
+def _history_summary_section(summary: str | None) -> str:
+    if summary is None or not summary.strip():
+        return ""
+    return "# Earlier conversation\n\n" + summary.strip()
 
 
 def _guardrails(budget: RunBudget, skills_max_instruction_chars: int | None) -> HarnessGuardrails:

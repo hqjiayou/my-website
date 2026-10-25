@@ -39,6 +39,39 @@ def citation_sources(
     ]
 
 
+def like_literal_pattern(token: str) -> str:
+    """收成 ILIKE 字面量模式。%、_、\\ 按字面匹配，不当成通配符。"""
+    escaped = token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def lexical_search_statement(
+    site_id: str, tokens: list[str], limit: int
+) -> tuple[str, list[object]]:
+    """词法 SQL 只按调用方 site_id 过滤，token 只进绑定参数。
+
+    LIMIT 之前按命中 token 数降序，同分再按 source_id、chunk_index。
+    否则更宽的短 token 会占满候选窗口，把型号整段命中挤掉。
+    """
+    arguments: list[object] = [site_id]
+    clauses: list[str] = []
+    for token in tokens:
+        arguments.append(like_literal_pattern(token))
+        clauses.append(f"content ILIKE ${len(arguments)} ESCAPE '\\'")
+    rank_terms = [
+        f"(content ILIKE ${index} ESCAPE '\\')::int" for index in range(2, len(arguments) + 1)
+    ]
+    arguments.append(limit)
+    sql = (
+        "SELECT source_id, chunk_index, content, 0::float8 AS score "
+        "FROM agent_retrieval.chunks "
+        f"WHERE site_id = $1 AND ({' OR '.join(clauses)}) "
+        f"ORDER BY ({' + '.join(rank_terms)}) DESC, source_id, chunk_index "
+        f"LIMIT ${len(arguments)}"
+    )
+    return sql, arguments
+
+
 class RetrievalStore(Protocol):
     async def upsert_document(
         self,
@@ -54,6 +87,10 @@ class RetrievalStore(Protocol):
 
     async def search(
         self, *, site_id: str, embedding: list[float], top_k: int
+    ) -> list[RetrievedChunk]: ...
+
+    async def search_lexical(
+        self, *, site_id: str, tokens: list[str], limit: int
     ) -> list[RetrievedChunk]: ...
 
     async def close(self) -> None: ...
@@ -183,6 +220,26 @@ class PgVectorRetrievalStore:
                 self._vector_literal(embedding),
                 top_k,
             )
+        return [
+            RetrievedChunk(
+                source_id=row["source_id"],
+                chunk_index=row["chunk_index"],
+                content=row["content"],
+                score=float(row["score"]),
+            )
+            for row in rows
+        ]
+
+    async def search_lexical(
+        self, *, site_id: str, tokens: list[str], limit: int
+    ) -> list[RetrievedChunk]:
+        """按调用方 site_id 做字面量子串匹配。分数由服务层覆盖率决定，这里不取向量分。"""
+        if not tokens or limit < 1:
+            return []
+        pool = await self._get_pool()
+        sql, arguments = lexical_search_statement(site_id, tokens, limit)
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *arguments)
         return [
             RetrievedChunk(
                 source_id=row["source_id"],
