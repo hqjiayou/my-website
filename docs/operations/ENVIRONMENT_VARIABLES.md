@@ -16,6 +16,8 @@ Java 只读 `services/website-services/.env`。Python 只读进程 cwd 下的 `s
 |------|-----|
 | DB / Redis / JWT / JWKS URI | website-services |
 | `AGENT_BASE_URL` | admin / site-app → agent-services 根地址（默认 `http://127.0.0.1:3001`） |
+| `AGENT_BUSINESS_API_BASE_URL` | Java 随对话传给 Python 的 site-app internal 根地址。本地默认 `http://127.0.0.1:8082`；Compose 为 `http://site:8082`。空则沿用 Python `BUSINESS_API_BASE_URL` |
+| `AI_MODEL_ENTRY_SECRET` | 模型入口 api_key 的 AES-GCM 口令。本地默认 `local-dev-model-entry-secret`；生产必须换成独立口令。空则明文兼容旧行 |
 | `AGENT_INTERNAL_SERVICE_TOKEN` | admin / site-app 与 agent-services 共享内部鉴权 |
 | `AGENT_CONNECT_TIMEOUT_MS` / `AGENT_READ_TIMEOUT_MS` / `AGENT_RETRY_MAX_ATTEMPTS` | HttpAgentClient 超时与重试。读超时默认 120000（须大于工具超时 30s，并与站点 SSE 120s 对齐）。POST 读超时不重试，避免对话副作用执行两次 |
 
@@ -24,13 +26,14 @@ Java 只读 `services/website-services/.env`。Python 只读进程 cwd 下的 `s
 | 变量 | 必需 | 说明 |
 |------|------|------|
 | `AGENT_INTERNAL_SERVICE_TOKEN` | **是** | 缺失 → 启动 fail-fast |
-| `AI_MODEL` | 否 | Pydantic AI spec；缺失 → BLOCKED |
+| `AI_MODEL` | 否 | 进程回退 spec。Java `ai_model_entry` 有启用的默认入口时，对话用该入口的 spec 和 key；都没有 → BLOCKED |
 | `AI_PROVIDER_API_KEY` / `AI_PROVIDER_BASE_URL` | 视 Provider | OpenAI-compatible 直配 |
 | `RETRIEVAL_DATABASE_URL` | 否 | Phase 3 派生索引；缺失 → 检索 BLOCKED（问答仍可用） |
 | `AI_EMBEDDING_MODEL` | 否 | 例 `openai:text-embedding-3-small`；缺失 → 检索 BLOCKED |
 | `AI_EMBEDDING_DIMENSIONS` | 否 | 默认 1536 |
 | `BUSINESS_API_BASE_URL` | 否 | Phase 4 Tools 回调 Java site-app internal（如 `http://127.0.0.1:8082`）；缺失 → 不注册业务工具 |
 | `AGENT_SKILLS_DIR` | 否 | Skills 目录；Docker 默认 `/app/skills` |
+| `AGENT_HARNESS_DIR` | 否 | 平台 background / guardrails / tool guidance 目录；Docker 默认 `/app/harness`。空则用源码 `harness/` |
 | `AGENT_DEFAULT_SKILLS` | 否 | 逗号分隔默认 skill id（如 `orchestration`） |
 | `AGENT_SKILLS_UNKNOWN_POLICY` | 否 | `ignore`（默认）或 `reject`；未知 skill id 时记 `skillsMissing` 或 400 |
 | `AGENT_ENABLE_TODO_TOOLS` | 否 | 默认 `true`；`false` 关闭 todo 编排工具 |

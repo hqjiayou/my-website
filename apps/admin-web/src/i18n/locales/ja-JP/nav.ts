@@ -27,7 +27,7 @@ export default {
     contents: 'ページコンテンツ',
     reservations: '予約管理',
     files: 'ファイル管理',
-    aiSettings: 'AI ランタイム設定',
+    aiSettings: 'モデル入口',
     aiPrompts: 'Prompt 設定',
     aiKnowledgeBases: 'ナレッジベース',
     aiConversations: '会話記録',

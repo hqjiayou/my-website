@@ -27,7 +27,7 @@ export default {
     contents: '页面内容',
     reservations: '预约管理',
     files: '文件管理',
-    aiSettings: 'AI 运行配置',
+    aiSettings: '模型入口',
     aiPrompts: 'Prompt 配置',
     aiKnowledgeBases: '知识库',
     aiConversations: '对话记录',

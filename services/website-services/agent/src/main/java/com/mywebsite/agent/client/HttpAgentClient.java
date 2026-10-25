@@ -26,6 +26,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -310,7 +311,8 @@ public class HttpAgentClient implements AgentClient {
             forwardSseEvents(connection.getInputStream(), listener);
         } catch (IOException ex) {
             log.warn("agent-services chat stream I/O failure", ex);
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+            throw new BusinessException(
+                    isConnectFailure(ex) ? ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED : ErrorCode.SYSTEM_ERROR);
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -421,7 +423,10 @@ public class HttpAgentClient implements AgentClient {
                 log.warn("agent-services read timed out method={} path={}", method, path);
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR);
             }
-            throw new RetryableAgentCallException(new BusinessException(ErrorCode.SYSTEM_ERROR), ex);
+            throw new RetryableAgentCallException(
+                    new BusinessException(
+                            isConnectFailure(ex) ? ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED : ErrorCode.SYSTEM_ERROR),
+                    ex);
         } catch (IOException ex) {
             throw new RetryableAgentCallException(
                     new BusinessException(ErrorCode.SYSTEM_ERROR),
@@ -519,6 +524,17 @@ public class HttpAgentClient implements AgentClient {
     }
 
     /** 可重试调用失败的内部信号；对外仍映射为 BusinessException。 */
+    private static boolean isConnectFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof ConnectException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
     private static final class RetryableAgentCallException extends RuntimeException {
         private final BusinessException businessException;
 

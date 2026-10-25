@@ -57,9 +57,7 @@ def _build_google_model(model_name: str, *, api_key: str | None, base_url: str |
     return GoogleModel(model_name, provider=provider)
 
 
-def _build_primary(spec: str, settings: Settings) -> Model:
-    api_key = settings.ai_provider_api_key.strip()
-    base_url = settings.ai_provider_base_url.strip()
+def _build_primary(spec: str, *, api_key: str, base_url: str) -> Model:
     google_name = _google_model_name(spec)
     if google_name is not None:
         # 未直配 key 时传 None，GoogleProvider 再读 GOOGLE_API_KEY 或 GEMINI_API_KEY。
@@ -74,11 +72,35 @@ def _build_primary(spec: str, settings: Settings) -> Model:
             base_url=base_url or None,
         )
         return OpenAIChatModel(spec.removeprefix("openai:"), provider=provider)
-    # 其余 spec（azure:/anthropic:/...）走 Pydantic AI 原生推断，
+    if spec.startswith("anthropic:") and api_key:
+        return _build_anthropic(spec.removeprefix("anthropic:"), api_key=api_key, base_url=base_url)
+    if spec.startswith("azure:") and (api_key or base_url):
+        return _build_azure(spec.removeprefix("azure:"), api_key=api_key, base_url=base_url)
+    # 其余 spec 走 Pydantic AI 原生推断，
     # 凭证由各 Provider 的原生环境变量提供。fallback 同样不走这里的直配。
     from pydantic_ai.models import infer_model
 
     return infer_model(spec)
+
+
+def _build_anthropic(model_name: str, *, api_key: str, base_url: str) -> Model:
+    from pydantic_ai.models.anthropic import AnthropicModel
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+
+    return AnthropicModel(
+        model_name,
+        provider=AnthropicProvider(api_key=api_key, base_url=base_url or None),
+    )
+
+
+def _build_azure(model_name: str, *, api_key: str, base_url: str) -> Model:
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.azure import AzureProvider
+
+    return OpenAIChatModel(
+        model_name,
+        provider=AzureProvider(azure_endpoint=base_url or None, api_key=api_key or None),
+    )
 
 
 def _build_fallbacks(settings: Settings, primary_spec: str) -> list[tuple[str, Model]]:
@@ -120,7 +142,11 @@ def create_model(settings: Settings) -> ModelHandle:
         )
 
     try:
-        primary = _build_primary(spec, settings)
+        primary = _build_primary(
+            spec,
+            api_key=settings.ai_provider_api_key.strip(),
+            base_url=settings.ai_provider_base_url.strip(),
+        )
     except Exception as exc:  # noqa: BLE001 — 凭证/spec 错误统一映射 BLOCKED，不让服务启动失败
         logger.warning("AI model configuration failed for %s", public_model_spec(spec), exc_info=exc)
         return ModelHandle(
@@ -142,3 +168,24 @@ def create_model(settings: Settings) -> ModelHandle:
         blocked_reason=None,
         fallback_specs=tuple(name for name, _ in fallbacks),
     )
+
+
+def create_model_for_entry(*, spec: str, api_key: str, base_url: str | None) -> ModelHandle:
+    """Java 模型入口。不用进程 AI_MODEL，也不挂 AI_FALLBACK_MODELS。"""
+    cleaned = spec.strip()
+    if not cleaned:
+        return ModelHandle(
+            model=None,
+            spec="blocked",
+            blocked_reason="AI model is not configured (missing AI_MODEL).",
+        )
+    try:
+        primary = _build_primary(cleaned, api_key=api_key.strip(), base_url=(base_url or "").strip())
+    except Exception as exc:  # noqa: BLE001 — 入口 spec/凭证错误映射 BLOCKED，不回显密钥
+        logger.warning("AI model entry failed for %s", public_model_spec(cleaned), exc_info=exc)
+        return ModelHandle(
+            model=None,
+            spec=cleaned,
+            blocked_reason=external_failure_message("AI provider is not configured or invalid", exc),
+        )
+    return ModelHandle(model=primary, spec=cleaned, blocked_reason=None)

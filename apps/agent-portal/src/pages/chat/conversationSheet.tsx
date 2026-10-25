@@ -1,0 +1,275 @@
+import { useRef, useState } from 'react'
+
+import type { SiteAiConversation } from '@/types/api'
+import { errorMessage } from '@/utils/http/apiError'
+
+/** 与站点会话标题生成截断、重命名 DTO 上限一致。 */
+const TITLE_MAX_LENGTH = 60
+
+interface ConversationSheetProps {
+  open: boolean
+  items: SiteAiConversation[]
+  loading: boolean
+  error: string | null
+  activeId: string | null
+  /** 串流中的当前会话。该行删除按钮停用。 */
+  deleteLockedId: string | null
+  onClose: () => void
+  onRefresh: () => void
+  onCreate: () => void
+  onOpen: (id: string) => void
+  onRename: (id: string, title: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+}
+
+export function ConversationSheet({
+  open,
+  items,
+  loading,
+  error,
+  activeId,
+  deleteLockedId,
+  onClose,
+  onRefresh,
+  onCreate,
+  onOpen,
+  onRename,
+  onDelete,
+}: ConversationSheetProps) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const [hint, setHint] = useState<string | null>(null)
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  const pendingRef = useRef(false)
+
+  if (!open) return null
+
+  function beginRename(item: SiteAiConversation) {
+    if (pendingRef.current) return
+    setEditingId(String(item.id))
+    setEditDraft(item.title?.trim() || '')
+    setHint(null)
+    setConfirmId(null)
+    setDeleteError(null)
+  }
+
+  function cancelRename() {
+    if (pendingRef.current) return
+    setEditingId(null)
+    setEditDraft('')
+    setHint(null)
+  }
+
+  function submitRename(id: string) {
+    if (pendingRef.current) return
+    const trimmed = editDraft.trim()
+    if (!trimmed) {
+      setHint('標題不可為空白')
+      return
+    }
+    if (trimmed.length > TITLE_MAX_LENGTH) {
+      setHint(`標題最多 ${TITLE_MAX_LENGTH} 字`)
+      return
+    }
+    pendingRef.current = true
+    setPending(true)
+    setHint(null)
+    void onRename(id, trimmed)
+      .then(() => {
+        setEditingId(null)
+        setEditDraft('')
+      })
+      .catch((renameError: unknown) => {
+        setHint(errorMessage(renameError))
+      })
+      .finally(() => {
+        pendingRef.current = false
+        setPending(false)
+      })
+  }
+
+  function submitDelete(id: string) {
+    if (pendingRef.current) return
+    pendingRef.current = true
+    setPending(true)
+    setDeleteError(null)
+    void onDelete(id)
+      .then(() => {
+        setConfirmId(null)
+      })
+      .catch((deleteFailure: unknown) => {
+        setDeleteError(errorMessage(deleteFailure))
+      })
+      .finally(() => {
+        pendingRef.current = false
+        setPending(false)
+      })
+  }
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col bg-gpt-sidebar text-gpt-ink">
+      <header className="safe-top flex items-center justify-between px-3 pt-3">
+        <p className="px-2 text-sm font-semibold tracking-tight">Agent Portal</p>
+        <button type="button" onClick={onClose} className="h-9 rounded-lg px-2 text-sm text-gpt-muted hover:bg-gpt-hover md:hidden">
+          關閉
+        </button>
+      </header>
+      <div className="flex gap-2 px-3 py-3">
+        <button
+          type="button"
+          onClick={onCreate}
+          className="h-10 flex-1 rounded-lg border border-gpt-line px-3 text-left text-sm hover:bg-gpt-hover"
+        >
+          新對話
+        </button>
+        <button type="button" onClick={onRefresh} className="h-10 rounded-lg px-3 text-sm text-gpt-muted hover:bg-gpt-hover">
+          重新整理
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        {loading ? <p className="px-2 py-6 text-sm text-gpt-muted">正在載入對話…</p> : null}
+        {error ? (
+          <div className="px-2 py-6">
+            <p className="text-sm text-danger">{error}</p>
+            <button type="button" onClick={onRefresh} className="mt-3 h-9 rounded-lg px-3 text-sm hover:bg-gpt-hover">
+              重試
+            </button>
+          </div>
+        ) : null}
+        {deleteError ? <p className="px-2 py-2 text-sm text-danger">{deleteError}</p> : null}
+        {!loading && !error && items.length === 0 ? (
+          <p className="px-2 py-6 text-sm leading-6 text-gpt-muted">還沒有對話。送出第一則訊息後會出現在這裡。</p>
+        ) : null}
+        <ul className="flex flex-col">
+          {items.map((item) => {
+            const id = String(item.id)
+            const selected = id === activeId
+            const deleteLocked = deleteLockedId != null && id === deleteLockedId
+            const title = item.title?.trim() || '未命名對話'
+            if (editingId === id) {
+              return (
+                <li key={id} className="rounded-lg px-2 py-2">
+                  <label className="sr-only" htmlFor={`rename-${id}`}>
+                    對話標題
+                  </label>
+                  <input
+                    id={`rename-${id}`}
+                    value={editDraft}
+                    autoFocus
+                    maxLength={TITLE_MAX_LENGTH}
+                    onChange={(event) => {
+                      setEditDraft(event.target.value)
+                      setHint(null)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        submitRename(id)
+                      } else if (event.key === 'Escape') {
+                        event.preventDefault()
+                        cancelRename()
+                      }
+                    }}
+                    className="h-10 w-full rounded-lg border border-gpt-line bg-gpt-canvas px-3 text-sm outline-none focus:border-gpt-ink"
+                  />
+                  {hint ? <p className="mt-1 text-sm text-danger">{hint}</p> : null}
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => submitRename(id)}
+                      className="h-9 rounded-lg bg-gpt-ink px-3 text-sm text-gpt-canvas disabled:opacity-60"
+                    >
+                      確認
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={cancelRename}
+                      className="h-9 rounded-lg px-3 text-sm hover:bg-gpt-hover disabled:opacity-60"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </li>
+              )
+            }
+            return (
+              <li key={id} className="group flex items-center gap-1 rounded-lg hover:bg-gpt-hover">
+                <button
+                  type="button"
+                  onClick={() => onOpen(id)}
+                  disabled={pending}
+                  className={
+                    selected
+                      ? 'flex min-w-0 flex-1 flex-col items-start rounded-lg bg-gpt-active px-2 py-2 text-left disabled:opacity-60'
+                      : 'flex min-w-0 flex-1 flex-col items-start rounded-lg px-2 py-2 text-left disabled:opacity-60'
+                  }
+                >
+                  <span className="w-full truncate text-sm">{title}</span>
+                  <span className="mt-0.5 text-xs text-gpt-muted">{formatTime(item.lastMessageAt)}</span>
+                </button>
+                {confirmId === id ? (
+                  <div className="flex shrink-0 flex-col items-end gap-1 py-2">
+                    <span className="text-xs text-muted-foreground">確定刪除此對話？</span>
+                    <div className="flex gap-1">
+                    <button
+                      type="button"
+                      disabled={pending || deleteLocked}
+                      title={deleteLocked ? '正在產生回覆，請稍後再刪除' : undefined}
+                      onClick={() => submitDelete(id)}
+                      className="h-8 rounded-lg px-2 text-xs text-danger disabled:opacity-60"
+                    >
+                        刪除
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => setConfirmId(null)}
+                        className="h-8 px-2 text-xs text-gpt-muted disabled:opacity-60"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => beginRename(item)}
+                      className="h-8 px-1.5 text-xs text-gpt-muted opacity-100 hover:text-gpt-ink disabled:opacity-60 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                    >
+                      重命名
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending || deleteLocked}
+                      title={deleteLocked ? '正在產生回覆，請稍後再刪除' : undefined}
+                      onClick={() => {
+                        setDeleteError(null)
+                        setConfirmId(id)
+                      }}
+                      className="h-8 px-1.5 text-xs text-danger opacity-100 disabled:opacity-60 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                    >
+                      刪除
+                    </button>
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+function formatTime(value: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}

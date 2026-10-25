@@ -15,6 +15,34 @@ export interface UpdateAiPromptProfileInput {
   version?: number | null
 }
 
+/** 平台模型入口。接口不返回 apiKey 正文。 */
+export interface AiModelEntry {
+  id: number
+  displayName: string
+  modelSpec: string
+  apiKeyConfigured: boolean
+  apiKeyHint: string
+  baseUrl: string | null
+  siteId: number | null
+  embeddingSpec: string | null
+  enabled: boolean
+  defaultEntry: boolean
+  version: number
+  updatedAt: string | null
+}
+
+export interface AiModelEntryWriteInput {
+  displayName: string
+  modelSpec: string
+  apiKey?: string
+  baseUrl?: string | null
+  siteId?: number | null
+  embeddingSpec?: string | null
+  enabled: boolean
+  defaultEntry: boolean
+  version?: number | null
+}
+
 export const AI_KB_STATUS = {
   ACTIVE: 'ACTIVE',
   DISABLED: 'DISABLED',

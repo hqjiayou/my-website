@@ -39,6 +39,16 @@ class McpReadyResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class HarnessFiles(BaseModel):
+    """平台 harness 文件是否存在。不含路径和正文。"""
+
+    background: bool = False
+    guardrails: bool = False
+    tool_guidance: bool = Field(default=False, alias="toolGuidance")
+
+    model_config = {"populate_by_name": True}
+
+
 class HealthResponse(BaseModel):
     ok: bool = True
     service: str = "agent-service"
@@ -52,5 +62,6 @@ class HealthResponse(BaseModel):
     retrieval_status: str = Field(default="BLOCKED", alias="retrievalStatus")
     retrieval_blocked_reason: str | None = Field(default=None, alias="retrievalBlockedReason")
     retrieval_degraded: bool = Field(default=False, alias="retrievalDegraded")
+    harness: HarnessFiles = Field(default_factory=HarnessFiles)
 
     model_config = {"populate_by_name": True}

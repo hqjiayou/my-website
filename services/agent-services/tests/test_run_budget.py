@@ -147,7 +147,8 @@ async def test_slow_tool_times_out_and_reports_failed_tool_result() -> None:
         return "late"
 
     async def stream_fn(messages: list[ModelMessage], _info: AgentInfo):
-        if not any("timed out" in repr(m).lower() or "timeout" in repr(m).lower() for m in messages):
+        # 工具说明现在会进入系统提示，文档里的 “timeout” 不能当成已经超时。
+        if not any("Tool timed out after" in repr(m) for m in messages):
             yield {0: DeltaToolCall(name="slow", json_args="{}")}
             return
         yield "gave up"

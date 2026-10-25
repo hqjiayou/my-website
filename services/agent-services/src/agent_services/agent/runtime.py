@@ -25,7 +25,7 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.toolsets.wrapper import WrapperToolset
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from agent_services.agent.prompt_builder import build_prompt_parts
+from agent_services.agent.harness import assemble_harness
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.api.errors import external_failure_message
 from agent_services.config import Settings
@@ -249,30 +249,39 @@ async def run_chat(
     budget: RunBudget | None = None,
     locale: str | None = None,
     skills_max_instruction_chars: int | None = None,
+    skill_ids: list[str] | None = None,
+    skills_missing: list[str] | None = None,
+    harness_dir: str | None = None,
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
-    system_prompt, user_message = build_prompt_parts(
-        site_id,
-        message,
-        prompt_profile,
-        retrieval_context,
+    harness = assemble_harness(
+        site_id=site_id,
+        message=message,
+        prompt_profile=prompt_profile,
+        retrieval_context=retrieval_context,
         skill_instructions=skill_instructions,
+        skill_ids=skill_ids,
+        skills_missing=skills_missing,
+        history=history,
         todos=initial_todos,
         locale=locale,
         skills_max_instruction_chars=skills_max_instruction_chars,
+        toolsets=toolsets,
+        budget=resolved_budget,
+        harness_dir=harness_dir,
     )
-    run_kwargs = build_run_kwargs(prompt_profile, history, resolved_budget)
+    run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
 
     needs_mcp_context = execution_needs_agent_context(toolsets or [])
     try:
-        agent = build_agent(model, system_prompt, toolsets, resolved_budget)
+        agent = build_agent(model, harness.system_prompt, toolsets, resolved_budget)
         if needs_mcp_context:
             # 设计 §19.5：async with agent；用 entered 区分「连接失败」与「进入后运行失败」
             entered = False
             try:
                 async with agent:
                     entered = True
-                    result = await agent.run(user_message, **run_kwargs)
+                    result = await agent.run(harness.user_message, **run_kwargs)
             except UsageLimitExceeded:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -284,7 +293,7 @@ async def run_chat(
                 logger.warning("AI provider call failed after MCP connect", exc_info=exc)
                 return ChatBlocked(message=external_failure_message("AI provider call failed", exc))
         else:
-            result = await agent.run(user_message, **run_kwargs)
+            result = await agent.run(harness.user_message, **run_kwargs)
     except UsageLimitExceeded as exc:
         # 预算超限不是外部依赖故障：单独错误码，便于调用方区分与告警
         return ChatBlocked(message=budget_exceeded_message(exc), error_code=BUDGET_EXCEEDED)

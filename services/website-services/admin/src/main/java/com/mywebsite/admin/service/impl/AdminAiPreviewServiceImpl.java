@@ -8,15 +8,21 @@ import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewSkillDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewTodoItem;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpReadyDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
+import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
 import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
+import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminAiPromptProfileMapper;
 import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiPreviewService;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentChatHistoryMessage;
 import com.mywebsite.agent.dto.AgentChatRequest;
+import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentPromptProfile;
+import com.mywebsite.agent.dto.AgentRuntimeStatus;
 import com.mywebsite.agent.dto.AgentTodoItem;
+import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.infra.service.LocalizedMessageService;
 import com.mywebsite.common.exception.BusinessException;
@@ -38,22 +44,34 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     private static final Logger log = LoggerFactory.getLogger(AdminAiPreviewServiceImpl.class);
     private static final long STREAM_TIMEOUT_MS = 120_000L;
     private static final Set<String> ALLOWED_ROLES = Set.of("USER", "ASSISTANT");
+    private static final int KNOWLEDGE_NEEDLE_CHARS = 80;
+    private static final int KNOWLEDGE_SNIPPET_CHARS = 800;
+    private static final int KNOWLEDGE_SNIPPET_LIMIT = 4;
 
     private final AgentClient agentClient;
+    private final AgentProperties agentProperties;
     private final AdminSiteMapper adminSiteMapper;
     private final AdminAiPromptProfileMapper promptProfileMapper;
+    private final AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper;
+    private final AdminAiModelEntryService modelEntryService;
     private final LocalizedMessageService localizedMessageService;
     private final ExecutorService adminAiStreamExecutor;
 
     public AdminAiPreviewServiceImpl(
             AgentClient agentClient,
+            AgentProperties agentProperties,
             AdminSiteMapper adminSiteMapper,
             AdminAiPromptProfileMapper promptProfileMapper,
+            AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper,
+            AdminAiModelEntryService modelEntryService,
             LocalizedMessageService localizedMessageService,
             ExecutorService adminAiStreamExecutor) {
         this.agentClient = agentClient;
+        this.agentProperties = agentProperties;
         this.adminSiteMapper = adminSiteMapper;
         this.promptProfileMapper = promptProfileMapper;
+        this.knowledgeDocumentMapper = knowledgeDocumentMapper;
+        this.modelEntryService = modelEntryService;
         this.localizedMessageService = localizedMessageService;
         this.adminAiStreamExecutor = adminAiStreamExecutor;
     }
@@ -72,7 +90,10 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 loadPromptProfile(siteId),
                 toHistory(request.history()),
                 normalizeSkills(request.skills()),
-                toTodos(request.todos()));
+                toTodos(request.todos()),
+                modelEntryService.currentSelection(siteId),
+                callbackBaseUrl(),
+                knowledgeSnippets(siteId, request.message().trim()));
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter));
         return emitter;
@@ -90,7 +111,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     public AdminAiRuntimeDto runtimeStatus(long siteId) {
         requireSite(siteId);
         try {
-            return new AdminAiRuntimeDto(true, null, agentClient.runtimeStatus());
+            return new AdminAiRuntimeDto(true, null, overlayEntry(siteId, agentClient.runtimeStatus()));
         } catch (BusinessException ex) {
             return new AdminAiRuntimeDto(false, toClientErrorCode(ex), null);
         }
@@ -124,6 +145,76 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             mapped.add(new AgentTodoItem(item.id().trim(), item.title().trim(), item.status()));
         }
         return mapped;
+    }
+
+    /** 对话实际用的是入口，不用进程 AI_MODEL。入口调用不挂进程 fallback。 */
+    private AgentRuntimeStatus overlayEntry(long siteId, AgentRuntimeStatus status) {
+        AgentModelSelection selection = modelEntryService.currentSelection(siteId);
+        if (selection == null || !StringUtils.hasText(selection.spec())) {
+            return status;
+        }
+        String retrievalStatus = status.retrievalStatus();
+        String retrievalReason = status.retrievalBlockedReason();
+        if (StringUtils.hasText(selection.embeddingSpec())
+                && "BLOCKED".equals(retrievalStatus)
+                && retrievalReason != null
+                && retrievalReason.contains("AI_EMBEDDING_MODEL")) {
+            retrievalStatus = "LIVE";
+            retrievalReason = null;
+        }
+        return new AgentRuntimeStatus(
+                selection.spec(),
+                "LIVE",
+                List.of(),
+                status.mcpStatus(),
+                status.mcpServers(),
+                status.limits(),
+                retrievalStatus,
+                retrievalReason,
+                status.harness());
+    }
+
+    private String callbackBaseUrl() {
+        String configured = agentProperties.getBusinessApiBaseUrl();
+        return StringUtils.hasText(configured) ? configured.trim() : null;
+    }
+
+    private List<String> knowledgeSnippets(long siteId, String query) {
+        String trimmed = query.trim();
+        if (trimmed.length() > KNOWLEDGE_NEEDLE_CHARS) {
+            trimmed = trimmed.substring(0, KNOWLEDGE_NEEDLE_CHARS);
+        }
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        String needle = trimmed;
+        List<String> snippets = knowledgeDocumentMapper
+                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
+                        .eq(AdminAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(AdminAiKnowledgeDocumentEntity::getStatus, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)
+                        .and(wrapper -> wrapper
+                                .like(AdminAiKnowledgeDocumentEntity::getTitle, needle)
+                                .or()
+                                .like(AdminAiKnowledgeDocumentEntity::getContent, needle))
+                        .orderByDesc(AdminAiKnowledgeDocumentEntity::getId)
+                        .last("LIMIT " + KNOWLEDGE_SNIPPET_LIMIT))
+                .stream()
+                .map(AdminAiPreviewServiceImpl::snippet)
+                .filter(StringUtils::hasText)
+                .toList();
+        return snippets.isEmpty() ? null : snippets;
+    }
+
+    private static String snippet(AdminAiKnowledgeDocumentEntity document) {
+        String content = document.getContent() == null ? "" : document.getContent().trim();
+        if (content.length() > KNOWLEDGE_SNIPPET_CHARS) {
+            content = content.substring(0, KNOWLEDGE_SNIPPET_CHARS);
+        }
+        String title = document.getTitle() == null ? "" : document.getTitle().trim();
+        if (!StringUtils.hasText(title)) {
+            return content;
+        }
+        return StringUtils.hasText(content) ? title + "\n" + content : title;
     }
 
     private AgentPromptProfile loadPromptProfile(long siteId) {

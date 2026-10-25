@@ -9,7 +9,7 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
 from pydantic_ai.models import Model
 
-from agent_services.agent.prompt_builder import build_prompt_parts
+from agent_services.agent.harness import assemble_harness
 from agent_services.agent.runtime import (
     BUDGET_EXCEEDED,
     MAX_TOOL_TRACE,
@@ -65,18 +65,27 @@ async def stream_chat_events(
     budget: RunBudget | None = None,
     locale: str | None = None,
     skills_max_instruction_chars: int | None = None,
+    skill_ids: list[str] | None = None,
+    harness_dir: str | None = None,
 ) -> AsyncIterator[AgentStreamEvent]:
     resolved_budget = budget or RunBudget()
-    system_prompt, user_message = build_prompt_parts(
-        site_id,
-        message,
-        prompt_profile,
-        retrieval_context,
+    harness = assemble_harness(
+        site_id=site_id,
+        message=message,
+        prompt_profile=prompt_profile,
+        retrieval_context=retrieval_context,
         skill_instructions=skill_instructions,
+        skill_ids=skill_ids if skill_ids is not None else skills_applied,
+        skills_missing=skills_missing,
+        history=history,
         todos=initial_todos,
         locale=locale,
         skills_max_instruction_chars=skills_max_instruction_chars,
+        toolsets=toolsets,
+        budget=resolved_budget,
+        harness_dir=harness_dir,
     )
+    system_prompt, user_message = harness.system_prompt, harness.user_message
     start_data: dict[str, object] = {"siteId": site_id}
     if skills_applied:
         start_data["skillsApplied"] = list(skills_applied)
@@ -84,7 +93,7 @@ async def stream_chat_events(
         start_data["skillsMissing"] = list(skills_missing)
     yield AgentStreamEvent(type=AgentStreamEventType.START, data=start_data)
 
-    run_kwargs = build_run_kwargs(prompt_profile, history, resolved_budget)
+    run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
     side_events: list[AgentStreamEvent] = []
     tool_trace: list[dict[str, object]] = []
 

@@ -18,11 +18,15 @@ class RetrievalChunkLimitExceeded(Exception):
 
 
 class RetrievalService:
-    def __init__(self, embedder: EmbeddingClient, store: RetrievalStore) -> None:
+    def __init__(self, embedder: EmbeddingClient | None, store: RetrievalStore) -> None:
         self._embedder = embedder
         self._store = store
         self._degraded = False
         self._last_error: str | None = None
+
+    @property
+    def has_process_embedder(self) -> bool:
+        return self._embedder is not None
 
     @property
     def degraded(self) -> bool:
@@ -32,7 +36,15 @@ class RetrievalService:
     def last_error(self) -> str | None:
         return self._last_error
 
-    async def upsert_document(self, *, site_id: str, source_id: str, title: str, content: str) -> int:
+    async def upsert_document(
+        self,
+        *,
+        site_id: str,
+        source_id: str,
+        title: str,
+        content: str,
+        embedder: EmbeddingClient | None = None,
+    ) -> int:
         chunks = split_text(content)
         if not chunks:
             await self._store.delete_document(site_id=site_id, source_id=source_id)
@@ -41,7 +53,10 @@ class RetrievalService:
             raise RetrievalChunkLimitExceeded(
                 f"Document exceeds the maximum of {MAX_UPSERT_CHUNKS} chunks."
             )
-        embeddings = await self._embedder.embed_documents(chunks)
+        client = embedder or self._embedder
+        if client is None:
+            raise RuntimeError("Embedding client is not configured.")
+        embeddings = await client.embed_documents(chunks)
         return await self._store.upsert_document(
             site_id=site_id,
             source_id=source_id,
@@ -53,19 +68,34 @@ class RetrievalService:
     async def delete_document(self, *, site_id: str, source_id: str) -> None:
         await self._store.delete_document(site_id=site_id, source_id=source_id)
 
-    async def search(self, *, site_id: str, query: str, top_k: int = DEFAULT_TOP_K) -> list[RetrievedChunk]:
-        embedding = await self._embedder.embed_query(query)
+    async def search(
+        self,
+        *,
+        site_id: str,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+        embedder: EmbeddingClient | None = None,
+    ) -> list[RetrievedChunk]:
+        client = embedder or self._embedder
+        if client is None:
+            raise RuntimeError("Embedding client is not configured.")
+        embedding = await client.embed_query(query)
         return await self._store.search(site_id=site_id, embedding=embedding, top_k=top_k)
 
     async def retrieve_chunks(
-        self, *, site_id: str, query: str, top_k: int = DEFAULT_TOP_K
+        self,
+        *,
+        site_id: str,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+        embedder: EmbeddingClient | None = None,
     ) -> list[RetrievedChunk]:
         """与 retrieve_context 同一条降级路径：嵌入或向量库失败时返回空列表并置 degraded。
 
         chat grounding 与 POST /retrieval/search 都走这里，避免另写一套错误格式。
         """
         try:
-            chunks = await self.search(site_id=site_id, query=query, top_k=top_k)
+            chunks = await self.search(site_id=site_id, query=query, top_k=top_k, embedder=embedder)
         except Exception as exc:  # noqa: BLE001
             self._degraded = True
             self._last_error = type(exc).__name__
@@ -98,10 +128,8 @@ def create_retrieval_service(settings: Settings) -> tuple[RetrievalService | Non
     if settings.ai_embedding_dimensions < 1:
         return None, "AI_EMBEDDING_DIMENSIONS must be a positive integer."
     embedder, blocked_reason = create_embedding_client(settings)
-    if embedder is None:
-        return None, blocked_reason
-
     from agent_services.retrieval.store import PgVectorRetrievalStore
 
     store = PgVectorRetrievalStore(dsn, dimensions=settings.ai_embedding_dimensions)
-    return RetrievalService(embedder, store), None
+    # 进程没配嵌入模型时仍保留库连接：请求可以带模型入口的 embedding spec 和 key。
+    return RetrievalService(embedder, store), None if embedder is not None else blocked_reason

@@ -132,6 +132,7 @@ src/agent_services/
 ├── observability/
 └── testing/mcp_echo.py             # 平台 MCP smoke（echo/add）
 skills/                             # SKILL.md
+harness/                            # background / guardrails / tool guidance
 scripts/run_mcp_echo.py             # 可选 HTTP MCP echo
 tests/
 ```
@@ -147,6 +148,19 @@ tests/
 uv run --extra dev python scripts/run_mcp_echo.py
 # 另开终端配置 MCP_SERVERS_JSON 后启动 agent-services
 ```
+
+## Harness（平台）
+
+一次请求组装成只读 harness，同步和流式都把这份系统提示送给模型：
+
+- `harness/background.md`、`guardrails.md`、`tool_guidance.md`（`AGENT_HARNESS_DIR`，镜像里是 `/app/harness`）。单文件超过 4000 字时截断并标明 `[... truncated]`
+- 已解析的 skills 正文；未知 id 记在 `skills_missing`
+- 本轮函数工具的名字和说明。MCP 另列服务器名，不写 URL，也不混进函数工具清单
+- 送模历史按字符预算裁成 `memory`，同步和流式都用这份结果
+- 预算、工具超时、历史字符上限和技能注入上限记在 guardrails 上，并写进提示里的 Run limits；超限仍由运行时强制失败
+- `GET /internal/v1/health` 的 `harness` 只报告三个平台文件在不在
+
+不在请求之间保存 harness，也不根据回复改写下一轮提示。
 
 ## Skills（平台）
 

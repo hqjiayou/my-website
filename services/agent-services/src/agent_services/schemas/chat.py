@@ -51,6 +51,17 @@ class ChatHistoryMessage(BaseModel):
         return value[:MAX_MESSAGE_CHARS]
 
 
+class ModelSelection(BaseModel):
+    """Java 模型入口带入的本次凭证。缺失时回退进程 AI_MODEL。"""
+
+    spec: str = Field(min_length=1, max_length=256)
+    api_key: str = Field(alias="apiKey", min_length=1, max_length=4096)
+    base_url: str | None = Field(default=None, alias="baseUrl", max_length=512)
+    embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
+
+    model_config = {"populate_by_name": True}
+
+
 class ChatRequest(BaseModel):
     site_id: str = Field(alias="siteId")
     message: str = Field(max_length=MAX_MESSAGE_CHARS)
@@ -60,8 +71,23 @@ class ChatRequest(BaseModel):
     history: list[ChatHistoryMessage] | None = Field(default=None, max_length=MAX_HISTORY_ITEMS)
     skills: list[SkillId] | None = Field(default=None, max_length=MAX_SKILL_IDS)
     todos: list[TodoItem] | None = Field(default=None, max_length=MAX_TODO_ITEMS)
+    model_selection: ModelSelection | None = Field(default=None, alias="model")
+    business_api_base_url: str | None = Field(default=None, alias="businessApiBaseUrl", max_length=512)
+    knowledge_context: list[str] | None = Field(default=None, alias="knowledgeContext", max_length=4)
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("knowledge_context")
+    @classmethod
+    def cap_knowledge_snippets(cls, value: list[str] | None) -> list[str] | None:
+        if not value:
+            return value
+        snippets: list[str] = []
+        for item in value:
+            text = item.strip()
+            if text:
+                snippets.append(text[:2000])
+        return snippets or None
 
     @field_validator("todos")
     @classmethod

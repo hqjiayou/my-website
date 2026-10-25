@@ -7,6 +7,7 @@ COPY pyproject.toml uv.lock .python-version README.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY src ./src
 COPY skills ./skills
+COPY harness ./harness
 ENV UV_PREVIEW_FEATURES=extra-build-dependencies
 RUN uv pip install hatchling && uv sync --frozen --no-dev --no-editable
 
@@ -24,8 +25,10 @@ USER appuser
 COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 COPY --from=builder --chown=appuser:appuser /app/src /app/src
 COPY --from=builder --chown=appuser:appuser /app/skills /app/skills
+COPY --from=builder --chown=appuser:appuser /app/harness /app/harness
 
 ENV AGENT_SKILLS_DIR=/app/skills
+ENV AGENT_HARNESS_DIR=/app/harness
 
 ENV PATH="/app/.venv/bin:$PATH"
 

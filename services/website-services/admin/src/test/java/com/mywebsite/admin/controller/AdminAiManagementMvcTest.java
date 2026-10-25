@@ -293,7 +293,8 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 List.of(new AgentRuntimeStatus.McpServer("echo", true)),
                 new AgentRuntimeStatus.Limits(10, 20, null, 30.0, 24000),
                 "BLOCKED",
-                "Retrieval database is not configured (missing RETRIEVAL_DATABASE_URL)."));
+                "Retrieval database is not configured (missing RETRIEVAL_DATABASE_URL).",
+                new AgentRuntimeStatus.HarnessFiles(true, true, false)));
 
         mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/runtime")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -303,7 +304,10 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.status.fallbackProviders[0]").value("anthropic:claude"))
                 .andExpect(jsonPath("$.data.status.mcpServers[0].name").value("echo"))
                 .andExpect(jsonPath("$.data.status.limits.maxRequests").value(10))
-                .andExpect(jsonPath("$.data.status.retrievalStatus").value("BLOCKED"));
+                .andExpect(jsonPath("$.data.status.retrievalStatus").value("BLOCKED"))
+                .andExpect(jsonPath("$.data.status.harness.background").value(true))
+                .andExpect(jsonPath("$.data.status.harness.guardrails").value(true))
+                .andExpect(jsonPath("$.data.status.harness.toolGuidance").value(false));
 
         when(agentClient.runtimeStatus()).thenThrow(new BusinessException(ErrorCode.SYSTEM_ERROR));
         mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/runtime")
@@ -378,6 +382,99 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("EXTERNAL_DEPENDENCY_BLOCKED")));
+    }
+
+    @Test
+    void modelEntryKeepsKeyOffTheApiAndPreviewUsesTheDefault() throws Exception {
+        String token = tokenFor(500L);
+        long siteId = createSite(token);
+        String secret = "super-secret-key";
+
+        ObjectNode create = MAPPER.createObjectNode();
+        create.put("displayName", "Gemini");
+        create.put("modelSpec", "google:gemini-3-flash-preview");
+        create.put("apiKey", secret);
+        create.put("baseUrl", "https://example.test/v1");
+        create.put("enabled", true);
+        create.put("defaultEntry", true);
+        MvcResult created = mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(create)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.apiKey").doesNotExist())
+                .andExpect(jsonPath("$.data.apiKeyHint").value("…-key"))
+                .andExpect(jsonPath("$.data.defaultEntry").value(true))
+                .andReturn();
+        assertThat(created.getResponse().getContentAsString()).doesNotContain(secret);
+        var createdData = MAPPER.readTree(created.getResponse().getContentAsString()).path("data");
+        long id = createdData.path("id").asLong();
+        int version = createdData.path("version").asInt();
+
+        ObjectNode update = MAPPER.createObjectNode();
+        update.put("displayName", "Gemini flash");
+        update.put("modelSpec", "google:gemini-3-flash-preview");
+        update.put("baseUrl", "");
+        update.put("enabled", true);
+        update.put("defaultEntry", true);
+        update.put("version", version);
+        MvcResult updated = mockMvc.perform(put("/api/admin/ai/model-entries/" + id)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(update)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.displayName").value("Gemini flash"))
+                .andExpect(jsonPath("$.data.apiKeyHint").value("…-key"))
+                .andExpect(jsonPath("$.data.baseUrl").value(org.hamcrest.Matchers.nullValue()))
+                .andReturn();
+        assertThat(updated.getResponse().getContentAsString()).doesNotContain(secret);
+
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        doAnswer(invocation -> {
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent("DONE", "{\"reply\":\"hi\"}");
+                    return null;
+                })
+                .when(agentClient)
+                .chatStream(captor.capture(), any());
+        ObjectNode preview = MAPPER.createObjectNode();
+        preview.put("message", "hello");
+        MvcResult streamed = mockMvc.perform(post("/api/admin/sites/" + siteId + "/ai/preview/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(preview)))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(streamed)).andExpect(status().isOk());
+        assertThat(captor.getValue().model().spec()).isEqualTo("google:gemini-3-flash-preview");
+        assertThat(captor.getValue().model().apiKey()).isEqualTo(secret);
+        assertThat(captor.getValue().model().baseUrl()).isNull();
+
+        ObjectNode second = MAPPER.createObjectNode();
+        second.put("displayName", "OpenAI");
+        second.put("modelSpec", "openai:gpt-4o-mini");
+        second.put("apiKey", "another-secret-key");
+        second.put("enabled", true);
+        second.put("defaultEntry", true);
+        mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(second)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.defaultEntry").value(true));
+
+        MvcResult listed = mockMvc.perform(get("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].defaultEntry").value(true))
+                .andExpect(jsonPath("$.data[1].defaultEntry").value(false))
+                .andReturn();
+        assertThat(listed.getResponse().getContentAsString()).doesNotContain(secret).doesNotContain("another-secret-key");
+        for (var item : MAPPER.readTree(listed.getResponse().getContentAsString()).path("data")) {
+            mockMvc.perform(delete("/api/admin/ai/model-entries/" + item.path("id").asLong())
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                    .andExpect(status().isOk());
+        }
     }
 
     private long createSite(String token) throws Exception {

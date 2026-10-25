@@ -14,6 +14,8 @@ import type {
   AiPreviewChatInput,
   AiPreviewHistoryMessage,
   AiPreviewSkill,
+  AiModelEntry,
+  AiModelEntryWriteInput,
   AiPromptProfile,
   AiMcpReady,
   AiRuntime,
@@ -49,6 +51,28 @@ function aiBase(siteId: number) {
 }
 
 export const aiApi = {
+  listModelEntries(): Promise<AiModelEntry[]> {
+    return httpClient.get<HttpMessageBody<AiModelEntry[]>>('/admin/ai/model-entries').then(unwrapData)
+  },
+
+  createModelEntry(input: AiModelEntryWriteInput): Promise<AiModelEntry> {
+    return httpClient
+      .post<HttpMessageBody<AiModelEntry>, AiModelEntryWriteInput>('/admin/ai/model-entries', input)
+      .then(unwrapData)
+  },
+
+  updateModelEntry(id: number, input: AiModelEntryWriteInput): Promise<AiModelEntry> {
+    return httpClient
+      .put<HttpMessageBody<AiModelEntry>, AiModelEntryWriteInput>(`/admin/ai/model-entries/${id}`, input)
+      .then(unwrapData)
+  },
+
+  deleteModelEntry(id: number): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null | void>>(`/admin/ai/model-entries/${id}`)
+      .then(unwrapVoid)
+  },
+
   getPromptProfile(siteId: number): Promise<AiPromptProfile> {
     return httpClient
       .get<HttpMessageBody<AiPromptProfile>>(`${aiBase(siteId)}/prompt-profile`)

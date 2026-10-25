@@ -17,7 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * RBAC 种子 Flyway（V1–V22：含 Site/User/Template/Media/Content/Reservation/AI）在真实 PostgreSQL 上的迁移与数据验证。
+ * RBAC 种子 Flyway（V1–V23：含 Site/User/Template/Media/Content/Reservation/AI）在真实 PostgreSQL 上的迁移与数据验证。
  *
  * <p>默认由 Testcontainers 自举一次性 PostgreSQL（库名 {@code my_website_rbac_verify}）；执行：
  * {@code mvn clean test -Ppersistence-verify-pg -pl admin -am -Dtest=AdminRbacSeedVerifyPgTest}
@@ -93,10 +93,12 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-kb:create",
             "admin:ai-kb:update",
             "admin:ai-kb:delete",
-            "admin:ai-conversation:list");
+            "admin:ai-conversation:list",
+            "admin:ai-model:read",
+            "admin:ai-model:update");
 
-    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 22;
-    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 61;
+    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 24;
+    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 63;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -109,7 +111,7 @@ class AdminRbacSeedVerifyPgTest {
                 .extracting(row -> row.get("version"))
                 .contains(
                         "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
-                        "16", "17", "18", "19", "20", "21");
+                        "16", "17", "18", "19", "20", "21", "22", "23", "24");
         assertThat(migrations).allMatch(row -> Boolean.TRUE.equals(row.get("success")));
 
         List<Map<String, Object>> roles = jdbcTemplate.queryForList(

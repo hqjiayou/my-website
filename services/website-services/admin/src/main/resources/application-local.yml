@@ -20,6 +20,12 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
 
+mywebsite:
+  ai:
+    model-entry-secret: ${AI_MODEL_ENTRY_SECRET:local-dev-model-entry-secret}
+  agent:
+    business-api-base-url: ${AGENT_BUSINESS_API_BASE_URL:http://127.0.0.1:8082}
+
 storage:
   minio:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}

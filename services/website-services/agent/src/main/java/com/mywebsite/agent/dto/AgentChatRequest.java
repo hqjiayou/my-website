@@ -12,7 +12,35 @@ public record AgentChatRequest(
         AgentPromptProfile promptProfile,
         List<AgentChatHistoryMessage> history,
         List<String> skills,
-        List<AgentTodoItem> todos) {
+        List<AgentTodoItem> todos,
+        AgentModelSelection model,
+        String businessApiBaseUrl,
+        List<String> knowledgeContext) {
+
+    public AgentChatRequest(
+            String siteId,
+            String message,
+            String locale,
+            String conversationId,
+            AgentPromptProfile promptProfile,
+            List<AgentChatHistoryMessage> history,
+            List<String> skills,
+            List<AgentTodoItem> todos,
+            AgentModelSelection model) {
+        this(siteId, message, locale, conversationId, promptProfile, history, skills, todos, model, null, null);
+    }
+
+    public AgentChatRequest(
+            String siteId,
+            String message,
+            String locale,
+            String conversationId,
+            AgentPromptProfile promptProfile,
+            List<AgentChatHistoryMessage> history,
+            List<String> skills,
+            List<AgentTodoItem> todos) {
+        this(siteId, message, locale, conversationId, promptProfile, history, skills, todos, null);
+    }
 
     public AgentChatRequest(String siteId, String message) {
         this(siteId, message, null, null, null, null, null, null);

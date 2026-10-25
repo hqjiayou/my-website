@@ -16,11 +16,12 @@ class Settings(BaseSettings):
         default="", validation_alias="AGENT_INTERNAL_SERVICE_TOKEN"
     )
 
+    # 进程回退模型。Java 在请求里带了模型入口时，这一轮不用这里的 spec / key。
     # Pydantic AI model spec，例如 "openai:gpt-4o-mini" / "azure:..." / "anthropic:..."
     # Google 正式路徑："google:gemini-3-flash-preview"（舊別名 "google-gla:..."）。已實測範例，程式不預設模型。
     # 直配憑證用 AI_PROVIDER_API_KEY；若有 AI_PROVIDER_BASE_URL 也傳給 Google Provider。
     # 未直配金鑰時，Google Provider 讀 GOOGLE_API_KEY 或 GEMINI_API_KEY。
-    # 缺失 → providerStatus=BLOCKED，chat 503（ADR-0004）
+    # 缺失且请求也没带入口 → providerStatus=BLOCKED，chat 503（ADR-0004）
     ai_model: str = Field(default="", validation_alias="AI_MODEL")
     ai_provider_api_key: str = Field(default="", validation_alias="AI_PROVIDER_API_KEY")
     ai_provider_base_url: str = Field(default="", validation_alias="AI_PROVIDER_BASE_URL")
@@ -53,6 +54,8 @@ class Settings(BaseSettings):
 
     # ---- Phase 5 Skills / Todo / MCP ----
     agent_skills_dir: str = Field(default="", validation_alias="AGENT_SKILLS_DIR")
+    # 平台 background / guardrails / tool guidance。空则用源码 harness/ 或镜像 /app/harness。
+    agent_harness_dir: str = Field(default="", validation_alias="AGENT_HARNESS_DIR")
     agent_default_skills: str = Field(default="orchestration", validation_alias="AGENT_DEFAULT_SKILLS")
     # ignore（默认）：未知 skill id 记入 skillsMissing，不失败
     # reject：请求/默认中含未知 id → 400 BAD_REQUEST

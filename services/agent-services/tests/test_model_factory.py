@@ -9,7 +9,11 @@ from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.test import TestModel
 
-from agent_services.agent.model_factory import ModelHandle, create_model
+from agent_services.agent.model_factory import (
+    ModelHandle,
+    create_model,
+    create_model_for_entry,
+)
 from agent_services.app import create_app
 
 
@@ -148,3 +152,58 @@ def test_google_gla_model_normalizes_name_and_passes_direct_credentials(
     assert handle.live
     assert isinstance(handle.model, TestModel)
     assert handle.spec == "google-gla:gemini-3-flash-preview"
+
+
+def test_entry_uses_its_own_key_and_skips_process_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _capture_google_build(monkeypatch)
+    handle = create_model_for_entry(
+        spec="google:gemini-3-flash-preview",
+        api_key="entry-key",
+        base_url="https://generativelanguage.example/v1beta",
+    )
+    assert captured["api_key"] == "entry-key"
+    assert captured["base_url"] == "https://generativelanguage.example/v1beta"
+    assert handle.live
+    assert handle.fallback_specs == ()
+    assert handle.spec == "google:gemini-3-flash-preview"
+
+
+def test_entry_passes_anthropic_and_azure_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_anthropic(model_name: str, *, api_key: str, base_url: str) -> Model:
+        captured["anthropic"] = (model_name, api_key, base_url)
+        return TestModel(model_name=model_name)
+
+    def fake_azure(model_name: str, *, api_key: str, base_url: str) -> Model:
+        captured["azure"] = (model_name, api_key, base_url)
+        return TestModel(model_name=model_name)
+
+    monkeypatch.setattr("agent_services.agent.model_factory._build_anthropic", fake_anthropic)
+    monkeypatch.setattr("agent_services.agent.model_factory._build_azure", fake_azure)
+
+    anthropic = create_model_for_entry(
+        spec="anthropic:claude-sonnet",
+        api_key="anthropic-key",
+        base_url="https://api.anthropic.com",
+    )
+    azure = create_model_for_entry(
+        spec="azure:my-deployment",
+        api_key="azure-key",
+        base_url="https://example.openai.azure.com",
+    )
+    assert anthropic.live
+    assert azure.live
+    assert captured["anthropic"] == ("claude-sonnet", "anthropic-key", "https://api.anthropic.com")
+    assert captured["azure"] == ("my-deployment", "azure-key", "https://example.openai.azure.com")
+
+
+def test_entry_failure_does_not_echo_the_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(model_name: str, *, api_key: str | None, base_url: str | None) -> Model:
+        raise RuntimeError(f"rejected {api_key}")
+
+    monkeypatch.setattr("agent_services.agent.model_factory._build_google_model", boom)
+    handle = create_model_for_entry(spec="google:gemini-3-flash-preview", api_key="entry-key", base_url=None)
+    assert not handle.live
+    assert handle.blocked_reason == "AI provider is not configured or invalid: RuntimeError"
+    assert "entry-key" not in (handle.blocked_reason or "")

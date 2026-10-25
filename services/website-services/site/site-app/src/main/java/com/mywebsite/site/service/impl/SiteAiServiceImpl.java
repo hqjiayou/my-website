@@ -17,8 +17,16 @@ import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.security.AuthContext;
 import com.mywebsite.common.security.AuthenticatedUser;
 import com.mywebsite.common.security.SubjectCodes;
+import com.mywebsite.infra.crypto.ModelEntryCipher;
 import com.mywebsite.infra.service.LocalizedMessageService;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.site.dto.SiteAiChatRequestDto;
+import com.mywebsite.site.entity.SiteAiKnowledgeDocumentEntity;
+import com.mywebsite.site.entity.SiteAiModelEntryEntity;
+import com.mywebsite.site.mapper.SiteAiKnowledgeDocumentMapper;
+import com.mywebsite.site.mapper.SiteAiModelEntryMapper;
 import com.mywebsite.site.dto.SiteAiChatResponseDto;
 import com.mywebsite.site.dto.SiteKnowledgeSearchRequestDto;
 import com.mywebsite.site.dto.SiteKnowledgeSearchResponseDto;
@@ -50,24 +58,39 @@ public class SiteAiServiceImpl implements SiteAiService {
 
     /** 与 agent-services ChatRequest.message 上限一致。超长在进会话和限流之前拒绝。 */
     private static final int MAX_MESSAGE_CHARS = 16_000;
+    private static final int KNOWLEDGE_NEEDLE_CHARS = 80;
+    private static final int KNOWLEDGE_SNIPPET_CHARS = 800;
+    private static final int KNOWLEDGE_SNIPPET_LIMIT = 4;
 
     private final AgentClient agentClient;
+    private final AgentProperties agentProperties;
+    private final ModelEntryCipher modelEntryCipher;
     private final SiteAiRateLimitService rateLimitService;
     private final SiteAiConversationService conversationService;
+    private final SiteAiModelEntryMapper modelEntryMapper;
+    private final SiteAiKnowledgeDocumentMapper knowledgeDocumentMapper;
     private final LocalizedMessageService localizedMessageService;
     private final ExecutorService siteAiStreamExecutor;
     private final ObjectMapper objectMapper;
 
     public SiteAiServiceImpl(
             AgentClient agentClient,
+            AgentProperties agentProperties,
+            ModelEntryCipher modelEntryCipher,
             SiteAiRateLimitService rateLimitService,
             SiteAiConversationService conversationService,
+            SiteAiModelEntryMapper modelEntryMapper,
+            SiteAiKnowledgeDocumentMapper knowledgeDocumentMapper,
             LocalizedMessageService localizedMessageService,
             ExecutorService siteAiStreamExecutor,
             ObjectMapper objectMapper) {
         this.agentClient = agentClient;
+        this.agentProperties = agentProperties;
+        this.modelEntryCipher = modelEntryCipher;
         this.rateLimitService = rateLimitService;
         this.conversationService = conversationService;
+        this.modelEntryMapper = modelEntryMapper;
+        this.knowledgeDocumentMapper = knowledgeDocumentMapper;
         this.localizedMessageService = localizedMessageService;
         this.siteAiStreamExecutor = siteAiStreamExecutor;
         this.objectMapper = objectMapper;
@@ -103,13 +126,31 @@ public class SiteAiServiceImpl implements SiteAiService {
         if (query.length() > SiteKnowledgeSearchRequestDto.MAX_QUERY_CHARS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        AgentRetrievalSearchResult result = agentClient.searchRetrieval(
-                new AgentRetrievalSearchRequest(String.valueOf(siteId), query, clampTopK(request.topK())));
-        List<SiteKnowledgeSearchResponseDto.Hit> hits = result.hits().stream()
-                .map(hit -> new SiteKnowledgeSearchResponseDto.Hit(
-                        hit.sourceId(), hit.chunkIndex(), hit.score(), hit.content()))
-                .toList();
-        return new SiteKnowledgeSearchResponseDto(hits, result.degraded());
+        try {
+            AgentModelSelection selection = loadDefaultModel(siteId);
+            AgentRetrievalSearchResult result = agentClient.searchRetrieval(new AgentRetrievalSearchRequest(
+                    String.valueOf(siteId),
+                    query,
+                    clampTopK(request.topK()),
+                    selection == null ? null : selection.embeddingSpec(),
+                    selection == null ? null : selection.apiKey(),
+                    selection == null ? null : selection.baseUrl()));
+            if (!result.degraded() && !result.hits().isEmpty()) {
+                List<SiteKnowledgeSearchResponseDto.Hit> hits = result.hits().stream()
+                        .map(hit -> new SiteKnowledgeSearchResponseDto.Hit(
+                                hit.sourceId(), hit.chunkIndex(), hit.score(), hit.content()))
+                        .toList();
+                return new SiteKnowledgeSearchResponseDto(hits, false);
+            }
+            if (!result.degraded()) {
+                return new SiteKnowledgeSearchResponseDto(List.of(), false);
+            }
+        } catch (BusinessException ex) {
+            if (ex.getCode() != ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()) {
+                throw ex;
+            }
+        }
+        return new SiteKnowledgeSearchResponseDto(textKnowledgeHits(siteId, query), false);
     }
 
     /** 与内容列表 limit 相同：越界夹进 1..{@link SiteKnowledgeSearchRequestDto#MAX_TOP_K}，null 交给 Python 默认。 */
@@ -153,7 +194,115 @@ public class SiteAiServiceImpl implements SiteAiService {
                 preparation.history().isEmpty() ? null : preparation.history(),
                 // 终端用户不能指定 skills（防前台激活任意指令模块）；只用 agent-services 平台默认
                 null,
-                preparation.todos().isEmpty() ? null : preparation.todos());
+                preparation.todos().isEmpty() ? null : preparation.todos(),
+                loadDefaultModel(siteId),
+                callbackBaseUrl(),
+                knowledgeSnippets(siteId, message));
+    }
+
+    private String callbackBaseUrl() {
+        String configured = agentProperties.getBusinessApiBaseUrl();
+        return StringUtils.hasText(configured) ? configured.trim() : null;
+    }
+
+    /** 向量索引没有命中时，Python 用这些原文片段回答。没有匹配则不传。 */
+    private List<String> knowledgeSnippets(long siteId, String query) {
+        String needle = needle(query);
+        if (needle.isEmpty()) {
+            return null;
+        }
+        List<String> snippets = knowledgeDocumentMapper
+                .selectList(new LambdaQueryWrapper<SiteAiKnowledgeDocumentEntity>()
+                        .eq(SiteAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(SiteAiKnowledgeDocumentEntity::getStatus, SiteAiKnowledgeDocumentEntity.STATUS_ACTIVE)
+                        .and(wrapper -> wrapper
+                                .like(SiteAiKnowledgeDocumentEntity::getTitle, needle)
+                                .or()
+                                .like(SiteAiKnowledgeDocumentEntity::getContent, needle))
+                        .orderByDesc(SiteAiKnowledgeDocumentEntity::getId)
+                        .last("LIMIT " + KNOWLEDGE_SNIPPET_LIMIT))
+                .stream()
+                .map(SiteAiServiceImpl::snippet)
+                .filter(StringUtils::hasText)
+                .toList();
+        return snippets.isEmpty() ? null : snippets;
+    }
+
+    private List<SiteKnowledgeSearchResponseDto.Hit> textKnowledgeHits(long siteId, String query) {
+        String needle = needle(query);
+        if (needle.isEmpty()) {
+            return List.of();
+        }
+        return knowledgeDocumentMapper
+                .selectList(new LambdaQueryWrapper<SiteAiKnowledgeDocumentEntity>()
+                        .eq(SiteAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(SiteAiKnowledgeDocumentEntity::getStatus, SiteAiKnowledgeDocumentEntity.STATUS_ACTIVE)
+                        .and(wrapper -> wrapper
+                                .like(SiteAiKnowledgeDocumentEntity::getTitle, needle)
+                                .or()
+                                .like(SiteAiKnowledgeDocumentEntity::getContent, needle))
+                        .orderByDesc(SiteAiKnowledgeDocumentEntity::getId)
+                        .last("LIMIT " + KNOWLEDGE_SNIPPET_LIMIT))
+                .stream()
+                .map(document -> new SiteKnowledgeSearchResponseDto.Hit(
+                        "kb:" + document.getId(), 0, 1.0d, snippet(document)))
+                .filter(hit -> StringUtils.hasText(hit.content()))
+                .toList();
+    }
+
+    private static String needle(String query) {
+        String trimmed = query == null ? "" : query.trim();
+        if (trimmed.length() > KNOWLEDGE_NEEDLE_CHARS) {
+            return trimmed.substring(0, KNOWLEDGE_NEEDLE_CHARS);
+        }
+        return trimmed;
+    }
+
+    private static String snippet(SiteAiKnowledgeDocumentEntity document) {
+        String content = document.getContent() == null ? "" : document.getContent().trim();
+        if (content.length() > KNOWLEDGE_SNIPPET_CHARS) {
+            content = content.substring(0, KNOWLEDGE_SNIPPET_CHARS);
+        }
+        String title = document.getTitle() == null ? "" : document.getTitle().trim();
+        if (!StringUtils.hasText(title)) {
+            return content;
+        }
+        return StringUtils.hasText(content) ? title + "\n" + content : title;
+    }
+
+    /** 站点默认入口优先，否则全站默认。没有时不带 model，Python 回退进程 AI_MODEL。 */
+    private AgentModelSelection loadDefaultModel(long siteId) {
+        SiteAiModelEntryEntity entry = selectDefaultModel(siteId);
+        if (entry == null) {
+            entry = selectDefaultModel(null);
+        }
+        if (entry == null || !StringUtils.hasText(entry.getModelSpec())) {
+            return null;
+        }
+        String apiKey = modelEntryCipher.decrypt(entry.getApiKey());
+        if (!StringUtils.hasText(apiKey)) {
+            return null;
+        }
+        if (modelEntryCipher.canEncrypt() && !modelEntryCipher.isEncrypted(entry.getApiKey())) {
+            entry.setApiKey(modelEntryCipher.encrypt(apiKey));
+            modelEntryMapper.updateById(entry);
+        }
+        String baseUrl = StringUtils.hasText(entry.getBaseUrl()) ? entry.getBaseUrl().trim() : null;
+        String embeddingSpec =
+                StringUtils.hasText(entry.getEmbeddingSpec()) ? entry.getEmbeddingSpec().trim() : null;
+        return new AgentModelSelection(entry.getModelSpec().trim(), apiKey, baseUrl, embeddingSpec);
+    }
+
+    private SiteAiModelEntryEntity selectDefaultModel(Long siteId) {
+        LambdaQueryWrapper<SiteAiModelEntryEntity> query = new LambdaQueryWrapper<SiteAiModelEntryEntity>()
+                .eq(SiteAiModelEntryEntity::getEnabled, true)
+                .eq(SiteAiModelEntryEntity::getDefaultEntry, true);
+        if (siteId == null) {
+            query.isNull(SiteAiModelEntryEntity::getSiteId);
+        } else {
+            query.eq(SiteAiModelEntryEntity::getSiteId, siteId);
+        }
+        return modelEntryMapper.selectOne(query.last("LIMIT 1"));
     }
 
     private AuthenticatedUser validateChatAccess(long siteId, SiteAiChatRequestDto request) {

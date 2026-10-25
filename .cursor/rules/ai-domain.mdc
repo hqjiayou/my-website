@@ -21,7 +21,8 @@ alwaysApply: false
 ## Java → Python 请求
 
 - Java 加载 history、prompt profile、trusted `siteId` 后组装 `AgentChatRequest`。
-- 可选请求字段：`skills[]`、`todos[]`。
+- 可选请求字段：`skills[]`、`todos[]`、`model`（Java 从 `ai_model_entry` 选出的 spec / apiKey / baseUrl，浏览器不可提交）。
+- 没有启用的默认入口时不带 `model`，Python 回退进程 `AI_MODEL`。
 - 站点会话 todos 持久化在 `site_ai_conversation.agent_todos`（V20）；消息级运行元数据在 `site_ai_message.agent_meta`（V21）。是否写入、是否把 todos 带入下一轮，由 Java 决定。
 
 ## 前端

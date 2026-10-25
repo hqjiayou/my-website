@@ -25,6 +25,94 @@ def _live_client(reply_text: str = "hello from test model") -> TestClient:
     return TestClient(create_app(make_settings(), model_handle=handle))
 
 
+def test_chat_uses_request_model_when_process_model_is_blocked(monkeypatch) -> None:
+    def build(spec: str, *, api_key: str, base_url: str) -> TestModel:
+        assert spec == "fake:from-java"
+        assert api_key == "secret-key"
+        assert base_url == "https://example.test/v1"
+        return TestModel(custom_output_text="from-entry")
+
+    monkeypatch.setattr("agent_services.agent.model_factory._build_primary", build)
+    response = _blocked_client().post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "hello",
+            "model": {
+                "spec": "fake:from-java",
+                "apiKey": "secret-key",
+                "baseUrl": "https://example.test/v1",
+            },
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["reply"] == "from-entry"
+    assert "secret-key" not in response.text
+
+
+def test_chat_uses_java_knowledge_when_vector_index_is_absent(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+    real = __import__(
+        "agent_services.agent.prompt_builder", fromlist=["build_prompt_parts"]
+    ).build_prompt_parts
+
+    def wrap(*args, **kwargs):
+        seen["retrieval"] = args[3] if len(args) > 3 else kwargs.get("retrieval_context")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr("agent_services.agent.harness.build_prompt_parts", wrap)
+    response = _live_client().post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "营业时间",
+            "knowledgeContext": ["  门店\n周一至周五 9:00-18:00  "],
+        },
+    )
+    assert response.status_code == 200
+    assert seen["retrieval"] == ["门店\n周一至周五 9:00-18:00"]
+
+
+def test_chat_request_business_url_registers_tools_against_that_host(monkeypatch) -> None:
+    seen: dict[str, str] = {}
+
+    def fake_build(settings, site_id, *, client=None):
+        seen["url"] = settings.business_api_base_url
+        seen["site"] = site_id
+        return None
+
+    monkeypatch.setattr("agent_services.agent.toolset_factory.build_business_toolset", fake_build)
+    response = _live_client().post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "hello",
+            "businessApiBaseUrl": "http://127.0.0.1:8082/",
+        },
+    )
+    assert response.status_code == 200
+    assert seen["url"] == "http://127.0.0.1:8082"
+    assert seen["site"] == "10"
+
+
+def test_chat_rejects_business_url_with_userinfo() -> None:
+    response = _live_client().post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "hello",
+            "businessApiBaseUrl": "http://user:secret@127.0.0.1:8082",
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["errorCode"] == "BAD_REQUEST"
+    assert "secret" not in response.text
+
+
 def test_chat_blocked_returns_503_flat_body() -> None:
     response = _blocked_client().post(
         "/internal/v1/chat",

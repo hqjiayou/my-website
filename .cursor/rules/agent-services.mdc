@@ -32,6 +32,7 @@ alwaysApply: false
 | `agent/runtime.py` `stream_runtime.py` | 同步 / SSE agent loop |
 | `agent/model_factory.py` | `AI_MODEL` → Pydantic AI；无配置则 BLOCKED |
 | `agent/prompt_builder.py` | system prompt 组装（含 skills / todos 注入） |
+| `agent/harness.py` + `harness/*.md` | 一次请求的 background、护栏、技能、工具说明、MCP 服务器名 |
 | `agent/toolset_factory.py` | business + todo + MCP 工具合并 |
 | `agent/business_tools.py` `tools/business_api.py` | 回调 Java site-app internal |
 | `agent/skills.py` + `skills/*/SKILL.md` | skill 加载 / frontmatter / catalog；未知策略 |

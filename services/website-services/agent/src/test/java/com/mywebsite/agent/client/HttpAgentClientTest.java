@@ -108,6 +108,7 @@ class HttpAgentClientTest {
         assertThat(status.fallbackProviders()).isEmpty();
         assertThat(status.mcpServers()).isEmpty();
         assertThat(status.limits()).isEqualTo(AgentRuntimeStatus.Limits.UNKNOWN);
+        assertThat(status.harness()).isEqualTo(AgentRuntimeStatus.HarnessFiles.UNKNOWN);
     }
 
     @Test
@@ -120,12 +121,15 @@ class HttpAgentClientTest {
                         + "\"fallbackProviders\":[\"anthropic:claude\"],\"mcpStatus\":\"CONFIGURED\","
                         + "\"mcpServers\":[{\"name\":\"echo\",\"enabled\":true}],"
                         + "\"limits\":{\"maxRequests\":10,\"maxToolCalls\":null,\"maxTotalTokens\":null,"
-                        + "\"toolTimeoutSeconds\":30.0,\"historyMaxChars\":24000},\"timestamp\":\"t\"}"));
+                        + "\"toolTimeoutSeconds\":30.0,\"historyMaxChars\":24000},"
+                        + "\"harness\":{\"background\":true,\"guardrails\":false,\"toolGuidance\":true},"
+                        + "\"timestamp\":\"t\"}"));
 
         AgentRuntimeStatus status = client.runtimeStatus();
         assertThat(status.fallbackProviders()).containsExactly("anthropic:claude");
         assertThat(status.mcpServers()).containsExactly(new AgentRuntimeStatus.McpServer("echo", true));
         assertThat(status.limits()).isEqualTo(new AgentRuntimeStatus.Limits(10, null, null, 30.0, 24000));
+        assertThat(status.harness()).isEqualTo(new AgentRuntimeStatus.HarnessFiles(true, false, true));
     }
 
     @Test
@@ -366,6 +370,21 @@ class HttpAgentClientTest {
                 "{\"ok\":false,\"errorCode\":\"EXTERNAL_DEPENDENCY_BLOCKED\",\"providerStatus\":\"BLOCKED\",\"message\":\"no key\"}"));
 
         assertThatThrownBy(() -> client.chatStream(new AgentChatRequest("10", "hello"), (event, data) -> {}))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());
+    }
+
+    @Test
+    void chatStreamConnectFailureIsExternalDependencyBlocked() {
+        AgentProperties closed = new AgentProperties();
+        closed.setBaseUrl("http://127.0.0.1:59999");
+        closed.setInternalServiceToken("secret-token");
+        closed.setConnectTimeoutMs(500);
+        closed.setReadTimeoutMs(500);
+        HttpAgentClient closedClient = new HttpAgentClient(closed, new ObjectMapper());
+
+        assertThatThrownBy(() -> closedClient.chatStream(new AgentChatRequest("10", "hello"), (event, data) -> {}))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getCode())
                 .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());

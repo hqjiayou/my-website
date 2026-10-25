@@ -12,7 +12,9 @@ import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminSiteMapper;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
+import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.agent.client.AgentClient;
+import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -41,14 +43,17 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     private final AdminAiKnowledgeDocumentMapper knowledgeMapper;
     private final AdminSiteMapper adminSiteMapper;
     private final AgentClient agentClient;
+    private final AdminAiModelEntryService modelEntryService;
 
     public AdminAiKnowledgeServiceImpl(
             AdminAiKnowledgeDocumentMapper knowledgeMapper,
             AdminSiteMapper adminSiteMapper,
-            AgentClient agentClient) {
+            AgentClient agentClient,
+            AdminAiModelEntryService modelEntryService) {
         this.knowledgeMapper = knowledgeMapper;
         this.adminSiteMapper = adminSiteMapper;
         this.agentClient = agentClient;
+        this.modelEntryService = modelEntryService;
     }
 
     @Override
@@ -158,11 +163,15 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     private void syncDerivedIndex(AdminAiKnowledgeDocumentEntity entity) {
         try {
             if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
+                AgentModelSelection selection = modelEntryService.currentSelection(entity.getSiteId());
                 agentClient.upsertRetrievalDocument(new AgentRetrievalDocument(
                         String.valueOf(entity.getSiteId()),
                         sourceId(entity.getId()),
                         entity.getTitle(),
-                        entity.getContent()));
+                        entity.getContent(),
+                        selection == null ? null : selection.embeddingSpec(),
+                        selection == null ? null : selection.apiKey(),
+                        selection == null ? null : selection.baseUrl()));
             } else {
                 agentClient.deleteRetrievalDocument(
                         String.valueOf(entity.getSiteId()), sourceId(entity.getId()));
