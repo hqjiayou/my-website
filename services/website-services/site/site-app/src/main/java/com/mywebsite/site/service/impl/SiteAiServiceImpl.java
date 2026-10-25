@@ -126,6 +126,7 @@ public class SiteAiServiceImpl implements SiteAiService {
         if (query.length() > SiteKnowledgeSearchRequestDto.MAX_QUERY_CHARS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
+        boolean vectorDegraded = false;
         try {
             AgentModelSelection selection = loadDefaultModel(siteId);
             AgentRetrievalSearchResult result = agentClient.searchRetrieval(new AgentRetrievalSearchRequest(
@@ -142,15 +143,18 @@ public class SiteAiServiceImpl implements SiteAiService {
                         .toList();
                 return new SiteKnowledgeSearchResponseDto(hits, false);
             }
-            if (!result.degraded()) {
-                return new SiteKnowledgeSearchResponseDto(List.of(), false);
-            }
+            vectorDegraded = result.degraded();
         } catch (BusinessException ex) {
             if (ex.getCode() != ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()) {
                 throw ex;
             }
+            vectorDegraded = true;
         }
-        return new SiteKnowledgeSearchResponseDto(textKnowledgeHits(siteId, query), false);
+        List<SiteKnowledgeSearchResponseDto.Hit> textHits = textKnowledgeHits(siteId, query);
+        if (!textHits.isEmpty()) {
+            return new SiteKnowledgeSearchResponseDto(textHits, false);
+        }
+        return new SiteKnowledgeSearchResponseDto(List.of(), vectorDegraded);
     }
 
     /** 与内容列表 limit 相同：越界夹进 1..{@link SiteKnowledgeSearchRequestDto#MAX_TOP_K}，null 交给 Python 默认。 */
@@ -282,10 +286,6 @@ public class SiteAiServiceImpl implements SiteAiService {
         String apiKey = modelEntryCipher.decrypt(entry.getApiKey());
         if (!StringUtils.hasText(apiKey)) {
             return null;
-        }
-        if (modelEntryCipher.canEncrypt() && !modelEntryCipher.isEncrypted(entry.getApiKey())) {
-            entry.setApiKey(modelEntryCipher.encrypt(apiKey));
-            modelEntryMapper.updateById(entry);
         }
         String baseUrl = StringUtils.hasText(entry.getBaseUrl()) ? entry.getBaseUrl().trim() : null;
         String embeddingSpec =

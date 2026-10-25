@@ -147,30 +147,26 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         return mapped;
     }
 
-    /** 对话实际用的是入口，不用进程 AI_MODEL。入口调用不挂进程 fallback。 */
+    /**
+     * 面板上的模型名是这次对话会用的入口，不是进程环境变量。
+     * 状态用 CONFIGURED：库里有入口，并不表示刚才探测过供应商。
+     * 检索状态保持 Python 的原话，不根据错误文案改成可用。
+     * 入口调用不使用进程 fallback，所以这里清空。
+     */
     private AgentRuntimeStatus overlayEntry(long siteId, AgentRuntimeStatus status) {
         AgentModelSelection selection = modelEntryService.currentSelection(siteId);
         if (selection == null || !StringUtils.hasText(selection.spec())) {
             return status;
         }
-        String retrievalStatus = status.retrievalStatus();
-        String retrievalReason = status.retrievalBlockedReason();
-        if (StringUtils.hasText(selection.embeddingSpec())
-                && "BLOCKED".equals(retrievalStatus)
-                && retrievalReason != null
-                && retrievalReason.contains("AI_EMBEDDING_MODEL")) {
-            retrievalStatus = "LIVE";
-            retrievalReason = null;
-        }
         return new AgentRuntimeStatus(
                 selection.spec(),
-                "LIVE",
+                "CONFIGURED",
                 List.of(),
                 status.mcpStatus(),
                 status.mcpServers(),
                 status.limits(),
-                retrievalStatus,
-                retrievalReason,
+                status.retrievalStatus(),
+                status.retrievalBlockedReason(),
                 status.harness());
     }
 

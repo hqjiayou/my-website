@@ -81,7 +81,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         if (asDefault) {
             clearOtherDefaults(request.siteId(), id);
         }
-        String apiKey = StringUtils.hasText(request.apiKey()) ? request.apiKey().trim() : plainKey(entry);
+        String apiKey = StringUtils.hasText(request.apiKey()) ? request.apiKey().trim() : decryptKey(entry);
         if (!StringUtils.hasText(apiKey)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
@@ -183,23 +183,17 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         entry.setDefaultEntry(asDefault);
     }
 
-    private String plainKey(AdminAiModelEntryEntity entry) {
+    /** 只解密。明文旧数据保持原样，下次保存时才加密，避免读接口改版本号。 */
+    private String decryptKey(AdminAiModelEntryEntity entry) {
         String plain = cipher.decrypt(entry.getApiKey());
-        if (!StringUtils.hasText(plain)) {
-            return null;
-        }
-        if (cipher.canEncrypt() && !cipher.isEncrypted(entry.getApiKey())) {
-            entry.setApiKey(cipher.encrypt(plain));
-            modelEntryMapper.updateById(entry);
-        }
-        return plain;
+        return StringUtils.hasText(plain) ? plain : null;
     }
 
     private AgentModelSelection toSelection(AdminAiModelEntryEntity entry) {
         if (entry == null || !StringUtils.hasText(entry.getModelSpec())) {
             return null;
         }
-        String apiKey = plainKey(entry);
+        String apiKey = decryptKey(entry);
         if (!StringUtils.hasText(apiKey)) {
             return null;
         }
@@ -217,7 +211,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
     }
 
     private AdminAiModelEntryDto toDto(AdminAiModelEntryEntity entry) {
-        String plain = plainKey(entry);
+        String plain = decryptKey(entry);
         return new AdminAiModelEntryDto(
                 entry.getId(),
                 entry.getDisplayName(),

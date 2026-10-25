@@ -406,7 +406,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.apiKeyHint").value("…-key"))
                 .andExpect(jsonPath("$.data.defaultEntry").value(true))
                 .andReturn();
-        assertThat(created.getResponse().getContentAsString()).doesNotContain(secret);
+        assertThat(created.getResponse().getContentAsString()).doesNotContain(secret).doesNotContain("enc:v1:");
         var createdData = MAPPER.readTree(created.getResponse().getContentAsString()).path("data");
         long id = createdData.path("id").asLong();
         int version = createdData.path("version").asInt();
@@ -450,6 +450,26 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         assertThat(captor.getValue().model().apiKey()).isEqualTo(secret);
         assertThat(captor.getValue().model().baseUrl()).isNull();
 
+        when(agentClient.runtimeStatus()).thenReturn(new AgentRuntimeStatus(
+                "blocked",
+                "BLOCKED",
+                List.of("should-not-show"),
+                "DISABLED",
+                List.of(),
+                new AgentRuntimeStatus.Limits(null, null, null, null, null),
+                "BLOCKED",
+                "Retrieval database is not configured (missing RETRIEVAL_DATABASE_URL).",
+                AgentRuntimeStatus.HarnessFiles.UNKNOWN));
+        mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/runtime")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status.provider").value("google:gemini-3-flash-preview"))
+                .andExpect(jsonPath("$.data.status.providerStatus").value("CONFIGURED"))
+                .andExpect(jsonPath("$.data.status.fallbackProviders").isEmpty())
+                .andExpect(jsonPath("$.data.status.retrievalStatus").value("BLOCKED"))
+                .andExpect(jsonPath("$.data.status.retrievalBlockedReason")
+                        .value(org.hamcrest.Matchers.containsString("RETRIEVAL_DATABASE_URL")));
+
         ObjectNode second = MAPPER.createObjectNode();
         second.put("displayName", "OpenAI");
         second.put("modelSpec", "openai:gpt-4o-mini");
@@ -469,8 +489,42 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data[0].defaultEntry").value(true))
                 .andExpect(jsonPath("$.data[1].defaultEntry").value(false))
                 .andReturn();
-        assertThat(listed.getResponse().getContentAsString()).doesNotContain(secret).doesNotContain("another-secret-key");
-        for (var item : MAPPER.readTree(listed.getResponse().getContentAsString()).path("data")) {
+        assertThat(listed.getResponse().getContentAsString())
+                .doesNotContain(secret)
+                .doesNotContain("another-secret-key")
+                .doesNotContain("enc:v1:");
+
+        ObjectNode siteEntry = MAPPER.createObjectNode();
+        siteEntry.put("displayName", "Site Gemini");
+        siteEntry.put("modelSpec", "google:gemini-3-flash-preview");
+        siteEntry.put("apiKey", "site-secret-key");
+        siteEntry.put("siteId", siteId);
+        siteEntry.put("enabled", true);
+        siteEntry.put("defaultEntry", true);
+        mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(siteEntry)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.siteId").value((int) siteId))
+                .andExpect(jsonPath("$.data.defaultEntry").value(true));
+        MvcResult scoped = mockMvc.perform(get("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        boolean platformDefaultRemains = false;
+        boolean siteDefault = false;
+        for (var item : MAPPER.readTree(scoped.getResponse().getContentAsString()).path("data")) {
+            if ("OpenAI".equals(item.path("displayName").asText())) {
+                platformDefaultRemains = item.path("defaultEntry").asBoolean();
+            }
+            if ("Site Gemini".equals(item.path("displayName").asText())) {
+                siteDefault = item.path("defaultEntry").asBoolean();
+            }
+        }
+        assertThat(platformDefaultRemains).isTrue();
+        assertThat(siteDefault).isTrue();
+        for (var item : MAPPER.readTree(scoped.getResponse().getContentAsString()).path("data")) {
             mockMvc.perform(delete("/api/admin/ai/model-entries/" + item.path("id").asLong())
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                     .andExpect(status().isOk());
