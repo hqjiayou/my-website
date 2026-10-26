@@ -324,7 +324,9 @@ public class HttpAgentClient implements AgentClient {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
         return new AgentRetrievalSearchResult(
-                readList(payload.get("hits"), AgentRetrievalHit.class), payload.path("degraded").asBoolean(false));
+                readList(payload.get("hits"), AgentRetrievalHit.class),
+                payload.path("degraded").asBoolean(false),
+                payload.path("rerankApplied").asBoolean(false));
     }
 
     @Override
