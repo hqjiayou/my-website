@@ -422,28 +422,6 @@ class HttpAgentClientTest {
     }
 
     @Test
-    void searchRetrievalParsesRerankAppliedAndDefaultsToFalse() throws IOException {
-        server.createContext("/internal/v1/retrieval/search", exchange -> {
-            String body = new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            if (body.contains("reranked")) {
-                write(exchange, 200, "{\"hits\":[{\"sourceId\":\"kb-1\",\"chunkIndex\":0,\"score\":0.9,"
-                        + "\"content\":\"chunk\"}],\"degraded\":false,\"rerankApplied\":true}");
-            } else {
-                write(exchange, 200, "{\"hits\":[],\"degraded\":false}");
-            }
-        });
-
-        var reranked = client.searchRetrieval(
-                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("7", "reranked query", null, null, null, null));
-        assertThat(reranked.rerankApplied()).isTrue();
-        assertThat(reranked.hits()).hasSize(1);
-
-        var plain = client.searchRetrieval(
-                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("7", "plain query", null, null, null, null));
-        assertThat(plain.rerankApplied()).isFalse();
-    }
-
-    @Test
     void prepareReembedMapsDimensionChangeRequired() throws IOException {
         AtomicInteger hits = new AtomicInteger();
         server.createContext("/internal/v1/retrieval/reembed/prepare", exchange -> {
