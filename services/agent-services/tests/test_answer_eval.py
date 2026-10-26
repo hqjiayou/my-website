@@ -1,0 +1,299 @@
+"""答案质量黄金集：评分器单测，以及 FunctionModel 下的管线 smoke。"""
+
+import json
+from datetime import UTC, datetime
+
+from conftest import make_settings
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+from agent_services.evals.run_answer_eval import (
+    EVAL_SITE_ID,
+    build_eval_index,
+    configured_model_block,
+    load_cases,
+    load_corpus,
+    main,
+    run_answer_eval,
+    validate_golden,
+)
+from agent_services.evals.scoring import (
+    aggregate,
+    case_passed,
+    citation_precision,
+    keyword_coverage,
+    refusal_correct,
+    retrieval_hit,
+    score_case,
+)
+from agent_services.retrieval.service import query_terms
+
+
+def test_retrieval_hit_positive_and_negative() -> None:
+    assert retrieval_hit(["a", "b"], ["b", "a", "c"]) is True
+    assert retrieval_hit(["a", "b"], ["a"]) is False
+    assert retrieval_hit([], ["a"]) is None
+
+
+def test_citation_precision_positive_and_negative() -> None:
+    assert citation_precision(["a", "b"], ["a", "a", "b"]) == 1.0
+    assert citation_precision(["a"], ["a", "b"]) == 0.5
+    assert citation_precision(["a"], ["b"]) == 0.0
+    assert citation_precision(["a"], None) is None
+    assert citation_precision(["a"], []) is None
+
+
+def test_keyword_coverage_positive_and_negative() -> None:
+    assert keyword_coverage(["XJ-900", "48 mm"], "The xj-900 burr is 48 mm.") == 1.0
+    assert keyword_coverage(["周二", "公休"], "公休尚未写明") == 0.5
+    assert keyword_coverage(["周二"], "周末营业") == 0.0
+    assert keyword_coverage([], "任何回答") is None
+
+
+def test_refusal_correct_positive_and_negative() -> None:
+    assert (
+        refusal_correct(category="unanswerable", answer="无法确认。", citation_source_ids=None) is True
+    )
+    assert (
+        refusal_correct(
+            category="unanswerable", answer="沒有相關資訊", citation_source_ids=None
+        )
+        is True
+    )
+    assert (
+        refusal_correct(category="unanswerable", answer="わかりません。", citation_source_ids=[])
+        is True
+    )
+    assert (
+        refusal_correct(
+            category="unanswerable",
+            answer="I cannot confirm the price.",
+            citation_source_ids=None,
+        )
+        is True
+    )
+    assert (
+        refusal_correct(
+            category="unanswerable", answer="无法确认。", citation_source_ids=["cafe-hours"]
+        )
+        is False
+    )
+    assert (
+        refusal_correct(category="unanswerable", answer="营业到 18:00。", citation_source_ids=None)
+        is False
+    )
+    assert (
+        refusal_correct(category="unanswerable", answer="相关信息如下：周一营业。", citation_source_ids=None)
+        is False
+    )
+    assert refusal_correct(category="hours", answer="无法确认。", citation_source_ids=None) is None
+
+
+def test_case_passed_follows_the_written_rule() -> None:
+    assert (
+        case_passed("hours", retrieval_hit=True, keyword_coverage=0.5, refusal_correct=None) is True
+    )
+    assert (
+        case_passed("hours", retrieval_hit=True, keyword_coverage=0.49, refusal_correct=None)
+        is False
+    )
+    assert (
+        case_passed("hours", retrieval_hit=False, keyword_coverage=1.0, refusal_correct=None)
+        is False
+    )
+    assert case_passed("unanswerable", retrieval_hit=None, keyword_coverage=None, refusal_correct=True)
+    assert (
+        case_passed("unanswerable", retrieval_hit=None, keyword_coverage=None, refusal_correct=False)
+        is False
+    )
+
+
+def test_aggregate_skips_missing_metrics_and_groups_categories() -> None:
+    summary = aggregate(
+        [
+            {
+                "category": "hours",
+                "retrieval_hit": True,
+                "citation_precision": 1.0,
+                "keyword_coverage": 1.0,
+                "refusal_correct": None,
+                "passed": True,
+            },
+            {
+                "category": "unanswerable",
+                "retrieval_hit": None,
+                "citation_precision": None,
+                "keyword_coverage": None,
+                "refusal_correct": False,
+                "passed": False,
+            },
+        ]
+    )
+    overall = summary["overall"]
+    assert overall["count"] == 2
+    assert overall["retrieval_hit"] == 1.0
+    assert overall["citation_precision"] == 1.0
+    assert overall["refusal_correct"] == 0.0
+    assert overall["passed"] == 0.5
+    assert set(summary["byCategory"]) == {"hours", "unanswerable"}
+    assert summary["byCategory"]["unanswerable"]["citation_precision"] is None
+
+
+def test_golden_set_matches_the_corpus() -> None:
+    corpus = load_corpus()
+    cases = load_cases()
+    validate_golden(corpus, cases)
+    by_source = {doc.source_id: doc for doc in corpus}
+    assert len(corpus) == 6
+    assert len(cases) == 12
+    assert sum(case.category == "unanswerable" for case in cases) == 4
+    assert sum(case.category != "unanswerable" for case in cases) == 8
+    assert any(len(case.expected_sources) == 2 for case in cases)
+    assert any(case.category == "model" and "XJ-900" in case.question for case in cases)
+    assert any("の" in case.question for case in cases)
+    assert any("北窗咖啡" in case.question for case in cases)
+    blob = "\n".join(doc.content for doc in corpus).casefold()
+    for case in cases:
+        if case.category == "unanswerable":
+            leaked = [token for token in query_terms(case.question) if token.casefold() in blob]
+            assert leaked == [], (case.id, leaked)
+            continue
+        expected = "\n".join(by_source[source].content for source in case.expected_sources).casefold()
+        for keyword in case.expected_keywords:
+            assert keyword.casefold() in expected, (case.id, keyword)
+
+
+async def test_golden_retrieval_hits_expected_sources_only() -> None:
+    corpus = load_corpus()
+    cases = load_cases()
+    service = await build_eval_index(corpus)
+    try:
+        for case in cases:
+            chunks = await service.retrieve_chunks(site_id=EVAL_SITE_ID, query=case.question)
+            found = {chunk.source_id for chunk in chunks}
+            if case.category == "unanswerable":
+                assert found == set(), (case.id, found)
+            else:
+                assert set(case.expected_sources) <= found, (case.id, found)
+    finally:
+        await service.close()
+
+
+def _smoke_respond(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+    parts: list[str] = []
+    for message in messages:
+        parts.append(repr(message))
+        for part in getattr(message, "parts", []):
+            content = getattr(part, "content", None)
+            if isinstance(content, str):
+                parts.append(content)
+    blob = "\n".join(parts)
+    marker = "Relevant site knowledge"
+    if marker not in blob:
+        return ModelResponse(parts=[TextPart("无法确认。没有相关信息。")])
+    return ModelResponse(parts=[TextPart(blob[blob.find(marker) :])])
+
+
+async def test_pipeline_smoke_scores_three_mini_cases(tmp_path) -> None:
+    wanted = ("zh-proper-hours", "unans-orbit", "model-xj900")
+    by_id = {case.id: case for case in load_cases()}
+    cases = [by_id[case_id] for case_id in wanted]
+    when = datetime(2026, 10, 26, 3, 27, tzinfo=UTC)
+    result = await run_answer_eval(
+        FunctionModel(_smoke_respond),
+        model_name="function:smoke",
+        cases=cases,
+        out=tmp_path,
+        generated_at=when,
+    )
+    report = result.report
+    assert report["model"] == "function:smoke"
+    assert report["generatedAt"] == when.isoformat()
+    assert "keyword_coverage ≥ 0.5" in str(report["passRule"])
+    assert "refusal_correct" in str(report["passRule"])
+    rows = report["cases"]
+    assert isinstance(rows, list)
+    assert [row["id"] for row in rows] == list(wanted)
+    summary = report["summary"]
+    assert isinstance(summary, dict)
+    assert summary["overall"]["count"] == 3
+    assert set(summary["byCategory"]) == {"hours", "unanswerable", "model"}
+    for row in rows:
+        scores = row["scores"]
+        assert set(scores) == {
+            "retrieval_hit",
+            "citation_precision",
+            "keyword_coverage",
+            "refusal_correct",
+            "passed",
+        }
+        assert scores == score_case(
+            category=row["category"],
+            expected_sources=row["expectedSources"],
+            expected_keywords=by_id[row["id"]].expected_keywords,
+            observed_sources=[item["sourceId"] for item in row["retrieved"]]
+            + [item["sourceId"] for item in (row["citations"] or [])],
+            citation_source_ids=[item["sourceId"] for item in row["citations"]]
+            if row["citations"]
+            else None,
+            answer=row["reply"],
+        )
+        assert scores["passed"] is case_passed(
+            row["category"],
+            retrieval_hit=scores["retrieval_hit"],
+            keyword_coverage=scores["keyword_coverage"],
+            refusal_correct=scores["refusal_correct"],
+        )
+    scored = {row["id"]: row["scores"] for row in rows}
+    assert scored["zh-proper-hours"]["retrieval_hit"] is True
+    assert scored["zh-proper-hours"]["keyword_coverage"] >= 0.5
+    assert scored["zh-proper-hours"]["passed"] is True
+    assert scored["zh-proper-hours"]["refusal_correct"] is None
+    assert scored["model-xj900"]["passed"] is True
+    assert scored["unans-orbit"]["refusal_correct"] is True
+    assert scored["unans-orbit"]["passed"] is True
+    assert scored["unans-orbit"]["citation_precision"] is None
+    assert result.json_path == tmp_path / "answer-eval-20261026T032700Z.json"
+    assert result.markdown_path == tmp_path / "answer-eval-20261026T032700Z.md"
+    written = json.loads(result.json_path.read_text(encoding="utf-8"))
+    assert written == json.loads(json.dumps(report))
+    markdown = result.markdown_path.read_text(encoding="utf-8")
+    assert "function:smoke" in markdown
+    assert "2026-10-26" in markdown
+    assert "zh-proper-hours" in markdown
+    assert "unans-orbit" in markdown
+    assert "model-xj900" in markdown
+    assert "Pass 判准" in markdown
+
+
+def test_configured_model_block_rejects_missing_and_fake_models() -> None:
+    missing_model, _spec, missing = configured_model_block(make_settings())
+    assert missing_model is None
+    assert missing.startswith("BLOCKED")
+    assert "AI_MODEL" in missing
+    fake_model, _spec, fake = configured_model_block(
+        make_settings(agent_contract_use_test_model=True, ai_model="openai:gpt-4o-mini")
+    )
+    assert fake_model is None
+    assert fake.startswith("BLOCKED")
+    assert "fake" in fake
+
+
+def test_cli_exits_nonzero_when_model_is_not_configured(monkeypatch, capsys, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    for name in (
+        "AI_MODEL",
+        "AI_PROVIDER_API_KEY",
+        "AI_PROVIDER_BASE_URL",
+        "AI_FALLBACK_MODELS",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
+        "OPENAI_API_KEY",
+    ):
+        monkeypatch.setenv(name, "")
+    # 空字符串过不了布尔校验；false 用来压过 .env 里的契约假模型。
+    monkeypatch.setenv("AGENT_CONTRACT_USE_TEST_MODEL", "false")
+    assert main([]) == 2
+    captured = capsys.readouterr()
+    assert "BLOCKED" in captured.out
+    assert "AI_MODEL" in captured.out

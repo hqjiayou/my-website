@@ -1,0 +1,32 @@
+[
+  {
+    "source_id": "cafe-hours",
+    "title": "北窗咖啡营业时间",
+    "content": "北窗咖啡每周二公休。平日从 08:30 营业到 18:00。周末从 09:00 营业到 17:00。最后点单时间是关门前 30 分钟。"
+  },
+  {
+    "source_id": "cafe-menu",
+    "title": "北窗咖啡菜单",
+    "content": "招牌点心是焦糖海盐可颂，售价 480 日元。季节限定饮品青柚冷萃只在六月供应。"
+  },
+  {
+    "source_id": "cafe-access",
+    "title": "北窓駅からの行き方",
+    "content": "北窓駅の東口から徒歩で 6 分です。駐車場は 4 台あります。"
+  },
+  {
+    "source_id": "cafe-reservation",
+    "title": "北窗咖啡预约规则",
+    "content": "四人以上需要提前一天预约。座位只保留 15 分钟，超时自动取消。改期请填写预约卡，不接受口头改期。"
+  },
+  {
+    "source_id": "xj900-specs",
+    "title": "XJ-900 specifications",
+    "content": "XJ-900 portable grinder. Burr size 48 mm. 刀盘直径 48 mm. Hopper capacity 80 g. Weight 1.2 kg. Color slate gray."
+  },
+  {
+    "source_id": "xj900-warranty",
+    "title": "XJ-900 保固",
+    "content": "XJ-900 保固 24 个月，只覆盖马达与刀盘。人为进水不在保固范围。登记保固时要出示购买收据。"
+  }
+]
