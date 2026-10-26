@@ -6,6 +6,7 @@ const TABS = [
   { to: ROUTES.home, label: '首頁', end: true },
   { to: ROUTES.chat, label: 'AI 對話', end: true },
   { to: ROUTES.knowledge, label: '知識搜尋', end: true },
+  { to: ROUTES.memories, label: '我的記憶', end: true },
 ] as const
 
 /** 首頁與知識搜尋釘在視埠底部。對話頁改放進版面流，才能跟著鍵盤內縮一起上移。 */

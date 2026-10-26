@@ -27,6 +27,7 @@ from pydantic_ai.toolsets.wrapper import WrapperToolset
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from agent_services.agent.harness import assemble_harness
+from agent_services.agent.memory import extract_memories
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.api.errors import external_failure_message
 from agent_services.config import Settings
@@ -207,6 +208,7 @@ class ChatReply:
     usage: dict[str, int] = field(default_factory=dict)
     tools: list[dict[str, object]] = field(default_factory=list)
     citations: list[dict[str, object]] | None = None
+    extracted_memories: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -332,6 +334,9 @@ async def run_chat(
     skill_ids: list[str] | None = None,
     skills_missing: list[str] | None = None,
     harness_dir: str | None = None,
+    memories: list[str] | None = None,
+    memory_enabled: bool = False,
+    memory_extraction_enabled: bool = True,
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
     history_summary = await prepare_history_summary(
@@ -353,6 +358,7 @@ async def run_chat(
         budget=resolved_budget,
         harness_dir=harness_dir,
         history_summary=history_summary,
+        memories=memories,
     )
     run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
     user_prompt = build_user_prompt(harness.user_message, attachments)
@@ -389,9 +395,19 @@ async def run_chat(
     text = str(result.output).strip()
     if not text:
         return ChatBlocked(message="AI provider returned an empty response.")
+    # 独立 Agent，不传入本轮 UsageLimits，抽取不计入 run budget。
+    extracted: list[str] = []
+    if memory_enabled and memory_extraction_enabled:
+        extracted = await extract_memories(
+            model,
+            user_message=message,
+            assistant_reply=text,
+            existing=memories,
+        )
     return ChatReply(
         reply=text,
         usage=usage_to_api(result.usage),
         tools=tool_trace_from_messages(result.new_messages()),
         citations=grounding_citations(retrieval_context, retrieval_chunks),
+        extracted_memories=extracted,
     )

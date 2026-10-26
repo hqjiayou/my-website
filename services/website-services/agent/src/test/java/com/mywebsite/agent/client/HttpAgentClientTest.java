@@ -246,6 +246,36 @@ class HttpAgentClientTest {
         assertThat(response.providerStatus()).isEqualTo("LIVE");
         assertThat(response.todos()).isEmpty();
         assertThat(response.skillsApplied()).isEmpty();
+        assertThat(response.extractedMemories()).isEmpty();
+    }
+
+    @Test
+    void liveSuccessMapsExtractedMemoriesAndToleratesMalformed() throws IOException {
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"data\":{\"reply\":\"hi\",\"providerStatus\":\"LIVE\","
+                        + "\"extractedMemories\":[\"likes tea\",null]}}"));
+
+        AgentChatResponse response = client.chat(new AgentChatRequest("10", "hello"));
+        assertThat(response.extractedMemories()).containsExactly("likes tea");
+
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"data\":{\"reply\":\"hi\",\"providerStatus\":\"LIVE\",\"extractedMemories\":\"oops\"}}"));
+        assertThat(client.chat(new AgentChatRequest("10", "hello")).extractedMemories()).isEmpty();
+    }
+
+    @Test
+    void legacyChatRequestOmitsMemoryFields() throws Exception {
+        AgentChatRequest request = new AgentChatRequest("10", "hello");
+        assertThat(request.memories()).isNull();
+        assertThat(request.memoryEnabled()).isNull();
+        String json = new ObjectMapper().writeValueAsString(request);
+        assertThat(json).doesNotContain("memories").doesNotContain("memoryEnabled");
     }
 
     @Test

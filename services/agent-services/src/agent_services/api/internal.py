@@ -353,6 +353,9 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         skill_ids=list(skill_resolution.applied_ids),
         skills_missing=list(skill_resolution.missing_ids),
         harness_dir=_harness_dir(request),
+        memories=body.memories,
+        memory_enabled=body.memory_enabled,
+        memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
     )
 
     if isinstance(outcome, ChatBlocked):
@@ -372,11 +375,14 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         citations=[ChatCitation.model_validate(item) for item in outcome.citations]
         if outcome.citations
         else None,
+        extracted_memories=outcome.extracted_memories,
     )
     payload = data.model_dump(by_alias=True)
     # 有采用才出现，与 SSE 加法字段一致；不要把 null 写进既有响应。
     if not payload.get("citations"):
         payload.pop("citations", None)
+    if not payload.get("extractedMemories"):
+        payload.pop("extractedMemories", None)
     return {"ok": True, "data": payload}
 
 
@@ -427,6 +433,9 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             skills_max_instruction_chars=request.app.state.settings.agent_skills_max_instruction_chars,
             skill_ids=list(skill_resolution.applied_ids),
             harness_dir=_harness_dir(request),
+            memories=body.memories,
+            memory_enabled=body.memory_enabled,
+            memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
         ):
             yield event.to_sse()
 

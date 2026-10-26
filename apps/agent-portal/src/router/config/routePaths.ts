@@ -3,4 +3,5 @@ export const ROUTES = {
   home: '/',
   chat: '/chat',
   knowledge: '/knowledge',
+  memories: '/memories',
 } as const

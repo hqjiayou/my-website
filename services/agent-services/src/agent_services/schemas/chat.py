@@ -15,6 +15,8 @@ MAX_SKILL_ID_LENGTH = 64
 MAX_ATTACHMENTS = 3
 MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024
 MAX_ATTACHMENTS_TOTAL_BYTES = 5 * 1024 * 1024
+MAX_MEMORIES = 20
+MAX_MEMORY_CHARS = 500
 
 ImageMediaType = Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
 
@@ -123,6 +125,8 @@ class ChatRequest(BaseModel):
     model_selection: ModelSelection | None = Field(default=None, alias="model")
     business_api_base_url: str | None = Field(default=None, alias="businessApiBaseUrl", max_length=512)
     knowledge_context: list[str] | None = Field(default=None, alias="knowledgeContext", max_length=4)
+    memories: list[str] | None = Field(default=None, max_length=MAX_MEMORIES)
+    memory_enabled: bool = Field(default=False, alias="memoryEnabled")
 
     model_config = {"populate_by_name": True}
 
@@ -144,6 +148,18 @@ class ChatRequest(BaseModel):
             if text:
                 snippets.append(text[:2000])
         return snippets or None
+
+    @field_validator("memories")
+    @classmethod
+    def cap_memories(cls, value: list[str] | None) -> list[str] | None:
+        if not value:
+            return None
+        kept: list[str] = []
+        for item in value:
+            text = item.strip()
+            if text:
+                kept.append(text[:MAX_MEMORY_CHARS])
+        return kept or None
 
     @field_validator("todos")
     @classmethod
@@ -197,6 +213,7 @@ class ChatSuccessData(BaseModel):
     todos: list[TodoItem] | None = None
     retrieval_degraded: bool = Field(default=False, alias="retrievalDegraded")
     citations: list[ChatCitation] | None = None
+    extracted_memories: list[str] = Field(default_factory=list, alias="extractedMemories")
 
     model_config = {"populate_by_name": True}
 

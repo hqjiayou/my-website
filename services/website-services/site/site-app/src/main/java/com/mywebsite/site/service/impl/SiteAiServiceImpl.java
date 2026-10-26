@@ -36,6 +36,7 @@ import com.mywebsite.site.service.SiteAiConversationService;
 import com.mywebsite.site.service.SiteAiConversationService.ChatPreparation;
 import com.mywebsite.site.service.SiteAiRateLimitService;
 import com.mywebsite.site.service.SiteAiService;
+import com.mywebsite.site.service.SiteUserMemoryService;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -75,6 +76,7 @@ public class SiteAiServiceImpl implements SiteAiService {
     private final ModelEntryCipher modelEntryCipher;
     private final SiteAiRateLimitService rateLimitService;
     private final SiteAiConversationService conversationService;
+    private final SiteUserMemoryService memoryService;
     private final SiteAiModelEntryMapper modelEntryMapper;
     private final SiteAiKnowledgeDocumentMapper knowledgeDocumentMapper;
     private final LocalizedMessageService localizedMessageService;
@@ -87,6 +89,7 @@ public class SiteAiServiceImpl implements SiteAiService {
             ModelEntryCipher modelEntryCipher,
             SiteAiRateLimitService rateLimitService,
             SiteAiConversationService conversationService,
+            SiteUserMemoryService memoryService,
             SiteAiModelEntryMapper modelEntryMapper,
             SiteAiKnowledgeDocumentMapper knowledgeDocumentMapper,
             LocalizedMessageService localizedMessageService,
@@ -97,6 +100,7 @@ public class SiteAiServiceImpl implements SiteAiService {
         this.modelEntryCipher = modelEntryCipher;
         this.rateLimitService = rateLimitService;
         this.conversationService = conversationService;
+        this.memoryService = memoryService;
         this.modelEntryMapper = modelEntryMapper;
         this.knowledgeDocumentMapper = knowledgeDocumentMapper;
         this.localizedMessageService = localizedMessageService;
@@ -113,16 +117,20 @@ public class SiteAiServiceImpl implements SiteAiService {
 
         ChatPreparation preparation =
                 conversationService.prepare(siteId, siteUserId, request.conversationId());
+        List<String> memories = memoryService.recentContents(siteId, siteUserId);
         AgentChatResponse response =
-                agentClient.chat(buildAgentRequest(siteId, message, attachments, preparation));
-        conversationService.recordExchange(
-                preparation.conversation(),
+                agentClient.chat(buildAgentRequest(siteId, message, attachments, preparation, memories));
+        persistTurn(
+                siteId,
+                siteUserId,
+                preparation,
                 message,
+                attachments,
                 response.reply(),
                 response.todos(),
                 response.runMeta(),
-                attachments,
-                response.citations());
+                response.citations(),
+                response.extractedMemories());
 
         return new SiteAiChatResponseDto(
                 response.reply(),
@@ -197,16 +205,22 @@ public class SiteAiServiceImpl implements SiteAiService {
 
         ChatPreparation preparation =
                 conversationService.prepare(siteId, siteUserId, request.conversationId());
-        AgentChatRequest agentRequest = buildAgentRequest(siteId, message, attachments, preparation);
+        List<String> memories = memoryService.recentContents(siteId, siteUserId);
+        AgentChatRequest agentRequest =
+                buildAgentRequest(siteId, message, attachments, preparation, memories);
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         siteAiStreamExecutor.execute(
-                () -> forwardStream(preparation, message, attachments, agentRequest, emitter));
+                () -> forwardStream(siteId, siteUserId, preparation, message, attachments, agentRequest, emitter));
         return emitter;
     }
 
     private AgentChatRequest buildAgentRequest(
-            long siteId, String message, List<AgentAttachmentDto> attachments, ChatPreparation preparation) {
+            long siteId,
+            String message,
+            List<AgentAttachmentDto> attachments,
+            ChatPreparation preparation,
+            List<String> memories) {
         Long conversationId = preparation.conversation().getId();
         return new AgentChatRequest(
                 String.valueOf(siteId),
@@ -221,7 +235,32 @@ public class SiteAiServiceImpl implements SiteAiService {
                 loadDefaultModel(siteId),
                 callbackBaseUrl(),
                 knowledgeSnippets(siteId, message),
-                attachments.isEmpty() ? null : attachments);
+                attachments.isEmpty() ? null : attachments,
+                memories == null || memories.isEmpty() ? null : memories,
+                Boolean.TRUE);
+    }
+
+    private void persistTurn(
+            long siteId,
+            long siteUserId,
+            ChatPreparation preparation,
+            String userMessage,
+            List<AgentAttachmentDto> userAttachments,
+            String reply,
+            List<AgentTodoItem> todos,
+            AgentRunMeta runMeta,
+            List<AgentCitation> citations,
+            List<String> extractedMemories) {
+        conversationService.recordExchange(
+                preparation.conversation(),
+                userMessage,
+                reply,
+                todos,
+                runMeta,
+                userAttachments,
+                citations);
+        memoryService.storeExtracted(
+                siteId, siteUserId, preparation.conversation().getId(), extractedMemories);
     }
 
     private static List<AgentAttachmentDto> toAgentAttachments(List<SiteAiAttachmentDto> attachments) {
@@ -398,7 +437,9 @@ public class SiteAiServiceImpl implements SiteAiService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
     }
 
-    private void forwardStream(
+    void forwardStream(
+            long siteId,
+            long siteUserId,
             ChatPreparation preparation,
             String userMessage,
             List<AgentAttachmentDto> userAttachments,
@@ -408,6 +449,7 @@ public class SiteAiServiceImpl implements SiteAiService {
         List<AgentTodoItem> doneTodos = new ArrayList<>();
         AtomicReference<AgentRunMeta> doneMeta = new AtomicReference<>(AgentRunMeta.EMPTY);
         AtomicReference<List<AgentCitation>> doneCitations = new AtomicReference<>(List.of());
+        AtomicReference<List<String>> doneMemories = new AtomicReference<>(List.of());
         try {
             agentClient.chatStream(agentRequest, (event, dataJson) -> {
                 JsonNode data = readJson(dataJson);
@@ -416,6 +458,7 @@ public class SiteAiServiceImpl implements SiteAiService {
                     doneTodos.addAll(extractTodos(data));
                     doneMeta.set(extractRunMeta(data));
                     doneCitations.set(readDoneCitations(data));
+                    doneMemories.set(readExtractedMemories(data));
                 }
                 String clientData = toClientEventData(event, data, dataJson);
                 if (clientData == null) {
@@ -429,14 +472,17 @@ public class SiteAiServiceImpl implements SiteAiService {
                 }
             });
             if (doneReply.length() > 0) {
-                conversationService.recordExchange(
-                        preparation.conversation(),
+                persistTurn(
+                        siteId,
+                        siteUserId,
+                        preparation,
                         userMessage,
+                        userAttachments,
                         doneReply.toString(),
                         doneTodos,
                         doneMeta.get(),
-                        userAttachments,
-                        doneCitations.get());
+                        doneCitations.get(),
+                        doneMemories.get());
                 sendEventQuietly(
                         emitter,
                         "CONVERSATION",
@@ -447,14 +493,17 @@ public class SiteAiServiceImpl implements SiteAiService {
             // DONE 已收到但最后一帧没发出去：回复和工具副作用已经发生，必须落库，避免用户重试再写一次预约。
             if (doneReply.length() > 0) {
                 try {
-                    conversationService.recordExchange(
-                            preparation.conversation(),
+                    persistTurn(
+                            siteId,
+                            siteUserId,
+                            preparation,
                             userMessage,
+                            userAttachments,
                             doneReply.toString(),
                             doneTodos,
                             doneMeta.get(),
-                            userAttachments,
-                            doneCitations.get());
+                            doneCitations.get(),
+                            doneMemories.get());
                 } catch (RuntimeException recordEx) {
                     log.warn("site ai stream reply was not stored after client disconnect", recordEx);
                 }
@@ -546,6 +595,20 @@ public class SiteAiServiceImpl implements SiteAiService {
             log.warn("site ai stream DONE carried malformed citations, ignored", ex);
             return List.of();
         }
+    }
+
+    private List<String> readExtractedMemories(JsonNode done) {
+        JsonNode memories = done.get("extractedMemories");
+        if (memories == null || memories.isNull() || !memories.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : memories) {
+            if (item != null && item.isTextual()) {
+                values.add(item.asText());
+            }
+        }
+        return List.copyOf(values);
     }
 
     private List<AgentTodoItem> extractTodos(JsonNode done) {

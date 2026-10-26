@@ -80,6 +80,7 @@ def assemble_harness(
     budget: RunBudget | None = None,
     harness_dir: str | None = None,
     history_summary: str | None = None,
+    memories: list[str] | None = None,
 ) -> RequestHarness:
     from agent_services.agent.runtime import RunBudget, trim_history
 
@@ -110,6 +111,7 @@ def assemble_harness(
         tool_guidance=tool_guidance,
         mcp_servers=mcp_servers,
         history_summary=_history_summary_section(history_summary),
+        memory_section=_memory_section(memories),
     )
     return RequestHarness(
         system_prompt=system_prompt,
@@ -165,10 +167,19 @@ def _compose(
     tool_guidance: tuple[ToolGuidance, ...],
     mcp_servers: tuple[str, ...],
     history_summary: str,
+    memory_section: str,
 ) -> str:
     sections = [
         part
-        for part in (background, guardrails_text, limits_text, history_summary, site_prompt, tool_file)
+        for part in (
+            background,
+            guardrails_text,
+            limits_text,
+            history_summary,
+            memory_section,
+            site_prompt,
+            tool_file,
+        )
         if part
     ]
     if tool_guidance:
@@ -186,6 +197,22 @@ def _history_summary_section(summary: str | None) -> str:
     if summary is None or not summary.strip():
         return ""
     return "# Earlier conversation\n\n" + summary.strip()
+
+
+def _memory_section(memories: list[str] | None) -> str:
+    """无有效条目时返回空串，系统提示与未传 memories 时逐字相同。"""
+    lines = [item.strip() for item in (memories or []) if item and item.strip()]
+    if not lines:
+        return ""
+    body = "\n".join(f"- {item}" for item in lines)
+    return (
+        "# Long-term memory\n\n"
+        "These are durable facts about this user. "
+        "Refer to them naturally when answering. "
+        "Do not recite them one by one. "
+        "If they conflict with what the user says in this turn, follow this turn.\n\n"
+        + body
+    )
 
 
 def _guardrails(budget: RunBudget, skills_max_instruction_chars: int | None) -> HarnessGuardrails:

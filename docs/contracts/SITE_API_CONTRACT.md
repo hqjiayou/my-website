@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: CONTRACT
 status: CURRENT
-last_verified: 2026-10-24
+last_verified: 2026-10-26
 ```
 
 前缀：`/api/site/**`（业务）+ `/api/auth/site/**`（认证）。
@@ -25,6 +25,12 @@ Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之
 |------|------|-------------|
 | PATCH | `/api/site/{siteId}/ai/conversations/{conversationId}` | 请求体 `title`（非空白，最长 60）；成功返回更新后的会话 |
 | DELETE | `/api/site/{siteId}/ai/conversations/{conversationId}` | 无请求体；成功时 `data` 为 null |
+
+### Site AI 记忆
+
+`GET /api/site/{siteId}/ai/memories` 返回当前用户记忆（`id`、`content`、`createdAt`，时间倒序）；`DELETE /api/site/{siteId}/ai/memories/{memoryId}` 删除自己的一条（非本人 NOT_FOUND，成功 `data` 为 null）；`DELETE /api/site/{siteId}/ai/memories` 清空自己的（成功 `data` 为 null）。每用户最多 50 条，超出时先删最旧再写入。
+
+站点 chat 与 chat/stream：服务端注入该用户最近 20 条记忆，并在成功回复后把本轮抽取结果去重落库；抽取为空或缺失时不写入。终端 SSE 不下发抽取结果。
 
 ### 公开内容
 
