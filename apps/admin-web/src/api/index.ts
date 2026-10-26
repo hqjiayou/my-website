@@ -20,6 +20,9 @@ export {
   SITE_STATUS,
   SITE_STATUS_VALUES,
   SITE_TYPE_VALUES,
+  SITE_TYPE_PRESETS,
+  SITE_TYPE_LEGACY,
+  SITE_TAG_PATTERN,
 } from './apps/siteApi'
 export { templateApi, TEMPLATE_STATUS, TEMPLATE_STATUS_VALUES } from './apps/templateApi'
 export {

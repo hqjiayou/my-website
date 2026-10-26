@@ -185,11 +185,27 @@ def _google_embedding_model_name(spec: str) -> str | None:
 
 def create_embedding_client(settings: Settings) -> tuple[EmbeddingClient | None, str | None]:
     """返回 (client, blocked_reason)；两者互斥。"""
-    spec = settings.ai_embedding_model.strip()
+    return create_embedding_client_for(
+        spec=settings.ai_embedding_model,
+        api_key=settings.ai_provider_api_key,
+        base_url=settings.ai_provider_base_url,
+        dimensions=settings.ai_embedding_dimensions,
+    )
+
+
+def create_embedding_client_for(
+    *,
+    spec: str,
+    api_key: str | None,
+    base_url: str | None,
+    dimensions: int,
+) -> tuple[EmbeddingClient | None, str | None]:
+    """用显式 spec / key 构造嵌入客户端。空 spec → 缺 AI_EMBEDDING_MODEL。"""
+    spec = spec.strip()
     if not spec:
         return None, "Embedding model is not configured (missing AI_EMBEDDING_MODEL)."
-    api_key = settings.ai_provider_api_key.strip() or None
-    base_url = settings.ai_provider_base_url.strip() or None
+    api_key = (api_key or "").strip() or None
+    base_url = (base_url or "").strip() or None
     if spec.startswith("openai:"):
         if not api_key and not base_url:
             return None, "Embedding provider credentials are not configured."
@@ -207,7 +223,7 @@ def create_embedding_client(settings: Settings) -> tuple[EmbeddingClient | None,
                     google_name,
                     api_key=api_key,
                     base_url=base_url,
-                    dimensions=settings.ai_embedding_dimensions,
+                    dimensions=dimensions,
                 ),
                 None,
             )

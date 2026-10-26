@@ -1,6 +1,6 @@
 # Agent 指引（my-website）
 
-中央控制的网站集合 Monorepo。一个后台总控 `apps/admin-web`，一个 Java 服务 `services/website-services`（gateway / auth / admin / site / common / infra / agent），一个 Python AI `services/agent-services`（internal only，经 Java `HttpAgentClient` 调用），一个访客前台 `apps/site-web`（v1：按 siteCode 渲染公开内容，只读）。Site Auth 后端已完成；site-web 未接登录（登录在 `apps/portal`）。
+中央控制的网站集合 Monorepo。一个后台总控 `apps/admin-web`，一个 Java 服务 `services/website-services`（gateway / auth / admin / site / common / infra / agent），一个 Python AI `services/agent-services`（internal only，经 Java `HttpAgentClient` 调用），一个访客前台 `apps/site-web`（v1：按 siteCode 渲染公开内容，只读）。Site Auth 后端已完成；site-web 未接登录（登录在 `apps/agent-portal`）。
 
 ## Source of Truth 顺序
 

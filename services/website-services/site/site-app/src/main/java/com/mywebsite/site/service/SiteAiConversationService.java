@@ -1,6 +1,8 @@
 package com.mywebsite.site.service;
 
+import com.mywebsite.agent.dto.AgentAttachmentDto;
 import com.mywebsite.agent.dto.AgentChatHistoryMessage;
+import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentPromptProfile;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentTodoItem;
@@ -17,7 +19,7 @@ public interface SiteAiConversationService {
 
     /**
      * 一轮成功交互后持久化 USER/ASSISTANT 消息、Todo 快照（整体覆盖）并刷新会话元数据；
-     * {@code runMeta} 写入 ASSISTANT 消息 agent_meta（仅后台观测）。
+     * {@code runMeta} 写入 ASSISTANT 消息 agent_meta（仅后台观测）。无附件。
      */
     void recordExchange(
             SiteAiConversationEntity conversation,
@@ -25,6 +27,31 @@ public interface SiteAiConversationService {
             String reply,
             List<AgentTodoItem> todos,
             AgentRunMeta runMeta);
+
+    /**
+     * 同上，并把 {@code userAttachments} 写入 USER 消息。null 或空表示本轮无图。ASSISTANT 不写附件。
+     * 不写 citations。
+     */
+    void recordExchange(
+            SiteAiConversationEntity conversation,
+            String userMessage,
+            String reply,
+            List<AgentTodoItem> todos,
+            AgentRunMeta runMeta,
+            List<AgentAttachmentDto> userAttachments);
+
+    /**
+     * 同上。{@code citations} 非空时写入 ASSISTANT {@code agent_meta} 的 {@code citations} 字段，并保留已有 run meta。
+     * null 或空列表不改变 {@code agent_meta}：空 run meta 仍为 null，非空 run meta 仍只写观测 JSON。
+     */
+    void recordExchange(
+            SiteAiConversationEntity conversation,
+            String userMessage,
+            String reply,
+            List<AgentTodoItem> todos,
+            AgentRunMeta runMeta,
+            List<AgentAttachmentDto> userAttachments,
+            List<AgentCitation> citations);
 
     List<SiteAiConversationDto> listConversations(long siteId, long siteUserId);
 

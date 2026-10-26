@@ -1,6 +1,6 @@
 # TLS 由 tailscale serve 终结。这里只做静态文件和反代，不申请证书。
 # 容器内监听 8080 / 8081（非 root 也能绑）。宿主映射见 docker-compose.yml：
-#   80 → 8080  Portal + /api，给 tailscale serve 主入口，也供同一局域网直连备援
+#   80 → 8080  Agent Portal + /api，给 tailscale serve 主入口，也供同一局域网直连备援
 #   127.0.0.1:8081 → 8081  admin-web。vite base 不能由环境变量设定，所以不挂到 /admin/
 # admin 用 tailscale serve 的第二个端口，或在主机上打开 http://127.0.0.1:8081
 

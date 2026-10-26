@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentMcpReady;
+import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
@@ -108,6 +109,7 @@ class HttpAgentClientTest {
         assertThat(status.fallbackProviders()).isEmpty();
         assertThat(status.mcpServers()).isEmpty();
         assertThat(status.limits()).isEqualTo(AgentRuntimeStatus.Limits.UNKNOWN);
+        assertThat(status.harness()).isEqualTo(AgentRuntimeStatus.HarnessFiles.UNKNOWN);
     }
 
     @Test
@@ -120,12 +122,15 @@ class HttpAgentClientTest {
                         + "\"fallbackProviders\":[\"anthropic:claude\"],\"mcpStatus\":\"CONFIGURED\","
                         + "\"mcpServers\":[{\"name\":\"echo\",\"enabled\":true}],"
                         + "\"limits\":{\"maxRequests\":10,\"maxToolCalls\":null,\"maxTotalTokens\":null,"
-                        + "\"toolTimeoutSeconds\":30.0,\"historyMaxChars\":24000},\"timestamp\":\"t\"}"));
+                        + "\"toolTimeoutSeconds\":30.0,\"historyMaxChars\":24000},"
+                        + "\"harness\":{\"background\":true,\"guardrails\":false,\"toolGuidance\":true},"
+                        + "\"timestamp\":\"t\"}"));
 
         AgentRuntimeStatus status = client.runtimeStatus();
         assertThat(status.fallbackProviders()).containsExactly("anthropic:claude");
         assertThat(status.mcpServers()).containsExactly(new AgentRuntimeStatus.McpServer("echo", true));
         assertThat(status.limits()).isEqualTo(new AgentRuntimeStatus.Limits(10, null, null, 30.0, 24000));
+        assertThat(status.harness()).isEqualTo(new AgentRuntimeStatus.HarnessFiles(true, false, true));
     }
 
     @Test
@@ -241,6 +246,36 @@ class HttpAgentClientTest {
         assertThat(response.providerStatus()).isEqualTo("LIVE");
         assertThat(response.todos()).isEmpty();
         assertThat(response.skillsApplied()).isEmpty();
+        assertThat(response.extractedMemories()).isEmpty();
+    }
+
+    @Test
+    void liveSuccessMapsExtractedMemoriesAndToleratesMalformed() throws IOException {
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"data\":{\"reply\":\"hi\",\"providerStatus\":\"LIVE\","
+                        + "\"extractedMemories\":[\"likes tea\",null]}}"));
+
+        AgentChatResponse response = client.chat(new AgentChatRequest("10", "hello"));
+        assertThat(response.extractedMemories()).containsExactly("likes tea");
+
+        server.removeContext("/internal/v1/chat");
+        server.createContext("/internal/v1/chat", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"data\":{\"reply\":\"hi\",\"providerStatus\":\"LIVE\",\"extractedMemories\":\"oops\"}}"));
+        assertThat(client.chat(new AgentChatRequest("10", "hello")).extractedMemories()).isEmpty();
+    }
+
+    @Test
+    void legacyChatRequestOmitsMemoryFields() throws Exception {
+        AgentChatRequest request = new AgentChatRequest("10", "hello");
+        assertThat(request.memories()).isNull();
+        assertThat(request.memoryEnabled()).isNull();
+        String json = new ObjectMapper().writeValueAsString(request);
+        assertThat(json).doesNotContain("memories").doesNotContain("memoryEnabled");
     }
 
     @Test
@@ -371,6 +406,68 @@ class HttpAgentClientTest {
                 .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());
     }
 
+    @Test
+    void chatStreamConnectFailureIsExternalDependencyBlocked() {
+        AgentProperties closed = new AgentProperties();
+        closed.setBaseUrl("http://127.0.0.1:59999");
+        closed.setInternalServiceToken("secret-token");
+        closed.setConnectTimeoutMs(500);
+        closed.setReadTimeoutMs(500);
+        HttpAgentClient closedClient = new HttpAgentClient(closed, new ObjectMapper());
+
+        assertThatThrownBy(() -> closedClient.chatStream(new AgentChatRequest("10", "hello"), (event, data) -> {}))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());
+    }
+
+    @Test
+    void searchRetrievalParsesRerankAppliedAndDefaultsToFalse() throws IOException {
+        server.createContext("/internal/v1/retrieval/search", exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            if (body.contains("reranked")) {
+                write(exchange, 200, "{\"hits\":[{\"sourceId\":\"kb-1\",\"chunkIndex\":0,\"score\":0.9,"
+                        + "\"content\":\"chunk\"}],\"degraded\":false,\"rerankApplied\":true}");
+            } else {
+                write(exchange, 200, "{\"hits\":[],\"degraded\":false}");
+            }
+        });
+
+        var reranked = client.searchRetrieval(
+                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("7", "reranked query", null, null, null, null));
+        assertThat(reranked.rerankApplied()).isTrue();
+        assertThat(reranked.hits()).hasSize(1);
+
+        var plain = client.searchRetrieval(
+                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("7", "plain query", null, null, null, null));
+        assertThat(plain.rerankApplied()).isFalse();
+    }
+
+    @Test
+    void prepareReembedMapsDimensionChangeRequired() throws IOException {
+        AtomicInteger hits = new AtomicInteger();
+        server.createContext("/internal/v1/retrieval/reembed/prepare", exchange -> {
+            hits.incrementAndGet();
+            write(
+                    exchange,
+                    409,
+                    "{\"ok\":false,\"errorCode\":\"DIMENSION_CHANGE_REQUIRED\","
+                            + "\"message\":\"dimensions differ\",\"dimensions\":8,\"columnDimensions\":3}");
+        });
+
+        assertThatThrownBy(() -> client.prepareReembed(
+                        new AgentModelSelection("openai:gpt", "key", null, "openai:embed"), false))
+                .isInstanceOf(AgentDimensionChangeRequiredException.class)
+                .satisfies(ex -> {
+                    AgentDimensionChangeRequiredException dimension =
+                            (AgentDimensionChangeRequiredException) ex;
+                    assertThat(dimension.dimensions()).isEqualTo(8);
+                    assertThat(dimension.columnDimensions()).isEqualTo(3);
+                    assertThat(dimension.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode());
+                });
+        assertThat(hits.get()).isEqualTo(1);
+    }
+
     private static void write(com.sun.net.httpserver.HttpExchange exchange, int status, String body)
             throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
@@ -379,5 +476,32 @@ class HttpAgentClientTest {
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
         }
+    }
+
+    @Test
+    void chatRequestSerializesFallbackModelsOnlyWhenPresent() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        AgentChatRequest withChain = new AgentChatRequest(
+                "10",
+                "hello",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new AgentModelSelection("google:gemini-3-flash-preview", "primary-key", null),
+                null,
+                null,
+                null,
+                null,
+                null,
+                java.util.List.of(new AgentModelSelection("openai:gpt-x", "backup-key", null)));
+        String json = mapper.writeValueAsString(withChain);
+        assertThat(json).contains("\"model\":{\"spec\":\"google:gemini-3-flash-preview\"");
+        assertThat(json).contains("\"fallbackModels\":[{\"spec\":\"openai:gpt-x\",\"apiKey\":\"backup-key\"}]");
+
+        String withoutChain = mapper.writeValueAsString(new AgentChatRequest("10", "hello"));
+        assertThat(withoutChain).doesNotContain("fallbackModels");
     }
 }

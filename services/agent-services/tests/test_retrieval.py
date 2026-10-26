@@ -2,6 +2,7 @@
 
 import json
 
+import anyio
 import httpx
 import pytest
 from conftest import TOKEN_HEADER, make_settings
@@ -23,9 +24,16 @@ from agent_services.retrieval.service import (
     DEFAULT_TOP_K,
     MAX_UPSERT_CHUNKS,
     RetrievalService,
+    code_tokens,
     create_retrieval_service,
+    query_terms,
 )
-from agent_services.retrieval.store import PgVectorRetrievalStore, RetrievedChunk
+from agent_services.retrieval.store import (
+    PgVectorRetrievalStore,
+    RetrievedChunk,
+    hnsw_index_allowed,
+)
+from agent_services.schemas.chat import ModelSelection
 from agent_services.schemas.retrieval import MAX_CONTENT_LENGTH
 
 # ---------------------------------------------------------------- chunking
@@ -42,6 +50,90 @@ def test_split_text_empty_returns_no_chunks() -> None:
 def test_split_text_merges_paragraphs_within_limit() -> None:
     chunks = split_text("para one\n\npara two", max_chars=200)
     assert chunks == ["para one\n\npara two"]
+
+
+def test_split_text_heading_boundaries_prefix_and_stack() -> None:
+    content = (
+        "# 安装\n\n"
+        "安装说明\n\n"
+        "补充一句\n\n"
+        "## 前置条件\n\n"
+        "需要 Python\n\n"
+        "### 版本\n\n"
+        "3.12 以上\n\n"
+        "## 步骤\n\n"
+        "第一步\n\n"
+        "# 使用\n\n"
+        "直接运行"
+    )
+    chunks = split_text(content, max_chars=400)
+    assert chunks == [
+        "§ 安装\n# 安装\n\n安装说明\n\n补充一句",
+        "§ 安装 > 前置条件\n## 前置条件\n\n需要 Python",
+        "§ 安装 > 前置条件 > 版本\n### 版本\n\n3.12 以上",
+        "§ 安装 > 步骤\n## 步骤\n\n第一步",
+        "§ 使用\n# 使用\n\n直接运行",
+    ]
+    assert split_text("前文\n# 安装\n正文", max_chars=200) == [
+        "前文",
+        "§ 安装\n# 安装\n正文",
+    ]
+
+
+def test_split_text_packs_long_single_newline_text_by_line() -> None:
+    line = "列表项" + "甲" * 20
+    lines = [f"{line}{index}" for index in range(6)]
+    content = "\n".join(lines)
+    chunks = split_text(content, max_chars=50, overlap=10)
+    assert chunks == [
+        f"{lines[0]}\n{lines[1]}",
+        f"{lines[2]}\n{lines[3]}",
+        f"{lines[4]}\n{lines[5]}",
+    ]
+    for original in lines:
+        assert sum(original in chunk.split("\n") for chunk in chunks) == 1
+
+
+def test_split_text_sentence_boundary_covers_text() -> None:
+    content = ("甲" * 40) + "。" + ("乙" * 40) + "！" + ("丙" * 40) + "？"
+    max_chars = 70
+    chunks = split_text(content, max_chars=max_chars, overlap=10)
+    assert chunks
+    assert chunks[0][-1] in "。．.!！?？"
+    assert len(chunks[0]) < max_chars
+    assert all(len(chunk) <= max_chars for chunk in chunks)
+
+    position = 0
+    for chunk in chunks:
+        start_min = 0 if position == 0 else max(0, position - len(chunk))
+        found = content.find(chunk, start_min)
+        assert 0 <= found <= position
+        position = max(position, found + len(chunk))
+    assert position == len(content)
+
+    quoted = ("甲" * 40) + "。”" + ("乙" * 40) + "。"
+    quoted_chunks = split_text(quoted, max_chars=70, overlap=8)
+    assert quoted_chunks[0].endswith("。”")
+    assert all(len(chunk) <= 70 for chunk in quoted_chunks)
+
+
+def test_split_text_prefix_counts_toward_max_chars() -> None:
+    paragraph = "甲" * 20
+    content = "# 标题\n\n" + paragraph + "\n\n" + paragraph
+    prefix = "§ 标题\n"
+    max_chars = len(content) + len(prefix) - 1
+    chunks = split_text(content, max_chars=max_chars, overlap=0)
+    assert len(chunks) > 1
+    assert all(chunk.startswith(prefix) for chunk in chunks)
+    assert all(len(chunk) <= max_chars for chunk in chunks)
+
+
+def test_split_text_rejects_invalid_budget() -> None:
+    with pytest.raises(ValueError, match="max_chars must be positive"):
+        split_text("hello", max_chars=0)
+    with pytest.raises(ValueError, match="overlap must be smaller than max_chars"):
+        split_text("hello", max_chars=10, overlap=10)
+    assert split_text("   \n\n  ", max_chars=0, overlap=5) == []
 
 
 async def test_embedding_client_posts_openai_compatible_endpoint() -> None:
@@ -362,6 +454,10 @@ class FakeStore:
         self.docs: dict[tuple[str, str], list[str]] = {}
         self.search_calls: list[str] = []
         self.search_top_ks: list[int] = []
+        self.column_dimensions: int | None = None
+        self.dimensions: int | None = None
+        self.recreate_calls: list[int] = []
+        self.ensure_calls: list[int] = []
 
     async def upsert_document(self, *, site_id, source_id, title, chunks, embeddings) -> int:
         assert len(chunks) == len(embeddings)
@@ -383,6 +479,21 @@ class FakeStore:
                     RetrievedChunk(source_id=source_id, chunk_index=i, content=content, score=0.9)
                 )
         return results[:top_k]
+
+    async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+        return []
+
+    async def current_dimensions(self) -> int | None:
+        return self.column_dimensions
+
+    async def ensure_schema(self, dimensions: int) -> None:
+        self.ensure_calls.append(dimensions)
+        self.dimensions = dimensions
+        self.column_dimensions = dimensions
+
+    async def recreate_schema(self, new_dimensions: int) -> None:
+        self.recreate_calls.append(new_dimensions)
+        self.dimensions = new_dimensions
 
     async def close(self) -> None:
         pass
@@ -680,6 +791,89 @@ def test_retrieval_search_degrades_when_embedding_fails() -> None:
     assert service.last_error == "RuntimeError"
 
 
+def test_vector_failure_does_not_return_lexical_hits() -> None:
+    class VectorDown(FakeStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.lexical_calls = 0
+
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            raise RuntimeError("db down")
+
+        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+            self.lexical_calls += 1
+            return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
+
+    store = VectorDown()
+    response = _search_client(RetrievalService(FakeEmbedder(), store)).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "7", "query": "XJ-900", "topK": 4},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"hits": [], "degraded": True}
+    assert store.lexical_calls == 0
+
+
+def test_embedder_failure_does_not_call_lexical_search() -> None:
+    class LexicalReady(FakeStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.lexical_calls = 0
+
+        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+            self.lexical_calls += 1
+            return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
+
+    class FailingEmbedder(FakeEmbedder):
+        async def embed_query(self, text: str) -> list[float]:
+            raise RuntimeError("embed down")
+
+    store = LexicalReady()
+    response = _search_client(RetrievalService(FailingEmbedder(), store)).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "7", "query": "XJ-900", "topK": 4},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"hits": [], "degraded": True}
+    assert store.lexical_calls == 0
+
+
+def test_like_literal_pattern_escapes_wildcards() -> None:
+    from agent_services.retrieval.store import (
+        lexical_search_statement,
+        like_literal_pattern,
+    )
+
+    assert like_literal_pattern("100%") == "%100\\%%"
+    assert like_literal_pattern("a_b") == "%a\\_b%"
+    assert like_literal_pattern("a\\b") == "%a\\\\b%"
+
+    token = "100%_a\\b"
+    sql, args = lexical_search_statement("site-7", [token], 20)
+    assert args[0] == "site-7"
+    assert args[1] == like_literal_pattern(token)
+    assert args[2] == 20
+    assert "WHERE site_id = $1 AND" in sql
+    assert "ESCAPE" in sql
+    assert "LIMIT $3" in sql
+    assert sql.index("ORDER BY") < sql.index("LIMIT $3")
+    assert "DESC, source_id, chunk_index" in sql
+    assert "(content ILIKE $2 ESCAPE '\\')::int" in sql
+    assert token not in sql
+    assert "100%" not in sql
+
+    ranked_sql, ranked_args = lexical_search_statement("site-7", ["XJ-900", "900"], 20)
+    assert ranked_args[0] == "site-7"
+    assert [item for item in ranked_args if item == "XJ-900" or item == "900"] == []
+    assert ranked_sql.index("ORDER BY") < ranked_sql.index("LIMIT $4")
+    assert "(content ILIKE $2 ESCAPE '\\')::int" in ranked_sql
+    assert "(content ILIKE $3 ESCAPE '\\')::int" in ranked_sql
+    assert "XJ-900" not in ranked_sql
+    assert "900" not in ranked_sql
+
+
 def test_retrieval_search_requires_internal_token() -> None:
     response = _search_client(_service()[0]).post(
         "/internal/v1/retrieval/search",
@@ -717,6 +911,147 @@ def test_retrieval_search_clamps_top_k() -> None:
     assert store.search_top_ks == [20]
 
 
+def test_retrieval_search_drops_hits_below_min_score() -> None:
+    """查询不含代码 token。store 已给出 0.9 与 0.2 时，响应只留 0.9，且不改字段。"""
+
+    class TwoScoreStore(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            self.search_calls.append(site_id)
+            self.search_top_ks.append(top_k)
+            return [
+                RetrievedChunk("kb:hi", 0, "relevant", 0.9),
+                RetrievedChunk("kb:lo", 0, "unrelated", 0.2),
+            ]
+
+    store = TwoScoreStore()
+    response = _search_client(RetrievalService(FakeEmbedder(), store)).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "query": "hi", "topK": 4},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"hits", "degraded"}
+    assert body == {
+        "hits": [
+            {
+                "sourceId": "kb:hi",
+                "chunkIndex": 0,
+                "score": 0.9,
+                "content": "relevant",
+            }
+        ],
+        "degraded": False,
+    }
+    assert store.search_top_ks == [4]
+
+
+async def test_retrieval_min_score_zero_keeps_low_vector_hits() -> None:
+    class TwoScoreStore(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            return [
+                RetrievedChunk("kb:hi", 0, "relevant", 0.9),
+                RetrievedChunk("kb:lo", 0, "unrelated", 0.2),
+            ]
+
+    service = RetrievalService(FakeEmbedder(), TwoScoreStore(), min_score=0)
+    hits = await service.search(site_id="1", query="hi", top_k=4)
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:hi", 0.9), ("kb:lo", 0.2)]
+
+
+def test_code_tokens_keep_model_numbers_whole() -> None:
+    from agent_services.retrieval.service import code_tokens
+
+    assert code_tokens("XJ-900") == ["XJ-900", "900"]
+    assert code_tokens("v1.2") == ["v1.2", "v1"]
+    assert code_tokens("M3") == ["M3"]
+    assert code_tokens("ABCD") == ["ABCD"]
+    assert code_tokens("hi") == []
+    assert code_tokens("AI") == []
+    assert code_tokens("ab") == []
+
+
+def test_retrieval_search_surfaces_code_token_below_vector_threshold() -> None:
+    """向量通道只有无关 0.9；词法通道带回 XJ-900。topK=1 时只留代码 chunk，score 为覆盖率 1。"""
+
+    class SplitStore(FakeStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.lexical_sites: list[str] = []
+            self.lexical_tokens: list[list[str]] = []
+
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            self.search_calls.append(site_id)
+            self.search_top_ks.append(top_k)
+            return [RetrievedChunk("kb:other", 0, "unrelated prose", 0.9)]
+
+        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+            self.lexical_sites.append(site_id)
+            self.lexical_tokens.append(list(tokens))
+            return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
+
+    store = SplitStore()
+    response = _search_client(RetrievalService(FakeEmbedder(), store)).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "7", "query": "XJ-900", "topK": 1},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "hits": [
+            {
+                "sourceId": "kb:code",
+                "chunkIndex": 0,
+                "score": 1.0,
+                "content": "model XJ-900 specs",
+            }
+        ],
+        "degraded": False,
+    }
+    assert store.lexical_sites == ["7"]
+    assert store.lexical_tokens == [["XJ-900", "900"]]
+
+
+async def test_same_chunk_score_is_max_of_cosine_and_code_coverage() -> None:
+    class BothStore(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.4)]
+
+        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+            return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
+
+    service = RetrievalService(FakeEmbedder(), BothStore())
+    hits = await service.search(site_id="7", query="XJ-900", top_k=4)
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:code", 1.0)]
+
+    class CosineWins(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            return [RetrievedChunk("kb:code", 0, "only ABCD here", 0.92)]
+
+        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+            return [RetrievedChunk("kb:code", 0, "only ABCD here", 0.1)]
+
+    cosine_hits = await RetrievalService(FakeEmbedder(), CosineWins()).search(
+        site_id="7", query="ABCD XJ-900", top_k=4
+    )
+    assert [(hit.source_id, hit.score) for hit in cosine_hits] == [("kb:code", 0.92)]
+
+
+def test_retrieval_min_score_rejects_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic import ValidationError
+
+    from agent_services.config import Settings
+
+    for value in (1.5, -0.01):
+        with pytest.raises(RuntimeError, match="RETRIEVAL_MIN_SCORE"):
+            create_app(make_settings(retrieval_min_score=value))
+    create_app(make_settings(retrieval_min_score=0))
+    for literal in ("nope", "true"):
+        monkeypatch.setenv("RETRIEVAL_MIN_SCORE", literal)
+        with pytest.raises(ValidationError):
+            Settings()
+
+
 _CITATION_HITS = [
     RetrievedChunk("s", 0, "low", 0.1),
     RetrievedChunk("s", 0, "high", 0.95),
@@ -727,12 +1062,11 @@ _CITATION_HITS = [
     RetrievedChunk("f", 0, "f", 0.15),
 ]
 
+# 默认门槛 0.35：0.4 留下，0.3 及以下不进 citations。
 _EXPECTED_CITATIONS = [
     {"sourceId": "s", "chunkIndex": 0, "score": 0.95},
     {"sourceId": "b", "chunkIndex": 1, "score": 0.5},
     {"sourceId": "c", "chunkIndex": 0, "score": 0.4},
-    {"sourceId": "d", "chunkIndex": 0, "score": 0.3},
-    {"sourceId": "e", "chunkIndex": 0, "score": 0.2},
 ]
 
 
@@ -841,3 +1175,320 @@ def test_stream_omits_citations_without_grounding() -> None:
         failed = _done_event_data(response.read().decode("utf-8"))
     assert failed["retrievalDegraded"] is True
     assert "citations" not in failed
+
+
+# ---------------------------------------------------------------- lexical v2 / HNSW / rerank
+
+
+def test_query_terms_cover_cjk_bigrams_and_keep_code_tokens() -> None:
+    assert query_terms("什么是退货？") == ["什么", "么是", "是退", "退货"]
+    assert query_terms("桜の花") == ["桜の", "の花"]
+    assert query_terms("山") == ["山"]
+    assert query_terms("XJ-900退货") == ["XJ-900", "900", "退货"]
+    segment = "".join(chr(0x4E00 + index) for index in range(30))
+    terms = query_terms(segment)
+    assert len(terms) == 24
+    assert terms[0] == segment[0:2]
+    assert terms[-1] == segment[23:25]
+    for query in ("XJ-900", "v1.2", "M3", "ABCD"):
+        assert query_terms(query) == code_tokens(query)
+
+
+def test_hnsw_index_allowed_only_within_pgvector_limit() -> None:
+    assert hnsw_index_allowed(1536) is True
+    assert hnsw_index_allowed(3072) is False
+
+
+class _LexicalV2Store(FakeStore):
+    def __init__(self, chunk: RetrievedChunk) -> None:
+        super().__init__()
+        self.chunk = chunk
+        self.lexical_tokens: list[list[str]] = []
+
+    async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        self.search_calls.append(site_id)
+        return []
+
+    async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+        self.lexical_tokens.append(list(tokens))
+        return [self.chunk]
+
+
+async def test_chinese_bigram_hits_when_vector_search_is_empty() -> None:
+    store = _LexicalV2Store(RetrievedChunk("kb:fuji", 0, "参观富士山", 0.0))
+    service = RetrievalService(FakeEmbedder(), store)
+    hits = await service.search(site_id="7", query="富士山", top_k=4)
+    assert store.lexical_tokens == [["富士", "士山"]]
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:fuji", 1.0)]
+    assert service.degraded is False
+
+
+async def test_japanese_bigram_hits_when_vector_search_is_empty() -> None:
+    store = _LexicalV2Store(RetrievedChunk("kb:tokyo", 0, "東京都庁案内", 0.0))
+    service = RetrievalService(FakeEmbedder(), store)
+    hits = await service.search(site_id="7", query="東京都", top_k=4)
+    assert store.lexical_tokens == [["東京", "京都"]]
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:tokyo", 1.0)]
+
+
+_RERANK_HITS = [
+    RetrievedChunk("kb:a", 0, "alpha", 0.9),
+    RetrievedChunk("kb:b", 0, "beta", 0.8),
+    RetrievedChunk("kb:c", 0, "gamma", 0.7),
+    RetrievedChunk("kb:d", 0, "delta", 0.6),
+]
+
+
+class _RerankStore(FakeStore):
+    async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        return list(_RERANK_HITS)
+
+
+def _order_model(payload: str, calls: list[int]) -> FunctionModel:
+    def respond(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        calls.append(1)
+        return ModelResponse(parts=[TextPart(payload)])
+
+    return FunctionModel(respond)
+
+
+async def test_rerank_reorders_candidates_and_marks_applied() -> None:
+    calls: list[int] = []
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=_order_model("[3, 1, 4, 2]", calls),
+    )
+    hits = await service.search(site_id="1", query="q", top_k=2)
+    assert calls == [1]
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:c", 0.7), ("kb:a", 0.9)]
+    assert service.rerank_applied is True
+    assert service.degraded is False
+
+
+def test_rerank_response_includes_rerank_applied_when_reordered() -> None:
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=_order_model("[3, 1, 4, 2]", []),
+    )
+    response = _search_client(service).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "query": "q", "topK": 2},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["degraded"] is False
+    assert body["rerankApplied"] is True
+    assert [hit["sourceId"] for hit in body["hits"]] == ["kb:c", "kb:a"]
+
+
+async def test_rerank_model_error_keeps_fused_order() -> None:
+    def boom(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise RuntimeError("rerank down")
+
+    service = RetrievalService(FakeEmbedder(), _RerankStore(), rerank_model=FunctionModel(boom))
+    hits = await service.search(site_id="1", query="q", top_k=2)
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.9), ("kb:b", 0.8)]
+    assert service.rerank_applied is False
+    assert service.degraded is False
+
+
+def test_rerank_response_omits_flag_when_model_fails() -> None:
+    def boom(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise RuntimeError("rerank down")
+
+    service = RetrievalService(FakeEmbedder(), _RerankStore(), rerank_model=FunctionModel(boom))
+    response = _search_client(service).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "query": "q", "topK": 2},
+    )
+    body = response.json()
+    assert "rerankApplied" not in body
+    assert body["degraded"] is False
+    assert [hit["sourceId"] for hit in body["hits"]] == ["kb:a", "kb:b"]
+
+
+async def test_rerank_timeout_keeps_fused_order() -> None:
+    async def slow(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        await anyio.sleep(1)
+        return ModelResponse(parts=[TextPart("[4, 3, 2, 1]")])
+
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=FunctionModel(slow),
+        rerank_timeout_seconds=0.05,
+    )
+    hits = await service.search(site_id="1", query="q", top_k=2)
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.9), ("kb:b", 0.8)]
+    assert service.rerank_applied is False
+    assert service.degraded is False
+
+
+async def test_rerank_disabled_does_not_call_model() -> None:
+    calls: list[int] = []
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=_order_model("[4, 3, 2, 1]", calls),
+        rerank_enabled=False,
+    )
+    hits = await service.search(site_id="1", query="q", top_k=2)
+    assert calls == []
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.9), ("kb:b", 0.8)]
+    assert service.rerank_applied is False
+
+
+async def test_rerank_skips_model_when_candidates_fit_in_top_k() -> None:
+    calls: list[int] = []
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=_order_model("[4, 3, 2, 1]", calls),
+    )
+    hits = await service.search(site_id="1", query="q", top_k=4)
+    assert calls == []
+    assert [hit.source_id for hit in hits] == ["kb:a", "kb:b", "kb:c", "kb:d"]
+    assert service.rerank_applied is False
+
+
+async def test_rerank_prefers_request_model_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    def swap(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[TextPart("[2, 1]")])
+
+    def identity(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[TextPart("[1, 2]")])
+
+    def fake_entry(**kwargs: object) -> ModelHandle:
+        assert kwargs["spec"] == "openai:rerank-test"
+        return ModelHandle(model=FunctionModel(swap), spec="openai:rerank-test", blocked_reason=None)
+
+    def fake_process(_settings: object) -> ModelHandle:
+        raise AssertionError("process model should not be built when the request selection is live")
+
+    monkeypatch.setattr("agent_services.retrieval.service.create_model_for_entry", fake_entry)
+    monkeypatch.setattr("agent_services.retrieval.service.create_model", fake_process)
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=FunctionModel(identity),
+        settings=make_settings(),
+        rerank_enabled=True,
+        rerank_timeout_seconds=4,
+    )
+    hits = await service.search(
+        site_id="1",
+        query="q",
+        top_k=1,
+        model_selection=ModelSelection(spec="openai:rerank-test", api_key="test-key"),
+    )
+    assert [hit.source_id for hit in hits] == ["kb:b"]
+    assert service.rerank_applied is True
+
+
+async def test_rerank_uses_process_model_without_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    def swap(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[TextPart("[2, 1]")])
+
+    def fake_process(_settings: object) -> ModelHandle:
+        return ModelHandle(model=FunctionModel(swap), spec="test:process", blocked_reason=None)
+
+    monkeypatch.setattr("agent_services.retrieval.service.create_model", fake_process)
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        settings=make_settings(),
+        rerank_enabled=True,
+        rerank_timeout_seconds=4,
+    )
+    hits = await service.search(site_id="1", query="q", top_k=1)
+    assert [hit.source_id for hit in hits] == ["kb:b"]
+    assert service.rerank_applied is True
+
+
+# ---------------------------------------------------------------- reembed prepare
+
+
+class SizedEmbedder:
+    def __init__(self, dimensions: int) -> None:
+        self.dimensions = dimensions
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return [[0.1] * self.dimensions for _ in texts]
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return await self.embed(texts)
+
+    async def embed_query(self, text: str) -> list[float]:
+        vectors = await self.embed([text])
+        return vectors[0]
+
+
+def _prepare(service: RetrievalService, body: dict[str, object]):
+    return TestClient(create_app(make_settings(), retrieval_service=service)).post(
+        "/internal/v1/retrieval/reembed/prepare",
+        headers=TOKEN_HEADER,
+        json=body,
+    )
+
+
+def test_reembed_prepare_same_dimension_does_not_recreate() -> None:
+    store = FakeStore()
+    store.column_dimensions = 3
+    response = _prepare(RetrievalService(FakeEmbedder(), store), {"confirmRecreate": False})
+    assert response.status_code == 200
+    assert response.json() == {"dimensions": 3, "columnDimensions": 3, "recreated": False}
+    assert store.recreate_calls == []
+    assert store.ensure_calls == []
+
+
+def test_reembed_prepare_dimension_change_without_confirm_is_409() -> None:
+    store = FakeStore()
+    store.column_dimensions = 3
+    response = _prepare(RetrievalService(SizedEmbedder(4), store), {"confirmRecreate": False})
+    assert response.status_code == 409
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "DIMENSION_CHANGE_REQUIRED"
+    assert body["dimensions"] == 4
+    assert body["columnDimensions"] == 3
+    assert "providerStatus" not in body
+    assert store.recreate_calls == []
+
+
+def test_reembed_prepare_dimension_change_confirm_recreates() -> None:
+    store = FakeStore()
+    store.column_dimensions = 3
+    response = _prepare(RetrievalService(SizedEmbedder(4), store), {"confirmRecreate": True})
+    assert response.status_code == 200
+    assert response.json() == {"dimensions": 4, "columnDimensions": 3, "recreated": True}
+    assert store.recreate_calls == [4]
+    assert store.dimensions == 4
+    assert store.ensure_calls == []
+
+
+def test_reembed_prepare_missing_table_creates_schema() -> None:
+    store = FakeStore()
+    store.column_dimensions = None
+    response = _prepare(RetrievalService(FakeEmbedder(), store), {"confirmRecreate": False})
+    assert response.status_code == 200
+    assert response.json() == {"dimensions": 3, "columnDimensions": None, "recreated": False}
+    assert store.ensure_calls == [3]
+    assert store.dimensions == 3
+    assert store.recreate_calls == []
+
+
+def test_reembed_prepare_without_embedder_is_blocked() -> None:
+    store = FakeStore()
+    response = _prepare(RetrievalService(None, store), {"confirmRecreate": True})
+    assert response.status_code == 503
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "EXTERNAL_DEPENDENCY_BLOCKED"
+    assert body["providerStatus"] == "BLOCKED"
+    assert "Embedding client is not configured" not in body["message"]
+    assert store.recreate_calls == []
+    assert store.ensure_calls == []

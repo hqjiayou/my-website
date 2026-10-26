@@ -37,7 +37,11 @@ async def test_todo_store_hydrates_from_request() -> None:
     toolset = build_todo_toolset(store)
 
     def model_fn(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-        has_tool_result = any("COMPLETED" in repr(message) for message in messages)
+        # 工具说明里的 “COMPLETED” 不能当成工具已经返回。
+        has_tool_result = any(
+            "'id': 't1'" in repr(message) and "'status': 'COMPLETED'" in repr(message)
+            for message in messages
+        )
         if not has_tool_result:
             return ModelResponse(parts=[ToolCallPart(tool_name="complete_todo", args={"todo_id": "t1"})])
         return ModelResponse(parts=[TextPart("done")])

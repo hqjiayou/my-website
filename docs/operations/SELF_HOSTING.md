@@ -6,7 +6,7 @@ status: CURRENT
 last_verified: 2026-10-24
 ```
 
-单人自用：常开主机 + Docker Compose + Tailscale。不买域名，不开路由器端口，不开 Tailscale Funnel。手机走 tailnet 里的 HTTPS 打开 Portal。
+单人自用：常开主机 + Docker Compose + Tailscale。不买域名，不开路由器端口，不开 Tailscale Funnel。手机走 tailnet 里的 HTTPS 打开 Agent Portal。
 
 这份说明对齐 `docker-compose.yml`。和方案文件有出入的地方写在最后一节。仓库里的 Java / Python / 前端代码和它们的默认配置没有为这份部署改过。
 
@@ -110,7 +110,7 @@ curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1/
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/
 ```
 
-Java 的 `/actuator/health` 在各自容器里，不映射到宿主。宿主 80 是 Portal，8081 只在本机，是 admin-web。
+Java 的 `/actuator/health` 在各自容器里，不映射到宿主。宿主 80 是 Agent Portal，8081 只在本机，是 admin-web。
 
 ## 5. 管理员种子
 
@@ -128,7 +128,7 @@ docker compose exec -T postgres \
 docker compose up -d --build web
 ```
 
-Portal 登录框要的是站点的 `siteCode`。`VITE_PORTAL_SITE_ID` 只给 `/api/site/{siteId}/ai/**` 用。改这个值必须重建镜像，重启容器不会改已经打进静态文件的值。
+Agent Portal 登录框要的是站点的 `siteCode`。`VITE_PORTAL_SITE_ID` 只给 `/api/site/{siteId}/ai/**` 用。改这个值必须重建镜像，重启容器不会改已经打进静态文件的值。
 
 ## 6. 检索库（问答不依赖这一步）
 
@@ -171,16 +171,16 @@ sudo tailscale serve --bg --https=8443 http://127.0.0.1:8081
 sudo tailscale serve status
 ```
 
-不同 Tailscale 版本的子命令不完全一样。目标是：443 转到本机 80（Portal），8443 转到本机 127.0.0.1:8081（admin-web）。`tailscale serve --help` 如果没有 `--https=8443`，用该版本里“额外 HTTPS 端口”的等价写法。不要改成 Funnel。
+不同 Tailscale 版本的子命令不完全一样。目标是：443 转到本机 80（Agent Portal），8443 转到本机 127.0.0.1:8081（admin-web）。`tailscale serve --help` 如果没有 `--https=8443`，用该版本里“额外 HTTPS 端口”的等价写法。不要改成 Funnel。
 
 手机安装 Tailscale，登录同一账号：
 
-- Portal：`https://<主机名>.<tailnet>.ts.net/`
+- Agent Portal：`https://<主机名>.<tailnet>.ts.net/`
 - 管理后台：`https://<主机名>.<tailnet>.ts.net:8443/`
 
-Portal 可以加到主屏幕。管理后台走第二个端口，因为 admin-web 的 Vite `base` 不能靠环境变量改成 `/admin/`，静态资源按站点根路径引用。
+Agent Portal 可以加到主屏幕。管理后台走第二个端口，因为 admin-web 的 Vite `base` 不能靠环境变量改成 `/admin/`，静态资源按站点根路径引用。
 
-同一局域网里可以用 `http://<主机局域网 IP>/` 作为 Portal 备援。不要在路由器上转发 80 或 8081。`SECURITY_REFRESH_COOKIE_SECURE` 保持 `false`，这样这条 HTTP 备援还能保存登录 Cookie；Tailscale 的 HTTPS 页面也会带上它。
+同一局域网里可以用 `http://<主机局域网 IP>/` 作为 Agent Portal 备援。不要在路由器上转发 80 或 8081。`SECURITY_REFRESH_COOKIE_SECURE` 保持 `false`，这样这条 HTTP 备援还能保存登录 Cookie；Tailscale 的 HTTPS 页面也会带上它。
 
 对象存储（MinIO / AIStor）不在这套 compose 里。需要上传文件的功能在这台主机上不可用。Redis 没有卷，重建 redis 容器会丢掉会话，用户要重新登录。
 

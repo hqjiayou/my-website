@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useOutletContext } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { siteApi, SITE_TYPE_VALUES, type Site, type SiteType } from '@/api'
+import { siteApi, SITE_TAG_PATTERN, SITE_TYPE_PRESETS, type Site } from '@/api'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
@@ -23,6 +23,7 @@ function SiteBasicForm({ site }: { site: Site }) {
 
   const [siteName, setSiteName] = useState(site.siteName)
   const [siteType, setSiteType] = useState(site.siteType)
+  const [customType, setCustomType] = useState(false)
   const [defaultDomain, setDefaultDomain] = useState(site.defaultDomain ?? '')
   const [description, setDescription] = useState(site.description ?? '')
 
@@ -30,7 +31,7 @@ function SiteBasicForm({ site }: { site: Site }) {
     mutationFn: () =>
       siteApi.updateSite(site.id, {
         siteName: siteName.trim(),
-        siteType,
+        siteType: siteType.trim(),
         defaultDomain: defaultDomain.trim() || undefined,
         description: description.trim() || undefined,
         version: site.version,
@@ -49,12 +50,26 @@ function SiteBasicForm({ site }: { site: Site }) {
   })
 
   function handleSave() {
-    if (!siteName.trim()) {
+    if (!siteName.trim() || !siteType.trim()) {
       toast.warning(t('create.messages.requiredFields'))
+      return
+    }
+    if (!SITE_TAG_PATTERN.test(siteType.trim())) {
+      toast.warning(t('create.messages.invalidSiteType'))
       return
     }
     if (updateMutation.isPending) return
     updateMutation.mutate()
+  }
+
+  function handleTypeSelect(value: string) {
+    if (value === '__CUSTOM__') {
+      setCustomType(true)
+      setSiteType('')
+      return
+    }
+    setCustomType(false)
+    setSiteType(value)
   }
 
   return (
@@ -85,20 +100,30 @@ function SiteBasicForm({ site }: { site: Site }) {
         <label className="space-y-1.5 text-sm">
           <span className="font-medium text-slate-700">{t('create.fields.siteType')}</span>
           <select
-            value={siteType}
-            onChange={(event) => setSiteType(event.target.value)}
+            value={customType ? '__CUSTOM__' : siteType}
+            onChange={(event) => handleTypeSelect(event.target.value)}
             disabled={!canUpdate}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200 disabled:bg-slate-50"
           >
-            {SITE_TYPE_VALUES.map((value) => (
+            {SITE_TYPE_PRESETS.map((value) => (
               <option key={value} value={value}>
                 {t(`siteType.${value}`)}
               </option>
             ))}
-            {!SITE_TYPE_VALUES.includes(siteType as SiteType) ? (
-              <option value={siteType}>{siteType}</option>
+            {!customType && siteType && !SITE_TYPE_PRESETS.includes(siteType) ? (
+              <option value={siteType}>{t(`siteType.${siteType}`, { defaultValue: siteType })}</option>
             ) : null}
+            <option value="__CUSTOM__">{t('create.fields.customSiteType')}</option>
           </select>
+          {customType ? (
+            <input
+              value={siteType}
+              onChange={(event) => setSiteType(event.target.value)}
+              disabled={!canUpdate}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200 disabled:bg-slate-50"
+              placeholder={t('create.placeholders.customSiteType')}
+            />
+          ) : null}
         </label>
 
         <label className="space-y-1.5 text-sm">

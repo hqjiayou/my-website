@@ -7,7 +7,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// 開發模式把 /api 轉到閘道。埠與 Portal（5174）分開。
+// 開發模式把 /api 轉到閘道。埠與 Agent Portal（5174）分開。
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {

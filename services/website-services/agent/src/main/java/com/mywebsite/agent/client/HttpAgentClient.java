@@ -9,7 +9,10 @@ import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentMcpReady;
+import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentPingResponse;
+import com.mywebsite.agent.dto.AgentReembedPrepareRequest;
+import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.agent.dto.AgentRetrievalHit;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
@@ -26,10 +29,12 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
@@ -196,7 +201,37 @@ public class HttpAgentClient implements AgentClient {
                 providerStatus,
                 readList(data.get("todos"), AgentTodoItem.class),
                 readRunMeta(data),
-                readList(data.get("citations"), AgentCitation.class));
+                readList(data.get("citations"), AgentCitation.class),
+                readExtractedMemories(data));
+    }
+
+    /** 缺失或格式异常时为空，不让已经成功的回复失败。 */
+    private List<String> readExtractedMemories(JsonNode data) {
+        JsonNode node = data.get("extractedMemories");
+        if (node == null || node.isNull()) {
+            return List.of();
+        }
+        if (!node.isArray()) {
+            log.warn("agent-services returned malformed extractedMemories, ignored");
+            return List.of();
+        }
+        try {
+            List<String> values = objectMapper.convertValue(
+                    node, objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+            if (values == null) {
+                return List.of();
+            }
+            List<String> kept = new ArrayList<>();
+            for (String value : values) {
+                if (value != null) {
+                    kept.add(value);
+                }
+            }
+            return List.copyOf(kept);
+        } catch (IllegalArgumentException ex) {
+            log.warn("agent-services returned malformed extractedMemories, ignored", ex);
+            return List.of();
+        }
     }
 
     /** 观测元数据格式异常只丢弃元数据，不让已成功的回复失败（与 todos 不同：todos 影响编排正确性）。 */
@@ -248,6 +283,22 @@ public class HttpAgentClient implements AgentClient {
     }
 
     @Override
+    public AgentReembedPrepareResult prepareReembed(AgentModelSelection selection, boolean confirmRecreate) {
+        ensureTokenConfigured();
+        JsonNode body = exchangeWithRetry(
+                "POST",
+                "/internal/v1/retrieval/reembed/prepare",
+                new AgentReembedPrepareRequest(selection, confirmRecreate));
+        JsonNode dimensions = body.get("dimensions");
+        if (dimensions == null || !dimensions.isNumber() || !body.has("recreated")) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+        JsonNode column = body.get("columnDimensions");
+        Integer columnDimensions = column != null && column.isNumber() ? column.asInt() : null;
+        return new AgentReembedPrepareResult(dimensions.asInt(), columnDimensions, body.get("recreated").asBoolean());
+    }
+
+    @Override
     public void deleteRetrievalDocument(String siteId, String sourceId) {
         if (!StringUtils.hasText(siteId) || !StringUtils.hasText(sourceId)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
@@ -273,7 +324,9 @@ public class HttpAgentClient implements AgentClient {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
         return new AgentRetrievalSearchResult(
-                readList(payload.get("hits"), AgentRetrievalHit.class), payload.path("degraded").asBoolean(false));
+                readList(payload.get("hits"), AgentRetrievalHit.class),
+                payload.path("degraded").asBoolean(false),
+                payload.path("rerankApplied").asBoolean(false));
     }
 
     @Override
@@ -310,7 +363,8 @@ public class HttpAgentClient implements AgentClient {
             forwardSseEvents(connection.getInputStream(), listener);
         } catch (IOException ex) {
             log.warn("agent-services chat stream I/O failure", ex);
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+            throw new BusinessException(
+                    isConnectFailure(ex) ? ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED : ErrorCode.SYSTEM_ERROR);
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -421,7 +475,10 @@ public class HttpAgentClient implements AgentClient {
                 log.warn("agent-services read timed out method={} path={}", method, path);
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR);
             }
-            throw new RetryableAgentCallException(new BusinessException(ErrorCode.SYSTEM_ERROR), ex);
+            throw new RetryableAgentCallException(
+                    new BusinessException(
+                            isConnectFailure(ex) ? ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED : ErrorCode.SYSTEM_ERROR),
+                    ex);
         } catch (IOException ex) {
             throw new RetryableAgentCallException(
                     new BusinessException(ErrorCode.SYSTEM_ERROR),
@@ -455,6 +512,9 @@ public class HttpAgentClient implements AgentClient {
 
     private BusinessException mapErrorBody(JsonNode node, int httpStatus) {
         String errorCode = textOrNull(node, "errorCode");
+        if ("DIMENSION_CHANGE_REQUIRED".equals(errorCode)) {
+            return dimensionChangeRequired(node);
+        }
         // MCP 不可用与 Provider BLOCKED 同属外部依赖失败（ADR-0004/§19.10）
         if ("EXTERNAL_DEPENDENCY_BLOCKED".equals(errorCode)
                 || "MCP_UNAVAILABLE".equals(errorCode)
@@ -475,6 +535,16 @@ public class HttpAgentClient implements AgentClient {
             return new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
         return new BusinessException(ErrorCode.SYSTEM_ERROR);
+    }
+
+    private static BusinessException dimensionChangeRequired(JsonNode node) {
+        JsonNode dimensions = node.get("dimensions");
+        if (dimensions == null || !dimensions.isNumber()) {
+            return new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+        JsonNode column = node.get("columnDimensions");
+        Integer columnDimensions = column != null && column.isNumber() ? column.asInt() : null;
+        return new AgentDimensionChangeRequiredException(dimensions.asInt(), columnDimensions);
     }
 
     private static boolean isReadTimeout(Throwable error) {
@@ -519,6 +589,17 @@ public class HttpAgentClient implements AgentClient {
     }
 
     /** 可重试调用失败的内部信号；对外仍映射为 BusinessException。 */
+    private static boolean isConnectFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof ConnectException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
     private static final class RetryableAgentCallException extends RuntimeException {
         private final BusinessException businessException;
 

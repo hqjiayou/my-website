@@ -26,7 +26,7 @@ supersedes:
 | 域 | 状态 | 说明 |
 |----|------|------|
 | **Admin Web** | PARTIAL（主域 + 运营聚合 + 站点 AI 管理 FORCE REAL；概览指标由 REAL API 推导；占位页） | 见 [`../admin-web/CURRENT_STATE.md`](../admin-web/CURRENT_STATE.md) |
-| **Site Web** | v1 IN_TREE（公开只读）/ NOT_IMPLEMENTED（auth） | `apps/site-web` 按 siteCode 渲染公开内容（仅 PUBLISHED）；Site Auth 前端未接（登录在 Portal） |
+| **Site Web** | v1 IN_TREE（公开只读）/ NOT_IMPLEMENTED（auth） | `apps/site-web` 按 siteCode 渲染公开内容（仅 PUBLISHED）；Site Auth 前端未接（登录在 `apps/agent-portal`） |
 | **Backend (website-services)** | PARTIAL（主业务 COMPLETE_V1；安全门 PARTIALLY_RESOLVED） | 见 [`../website-services/CURRENT_STATE.md`](../website-services/CURRENT_STATE.md) |
 | **Database** | COMPLETE_V1（Flyway 以 `infra/.../db/migration` 为准，当前至 V21） | 以代码为准 |
 | **Auth Admin** | PARTIAL | 登录/刷新/登出/注册门控 REAL；XFF：gateway trusted-proxies 已配置，缺集成测试 |
@@ -39,7 +39,7 @@ supersedes:
 | **Media** | COMPLETE_V1 | 服务端 object key；MIME；站点归属 |
 | **Content** | COMPLETE_V1 | CMS CRUD/status |
 | **Reservation** | COMPLETE_V1_ADMIN_SCOPE | 状态：`NEW` / `CONFIRMED` / `DONE` / `CANCELLED`（**不是** COMPLETED）；无公开预约/冲突引擎 |
-| **AI** | PARTIAL_ADMIN_SCOPE；LIVE 仍 EXTERNAL_BLOCKED（无 Provider） | admin Prompt/KB/会话/预览 FORCE REAL；site-web 聊天 NOT_IMPLEMENTED；无 `AI_MODEL` 诚实 503。Agent 平台（无业务工具）：MCP（配置驱动，`transport` 仅 http/sse，深检 `GET /internal/v1/mcp/ready`，连接失败 `MCP_UNAVAILABLE`）/ Skills（目录 + 预览可选）/ Todo（站点会话 V20 持久化、预览前端回传）已端到端接通；运行预算（Python `AGENT_BUDGET_EXCEEDED` → Java `ErrorCode` 1008 / HTTP 422）/ 工具超时 / 历史字符预算 / Fallback 模型 / Agent OTel / 运行轨迹（V21 `site_ai_message.agent_meta`，后台会话可见）/ 后台“运行时”面板，见 Agent 设计 V1 §19–§24 |
+| **AI** | PARTIAL_ADMIN_SCOPE；LIVE 仍 EXTERNAL_BLOCKED（无 Provider） | admin Prompt/KB/会话/预览 FORCE REAL；平台模型入口在 Java `ai_model_entry`（后台「模型入口」维护，响应不含 key；启用的默认入口随对话注入 Python，没有则回退进程 `AI_MODEL`）；site-web 聊天 NOT_IMPLEMENTED；两边都没有模型时诚实 503。Agent 平台（无业务工具）：每次对话由 `assemble_harness` 把平台 background、护栏、生效的运行上限、技能正文、函数工具说明和 MCP 服务器名送进系统提示，并按历史字符预算裁剪送模记忆（不写 URL，不改写下一轮；超预算时把被裁掉的前缀摘要进系统提示，摘要失败则只裁剪，不回写会话；未做摘要落库与跨轮复用）；`GET /internal/v1/health` 的 `harness` 只报告这三个平台文件是否存在，`provider` 仍是进程环境模型；MCP（配置驱动，`transport` 支持 http/sse/stdio，深检 `GET /internal/v1/mcp/ready`，连接失败 `MCP_UNAVAILABLE`）/ Skills（目录 + 预览可选）/ Todo（站点会话 V20 持久化、预览前端回传）已端到端接通；运行预算（Python `AGENT_BUDGET_EXCEEDED` → Java `ErrorCode` 1008 / HTTP 422）/ 工具超时 / 历史字符预算 / Fallback 模型（进程 `AI_MODEL` 与构建成功的模型入口都挂 `AI_FALLBACK_MODELS`，仅 Provider API 错误时切换；入口本身 BLOCKED 时不顶替，备用凭证不使用入口 apiKey）/ Agent OTel / 运行轨迹（V21 `site_ai_message.agent_meta`，后台会话可见）/ 后台“运行时”面板，见 Agent 设计 V1 §19–§24。多模態輸入 v1（傳圖）已落地（分支） |
 | **Mock 策略** | admin-web 无 mock 数据源；`VITE_USE_MOCK` 不再生效 | 见 [`../rules/MOCK_POLICY.md`](../rules/MOCK_POLICY.md) |
 | **Testing** | Vertical/Contract 有；Browser E2E = **NOT_IMPLEMENTED** | 禁止称 MockMvc/build 为 Browser E2E |
 | **External** | PostgreSQL / Redis /（可选 MinIO）/ AI Provider | AI Provider 缺失 → 诚实 503 |

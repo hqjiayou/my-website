@@ -21,6 +21,11 @@ public class AgentProperties {
      */
     private int retryMaxAttempts = 1;
 
+    /**
+     * Python 回调本机 site-app internal 的根地址。空则不在请求里覆盖，沿用 Python 的 BUSINESS_API_BASE_URL。
+     */
+    private String businessApiBaseUrl = "";
+
     public String getBaseUrl() {
         return baseUrl;
     }
@@ -59,5 +64,13 @@ public class AgentProperties {
 
     public void setRetryMaxAttempts(int retryMaxAttempts) {
         this.retryMaxAttempts = retryMaxAttempts;
+    }
+
+    public String getBusinessApiBaseUrl() {
+        return businessApiBaseUrl;
+    }
+
+    public void setBusinessApiBaseUrl(String businessApiBaseUrl) {
+        this.businessApiBaseUrl = businessApiBaseUrl;
     }
 }

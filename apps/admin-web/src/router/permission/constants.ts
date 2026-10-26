@@ -22,6 +22,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   [ROUTES.operation.contents]: PERMISSION_CODES.contentList,
   [ROUTES.operation.reservations]: PERMISSION_CODES.reservationList,
   [ROUTES.operation.files]: PERMISSION_CODES.mediaList,
+  [ROUTES.ai.settings]: PERMISSION_CODES.aiModelRead,
   [ROUTES.ai.prompts]: PERMISSION_CODES.aiPromptRead,
   [ROUTES.ai.knowledgeBases]: PERMISSION_CODES.aiKbList,
   [ROUTES.ai.conversations]: PERMISSION_CODES.aiConversationList,

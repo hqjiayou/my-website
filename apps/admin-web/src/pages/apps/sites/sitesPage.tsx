@@ -5,7 +5,14 @@ import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { siteApi, SITE_STATUS, SITE_TYPE_VALUES, type SiteListItem, type SiteListQuery } from '@/api'
+import {
+  siteApi,
+  SITE_STATUS,
+  SITE_TYPE_LEGACY,
+  SITE_TYPE_PRESETS,
+  type SiteListItem,
+  type SiteListQuery,
+} from '@/api'
 import { DataTable, type DataTableColumn } from '@/components/admin'
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
@@ -199,9 +206,9 @@ export function SitesPage() {
             onChange={(event) => setDraft((prev) => ({ ...prev, siteType: event.target.value || undefined }))}
           >
             <option value="">{t('list.filters.allSiteType')}</option>
-            {SITE_TYPE_VALUES.map((value) => (
+            {[...SITE_TYPE_PRESETS, ...SITE_TYPE_LEGACY].map((value) => (
               <option key={value} value={value}>
-                {t(`siteType.${value}`)}
+                {t(`siteType.${value}`, { defaultValue: value })}
               </option>
             ))}
           </select>

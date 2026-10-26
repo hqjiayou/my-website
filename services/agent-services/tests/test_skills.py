@@ -283,3 +283,111 @@ def test_chat_applies_skill_instruction_budget(tmp_path: Path) -> None:
     assert "[skills truncated: 1 skill(s) omitted due to instruction budget]" in blob
     assert "TINY-BODY" not in blob
     assert "## Skill: tiny" not in blob
+
+
+def test_standard_skill_exposes_optional_fields(tmp_path: Path) -> None:
+    clear_skills_cache()
+    _write_skill(
+        tmp_path,
+        "pdf-tools",
+        "Extract tables.",
+        frontmatter=(
+            "name: pdf-tools\n"
+            "description: Extract tables from PDFs.\n"
+            "license: Apache-2.0\n"
+            "compatibility: Requires poppler\n"
+            "metadata:\n"
+            "  author: platform\n"
+            '  version: "1"\n'
+            'allowed-tools: "Bash(python:*) Read"\n'
+        ),
+    )
+    skill = discover_skills(str(tmp_path))["pdf-tools"]
+    assert skill.id == "pdf-tools"
+    assert skill.description == "Extract tables from PDFs."
+    assert skill.license == "Apache-2.0"
+    assert skill.compatibility == "Requires poppler"
+    assert skill.metadata == {"author": "platform", "version": "1"}
+    assert skill.allowed_tools == ("Bash(python:*)", "Read")
+    assert skill.version is None
+
+
+def test_skill_name_mismatch_is_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    clear_skills_cache()
+    _write_skill(
+        tmp_path,
+        "good-name",
+        "Body.",
+        frontmatter="name: other-name\ndescription: Other\n",
+    )
+    with caplog.at_level("WARNING"):
+        catalog = discover_skills(str(tmp_path))
+    assert "good-name" not in catalog
+    assert any("does not match" in record.message for record in caplog.records)
+
+
+def test_invalid_skill_name_is_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    clear_skills_cache()
+    _write_skill(tmp_path, "bad_name", "Body.", frontmatter="name: bad_name\ndescription: Nope\n")
+    with caplog.at_level("WARNING"):
+        catalog = discover_skills(str(tmp_path))
+    assert catalog == {}
+    assert any("does not match name rules" in record.message for record in caplog.records)
+
+
+def test_missing_name_falls_back_to_directory(tmp_path: Path) -> None:
+    clear_skills_cache()
+    _write_skill(tmp_path, "legacy-skill", "Legacy body.", frontmatter="description: Legacy\n")
+    skill = discover_skills(str(tmp_path))["legacy-skill"]
+    assert skill.id == "legacy-skill"
+    assert skill.description == "Legacy"
+
+
+def test_missing_description_is_derived_from_first_paragraph(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    clear_skills_cache()
+    _write_skill(
+        tmp_path,
+        "notes",
+        "First paragraph stays.\n\nSecond paragraph does not.",
+        frontmatter="name: notes\n",
+    )
+    with caplog.at_level("INFO"):
+        skill = discover_skills(str(tmp_path))["notes"]
+    assert skill.description == "First paragraph stays."
+    assert any("derived from body" in record.message for record in caplog.records)
+
+
+def test_overlong_description_is_truncated(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    clear_skills_cache()
+    long = "x" * 1100
+    _write_skill(
+        tmp_path,
+        "long-text",
+        "Body.",
+        frontmatter=f"name: long-text\ndescription: {long}\n",
+    )
+    with caplog.at_level("WARNING"):
+        skill = discover_skills(str(tmp_path))["long-text"]
+    assert skill.description == long[:1024]
+    assert len(skill.description) == 1024
+    assert any("truncated" in record.message for record in caplog.records)
+
+
+def test_allowed_tools_yaml_list_is_parsed(tmp_path: Path) -> None:
+    clear_skills_cache()
+    _write_skill(
+        tmp_path,
+        "tool-list",
+        "Use the listed tools.",
+        frontmatter=(
+            "name: tool-list\n"
+            "description: Lists tools.\n"
+            "allowed-tools:\n"
+            "  - Bash\n"
+            "  - Read\n"
+        ),
+    )
+    skill = discover_skills(str(tmp_path))["tool-list"]
+    assert skill.allowed_tools == ("Bash", "Read")

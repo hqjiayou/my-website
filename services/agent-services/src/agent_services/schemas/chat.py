@@ -1,3 +1,5 @@
+import base64
+import binascii
 import math
 from typing import Annotated, Literal
 
@@ -10,6 +12,13 @@ MAX_MESSAGE_CHARS = 16000
 MAX_HISTORY_ITEMS = 50
 MAX_SKILL_IDS = 16
 MAX_SKILL_ID_LENGTH = 64
+MAX_ATTACHMENTS = 3
+MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024
+MAX_ATTACHMENTS_TOTAL_BYTES = 5 * 1024 * 1024
+MAX_MEMORIES = 20
+MAX_MEMORY_CHARS = 500
+
+ImageMediaType = Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
 
 SkillId = Annotated[str, StringConstraints(max_length=MAX_SKILL_ID_LENGTH)]
 
@@ -36,11 +45,45 @@ class PromptProfile(BaseModel):
         return value
 
 
+class ChatAttachment(BaseModel):
+    """图片附件。data 为标准 base64，解码后单张不超过 2MiB。"""
+
+    media_type: ImageMediaType = Field(alias="mediaType")
+    data: str
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("data")
+    @classmethod
+    def validate_base64_payload(cls, value: str) -> str:
+        if _decoded_attachment_size(value) > MAX_ATTACHMENT_BYTES:
+            raise ValueError("attachment exceeds 2MiB")
+        return value
+
+
+def _decoded_attachment_size(value: str) -> int:
+    try:
+        decoded = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("attachment data is not valid base64") from exc
+    return len(decoded)
+
+
+def limit_attachment_list(value: list[ChatAttachment] | None) -> list[ChatAttachment] | None:
+    if not value:
+        return None
+    total = sum(_decoded_attachment_size(item.data) for item in value)
+    if total > MAX_ATTACHMENTS_TOTAL_BYTES:
+        raise ValueError("attachments exceed 5MiB")
+    return value
+
+
 class ChatHistoryMessage(BaseModel):
     """多轮历史消息；由 Java 从会话真相源加载后随请求传入（Python stateless）。"""
 
     role: Literal["USER", "ASSISTANT"]
     content: str
+    attachments: list[ChatAttachment] | None = Field(default=None, max_length=MAX_ATTACHMENTS)
 
     @field_validator("content")
     @classmethod
@@ -50,18 +93,77 @@ class ChatHistoryMessage(BaseModel):
             return value
         return value[:MAX_MESSAGE_CHARS]
 
+    @field_validator("attachments")
+    @classmethod
+    def cap_history_attachments(
+        cls, value: list[ChatAttachment] | None
+    ) -> list[ChatAttachment] | None:
+        return limit_attachment_list(value)
+
+
+class ModelSelection(BaseModel):
+    """Java 模型入口带入的本次凭证。缺失时回退进程 AI_MODEL。"""
+
+    spec: str = Field(min_length=1, max_length=256)
+    api_key: str = Field(alias="apiKey", min_length=1, max_length=4096)
+    base_url: str | None = Field(default=None, alias="baseUrl", max_length=512)
+    embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
+
+    model_config = {"populate_by_name": True}
+
 
 class ChatRequest(BaseModel):
     site_id: str = Field(alias="siteId")
     message: str = Field(max_length=MAX_MESSAGE_CHARS)
+    attachments: list[ChatAttachment] | None = Field(default=None, max_length=MAX_ATTACHMENTS)
     locale: str | None = None
     conversation_id: str | None = Field(default=None, alias="conversationId")
     prompt_profile: PromptProfile | None = Field(default=None, alias="promptProfile")
     history: list[ChatHistoryMessage] | None = Field(default=None, max_length=MAX_HISTORY_ITEMS)
     skills: list[SkillId] | None = Field(default=None, max_length=MAX_SKILL_IDS)
     todos: list[TodoItem] | None = Field(default=None, max_length=MAX_TODO_ITEMS)
+    model_selection: ModelSelection | None = Field(default=None, alias="model")
+    # 入口备援链（各自带凭证）；主用构建失败时不得顶替，仅运行期 API 错误时顺链切换
+    fallback_models: list[ModelSelection] = Field(
+        default_factory=list, alias="fallbackModels", max_length=8
+    )
+    business_api_base_url: str | None = Field(default=None, alias="businessApiBaseUrl", max_length=512)
+    knowledge_context: list[str] | None = Field(default=None, alias="knowledgeContext", max_length=4)
+    memories: list[str] | None = Field(default=None, max_length=MAX_MEMORIES)
+    memory_enabled: bool = Field(default=False, alias="memoryEnabled")
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("attachments")
+    @classmethod
+    def cap_request_attachments(
+        cls, value: list[ChatAttachment] | None
+    ) -> list[ChatAttachment] | None:
+        return limit_attachment_list(value)
+
+    @field_validator("knowledge_context")
+    @classmethod
+    def cap_knowledge_snippets(cls, value: list[str] | None) -> list[str] | None:
+        if not value:
+            return value
+        snippets: list[str] = []
+        for item in value:
+            text = item.strip()
+            if text:
+                snippets.append(text[:2000])
+        return snippets or None
+
+    @field_validator("memories")
+    @classmethod
+    def cap_memories(cls, value: list[str] | None) -> list[str] | None:
+        if not value:
+            return None
+        kept: list[str] = []
+        for item in value:
+            text = item.strip()
+            if text:
+                kept.append(text[:MAX_MEMORY_CHARS])
+        return kept or None
 
     @field_validator("todos")
     @classmethod
@@ -115,6 +217,7 @@ class ChatSuccessData(BaseModel):
     todos: list[TodoItem] | None = None
     retrieval_degraded: bool = Field(default=False, alias="retrievalDegraded")
     citations: list[ChatCitation] | None = None
+    extracted_memories: list[str] = Field(default_factory=list, alias="extractedMemories")
 
     model_config = {"populate_by_name": True}
 

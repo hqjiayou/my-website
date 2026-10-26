@@ -1,11 +1,19 @@
 import logging
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic_ai.models import Model
 
+from agent_services.agent.harness import harness_component_flags
 from agent_services.agent.mcp_tools import mcp_config_snapshot, probe_mcp_ready
-from agent_services.agent.model_factory import ModelHandle, public_model_spec
+from agent_services.agent.model_factory import (
+    EntryFallback,
+    ModelHandle,
+    create_model_for_entry,
+    public_model_spec,
+)
 from agent_services.agent.runtime import (
     BUDGET_EXCEEDED,
     ChatBlocked,
@@ -22,7 +30,14 @@ from agent_services.agent.todo_tools import todo_store_from_request
 from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.api.errors import InternalApiError, external_failure_message
 from agent_services.auth.internal_token import require_internal_service_token
+from agent_services.config import Settings
+from agent_services.retrieval.embeddings import (
+    EmbeddingClient,
+    create_embedding_client_for,
+)
 from agent_services.retrieval.service import (
+    DimensionChangeRequired,
+    ReembedPrepared,
     RetrievalChunkLimitExceeded,
     RetrievalService,
 )
@@ -32,9 +47,11 @@ from agent_services.schemas.chat import (
     ChatRequest,
     ChatSuccessData,
     ChatUsage,
+    ModelSelection,
     ToolTraceItem,
 )
 from agent_services.schemas.health import (
+    HarnessFiles,
     HealthResponse,
     McpReadyResponse,
     McpReadyServerStatus,
@@ -42,6 +59,8 @@ from agent_services.schemas.health import (
     RuntimeLimits,
 )
 from agent_services.schemas.retrieval import (
+    ReembedPrepareRequest,
+    ReembedPrepareResponse,
     RetrievalSearchHit,
     RetrievalSearchRequest,
     RetrievalSearchResponse,
@@ -61,6 +80,23 @@ def _model_handle(request: Request) -> ModelHandle:
     return request.app.state.model_handle
 
 
+def _execution_handle(request: Request, body: ChatRequest) -> ModelHandle:
+    """请求里带了 Java 模型入口就用那一条；否则用进程启动时的 AI_MODEL。"""
+    selection = body.model_selection
+    if selection is None:
+        return _model_handle(request)
+    return create_model_for_entry(
+        spec=selection.spec,
+        api_key=selection.api_key,
+        base_url=selection.base_url,
+        settings=request.app.state.settings,
+        fallbacks=[
+            EntryFallback(spec=item.spec, api_key=item.api_key, base_url=item.base_url)
+            for item in body.fallback_models
+        ],
+    )
+
+
 def _retrieval_service_or_none(request: Request) -> RetrievalService | None:
     return request.app.state.retrieval_service
 
@@ -78,21 +114,95 @@ def _require_retrieval_service(request: Request) -> RetrievalService:
     return service
 
 
+def _request_embedder(
+    request: Request, spec: str | None, api_key: str | None, base_url: str | None
+) -> EmbeddingClient | None:
+    """模型入口带了 embedding spec 和 key 时，这一次检索用这把密钥，不读进程 AI_PROVIDER_API_KEY。"""
+    if spec is None or not spec.strip() or api_key is None or not api_key.strip():
+        return None
+    client, reason = create_embedding_client_for(
+        spec=spec,
+        api_key=api_key,
+        base_url=base_url,
+        dimensions=request.app.state.settings.ai_embedding_dimensions,
+    )
+    if client is None:
+        logger.warning("model entry embedding client was not built: %s", reason)
+    return client
+
+
 async def _retrieval_context(
-    request: Request, site_id: str, message: str
+    request: Request,
+    site_id: str,
+    message: str,
+    embedder: EmbeddingClient | None = None,
+    model_selection: ModelSelection | None = None,
 ) -> tuple[list[str] | None, bool, list[RetrievedChunk] | None]:
     service = _retrieval_service_or_none(request)
     if service is None:
         return None, False, None
-    chunks = await service.retrieve_chunks(site_id=site_id, query=message)
+    chunks = await service.retrieve_chunks(
+        site_id=site_id,
+        query=message,
+        embedder=embedder,
+        model_selection=model_selection,
+    )
     # 降级或没有命中时不把 chunks 交给 runtime，避免拼出假 citations。
     if service.degraded or not chunks:
         return None, service.degraded, None
     return [chunk.content for chunk in chunks], False, chunks
 
 
+async def _grounding(
+    request: Request, body: ChatRequest, site_id: str, message: str
+) -> tuple[list[str] | None, bool, list[RetrievedChunk] | None]:
+    """向量命中优先。没有向量片段时，用 Java 从知识库原文查出的片段。"""
+    selection = body.model_selection
+    embedder = (
+        _request_embedder(request, selection.embedding_spec, selection.api_key, selection.base_url)
+        if selection is not None
+        else None
+    )
+    context, degraded, chunks = await _retrieval_context(
+        request, site_id, message, embedder, model_selection=selection
+    )
+    if chunks:
+        return context, degraded, chunks
+    hints = list(body.knowledge_context or [])
+    if hints:
+        return hints, False, None
+    return context, degraded, chunks
+
+
+def _business_settings(settings: Settings, override: str | None) -> Settings:
+    """请求里的回调地址覆盖进程环境变量。空则保持进程配置。"""
+    if override is None or not override.strip():
+        return settings
+    value = override.strip().rstrip("/")
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise InternalApiError(
+            status_code=400,
+            error_code="BAD_REQUEST",
+            message="businessApiBaseUrl is invalid.",
+        )
+    return settings.model_copy(update={"business_api_base_url": value})
+
+
 def _parse_default_skills(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _harness_dir(request: Request) -> str | None:
+    raw = request.app.state.settings.agent_harness_dir.strip()
+    return raw or None
 
 
 def _skills_dir(request: Request) -> str:
@@ -100,7 +210,7 @@ def _skills_dir(request: Request) -> str:
     return settings.agent_skills_dir.strip() or default_skills_directory()
 
 
-def _prepare_execution(request: Request, body: ChatRequest, site_id: str):
+def _prepare_execution(request: Request, body: ChatRequest, site_id: str, model: Model | None):
     settings = request.app.state.settings
     skills_dir = _skills_dir(request)
     resolution = resolve_skills(
@@ -116,7 +226,13 @@ def _prepare_execution(request: Request, body: ChatRequest, site_id: str):
             message=f"Unknown skill ids: {', '.join(resolution.missing_ids)}",
         )
     todo_store = todo_store_from_request(body.todos)
-    toolsets = build_execution_toolsets(settings, site_id, todo_store=todo_store)
+    toolsets = build_execution_toolsets(
+        _business_settings(settings, body.business_api_base_url),
+        site_id,
+        todo_store=todo_store,
+        model=model,
+        retrieval=_retrieval_service_or_none(request),
+    )
     return resolution, todo_store, toolsets
 
 
@@ -138,7 +254,15 @@ async def list_skills(request: Request) -> dict[str, object]:
     catalog = list_skill_catalog(_skills_dir(request))
     payload = SkillCatalogResponse(
         skills=[
-            SkillCatalogItem(id=item.id, description=item.description, version=item.version)
+            SkillCatalogItem(
+                id=item.id,
+                description=item.description,
+                version=item.version,
+                license=item.license,
+                compatibility=item.compatibility,
+                metadata=dict(item.metadata),
+                allowed_tools=list(item.allowed_tools),
+            )
             for item in catalog
         ]
     )
@@ -153,6 +277,7 @@ async def internal_health(request: Request) -> HealthResponse:
     usage_limits = budget.usage_limits
     retrieval_service = _retrieval_service_or_none(request)
     retrieval_reason = getattr(request.app.state, "retrieval_blocked_reason", None)
+    retrieval_ready = retrieval_service is not None and retrieval_service.has_process_embedder
     return HealthResponse(
         limits=RuntimeLimits(
             maxRequests=usage_limits.request_limit if usage_limits else None,
@@ -169,8 +294,11 @@ async def internal_health(request: Request) -> HealthResponse:
         mcpServers=[
             McpServerHealth(name=item.name, enabled=item.enabled) for item in snapshot.servers
         ],
-        retrievalStatus="LIVE" if retrieval_service is not None else "BLOCKED",
-        retrievalBlockedReason=None if retrieval_service is not None else retrieval_reason,
+        harness=HarnessFiles.model_validate(
+            harness_component_flags(request.app.state.settings.agent_harness_dir.strip() or None)
+        ),
+        retrievalStatus="LIVE" if retrieval_ready else "BLOCKED",
+        retrievalBlockedReason=None if retrieval_ready else retrieval_reason,
         retrievalDegraded=retrieval_service.degraded if retrieval_service is not None else False,
     )
 
@@ -202,14 +330,14 @@ async def mcp_ready(request: Request) -> JSONResponse:
 async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object]:
     site_id = body.site_id.strip()
     message = body.message.strip()
-    if not site_id or not message:
+    if not site_id or (not message and not body.attachments):
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
             message="siteId and message are required.",
         )
 
-    handle = _model_handle(request)
+    handle = _execution_handle(request, body)
     if not handle.live:
         raise InternalApiError(
             status_code=503,
@@ -218,15 +346,16 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
             provider_status="BLOCKED",
         )
 
-    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id)
+    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id, handle.model)
 
-    retrieval_context, retrieval_degraded, retrieval_chunks = await _retrieval_context(
-        request, site_id, message
+    retrieval_context, retrieval_degraded, retrieval_chunks = await _grounding(
+        request, body, site_id, message
     )
     outcome = await run_chat(
         handle.model,  # type: ignore[arg-type]  # live 已保证非 None
         site_id=site_id,
         message=message,
+        attachments=body.attachments,
         prompt_profile=body.prompt_profile,
         history=body.history,
         retrieval_context=retrieval_context,
@@ -237,6 +366,12 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         budget=run_budget_from_settings(request.app.state.settings),
         locale=body.locale,
         skills_max_instruction_chars=request.app.state.settings.agent_skills_max_instruction_chars,
+        skill_ids=list(skill_resolution.applied_ids),
+        skills_missing=list(skill_resolution.missing_ids),
+        harness_dir=_harness_dir(request),
+        memories=body.memories,
+        memory_enabled=body.memory_enabled,
+        memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
     )
 
     if isinstance(outcome, ChatBlocked):
@@ -256,11 +391,14 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         citations=[ChatCitation.model_validate(item) for item in outcome.citations]
         if outcome.citations
         else None,
+        extracted_memories=outcome.extracted_memories,
     )
     payload = data.model_dump(by_alias=True)
     # 有采用才出现，与 SSE 加法字段一致；不要把 null 写进既有响应。
     if not payload.get("citations"):
         payload.pop("citations", None)
+    if not payload.get("extractedMemories"):
+        payload.pop("extractedMemories", None)
     return {"ok": True, "data": payload}
 
 
@@ -268,14 +406,14 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
 async def internal_chat_stream(request: Request, body: ChatRequest) -> StreamingResponse:
     site_id = body.site_id.strip()
     message = body.message.strip()
-    if not site_id or not message:
+    if not site_id or (not message and not body.attachments):
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
             message="siteId and message are required.",
         )
 
-    handle = _model_handle(request)
+    handle = _execution_handle(request, body)
     if not handle.live:
         raise InternalApiError(
             status_code=503,
@@ -284,16 +422,17 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             provider_status="BLOCKED",
         )
 
-    retrieval_context, retrieval_degraded, retrieval_chunks = await _retrieval_context(
-        request, site_id, message
+    retrieval_context, retrieval_degraded, retrieval_chunks = await _grounding(
+        request, body, site_id, message
     )
-    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id)
+    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id, handle.model)
 
     async def event_generator():
         async for event in stream_chat_events(
             handle.model,  # type: ignore[arg-type]
             site_id=site_id,
             message=message,
+            attachments=body.attachments,
             prompt_profile=body.prompt_profile,
             history=body.history,
             retrieval_context=retrieval_context,
@@ -308,6 +447,11 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             budget=run_budget_from_settings(request.app.state.settings),
             locale=body.locale,
             skills_max_instruction_chars=request.app.state.settings.agent_skills_max_instruction_chars,
+            skill_ids=list(skill_resolution.applied_ids),
+            harness_dir=_harness_dir(request),
+            memories=body.memories,
+            memory_enabled=body.memory_enabled,
+            memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
         ):
             yield event.to_sse()
 
@@ -337,7 +481,11 @@ async def upsert_retrieval_document(
     service = _require_retrieval_service(request)
     try:
         chunk_count = await service.upsert_document(
-            site_id=site_id, source_id=source_id, title=body.title, content=body.content
+            site_id=site_id,
+            source_id=source_id,
+            title=body.title,
+            content=body.content,
+            embedder=_request_embedder(request, body.embedding_spec, body.api_key, body.base_url),
         )
     except RetrievalChunkLimitExceeded as exc:
         raise InternalApiError(status_code=400, error_code="BAD_REQUEST", message=str(exc)) from exc
@@ -350,6 +498,45 @@ async def upsert_retrieval_document(
             provider_status="BLOCKED",
         ) from exc
     return {"ok": True, "data": {"chunks": chunk_count}}
+
+
+@router.post("/retrieval/reembed/prepare")
+async def prepare_retrieval_reembed(
+    request: Request, body: ReembedPrepareRequest
+) -> dict[str, object]:
+    """探针目标 embedding 维度。列维度不同且未确认时 409，不改表。"""
+    service = _require_retrieval_service(request)
+    selection = body.model_selection
+    embedder = (
+        _request_embedder(request, selection.embedding_spec, selection.api_key, selection.base_url)
+        if selection is not None
+        else None
+    )
+    try:
+        prepared: ReembedPrepared = await service.prepare_reembed(
+            embedder=embedder,
+            confirm_recreate=body.confirm_recreate,
+        )
+    except DimensionChangeRequired as exc:
+        raise InternalApiError(
+            status_code=409,
+            error_code="DIMENSION_CHANGE_REQUIRED",
+            message="Embedding dimensions differ from the vector column; confirm recreate to rebuild.",
+            details={"dimensions": exc.dimensions, "columnDimensions": exc.column_dimensions},
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 — 无 embedder / embedding / DB 故障对 Java 诚实报 503
+        logger.warning("Retrieval reembed prepare failed", exc_info=exc)
+        raise InternalApiError(
+            status_code=503,
+            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
+            message=external_failure_message("Retrieval reembed prepare failed", exc),
+            provider_status="BLOCKED",
+        ) from exc
+    return ReembedPrepareResponse(
+        dimensions=prepared.dimensions,
+        column_dimensions=prepared.column_dimensions,
+        recreated=prepared.recreated,
+    ).model_dump(by_alias=True)
 
 
 @router.delete("/retrieval/documents")
@@ -396,7 +583,13 @@ async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> di
             message="siteId is required.",
         )
     service = _require_retrieval_service(request)
-    chunks = await service.retrieve_chunks(site_id=site_id, query=query, top_k=body.top_k)
+    chunks = await service.retrieve_chunks(
+        site_id=site_id,
+        query=query,
+        top_k=body.top_k,
+        embedder=_request_embedder(request, body.embedding_spec, body.api_key, body.base_url),
+        model_selection=body.model_selection,
+    )
     payload = RetrievalSearchResponse(
         hits=[
             RetrievalSearchHit(
@@ -408,5 +601,10 @@ async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> di
             for chunk in chunks
         ],
         degraded=service.degraded,
+        rerank_applied=service.rerank_applied,
     )
-    return payload.model_dump(by_alias=True)
+    dumped = payload.model_dump(by_alias=True)
+    # 未重排时不写出默认 false，避免既有 {hits, degraded} 精确断言被改写。
+    if not service.rerank_applied:
+        dumped.pop("rerankApplied", None)
+    return dumped

@@ -49,5 +49,6 @@ public abstract class AbstractAdminSpringBootTest {
         registry.add(
                 "spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
                 () -> "http://127.0.0.1:" + port + "/.well-known/jwks.json");
+        registry.add("mywebsite.ai.model-entry-secret", () -> "test-model-entry-secret");
     }
 }

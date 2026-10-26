@@ -10,10 +10,15 @@ import type {
   AiKnowledgeDetail,
   AiKnowledgeListItem,
   AiKnowledgeListQuery,
+  AiKnowledgeBase,
+  AiKnowledgeOverview,
+  AiKnowledgeReembedResult,
   AiMessage,
   AiPreviewChatInput,
   AiPreviewHistoryMessage,
   AiPreviewSkill,
+  AiModelEntry,
+  AiModelEntryWriteInput,
   AiPromptProfile,
   AiMcpReady,
   AiRuntime,
@@ -43,12 +48,35 @@ function unwrapVoid(body: HttpMessageBody<null | void>) {
 }
 
 const UPLOAD_TIMEOUT_MS = 60_000
+const REEMBED_TIMEOUT_MS = 600_000
 
 function aiBase(siteId: number) {
   return `/admin/sites/${siteId}/ai`
 }
 
 export const aiApi = {
+  listModelEntries(): Promise<AiModelEntry[]> {
+    return httpClient.get<HttpMessageBody<AiModelEntry[]>>('/admin/ai/model-entries').then(unwrapData)
+  },
+
+  createModelEntry(input: AiModelEntryWriteInput): Promise<AiModelEntry> {
+    return httpClient
+      .post<HttpMessageBody<AiModelEntry>, AiModelEntryWriteInput>('/admin/ai/model-entries', input)
+      .then(unwrapData)
+  },
+
+  updateModelEntry(id: number, input: AiModelEntryWriteInput): Promise<AiModelEntry> {
+    return httpClient
+      .put<HttpMessageBody<AiModelEntry>, AiModelEntryWriteInput>(`/admin/ai/model-entries/${id}`, input)
+      .then(unwrapData)
+  },
+
+  deleteModelEntry(id: number): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null | void>>(`/admin/ai/model-entries/${id}`)
+      .then(unwrapVoid)
+  },
+
   getPromptProfile(siteId: number): Promise<AiPromptProfile> {
     return httpClient
       .get<HttpMessageBody<AiPromptProfile>>(`${aiBase(siteId)}/prompt-profile`)
@@ -72,6 +100,7 @@ export const aiApi = {
       pageNum: query.pageNum ?? 1,
       pageSize: query.pageSize ?? 20,
       status: query.status,
+      baseId: query.baseId,
     })
     return httpClient
       .get<HttpMessageBody<PageResult<AiKnowledgeListItem>>>(
@@ -95,18 +124,46 @@ export const aiApi = {
       .then(unwrapData)
   },
 
-  uploadKnowledgeDocument(siteId: number, file: File, title?: string): Promise<AiKnowledgeDetail> {
+  uploadKnowledgeDocument(
+    siteId: number,
+    file: File,
+    title?: string,
+    baseId?: number | null,
+  ): Promise<AiKnowledgeDetail> {
     const form = new FormData()
     form.append('file', file)
     const trimmed = title?.trim()
     if (trimmed) {
       form.append('title', trimmed)
     }
+    if (baseId != null) {
+      form.append('baseId', String(baseId))
+    }
     return httpClient
       .post<HttpMessageBody<AiKnowledgeDetail>, FormData>(
         `${aiBase(siteId)}/knowledge-documents/upload`,
         form,
         { timeout: UPLOAD_TIMEOUT_MS },
+      )
+      .then(unwrapData)
+  },
+
+  getKnowledgeDocumentFile(
+    siteId: number,
+    id: number,
+  ): Promise<{ url: string; filename: string | null; sourceFormat: string | null }> {
+    return httpClient
+      .get<HttpMessageBody<{ url: string; filename: string | null; sourceFormat: string | null }>>(
+        `${aiBase(siteId)}/knowledge-documents/${id}/file`,
+      )
+      .then(unwrapData)
+  },
+
+  reindexKnowledgeDocument(siteId: number, id: number): Promise<AiKnowledgeDetail> {
+    return httpClient
+      .post<HttpMessageBody<AiKnowledgeDetail>, Record<string, never>>(
+        `${aiBase(siteId)}/knowledge-documents/${id}/reindex`,
+        {},
       )
       .then(unwrapData)
   },
@@ -121,6 +178,67 @@ export const aiApi = {
         `${aiBase(siteId)}/knowledge-documents/${id}`,
         input,
       )
+      .then(unwrapData)
+  },
+
+  listKnowledgeBases(siteId: number): Promise<AiKnowledgeBase[]> {
+    return httpClient
+      .get<HttpMessageBody<AiKnowledgeBase[]>>(`${aiBase(siteId)}/knowledge-bases`)
+      .then(unwrapData)
+  },
+
+  createKnowledgeBase(siteId: number, name: string): Promise<AiKnowledgeBase> {
+    return httpClient
+      .post<HttpMessageBody<AiKnowledgeBase>, { name: string }>(`${aiBase(siteId)}/knowledge-bases`, {
+        name,
+      })
+      .then(unwrapData)
+  },
+
+  deleteKnowledgeBase(siteId: number, baseId: number): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null>>(`${aiBase(siteId)}/knowledge-bases/${baseId}`)
+      .then(() => undefined)
+  },
+
+  listAllKnowledgeBases(): Promise<AiKnowledgeBase[]> {
+    return httpClient
+      .get<HttpMessageBody<AiKnowledgeBase[]>>(`/admin/ai/knowledge-bases`)
+      .then(unwrapData)
+  },
+
+  linkKnowledgeBase(baseId: number, targetSiteId: number): Promise<void> {
+    return httpClient
+      .post<HttpMessageBody<null>>(`/admin/ai/knowledge-bases/${baseId}/links/${targetSiteId}`, {})
+      .then(() => undefined)
+  },
+
+  unlinkKnowledgeBase(baseId: number, targetSiteId: number): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null>>(`/admin/ai/knowledge-bases/${baseId}/links/${targetSiteId}`)
+      .then(() => undefined)
+  },
+
+  getKnowledgeOverview(): Promise<AiKnowledgeOverview> {
+    return httpClient
+      .get<HttpMessageBody<AiKnowledgeOverview>>(`/admin/ai/knowledge-overview`)
+      .then(unwrapData)
+  },
+
+  reindexFailedKnowledge(): Promise<{ attempted: number; succeeded: number }> {
+    return httpClient
+      .post<HttpMessageBody<{ attempted: number; succeeded: number }>>(
+        `/admin/ai/knowledge/reindex-failed`,
+        {},
+      )
+      .then(unwrapData)
+  },
+
+  reembedKnowledge(): Promise<AiKnowledgeReembedResult> {
+    return httpClient
+      .post<HttpMessageBody<AiKnowledgeReembedResult>>('/admin/ai/knowledge/reembed', undefined, {
+        timeout: REEMBED_TIMEOUT_MS,
+      })
       .then(unwrapData)
   },
 

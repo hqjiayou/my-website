@@ -53,7 +53,7 @@ description: my-website 架构与任务规划专家。先读相关代码再做�
 1. 确认需求与现状  
 2. 划定修改边界  
 3. 列出复用与拟改文件  
-4. 给出顺序、风险、验收标准  
+4. 给出顺序、风险、验收标准。同一层先排最可能被证伪的项  
 
 ## Output Format
 
@@ -77,4 +77,12 @@ description: my-website 架构与任务规划专家。先读相关代码再做�
 
 `/dev` 按验收项逐项实现，验收项全部通过就停（流程见 `.cursor/skills/dev/SKILL.md`）。本角色只负责写出验收项，不执行循环。
 
-每一项写成可勾选的一句：执行者（admin-backend / admin-frontend / agent-services / 主会话）做什么、成功时看到什么、用哪条测试或哪条手工路径验证。不能验证的句子不写成验收项。跨模块按 Flyway → Java → `agent` 契约 DTO → Python → admin-web 排序。
+每一项写成可勾选的一句：执行者（admin-backend / admin-frontend / agent-services / 主会话）做什么、成功时看到什么、用哪条测试或哪条手工路径验证。不能验证的句子不写成验收项。跨模块按 Flyway → Java → `agent` 契约 DTO → Python → admin-web 排序。同一层里，先写最可能被证伪的那一项。
+
+下面五类除了这一句，还要写主张，以及哪条测试或哪条请求会证伪：
+
+- 跨模块 DTO 或契约
+- 鉴权或权限 migration
+- 新的 Flyway
+- 失败后会重试、双写，或把错误吞掉
+- 声称旧调用方仍然成立

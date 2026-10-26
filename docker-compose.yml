@@ -78,6 +78,8 @@ services:
     restart: unless-stopped
     environment:
       <<: *java-db
+      AGENT_BUSINESS_API_BASE_URL: "http://site:8082"
+      AI_MODEL_ENTRY_SECRET: "${AI_MODEL_ENTRY_SECRET:-local-dev-model-entry-secret}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -136,6 +138,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: "${REDIS_PASSWORD}"
+      AGENT_BUSINESS_API_BASE_URL: "http://site:8082"
+      AI_MODEL_ENTRY_SECRET: "${AI_MODEL_ENTRY_SECRET:-local-dev-model-entry-secret}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -210,7 +214,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/portal/Dockerfile
+      dockerfile: apps/agent-portal/Dockerfile
       args:
         VITE_PORTAL_SITE_ID: "${VITE_PORTAL_SITE_ID:-}"
     restart: unless-stopped

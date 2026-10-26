@@ -27,7 +27,7 @@ export default {
     contents: 'Page Contents',
     reservations: 'Reservations',
     files: 'File Assets',
-    aiSettings: 'AI Runtime Settings',
+    aiSettings: 'Model entries',
     aiPrompts: 'Prompt Settings',
     aiKnowledgeBases: 'Knowledge Bases',
     aiConversations: 'Conversations',

@@ -1,3 +1,8 @@
+import base64
+
+import pytest
+from pydantic import ValidationError
+from pydantic_ai import BinaryContent
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -5,6 +10,7 @@ from pydantic_ai.messages import (
     RetryInfo,
     TextPart,
     ToolReturnPart,
+    UserPromptPart,
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
@@ -15,10 +21,20 @@ from agent_services.agent.runtime import (
     ChatReply,
     budget_exceeded_message,
     build_message_history,
+    build_user_prompt,
     run_chat,
     tool_trace_from_messages,
 )
-from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
+from agent_services.agent.stream_runtime import stream_chat_events
+from agent_services.schemas.chat import (
+    MAX_ATTACHMENT_BYTES,
+    MAX_ATTACHMENTS,
+    ChatAttachment,
+    ChatHistoryMessage,
+    ChatRequest,
+    PromptProfile,
+)
+from agent_services.schemas.stream import AgentStreamEventType
 
 
 def test_budget_message_keeps_limit_text_and_drops_url() -> None:
@@ -55,7 +71,9 @@ def test_prompt_profile_drops_unusable_temperature_and_caps_prompt() -> None:
 def test_prompt_builder_uses_trusted_profile_prompt() -> None:
     profile = PromptProfile(systemPrompt="  You are a cake shop assistant.  ")
     system, _ = build_prompt_parts("1", "hi", profile)
-    assert system == "You are a cake shop assistant."
+    # profile 原文打头，其后常开事实锚定护栏（见 grounding guardrail 测试）
+    assert system.startswith("You are a cake shop assistant.")
+    assert "organizational tag, not a business classification" in system
 
 
 async def test_run_chat_returns_reply_from_test_model() -> None:
@@ -146,6 +164,165 @@ def test_build_message_history_empty() -> None:
     assert build_message_history([]) == []
 
 
+def _user_contents(messages: list[ModelMessage]) -> list[object]:
+    contents: list[object] = []
+    for message in messages:
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if isinstance(part, UserPromptPart):
+                contents.append(part.content)
+    return contents
+
+
+def test_build_message_history_caps_replayed_images_at_most_recent_four() -> None:
+    def turn(text: str, tag: bytes) -> ChatHistoryMessage:
+        return ChatHistoryMessage(
+            role="USER",
+            content=text,
+            attachments=[_image(payload=tag + b"-a"), _image(payload=tag + b"-b")],
+        )
+
+    messages = build_message_history([
+        turn("oldest", b"one"),
+        ChatHistoryMessage(role="ASSISTANT", content="a1"),
+        turn("middle", b"two"),
+        ChatHistoryMessage(role="ASSISTANT", content="a2"),
+        turn("newest", b"three"),
+    ])
+    # 6 张历史图只重播最近 4 张：最旧一轮丢图保文字。
+    binaries = _binary_parts(messages)
+    assert len(binaries) == 4
+    assert all(item.data.startswith((b"two", b"three")) for _text, item in binaries)
+    contents = _user_contents(messages)
+    assert contents[0] == "oldest"
+
+
+def test_build_message_history_placeholder_when_images_dropped_and_text_empty() -> None:
+    def turn(tag: bytes) -> ChatHistoryMessage:
+        return ChatHistoryMessage(
+            role="USER",
+            content="",
+            attachments=[_image(payload=tag + b"-a"), _image(payload=tag + b"-b")],
+        )
+
+    messages = build_message_history([turn(b"one"), turn(b"two"), turn(b"three")])
+    contents = _user_contents(messages)
+    assert contents[0] == "[图片]"
+    assert len(_binary_parts(messages)) == 4
+
+
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+_PNG_B64 = base64.b64encode(_PNG_BYTES).decode()
+
+
+def _image(media_type: str = "image/png", payload: bytes = _PNG_BYTES) -> ChatAttachment:
+    return ChatAttachment(mediaType=media_type, data=base64.b64encode(payload).decode())
+
+
+def _binary_parts(messages: list[ModelMessage]) -> list[tuple[str, BinaryContent]]:
+    found: list[tuple[str, BinaryContent]] = []
+    for message in messages:
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if not isinstance(part, UserPromptPart) or isinstance(part.content, str):
+                continue
+            for item in part.content:
+                if isinstance(item, BinaryContent):
+                    text = next((piece for piece in part.content if isinstance(piece, str)), "")
+                    found.append((text, item))
+    return found
+
+
+def test_attachment_schema_rejects_illegal_media_type() -> None:
+    with pytest.raises(ValidationError):
+        ChatAttachment(mediaType="image/bmp", data=_PNG_B64)
+
+
+def test_attachment_schema_rejects_bad_base64() -> None:
+    with pytest.raises(ValidationError):
+        ChatAttachment(mediaType="image/png", data="@@@@")
+
+
+def test_attachment_schema_rejects_oversized_payload() -> None:
+    payload = base64.b64encode(b"a" * (MAX_ATTACHMENT_BYTES + 1)).decode()
+    with pytest.raises(ValidationError):
+        ChatAttachment(mediaType="image/png", data=payload)
+
+
+def test_attachment_schema_rejects_too_many() -> None:
+    with pytest.raises(ValidationError):
+        ChatRequest(
+            siteId="1",
+            message="hi",
+            attachments=[_image() for _ in range(MAX_ATTACHMENTS + 1)],
+        )
+
+
+def test_build_user_prompt_text_only_stays_string() -> None:
+    assert build_user_prompt("hello", None) == "hello"
+    assert build_user_prompt("hello", []) == "hello"
+
+
+async def test_run_chat_sends_image_bytes_for_current_turn_and_history() -> None:
+    seen: list[list[ModelMessage]] = []
+    history_bytes = b"GIF89a-history"
+
+    def capture(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        seen.append(messages)
+        return ModelResponse(parts=[TextPart("seen")])
+
+    outcome = await run_chat(
+        FunctionModel(capture),
+        site_id="1",
+        message="look",
+        attachments=[_image()],
+        history=[
+            ChatHistoryMessage(role="USER", content="see", attachments=[_image("image/gif", history_bytes)]),
+            ChatHistoryMessage(
+                role="ASSISTANT",
+                content="noted",
+                attachments=[_image()],
+            ),
+        ],
+    )
+    assert isinstance(outcome, ChatReply)
+    binaries = _binary_parts(seen[0])
+    assert [(text, item.media_type, item.data) for text, item in binaries] == [
+        ("see", "image/gif", history_bytes),
+        ("look", "image/png", _PNG_BYTES),
+    ]
+    assistant = next(message for message in seen[0] if isinstance(message, ModelResponse))
+    assert assistant.parts == [TextPart(content="noted")]
+
+
+async def test_stream_chat_sends_current_image_part() -> None:
+    seen: list[list[ModelMessage]] = []
+
+    async def stream_fn(messages: list[ModelMessage], _info: AgentInfo):
+        seen.append(messages)
+        yield "ok"
+
+    events = [
+        event
+        async for event in stream_chat_events(
+            FunctionModel(stream_function=stream_fn),
+            site_id="1",
+            message="",
+            attachments=[_image()],
+        )
+    ]
+    assert any(event.type == AgentStreamEventType.DONE for event in events)
+    binaries = _binary_parts(seen[0])
+    assert len(binaries) == 1
+    assert binaries[0][0] == ""
+    assert binaries[0][1].media_type == "image/png"
+    assert binaries[0][1].data == _PNG_BYTES
+
+
 def test_retried_tool_return_is_failed_in_non_stream_trace() -> None:
     """2.60+ 超时/框架重试是 ToolReturnPart(outcome='retried', retry=RetryInfo)，轨迹须记失败。"""
     # 超时在 2.61 记为 cause='model_retry'；content 是纯文本，不能靠 {"error": ...} 判失败
@@ -160,3 +337,9 @@ def test_retried_tool_return_is_failed_in_non_stream_trace() -> None:
         ]
     )
     assert tool_trace_from_messages([request]) == [{"name": "slow", "ok": False}]
+
+
+def test_prompt_builder_includes_grounding_guardrail() -> None:
+    system, _ = build_prompt_parts("42", "hello", None)
+    assert "organizational tag, not a business classification" in system
+    assert "instead of guessing" in system

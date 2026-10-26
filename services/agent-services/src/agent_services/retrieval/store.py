@@ -5,10 +5,16 @@
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass
 from typing import Protocol
 
 from agent_services.retrieval.embeddings import _finite_floats
+
+logger = logging.getLogger(__name__)
+
+# pgvector 的 vector 型 HNSW 索引上限。超过则不建索引，搜索仍走顺序扫描。
+HNSW_MAX_DIMENSIONS = 2000
 
 
 @dataclass(frozen=True)
@@ -39,6 +45,63 @@ def citation_sources(
     ]
 
 
+def hnsw_index_allowed(dimensions: int) -> bool:
+    """维度不超过 pgvector HNSW 上限时才建索引。"""
+    return dimensions <= HNSW_MAX_DIMENSIONS
+
+
+def _positive_dimensions(dimensions: int) -> int:
+    if isinstance(dimensions, bool) or not isinstance(dimensions, int) or dimensions < 1:
+        raise ValueError("Embedding dimensions must be a positive integer.")
+    return dimensions
+
+
+# pgvector 把 vector(N) 的 N 存在 atttypmod；无此列或未限定维度时没有正整数。
+_EMBEDDING_ATTTYPMOD_SQL = """
+SELECT a.atttypmod
+FROM pg_catalog.pg_attribute a
+JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'agent_retrieval'
+  AND c.relname = 'chunks'
+  AND a.attname = 'embedding'
+  AND NOT a.attisdropped
+"""
+
+
+def like_literal_pattern(token: str) -> str:
+    """收成 ILIKE 字面量模式。%、_、\\ 按字面匹配，不当成通配符。"""
+    escaped = token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def lexical_search_statement(
+    site_id: str, tokens: list[str], limit: int
+) -> tuple[str, list[object]]:
+    """词法 SQL 只按调用方 site_id 过滤，token 只进绑定参数。
+
+    LIMIT 之前按命中 token 数降序，同分再按 source_id、chunk_index。
+    否则更宽的短 token 会占满候选窗口，把型号整段命中挤掉。
+    """
+    arguments: list[object] = [site_id]
+    clauses: list[str] = []
+    for token in tokens:
+        arguments.append(like_literal_pattern(token))
+        clauses.append(f"content ILIKE ${len(arguments)} ESCAPE '\\'")
+    rank_terms = [
+        f"(content ILIKE ${index} ESCAPE '\\')::int" for index in range(2, len(arguments) + 1)
+    ]
+    arguments.append(limit)
+    sql = (
+        "SELECT source_id, chunk_index, content, 0::float8 AS score "
+        "FROM agent_retrieval.chunks "
+        f"WHERE site_id = $1 AND ({' OR '.join(clauses)}) "
+        f"ORDER BY ({' + '.join(rank_terms)}) DESC, source_id, chunk_index "
+        f"LIMIT ${len(arguments)}"
+    )
+    return sql, arguments
+
+
 class RetrievalStore(Protocol):
     async def upsert_document(
         self,
@@ -56,6 +119,16 @@ class RetrievalStore(Protocol):
         self, *, site_id: str, embedding: list[float], top_k: int
     ) -> list[RetrievedChunk]: ...
 
+    async def search_lexical(
+        self, *, site_id: str, tokens: list[str], limit: int
+    ) -> list[RetrievedChunk]: ...
+
+    async def current_dimensions(self) -> int | None: ...
+
+    async def ensure_schema(self, dimensions: int) -> None: ...
+
+    async def recreate_schema(self, new_dimensions: int) -> None: ...
+
     async def close(self) -> None: ...
 
 
@@ -63,9 +136,10 @@ class PgVectorRetrievalStore:
     """pgvector 实现。schema/表首次使用时创建；CREATE EXTENSION 需要 DBA 预授权，
     失败时假定扩展已由运维预建（部署文档约定）。"""
 
-    def __init__(self, dsn: str, *, dimensions: int) -> None:
+    def __init__(self, dsn: str, *, dimensions: int, hnsw_ef_search: int = 40) -> None:
         self._dsn = dsn
         self._dimensions = dimensions
+        self._hnsw_ef_search = hnsw_ef_search
         self._pool = None
         self._pool_lock = asyncio.Lock()
 
@@ -90,29 +164,91 @@ class PgVectorRetrievalStore:
     async def _ensure_schema(self) -> None:
         assert self._pool is not None
         async with self._pool.acquire() as conn:
-            try:
-                await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-            except Exception:  # noqa: BLE001 — 无扩展安装权限时由运维预建
-                pass
-            await conn.execute("CREATE SCHEMA IF NOT EXISTS agent_retrieval")
-            await conn.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS agent_retrieval.chunks (
-                    id          BIGSERIAL PRIMARY KEY,
-                    site_id     TEXT NOT NULL,
-                    source_id   TEXT NOT NULL,
-                    chunk_index INTEGER NOT NULL,
-                    content     TEXT NOT NULL,
-                    embedding   vector({self._dimensions}) NOT NULL,
-                    metadata    JSONB NOT NULL DEFAULT '{{}}'::jsonb,
-                    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-                )
-                """
+            await self._install_vector_extension(conn)
+            await self._create_chunks(conn, self._dimensions)
+
+    @staticmethod
+    async def _install_vector_extension(conn) -> None:
+        try:
+            await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        except Exception:  # noqa: BLE001 — 无扩展安装权限时由运维预建
+            pass
+
+    @staticmethod
+    async def _create_chunks(conn, dimensions: int) -> None:
+        """与首次建表同一套 DDL。dimensions 只来自已校验的正整数。"""
+        await conn.execute("CREATE SCHEMA IF NOT EXISTS agent_retrieval")
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS agent_retrieval.chunks (
+                id          BIGSERIAL PRIMARY KEY,
+                site_id     TEXT NOT NULL,
+                source_id   TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                content     TEXT NOT NULL,
+                embedding   vector({dimensions}) NOT NULL,
+                metadata    JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
             )
+            """
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_retrieval_chunks_site_source "
+            "ON agent_retrieval.chunks (site_id, source_id)"
+        )
+        if hnsw_index_allowed(dimensions):
             await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_agent_retrieval_chunks_site_source "
-                "ON agent_retrieval.chunks (site_id, source_id)"
+                "CREATE INDEX IF NOT EXISTS idx_agent_retrieval_chunks_embedding_hnsw "
+                "ON agent_retrieval.chunks USING hnsw (embedding vector_cosine_ops) "
+                "WITH (m = 16, ef_construction = 64)"
             )
+        else:
+            logger.warning(
+                "Skipping HNSW index: embedding dimensions %s exceed %s; "
+                "vector search will scan",
+                dimensions,
+                HNSW_MAX_DIMENSIONS,
+            )
+
+    async def _connect(self):
+        import asyncpg
+
+        return await asyncpg.connect(self._dsn)
+
+    async def current_dimensions(self) -> int | None:
+        """读 chunks.embedding 的实际维度。表或列不存在时不建表，回 None。"""
+        conn = await self._connect()
+        try:
+            typmod = await conn.fetchval(_EMBEDDING_ATTTYPMOD_SQL)
+        finally:
+            await conn.close()
+        if isinstance(typmod, bool) or not isinstance(typmod, int) or typmod < 1:
+            return None
+        return typmod
+
+    async def ensure_schema(self, dimensions: int) -> None:
+        """表不存在时按给定维度建表与索引。成功后更新 self._dimensions。"""
+        dimensions = _positive_dimensions(dimensions)
+        conn = await self._connect()
+        try:
+            await self._install_vector_extension(conn)
+            await self._create_chunks(conn, dimensions)
+            self._dimensions = dimensions
+        finally:
+            await conn.close()
+
+    async def recreate_schema(self, new_dimensions: int) -> None:
+        """单个事务内删除 chunks 并按新维度重建表与全部索引。成功后更新 self._dimensions。"""
+        new_dimensions = _positive_dimensions(new_dimensions)
+        conn = await self._connect()
+        try:
+            await self._install_vector_extension(conn)
+            async with conn.transaction():
+                await conn.execute("DROP TABLE IF EXISTS agent_retrieval.chunks")
+                await self._create_chunks(conn, new_dimensions)
+            self._dimensions = new_dimensions
+        finally:
+            await conn.close()
 
     def _vector_literal(self, embedding: list[float]) -> str:
         if len(embedding) != self._dimensions:
@@ -172,7 +308,17 @@ class PgVectorRetrievalStore:
         self, *, site_id: str, embedding: list[float], top_k: int
     ) -> list[RetrievedChunk]:
         pool = await self._get_pool()
-        async with pool.acquire() as conn:
+        # hnsw.ef_search 是事务局部参数。asyncpg 必须把 set_config 和查询放进同一个 transaction。
+        async with pool.acquire() as conn, conn.transaction():
+            if (
+                isinstance(self._hnsw_ef_search, int)
+                and not isinstance(self._hnsw_ef_search, bool)
+                and self._hnsw_ef_search > 0
+            ):
+                await conn.execute(
+                    "SELECT set_config('hnsw.ef_search', $1, true)",
+                    str(self._hnsw_ef_search),
+                )
             rows = await conn.fetch(
                 "SELECT source_id, chunk_index, content, "
                 "1 - (embedding <=> $2::vector) AS score "
@@ -183,6 +329,26 @@ class PgVectorRetrievalStore:
                 self._vector_literal(embedding),
                 top_k,
             )
+        return [
+            RetrievedChunk(
+                source_id=row["source_id"],
+                chunk_index=row["chunk_index"],
+                content=row["content"],
+                score=float(row["score"]),
+            )
+            for row in rows
+        ]
+
+    async def search_lexical(
+        self, *, site_id: str, tokens: list[str], limit: int
+    ) -> list[RetrievedChunk]:
+        """按调用方 site_id 做字面量子串匹配。分数由服务层覆盖率决定，这里不取向量分。"""
+        if not tokens or limit < 1:
+            return []
+        pool = await self._get_pool()
+        sql, arguments = lexical_search_statement(site_id, tokens, limit)
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *arguments)
         return [
             RetrievedChunk(
                 source_id=row["source_id"],

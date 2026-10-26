@@ -2,11 +2,15 @@
 
 import type { AppearanceConfigV1 } from '@/types/appearance'
 
-export type SiteType = 'CAR_REPAIR' | 'USED_CAR' | 'CAKE' | 'SALON' | 'CLINIC' | 'GYOSEISHOSHI'
+/** 站点用途标签：自由字符串（预设见 SITE_TYPE_PRESETS，亦可自订），不再是行业闭集。 */
+export type SiteType = string
 
 export type SiteStatus = 'ACTIVE' | 'DISABLED'
 
-export const SITE_TYPE_VALUES: SiteType[] = [
+export const SITE_TYPE_PRESETS: string[] = ['PERSONAL', 'PORTFOLIO', 'BLOG', 'KNOWLEDGE', 'TOOL', 'OTHER']
+
+/** 旧行业类型：仅历史站点与模板目录仍会出现，用于筛选与标签展示。 */
+export const SITE_TYPE_LEGACY: string[] = [
   'CAR_REPAIR',
   'USED_CAR',
   'CAKE',
@@ -14,6 +18,12 @@ export const SITE_TYPE_VALUES: SiteType[] = [
   'CLINIC',
   'GYOSEISHOSHI',
 ]
+
+/** @deprecated 旧名兼容：现语义为预设用途标签。 */
+export const SITE_TYPE_VALUES: string[] = SITE_TYPE_PRESETS
+
+/** 与后端 SITE_TAG_PATTERN 对齐：1–32 字符，字母/数字开头。 */
+export const SITE_TAG_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_\- ]{0,31}$/
 
 export const SITE_STATUS_VALUES: SiteStatus[] = ['ACTIVE', 'DISABLED']
 

@@ -4,7 +4,13 @@ import json
 
 import httpx
 from conftest import make_settings
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+)
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from agent_services.agent.business_tools import build_business_toolset
@@ -149,7 +155,11 @@ async def test_create_reservation_tool_calls_java_internal_api() -> None:
     assert toolset is not None
 
     def model_fn(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-        has_tool_result = any("reservation" in repr(m) and "55" in repr(m) for m in messages)
+        has_tool_result = any(
+            isinstance(part, ToolReturnPart) and part.tool_name == "create_reservation"
+            for message in messages
+            for part in message.parts
+        )
         if not has_tool_result:
             return ModelResponse(parts=[
                 ToolCallPart(
@@ -231,3 +241,20 @@ async def test_create_reservation_sends_stable_idempotency_key() -> None:
     assert keys[3] == reservation_idempotency_key("8", payload)
     assert keys[3] != keys[0]
     assert captured[0].headers["X-Internal-Service-Token"] == "test-internal-token"
+
+
+async def test_get_site_info_presents_site_type_as_neutral_category() -> None:
+    """呈现给模型时 siteType 改名 category（值不变），避免被误读为行业定性。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _api_response(
+            {"id": 7, "siteName": "Demo", "siteType": "PERSONAL", "description": "d"}
+        )
+
+    toolset = build_business_toolset(make_settings(), "7", client=_client_with(handler))
+    assert toolset is not None
+    tool = toolset.tools["get_site_info"]
+    result = await tool.function()
+    assert result == {
+        "site": {"id": 7, "siteName": "Demo", "category": "PERSONAL", "description": "d"}
+    }

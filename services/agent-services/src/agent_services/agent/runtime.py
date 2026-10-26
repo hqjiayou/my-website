@@ -5,11 +5,12 @@ Python 不保存会话状态（stateless between business requests）；
 运行预算（§22.4）：每轮 UsageLimits + 工具超时；超限诚实失败 AGENT_BUDGET_EXCEEDED。
 """
 
+import base64
 import logging
 from dataclasses import dataclass, field
 
 import anyio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.exceptions import ModelRetry, UsageLimitExceeded
 from pydantic_ai.messages import (
     ModelMessage,
@@ -25,16 +26,22 @@ from pydantic_ai.settings import ModelSettings
 from pydantic_ai.toolsets.wrapper import WrapperToolset
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from agent_services.agent.prompt_builder import build_prompt_parts
+from agent_services.agent.harness import assemble_harness
+from agent_services.agent.memory import extract_memories
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.api.errors import external_failure_message
 from agent_services.config import Settings
 from agent_services.observability.request_id import current_request_id
 from agent_services.retrieval.store import RetrievedChunk, citation_sources
-from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
+from agent_services.schemas.chat import (
+    ChatAttachment,
+    ChatHistoryMessage,
+    PromptProfile,
+)
 from agent_services.schemas.todo import TodoItem
 
 BUDGET_EXCEEDED = "AGENT_BUDGET_EXCEEDED"
+HISTORY_SUMMARY_MAX_CHARS = 1000
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +97,59 @@ def trim_history(
     return kept
 
 
+def dropped_history(
+    history: list[ChatHistoryMessage] | None, max_chars: int | None
+) -> list[ChatHistoryMessage]:
+    """trim_history 丢掉的前缀。保留项始终是原列表的后缀。"""
+    if not history:
+        return []
+    kept = trim_history(history, max_chars)
+    return list(history[: len(history) - len(kept)])
+
+
+async def summary_for_dropped(
+    history: list[ChatHistoryMessage] | None,
+    max_chars: int | None,
+    summarizer,
+) -> str | None:
+    """没有被裁掉的前缀时不调用摘要。空摘要视为没有。"""
+    dropped = dropped_history(history, max_chars)
+    if not dropped:
+        return None
+    text = await summarizer(dropped)
+    cleaned = "" if text is None else str(text).strip()
+    return cleaned or None
+
+
+async def summarize_dropped_history(model: Model, dropped: list[ChatHistoryMessage]) -> str:
+    """用本轮同一个模型压缩被裁掉的前缀。不把入口或进程密钥写进提示。"""
+    transcript = "\n".join(f"{item.role}: {item.content}" for item in dropped)
+    agent = Agent(
+        model,
+        system_prompt=(
+            "Summarize the earlier conversation in one short paragraph. "
+            "Keep names, decisions, and facts. Do not invent anything."
+        ),
+    )
+    result = await agent.run(transcript)
+    return str(result.output).strip()[:HISTORY_SUMMARY_MAX_CHARS]
+
+
+async def prepare_history_summary(
+    model: Model,
+    history: list[ChatHistoryMessage] | None,
+    max_chars: int | None,
+) -> str | None:
+    async def summarize(dropped: list[ChatHistoryMessage]) -> str:
+        return await summarize_dropped_history(model, dropped)
+
+    try:
+        return await summary_for_dropped(history, max_chars, summarize)
+    except Exception:  # noqa: BLE001 — 摘要失败只放弃摘要，不阻断本轮对话
+        logger.warning("history summary failed; continuing with trimmed history", exc_info=True)
+        return None
+
+
 def usage_to_api(usage: RunUsage) -> dict[str, int]:
     return {
         "requests": usage.requests,
@@ -104,7 +164,7 @@ MAX_TOOL_TRACE = 50
 
 
 def tool_succeeded(part: ToolReturnPart | RetryPromptPart) -> bool:
-    """框架层重试（参数校验失败 / MCP 工具报错 / 超时）或平台工具约定的 {"error": ...} 返回 → 失败。
+    """框架层重试、ToolFailed，或平台工具约定的 {"error": ...} 返回 → 失败。
 
     2.60 起工具超时与框架重试不再单独产出 RetryPromptPart，而是
     ToolReturnPart(outcome='retried', retry=...)；outcome / retry 防御式读取，
@@ -112,8 +172,10 @@ def tool_succeeded(part: ToolReturnPart | RetryPromptPart) -> bool:
     """
     if isinstance(part, RetryPromptPart):
         return False
-    # 任一成立即失败：outcome 标记 retried，或携带框架重试信息（2.60 为 RetryInfo）
-    if getattr(part, "outcome", None) == "retried" or getattr(part, "retry", None) is not None:
+    # 任一成立即失败：outcome 为 retried / failed，或携带框架重试信息（2.60 为 RetryInfo）。
+    # failed 是 ToolFailed 的终态（委派超时、超限等），模型看得到说明，但不再重试。
+    outcome = getattr(part, "outcome", None)
+    if outcome in {"retried", "failed"} or getattr(part, "retry", None) is not None:
         return False
     content = part.content
     return not (isinstance(content, dict) and "error" in content)
@@ -148,6 +210,7 @@ class ChatReply:
     usage: dict[str, int] = field(default_factory=dict)
     tools: list[dict[str, object]] = field(default_factory=list)
     citations: list[dict[str, object]] | None = None
+    extracted_memories: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -174,14 +237,60 @@ def budget_exceeded_message(exc: BaseException) -> str:
     return f"Agent run budget exceeded: {detail}"
 
 
+UserPrompt = str | list[str | BinaryContent]
+
+
+def build_user_prompt(text: str, attachments: list[ChatAttachment] | None) -> UserPrompt:
+    """无附件时原样返回字符串。有图时为 [非空文字] + 每张图一个 BinaryContent。"""
+    images = [
+        BinaryContent(data=base64.b64decode(item.data), media_type=item.media_type)
+        for item in attachments or []
+    ]
+    if not images:
+        return text
+    parts: list[str | BinaryContent] = []
+    if text:
+        parts.append(text)
+    parts.extend(images)
+    return parts
+
+
+MAX_HISTORY_IMAGES = 4
+IMAGE_ONLY_PLACEHOLDER = "[图片]"
+
+
 def build_message_history(history: list[ChatHistoryMessage] | None) -> list[ModelMessage]:
-    """Java 传入的扁平历史 → Pydantic AI ModelMessage；顺序保持原样。"""
+    """Java 传入的扁平历史 → Pydantic AI ModelMessage；顺序保持原样。
+
+    图片重播设全域上限：从最新往前数，最多带最近 MAX_HISTORY_IMAGES 张；
+    更早的 USER 轮次丢图保文字，文字为空时以占位符保留该轮，
+    避免长对话每轮重送全部历史图片。
+    """
     if not history:
         return []
+    effective: list[list[ChatAttachment] | None] = [item.attachments for item in history]
+    image_budget = MAX_HISTORY_IMAGES
+    for index in range(len(history) - 1, -1, -1):
+        item = history[index]
+        if item.role != "USER" or not item.attachments:
+            continue
+        if image_budget <= 0:
+            effective[index] = []
+            continue
+        take = item.attachments[:image_budget]
+        effective[index] = take
+        image_budget -= len(take)
     messages: list[ModelMessage] = []
-    for item in history:
+    for index, item in enumerate(history):
         if item.role == "USER":
-            messages.append(ModelRequest(parts=[UserPromptPart(content=item.content)]))
+            attachments = effective[index]
+            dropped_images = len(item.attachments or []) - len(attachments or [])
+            text = item.content
+            if dropped_images > 0 and not attachments and not text:
+                text = IMAGE_ONLY_PLACEHOLDER
+            messages.append(
+                ModelRequest(parts=[UserPromptPart(content=build_user_prompt(text, attachments))])
+            )
         else:
             messages.append(ModelResponse(parts=[TextPart(content=item.content)]))
     return messages
@@ -209,7 +318,13 @@ class _TimeoutToolset(WrapperToolset):
 def build_agent(model: Model, system_prompt: str, toolsets: list[object] | None, budget: RunBudget) -> Agent:
     resolved = list(toolsets or [])
     if budget.tool_timeout_seconds is not None:
-        resolved = [_TimeoutToolset(wrapped=ts, timeout_seconds=budget.tool_timeout_seconds) for ts in resolved]
+        # delegate_task 自己把超时收成工具返回。再套一层会变成 ModelRetry，委派失败会拖垮本轮。
+        resolved = [
+            ts
+            if getattr(ts, "skip_outer_tool_timeout", False)
+            else _TimeoutToolset(wrapped=ts, timeout_seconds=budget.tool_timeout_seconds)
+            for ts in resolved
+        ]
     return Agent(model, system_prompt=system_prompt, toolsets=resolved or None)
 
 
@@ -239,6 +354,7 @@ async def run_chat(
     *,
     site_id: str,
     message: str,
+    attachments: list[ChatAttachment] | None = None,
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
@@ -249,30 +365,48 @@ async def run_chat(
     budget: RunBudget | None = None,
     locale: str | None = None,
     skills_max_instruction_chars: int | None = None,
+    skill_ids: list[str] | None = None,
+    skills_missing: list[str] | None = None,
+    harness_dir: str | None = None,
+    memories: list[str] | None = None,
+    memory_enabled: bool = False,
+    memory_extraction_enabled: bool = True,
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
-    system_prompt, user_message = build_prompt_parts(
-        site_id,
-        message,
-        prompt_profile,
-        retrieval_context,
+    history_summary = await prepare_history_summary(
+        model, history, resolved_budget.history_max_chars
+    )
+    harness = assemble_harness(
+        site_id=site_id,
+        message=message,
+        prompt_profile=prompt_profile,
+        retrieval_context=retrieval_context,
         skill_instructions=skill_instructions,
+        skill_ids=skill_ids,
+        skills_missing=skills_missing,
+        history=history,
         todos=initial_todos,
         locale=locale,
         skills_max_instruction_chars=skills_max_instruction_chars,
+        toolsets=toolsets,
+        budget=resolved_budget,
+        harness_dir=harness_dir,
+        history_summary=history_summary,
+        memories=memories,
     )
-    run_kwargs = build_run_kwargs(prompt_profile, history, resolved_budget)
+    run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
+    user_prompt = build_user_prompt(harness.user_message, attachments)
 
     needs_mcp_context = execution_needs_agent_context(toolsets or [])
     try:
-        agent = build_agent(model, system_prompt, toolsets, resolved_budget)
+        agent = build_agent(model, harness.system_prompt, toolsets, resolved_budget)
         if needs_mcp_context:
             # 设计 §19.5：async with agent；用 entered 区分「连接失败」与「进入后运行失败」
             entered = False
             try:
                 async with agent:
                     entered = True
-                    result = await agent.run(user_message, **run_kwargs)
+                    result = await agent.run(user_prompt, **run_kwargs)
             except UsageLimitExceeded:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -284,7 +418,7 @@ async def run_chat(
                 logger.warning("AI provider call failed after MCP connect", exc_info=exc)
                 return ChatBlocked(message=external_failure_message("AI provider call failed", exc))
         else:
-            result = await agent.run(user_message, **run_kwargs)
+            result = await agent.run(user_prompt, **run_kwargs)
     except UsageLimitExceeded as exc:
         # 预算超限不是外部依赖故障：单独错误码，便于调用方区分与告警
         return ChatBlocked(message=budget_exceeded_message(exc), error_code=BUDGET_EXCEEDED)
@@ -295,9 +429,19 @@ async def run_chat(
     text = str(result.output).strip()
     if not text:
         return ChatBlocked(message="AI provider returned an empty response.")
+    # 独立 Agent，不传入本轮 UsageLimits，抽取不计入 run budget。
+    extracted: list[str] = []
+    if memory_enabled and memory_extraction_enabled:
+        extracted = await extract_memories(
+            model,
+            user_message=message,
+            assistant_reply=text,
+            existing=memories,
+        )
     return ChatReply(
         reply=text,
         usage=usage_to_api(result.usage),
         tools=tool_trace_from_messages(result.new_messages()),
         citations=grounding_citations(retrieval_context, retrieval_chunks),
+        extracted_memories=extracted,
     )

@@ -2,13 +2,18 @@ package com.mywebsite.site.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.mywebsite.agent.dto.AgentAttachmentDto;
 import com.mywebsite.agent.dto.AgentChatHistoryMessage;
+import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentPromptProfile;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
+import com.mywebsite.site.dto.SiteAiAttachmentDto;
 import com.mywebsite.site.dto.SiteAiConversationDto;
 import com.mywebsite.site.dto.SiteAiConversationRenameRequestDto;
 import com.mywebsite.site.dto.SiteAiMessageDto;
@@ -21,8 +26,11 @@ import com.mywebsite.site.mapper.SiteAiPromptProfileMapper;
 import com.mywebsite.site.service.SiteAiConversationService;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +43,12 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
 
     /** 每次 chat 携带的最大历史条数（含 USER/ASSISTANT），控制上下文成本。 */
     private static final int HISTORY_LIMIT = 20;
+
+    /** 历史重播带给模型的图片张数上限。按消息 id（追加顺序）从新到旧计数。 */
+    private static final int HISTORY_IMAGE_LIMIT = 4;
+
+    /** 文字为空且图片已超出重播上限时的占位，避免送出空 content。 */
+    private static final String DROPPED_IMAGE_PLACEHOLDER = "[图片]";
 
     /** 与 {@link SiteAiConversationRenameRequestDto#TITLE_MAX_LENGTH} 同一上限：生成标题截断，重命名由 DTO 拒绝更长值。 */
     private static final int TITLE_MAX_LENGTH = SiteAiConversationRenameRequestDto.TITLE_MAX_LENGTH;
@@ -82,6 +96,31 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             String reply,
             List<AgentTodoItem> todos,
             AgentRunMeta runMeta) {
+        recordExchange(conversation, userMessage, reply, todos, runMeta, null);
+    }
+
+    @Override
+    @Transactional
+    public void recordExchange(
+            SiteAiConversationEntity conversation,
+            String userMessage,
+            String reply,
+            List<AgentTodoItem> todos,
+            AgentRunMeta runMeta,
+            List<AgentAttachmentDto> userAttachments) {
+        recordExchange(conversation, userMessage, reply, todos, runMeta, userAttachments, null);
+    }
+
+    @Override
+    @Transactional
+    public void recordExchange(
+            SiteAiConversationEntity conversation,
+            String userMessage,
+            String reply,
+            List<AgentTodoItem> todos,
+            AgentRunMeta runMeta,
+            List<AgentAttachmentDto> userAttachments,
+            List<AgentCitation> citations) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         conversation.setAgentTodos(writeTodos(todos));
         if (conversation.getId() == null) {
@@ -92,8 +131,13 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             conversation.setLastMessageAt(now);
             conversationMapper.updateById(conversation);
         }
-        insertMessage(conversation, SiteAiMessageEntity.ROLE_USER, userMessage, null);
-        insertMessage(conversation, SiteAiMessageEntity.ROLE_ASSISTANT, reply, writeRunMeta(runMeta));
+        insertMessage(conversation, SiteAiMessageEntity.ROLE_USER, userMessage, null, writeAttachments(userAttachments));
+        insertMessage(
+                conversation,
+                SiteAiMessageEntity.ROLE_ASSISTANT,
+                reply,
+                writeAgentMeta(runMeta, citations),
+                null);
     }
 
     @Override
@@ -115,7 +159,13 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                         .eq(SiteAiMessageEntity::getConversationId, conversationId)
                         .orderByAsc(SiteAiMessageEntity::getId))
                 .stream()
-                .map(m -> new SiteAiMessageDto(m.getId(), m.getRole(), m.getContent(), m.getCreatedAt()))
+                .map(m -> new SiteAiMessageDto(
+                        m.getId(),
+                        m.getRole(),
+                        m.getContent(),
+                        m.getCreatedAt(),
+                        readPublicAttachments(m),
+                        readCitations(m)))
                 .toList();
     }
 
@@ -153,10 +203,101 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                         .eq(SiteAiMessageEntity::getConversationId, conversationId)
                         .orderByDesc(SiteAiMessageEntity::getId)
                         .last("LIMIT " + HISTORY_LIMIT));
-        return latest.stream()
+        List<SiteAiMessageEntity> chronological = latest.stream()
                 .sorted(Comparator.comparing(SiteAiMessageEntity::getId))
-                .map(m -> new AgentChatHistoryMessage(m.getRole(), m.getContent()))
                 .toList();
+        Map<Long, List<AgentAttachmentDto>> replay = replayAttachments(chronological);
+        return chronological.stream().map(message -> toHistoryMessage(message, replay)).toList();
+    }
+
+    /**
+     * 全历史最多保留最近 {@link #HISTORY_IMAGE_LIMIT} 张。同一条消息放不下时保留列表前缀，其余丢掉。
+     */
+    private Map<Long, List<AgentAttachmentDto>> replayAttachments(List<SiteAiMessageEntity> chronological) {
+        Map<Long, List<AgentAttachmentDto>> replay = new HashMap<>();
+        int remaining = HISTORY_IMAGE_LIMIT;
+        for (int i = chronological.size() - 1; i >= 0; i--) {
+            SiteAiMessageEntity message = chronological.get(i);
+            if (!SiteAiMessageEntity.ROLE_USER.equals(message.getRole())) {
+                continue;
+            }
+            StoredAttachments stored = readStoredAttachments(message);
+            if (!stored.present()) {
+                continue;
+            }
+            if (stored.items().isEmpty() || remaining <= 0) {
+                replay.put(message.getId(), List.of());
+                continue;
+            }
+            if (stored.items().size() <= remaining) {
+                replay.put(message.getId(), stored.items());
+                remaining -= stored.items().size();
+            } else {
+                replay.put(message.getId(), List.copyOf(stored.items().subList(0, remaining)));
+                remaining = 0;
+            }
+        }
+        return replay;
+    }
+
+    private AgentChatHistoryMessage toHistoryMessage(
+            SiteAiMessageEntity message, Map<Long, List<AgentAttachmentDto>> replay) {
+        String content = message.getContent() == null ? "" : message.getContent();
+        if (!SiteAiMessageEntity.ROLE_USER.equals(message.getRole()) || !replay.containsKey(message.getId())) {
+            return new AgentChatHistoryMessage(message.getRole(), content);
+        }
+        List<AgentAttachmentDto> kept = replay.get(message.getId());
+        if (kept.isEmpty()) {
+            if (!StringUtils.hasText(content)) {
+                content = DROPPED_IMAGE_PLACEHOLDER;
+            }
+            return new AgentChatHistoryMessage(message.getRole(), content);
+        }
+        return new AgentChatHistoryMessage(message.getRole(), content, kept);
+    }
+
+    private StoredAttachments readStoredAttachments(SiteAiMessageEntity message) {
+        String raw = message.getAttachments();
+        if (!StringUtils.hasText(raw)) {
+            return StoredAttachments.none();
+        }
+        try {
+            AgentAttachmentDto[] parsed = objectMapper.readValue(raw, AgentAttachmentDto[].class);
+            List<AgentAttachmentDto> items = new ArrayList<>();
+            if (parsed != null) {
+                for (AgentAttachmentDto item : parsed) {
+                    if (item != null && StringUtils.hasText(item.mediaType()) && StringUtils.hasText(item.data())) {
+                        items.add(item);
+                    }
+                }
+            }
+            return new StoredAttachments(true, List.copyOf(items));
+        } catch (JsonProcessingException ex) {
+            log.warn("site ai message {} has malformed attachments, ignored", message.getId(), ex);
+            return new StoredAttachments(true, List.of());
+        }
+    }
+
+    private List<SiteAiAttachmentDto> readPublicAttachments(SiteAiMessageEntity message) {
+        if (!SiteAiMessageEntity.ROLE_USER.equals(message.getRole()) || !StringUtils.hasText(message.getAttachments())) {
+            return null;
+        }
+        try {
+            SiteAiAttachmentDto[] parsed = objectMapper.readValue(message.getAttachments(), SiteAiAttachmentDto[].class);
+            if (parsed == null || parsed.length == 0) {
+                return null;
+            }
+            List<SiteAiAttachmentDto> items = new ArrayList<>();
+            for (SiteAiAttachmentDto item : parsed) {
+                if (item != null) {
+                    items.add(item);
+                }
+            }
+            return items.isEmpty() ? null : List.copyOf(items);
+        } catch (JsonProcessingException ex) {
+            log.warn("site ai message {} has malformed attachments, ignored", message.getId(), ex);
+            return null;
+        }
     }
 
     private AgentPromptProfile loadPromptProfile(long siteId) {
@@ -196,6 +337,74 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         }
     }
 
+    private String writeAttachments(List<AgentAttachmentDto> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(attachments);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize chat attachments", ex);
+        }
+    }
+
+    /**
+     * citations 为空时原样返回 {@link #writeRunMeta}。非空时写入 {@code citations} 字段；
+     * 已有 run meta 的键保留，观测数据仍可被按原结构读取。
+     */
+    private String writeAgentMeta(AgentRunMeta runMeta, List<AgentCitation> citations) {
+        String meta = writeRunMeta(runMeta);
+        if (citations == null || citations.isEmpty()) {
+            return meta;
+        }
+        try {
+            ObjectNode node =
+                    meta == null ? objectMapper.createObjectNode() : objectMapper.readValue(meta, ObjectNode.class);
+            node.set("citations", objectMapper.valueToTree(citations));
+            return objectMapper.writeValueAsString(node);
+        } catch (RuntimeException | JsonProcessingException ex) {
+            log.warn("Failed to serialize citations into agent meta, kept previous payload", ex);
+            return meta;
+        }
+    }
+
+    /** 无 citations、空数组或 agentMeta 损坏时返回 null，不让消息列表失败。 */
+    private List<SiteAiMessageDto.Citation> readCitations(SiteAiMessageEntity message) {
+        if (!StringUtils.hasText(message.getAgentMeta())) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(message.getAgentMeta());
+            if (root == null || !root.isObject()) {
+                log.warn("site ai message {} has malformed agent_meta citations, ignored", message.getId());
+                return null;
+            }
+            JsonNode citations = root.get("citations");
+            if (citations == null || citations.isNull()) {
+                return null;
+            }
+            if (!citations.isArray()) {
+                log.warn("site ai message {} has malformed agent_meta citations, ignored", message.getId());
+                return null;
+            }
+            SiteAiMessageDto.Citation[] parsed =
+                    objectMapper.treeToValue(citations, SiteAiMessageDto.Citation[].class);
+            if (parsed == null || parsed.length == 0) {
+                return null;
+            }
+            List<SiteAiMessageDto.Citation> items = new ArrayList<>();
+            for (SiteAiMessageDto.Citation item : parsed) {
+                if (item != null) {
+                    items.add(item);
+                }
+            }
+            return items.isEmpty() ? null : List.copyOf(items);
+        } catch (Exception ex) {
+            log.warn("site ai message {} has malformed agent_meta citations, ignored", message.getId(), ex);
+            return null;
+        }
+    }
+
     /** 观测数据序列化失败不得让已成功的一轮回滚：记日志后存 NULL。 */
     private String writeRunMeta(AgentRunMeta runMeta) {
         if (runMeta == null || runMeta.equals(AgentRunMeta.EMPTY)) {
@@ -210,14 +419,25 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
     }
 
     private void insertMessage(
-            SiteAiConversationEntity conversation, String role, String content, String agentMeta) {
+            SiteAiConversationEntity conversation,
+            String role,
+            String content,
+            String agentMeta,
+            String attachments) {
         SiteAiMessageEntity message = new SiteAiMessageEntity();
         message.setConversationId(conversation.getId());
         message.setSiteId(conversation.getSiteId());
         message.setRole(role);
         message.setContent(content);
         message.setAgentMeta(agentMeta);
+        message.setAttachments(attachments);
         messageMapper.insert(message);
+    }
+
+    private record StoredAttachments(boolean present, List<AgentAttachmentDto> items) {
+        private static StoredAttachments none() {
+            return new StoredAttachments(false, List.of());
+        }
     }
 
     private static SiteAiConversationDto toDto(SiteAiConversationEntity conversation) {

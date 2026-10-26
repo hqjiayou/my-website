@@ -1,15 +1,25 @@
 /**
  * 统一 API 错误类型，供 axios 拦截器与 React Query 全局处理复用。
  */
+export interface ApiErrorConflict {
+  siteId: number
+  dimensions: number
+}
+
 export class ApiError extends Error {
   readonly status?: number
   readonly code?: number | null
+  readonly conflicts?: ApiErrorConflict[]
 
-  constructor(message: string, options?: { status?: number; code?: number | null }) {
+  constructor(
+    message: string,
+    options?: { status?: number; code?: number | null; conflicts?: ApiErrorConflict[] },
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = options?.status
     this.code = options?.code
+    this.conflicts = options?.conflicts
   }
 }
 

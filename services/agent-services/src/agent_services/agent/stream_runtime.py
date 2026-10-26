@@ -9,16 +9,20 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
 from pydantic_ai.models import Model
 
-from agent_services.agent.prompt_builder import build_prompt_parts
+from agent_services.agent.harness import assemble_harness
+from agent_services.agent.memory import extract_memories
 from agent_services.agent.runtime import (
     BUDGET_EXCEEDED,
     MAX_TOOL_TRACE,
     RunBudget,
+    UserPrompt,
     budget_exceeded_message,
     build_agent,
     build_run_kwargs,
+    build_user_prompt,
     grounding_citations,
     mcp_unavailable_message,
+    prepare_history_summary,
     tool_succeeded,
     usage_to_api,
 )
@@ -26,7 +30,11 @@ from agent_services.agent.todo_tools import TodoStore
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.api.errors import external_failure_message
 from agent_services.retrieval.store import RetrievedChunk
-from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
+from agent_services.schemas.chat import (
+    ChatAttachment,
+    ChatHistoryMessage,
+    PromptProfile,
+)
 from agent_services.schemas.stream import AgentStreamEvent, AgentStreamEventType
 from agent_services.schemas.todo import TodoItem
 
@@ -51,6 +59,7 @@ async def stream_chat_events(
     *,
     site_id: str,
     message: str,
+    attachments: list[ChatAttachment] | None = None,
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
@@ -65,18 +74,36 @@ async def stream_chat_events(
     budget: RunBudget | None = None,
     locale: str | None = None,
     skills_max_instruction_chars: int | None = None,
+    skill_ids: list[str] | None = None,
+    harness_dir: str | None = None,
+    memories: list[str] | None = None,
+    memory_enabled: bool = False,
+    memory_extraction_enabled: bool = True,
 ) -> AsyncIterator[AgentStreamEvent]:
     resolved_budget = budget or RunBudget()
-    system_prompt, user_message = build_prompt_parts(
-        site_id,
-        message,
-        prompt_profile,
-        retrieval_context,
+    history_summary = await prepare_history_summary(
+        model, history, resolved_budget.history_max_chars
+    )
+    harness = assemble_harness(
+        site_id=site_id,
+        message=message,
+        prompt_profile=prompt_profile,
+        retrieval_context=retrieval_context,
         skill_instructions=skill_instructions,
+        skill_ids=skill_ids if skill_ids is not None else skills_applied,
+        skills_missing=skills_missing,
+        history=history,
         todos=initial_todos,
         locale=locale,
         skills_max_instruction_chars=skills_max_instruction_chars,
+        toolsets=toolsets,
+        budget=resolved_budget,
+        harness_dir=harness_dir,
+        history_summary=history_summary,
+        memories=memories,
     )
+    system_prompt = harness.system_prompt
+    user_prompt = build_user_prompt(harness.user_message, attachments)
     start_data: dict[str, object] = {"siteId": site_id}
     if skills_applied:
         start_data["skillsApplied"] = list(skills_applied)
@@ -84,7 +111,7 @@ async def stream_chat_events(
         start_data["skillsMissing"] = list(skills_missing)
     yield AgentStreamEvent(type=AgentStreamEventType.START, data=start_data)
 
-    run_kwargs = build_run_kwargs(prompt_profile, history, resolved_budget)
+    run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
     side_events: list[AgentStreamEvent] = []
     tool_trace: list[dict[str, object]] = []
 
@@ -126,7 +153,7 @@ async def stream_chat_events(
             try:
                 async with agent:
                     entered = True
-                    async for event in _emit_agent_stream(agent, user_message, run_kwargs, side_events):
+                    async for event in _emit_agent_stream(agent, user_prompt, run_kwargs, side_events):
                         if isinstance(event, AgentStreamEvent):
                             yield event
                         else:
@@ -144,7 +171,7 @@ async def stream_chat_events(
                 )
                 return
         else:
-            async for event in _emit_agent_stream(agent, user_message, run_kwargs, side_events):
+            async for event in _emit_agent_stream(agent, user_prompt, run_kwargs, side_events):
                 if isinstance(event, AgentStreamEvent):
                     yield event
                 else:
@@ -186,16 +213,26 @@ async def stream_chat_events(
     citations = grounding_citations(retrieval_context, retrieval_chunks)
     if citations:
         done_data["citations"] = citations
+    # 独立 Agent，不传入本轮 UsageLimits，抽取不计入 run budget。
+    if memory_enabled and memory_extraction_enabled:
+        extracted = await extract_memories(
+            model,
+            user_message=message,
+            assistant_reply=output.reply,
+            existing=memories,
+        )
+        if extracted:
+            done_data["extractedMemories"] = extracted
     yield AgentStreamEvent(type=AgentStreamEventType.DONE, data=done_data)
 
 
 async def _emit_agent_stream(
     agent: Agent,
-    user_message: str,
+    user_prompt: UserPrompt,
     run_kwargs: dict[str, object],
     side_events: list[AgentStreamEvent],
 ) -> AsyncIterator[AgentStreamEvent | _StreamOutput]:
-    async with agent.run_stream(user_message, **run_kwargs) as stream:
+    async with agent.run_stream(user_prompt, **run_kwargs) as stream:
         async for chunk in stream.stream_text(delta=True):
             while side_events:
                 yield side_events.pop(0)

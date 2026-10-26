@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mywebsite.agent.client.AgentClient;
+import com.mywebsite.agent.dto.AgentAttachmentDto;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
@@ -17,8 +18,17 @@ import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.security.AuthContext;
 import com.mywebsite.common.security.AuthenticatedUser;
 import com.mywebsite.common.security.SubjectCodes;
+import com.mywebsite.infra.crypto.ModelEntryCipher;
 import com.mywebsite.infra.service.LocalizedMessageService;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.properties.AgentProperties;
+import com.mywebsite.site.dto.SiteAiAttachmentDto;
 import com.mywebsite.site.dto.SiteAiChatRequestDto;
+import com.mywebsite.site.entity.SiteAiKnowledgeDocumentEntity;
+import com.mywebsite.site.entity.SiteAiModelEntryEntity;
+import com.mywebsite.site.mapper.SiteAiKnowledgeDocumentMapper;
+import com.mywebsite.site.mapper.SiteAiModelEntryMapper;
 import com.mywebsite.site.dto.SiteAiChatResponseDto;
 import com.mywebsite.site.dto.SiteKnowledgeSearchRequestDto;
 import com.mywebsite.site.dto.SiteKnowledgeSearchResponseDto;
@@ -26,8 +36,10 @@ import com.mywebsite.site.service.SiteAiConversationService;
 import com.mywebsite.site.service.SiteAiConversationService.ChatPreparation;
 import com.mywebsite.site.service.SiteAiRateLimitService;
 import com.mywebsite.site.service.SiteAiService;
+import com.mywebsite.site.service.SiteUserMemoryService;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -50,24 +62,47 @@ public class SiteAiServiceImpl implements SiteAiService {
 
     /** 与 agent-services ChatRequest.message 上限一致。超长在进会话和限流之前拒绝。 */
     private static final int MAX_MESSAGE_CHARS = 16_000;
+    private static final int MAX_ATTACHMENTS = 3;
+    private static final int MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_ATTACHMENTS_TOTAL_BYTES = 5 * 1024 * 1024;
+    private static final Set<String> ATTACHMENT_MEDIA_TYPES =
+            Set.of("image/jpeg", "image/png", "image/webp", "image/gif");
+    private static final int KNOWLEDGE_NEEDLE_CHARS = 80;
+    private static final int KNOWLEDGE_SNIPPET_CHARS = 800;
+    private static final int KNOWLEDGE_SNIPPET_LIMIT = 4;
 
     private final AgentClient agentClient;
+    private final AgentProperties agentProperties;
+    private final ModelEntryCipher modelEntryCipher;
     private final SiteAiRateLimitService rateLimitService;
     private final SiteAiConversationService conversationService;
+    private final SiteUserMemoryService memoryService;
+    private final SiteAiModelEntryMapper modelEntryMapper;
+    private final SiteAiKnowledgeDocumentMapper knowledgeDocumentMapper;
     private final LocalizedMessageService localizedMessageService;
     private final ExecutorService siteAiStreamExecutor;
     private final ObjectMapper objectMapper;
 
     public SiteAiServiceImpl(
             AgentClient agentClient,
+            AgentProperties agentProperties,
+            ModelEntryCipher modelEntryCipher,
             SiteAiRateLimitService rateLimitService,
             SiteAiConversationService conversationService,
+            SiteUserMemoryService memoryService,
+            SiteAiModelEntryMapper modelEntryMapper,
+            SiteAiKnowledgeDocumentMapper knowledgeDocumentMapper,
             LocalizedMessageService localizedMessageService,
             ExecutorService siteAiStreamExecutor,
             ObjectMapper objectMapper) {
         this.agentClient = agentClient;
+        this.agentProperties = agentProperties;
+        this.modelEntryCipher = modelEntryCipher;
         this.rateLimitService = rateLimitService;
         this.conversationService = conversationService;
+        this.memoryService = memoryService;
+        this.modelEntryMapper = modelEntryMapper;
+        this.knowledgeDocumentMapper = knowledgeDocumentMapper;
         this.localizedMessageService = localizedMessageService;
         this.siteAiStreamExecutor = siteAiStreamExecutor;
         this.objectMapper = objectMapper;
@@ -75,15 +110,27 @@ public class SiteAiServiceImpl implements SiteAiService {
 
     @Override
     public SiteAiChatResponseDto chat(long siteId, SiteAiChatRequestDto request) {
-        AuthenticatedUser user = validateChatAccess(siteId, request);
-        long siteUserId = requireSiteUserId(user);
-        String message = request.message().trim();
+        ValidatedChat validated = validateChatAccess(siteId, request);
+        long siteUserId = requireSiteUserId(validated.user());
+        String message = validated.message();
+        List<AgentAttachmentDto> attachments = toAgentAttachments(validated.attachments());
 
         ChatPreparation preparation =
                 conversationService.prepare(siteId, siteUserId, request.conversationId());
-        AgentChatResponse response = agentClient.chat(buildAgentRequest(siteId, message, preparation));
-        conversationService.recordExchange(
-                preparation.conversation(), message, response.reply(), response.todos(), response.runMeta());
+        List<String> memories = memoryService.recentContents(siteId, siteUserId);
+        AgentChatResponse response =
+                agentClient.chat(buildAgentRequest(siteId, message, attachments, preparation, memories));
+        persistTurn(
+                siteId,
+                siteUserId,
+                preparation,
+                message,
+                attachments,
+                response.reply(),
+                response.todos(),
+                response.runMeta(),
+                response.citations(),
+                response.extractedMemories());
 
         return new SiteAiChatResponseDto(
                 response.reply(),
@@ -103,13 +150,72 @@ public class SiteAiServiceImpl implements SiteAiService {
         if (query.length() > SiteKnowledgeSearchRequestDto.MAX_QUERY_CHARS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        AgentRetrievalSearchResult result = agentClient.searchRetrieval(
-                new AgentRetrievalSearchRequest(String.valueOf(siteId), query, clampTopK(request.topK())));
-        List<SiteKnowledgeSearchResponseDto.Hit> hits = result.hits().stream()
-                .map(hit -> new SiteKnowledgeSearchResponseDto.Hit(
-                        hit.sourceId(), hit.chunkIndex(), hit.score(), hit.content()))
+        boolean vectorDegraded = false;
+        try {
+            AgentModelSelection selection = loadDefaultModel(siteId);
+            AgentRetrievalSearchResult result = agentClient.searchRetrieval(new AgentRetrievalSearchRequest(
+                    String.valueOf(siteId),
+                    query,
+                    clampTopK(request.topK()),
+                    selection == null ? null : selection.embeddingSpec(),
+                    selection == null ? null : selection.apiKey(),
+                    selection == null ? null : selection.baseUrl()));
+            if (!result.degraded() && !result.hits().isEmpty()) {
+                List<SiteKnowledgeSearchResponseDto.Hit> hits = result.hits().stream()
+                        .map(hit -> new SiteKnowledgeSearchResponseDto.Hit(
+                                hit.sourceId(), hit.chunkIndex(), hit.score(), hit.content()))
+                        .toList();
+                return new SiteKnowledgeSearchResponseDto(hits, false, result.rerankApplied());
+            }
+            vectorDegraded = result.degraded();
+        } catch (BusinessException ex) {
+            if (ex.getCode() != ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()) {
+                throw ex;
+            }
+            vectorDegraded = true;
+        }
+        List<SiteKnowledgeSearchResponseDto.Hit> textHits = textKnowledgeHits(siteId, query);
+        if (!textHits.isEmpty()) {
+            return new SiteKnowledgeSearchResponseDto(textHits, false);
+        }
+        return new SiteKnowledgeSearchResponseDto(List.of(), vectorDegraded);
+    }
+
+    @Override
+    public List<com.mywebsite.site.dto.SiteKnowledgeDocumentDtos.ListItem> listKnowledgeDocuments(long siteId) {
+        AuthenticatedUser user = requireSiteMember(siteId);
+        requireSiteUserId(user);
+        return knowledgeDocumentMapper
+                .selectList(new LambdaQueryWrapper<SiteAiKnowledgeDocumentEntity>()
+                        .select(
+                                SiteAiKnowledgeDocumentEntity::getId,
+                                SiteAiKnowledgeDocumentEntity::getTitle,
+                                SiteAiKnowledgeDocumentEntity::getUpdatedAt)
+                        .eq(SiteAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(SiteAiKnowledgeDocumentEntity::getStatus, SiteAiKnowledgeDocumentEntity.STATUS_ACTIVE)
+                        .orderByDesc(SiteAiKnowledgeDocumentEntity::getUpdatedAt)
+                        .orderByDesc(SiteAiKnowledgeDocumentEntity::getId))
+                .stream()
+                .map(doc -> new com.mywebsite.site.dto.SiteKnowledgeDocumentDtos.ListItem(
+                        doc.getId(), doc.getTitle(), doc.getUpdatedAt()))
                 .toList();
-        return new SiteKnowledgeSearchResponseDto(hits, result.degraded());
+    }
+
+    @Override
+    public com.mywebsite.site.dto.SiteKnowledgeDocumentDtos.Detail getKnowledgeDocument(
+            long siteId, long documentId) {
+        AuthenticatedUser user = requireSiteMember(siteId);
+        requireSiteUserId(user);
+        SiteAiKnowledgeDocumentEntity doc = knowledgeDocumentMapper.selectOne(
+                new LambdaQueryWrapper<SiteAiKnowledgeDocumentEntity>()
+                        .eq(SiteAiKnowledgeDocumentEntity::getId, documentId)
+                        .eq(SiteAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(SiteAiKnowledgeDocumentEntity::getStatus, SiteAiKnowledgeDocumentEntity.STATUS_ACTIVE));
+        if (doc == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        return new com.mywebsite.site.dto.SiteKnowledgeDocumentDtos.Detail(
+                doc.getId(), doc.getTitle(), doc.getContent(), doc.getUpdatedAt());
     }
 
     /** 与内容列表 limit 相同：越界夹进 1..{@link SiteKnowledgeSearchRequestDto#MAX_TOP_K}，null 交给 Python 默认。 */
@@ -129,21 +235,31 @@ public class SiteAiServiceImpl implements SiteAiService {
 
     @Override
     public SseEmitter chatStream(long siteId, SiteAiChatRequestDto request) {
-        AuthenticatedUser user = validateChatAccess(siteId, request);
-        long siteUserId = requireSiteUserId(user);
-        String message = request.message().trim();
+        ValidatedChat validated = validateChatAccess(siteId, request);
+        long siteUserId = requireSiteUserId(validated.user());
+        String message = validated.message();
+        List<AgentAttachmentDto> attachments = toAgentAttachments(validated.attachments());
 
         ChatPreparation preparation =
                 conversationService.prepare(siteId, siteUserId, request.conversationId());
-        AgentChatRequest agentRequest = buildAgentRequest(siteId, message, preparation);
+        List<String> memories = memoryService.recentContents(siteId, siteUserId);
+        AgentChatRequest agentRequest =
+                buildAgentRequest(siteId, message, attachments, preparation, memories);
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
-        siteAiStreamExecutor.execute(() -> forwardStream(preparation, message, agentRequest, emitter));
+        siteAiStreamExecutor.execute(
+                () -> forwardStream(siteId, siteUserId, preparation, message, attachments, agentRequest, emitter));
         return emitter;
     }
 
-    private AgentChatRequest buildAgentRequest(long siteId, String message, ChatPreparation preparation) {
+    private AgentChatRequest buildAgentRequest(
+            long siteId,
+            String message,
+            List<AgentAttachmentDto> attachments,
+            ChatPreparation preparation,
+            List<String> memories) {
         Long conversationId = preparation.conversation().getId();
+        List<AgentModelSelection> chain = loadModelChain(siteId);
         return new AgentChatRequest(
                 String.valueOf(siteId),
                 message,
@@ -153,21 +269,250 @@ public class SiteAiServiceImpl implements SiteAiService {
                 preparation.history().isEmpty() ? null : preparation.history(),
                 // 终端用户不能指定 skills（防前台激活任意指令模块）；只用 agent-services 平台默认
                 null,
-                preparation.todos().isEmpty() ? null : preparation.todos());
+                preparation.todos().isEmpty() ? null : preparation.todos(),
+                chain.isEmpty() ? null : chain.get(0),
+                callbackBaseUrl(),
+                knowledgeSnippets(siteId, message),
+                attachments.isEmpty() ? null : attachments,
+                memories == null || memories.isEmpty() ? null : memories,
+                Boolean.TRUE,
+                chain.size() > 1 ? List.copyOf(chain.subList(1, chain.size())) : null);
     }
 
-    private AuthenticatedUser validateChatAccess(long siteId, SiteAiChatRequestDto request) {
+    private void persistTurn(
+            long siteId,
+            long siteUserId,
+            ChatPreparation preparation,
+            String userMessage,
+            List<AgentAttachmentDto> userAttachments,
+            String reply,
+            List<AgentTodoItem> todos,
+            AgentRunMeta runMeta,
+            List<AgentCitation> citations,
+            List<String> extractedMemories) {
+        conversationService.recordExchange(
+                preparation.conversation(),
+                userMessage,
+                reply,
+                todos,
+                runMeta,
+                userAttachments,
+                citations);
+        memoryService.storeExtracted(
+                siteId, siteUserId, preparation.conversation().getId(), extractedMemories);
+    }
+
+    private static List<AgentAttachmentDto> toAgentAttachments(List<SiteAiAttachmentDto> attachments) {
+        if (attachments.isEmpty()) {
+            return List.of();
+        }
+        return attachments.stream()
+                .map(item -> new AgentAttachmentDto(item.mediaType(), item.data()))
+                .toList();
+    }
+
+    private String callbackBaseUrl() {
+        String configured = agentProperties.getBusinessApiBaseUrl();
+        return StringUtils.hasText(configured) ? configured.trim() : null;
+    }
+
+    /** 向量索引没有命中时，Python 用这些原文片段回答。没有匹配则不传。 */
+    private List<String> knowledgeSnippets(long siteId, String query) {
+        String needle = needle(query);
+        if (needle.isEmpty()) {
+            return null;
+        }
+        List<String> snippets = knowledgeDocumentMapper
+                .selectList(new LambdaQueryWrapper<SiteAiKnowledgeDocumentEntity>()
+                        .eq(SiteAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(SiteAiKnowledgeDocumentEntity::getStatus, SiteAiKnowledgeDocumentEntity.STATUS_ACTIVE)
+                        .and(wrapper -> wrapper
+                                .like(SiteAiKnowledgeDocumentEntity::getTitle, needle)
+                                .or()
+                                .like(SiteAiKnowledgeDocumentEntity::getContent, needle))
+                        .orderByDesc(SiteAiKnowledgeDocumentEntity::getId)
+                        .last("LIMIT " + KNOWLEDGE_SNIPPET_LIMIT))
+                .stream()
+                .map(SiteAiServiceImpl::snippet)
+                .filter(StringUtils::hasText)
+                .toList();
+        return snippets.isEmpty() ? null : snippets;
+    }
+
+    private List<SiteKnowledgeSearchResponseDto.Hit> textKnowledgeHits(long siteId, String query) {
+        String needle = needle(query);
+        if (needle.isEmpty()) {
+            return List.of();
+        }
+        return knowledgeDocumentMapper
+                .selectList(new LambdaQueryWrapper<SiteAiKnowledgeDocumentEntity>()
+                        .eq(SiteAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(SiteAiKnowledgeDocumentEntity::getStatus, SiteAiKnowledgeDocumentEntity.STATUS_ACTIVE)
+                        .and(wrapper -> wrapper
+                                .like(SiteAiKnowledgeDocumentEntity::getTitle, needle)
+                                .or()
+                                .like(SiteAiKnowledgeDocumentEntity::getContent, needle))
+                        .orderByDesc(SiteAiKnowledgeDocumentEntity::getId)
+                        .last("LIMIT " + KNOWLEDGE_SNIPPET_LIMIT))
+                .stream()
+                .map(document -> new SiteKnowledgeSearchResponseDto.Hit(
+                        "kb:" + document.getId(), 0, 1.0d, snippet(document)))
+                .filter(hit -> StringUtils.hasText(hit.content()))
+                .toList();
+    }
+
+    private static String needle(String query) {
+        String trimmed = query == null ? "" : query.trim();
+        if (trimmed.length() > KNOWLEDGE_NEEDLE_CHARS) {
+            return trimmed.substring(0, KNOWLEDGE_NEEDLE_CHARS);
+        }
+        return trimmed;
+    }
+
+    private static String snippet(SiteAiKnowledgeDocumentEntity document) {
+        String content = document.getContent() == null ? "" : document.getContent().trim();
+        if (content.length() > KNOWLEDGE_SNIPPET_CHARS) {
+            content = content.substring(0, KNOWLEDGE_SNIPPET_CHARS);
+        }
+        String title = document.getTitle() == null ? "" : document.getTitle().trim();
+        if (!StringUtils.hasText(title)) {
+            return content;
+        }
+        return StringUtils.hasText(content) ? title + "\n" + content : title;
+    }
+
+    /** 站点默认入口优先，否则全站默认。没有时不带 model，Python 回退进程 AI_MODEL。 */
+    private AgentModelSelection loadDefaultModel(long siteId) {
+        List<AgentModelSelection> chain = loadModelChain(siteId);
+        return chain.isEmpty() ? null : chain.get(0);
+    }
+
+    /**
+     * 生效链（与 admin AdminAiModelEntryServiceImpl.selectionChain 同规则，两处须一致）：
+     * 首元是主用（站点默认，否则全站默认），其后依次是同站其他启用入口、全站其他启用入口
+     * （各组内默认在前、id 升序）。主用不存在或解密不出 key 时返回空列表，备援不得越过坏主用顶上；
+     * 解密不出 key 的备援跳过。
+     */
+    private List<AgentModelSelection> loadModelChain(long siteId) {
+        List<SiteAiModelEntryEntity> siteEntries = enabledModelEntries(siteId);
+        List<SiteAiModelEntryEntity> globalEntries = enabledModelEntries(null);
+        SiteAiModelEntryEntity primary = firstDefaultEntry(siteEntries);
+        if (primary == null) {
+            primary = firstDefaultEntry(globalEntries);
+        }
+        if (primary == null) {
+            return List.of();
+        }
+        AgentModelSelection primarySelection = toModelSelection(primary);
+        if (primarySelection == null) {
+            return List.of();
+        }
+        List<AgentModelSelection> chain = new ArrayList<>();
+        chain.add(primarySelection);
+        appendModelSelections(chain, siteEntries, primary.getId());
+        appendModelSelections(chain, globalEntries, primary.getId());
+        return List.copyOf(chain);
+    }
+
+    /** 作用域内启用入口：默认在前，其余 id 升序。 */
+    private List<SiteAiModelEntryEntity> enabledModelEntries(Long siteId) {
+        LambdaQueryWrapper<SiteAiModelEntryEntity> query = new LambdaQueryWrapper<SiteAiModelEntryEntity>()
+                .eq(SiteAiModelEntryEntity::getEnabled, true)
+                .orderByDesc(SiteAiModelEntryEntity::getDefaultEntry)
+                .orderByAsc(SiteAiModelEntryEntity::getId);
+        if (siteId == null) {
+            query.isNull(SiteAiModelEntryEntity::getSiteId);
+        } else {
+            query.eq(SiteAiModelEntryEntity::getSiteId, siteId);
+        }
+        List<SiteAiModelEntryEntity> entries = modelEntryMapper.selectList(query);
+        return entries == null ? List.of() : entries;
+    }
+
+    private static SiteAiModelEntryEntity firstDefaultEntry(List<SiteAiModelEntryEntity> entries) {
+        for (SiteAiModelEntryEntity entry : entries) {
+            if (Boolean.TRUE.equals(entry.getDefaultEntry())) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private void appendModelSelections(
+            List<AgentModelSelection> chain, List<SiteAiModelEntryEntity> entries, Long skipId) {
+        for (SiteAiModelEntryEntity entry : entries) {
+            if (entry.getId() != null && entry.getId().equals(skipId)) {
+                continue;
+            }
+            AgentModelSelection selection = toModelSelection(entry);
+            if (selection != null) {
+                chain.add(selection);
+            }
+        }
+    }
+
+    private AgentModelSelection toModelSelection(SiteAiModelEntryEntity entry) {
+        if (entry == null || !StringUtils.hasText(entry.getModelSpec())) {
+            return null;
+        }
+        String apiKey = modelEntryCipher.decrypt(entry.getApiKey());
+        if (!StringUtils.hasText(apiKey)) {
+            return null;
+        }
+        String baseUrl = StringUtils.hasText(entry.getBaseUrl()) ? entry.getBaseUrl().trim() : null;
+        String embeddingSpec =
+                StringUtils.hasText(entry.getEmbeddingSpec()) ? entry.getEmbeddingSpec().trim() : null;
+        return new AgentModelSelection(entry.getModelSpec().trim(), apiKey, baseUrl, embeddingSpec);
+    }
+
+    private ValidatedChat validateChatAccess(long siteId, SiteAiChatRequestDto request) {
         AuthenticatedUser user = requireSiteMember(siteId);
-        if (request == null || !StringUtils.hasText(request.message())) {
+        if (request == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        if (request.message().trim().length() > MAX_MESSAGE_CHARS) {
+        String message = request.message() == null ? "" : request.message().trim();
+        List<SiteAiAttachmentDto> attachments = validateAttachments(request.attachments());
+        if (!StringUtils.hasText(message) && attachments.isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        if (message.length() > MAX_MESSAGE_CHARS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         if (!rateLimitService.tryAcquire(siteId, user.subject())) {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS);
         }
-        return user;
+        return new ValidatedChat(user, message, attachments);
+    }
+
+    private static List<SiteAiAttachmentDto> validateAttachments(List<SiteAiAttachmentDto> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return List.of();
+        }
+        if (attachments.size() > MAX_ATTACHMENTS) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        long total = 0;
+        for (SiteAiAttachmentDto attachment : attachments) {
+            if (attachment == null
+                    || !ATTACHMENT_MEDIA_TYPES.contains(attachment.mediaType())
+                    || !StringUtils.hasText(attachment.data())) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            byte[] decoded;
+            try {
+                decoded = Base64.getDecoder().decode(attachment.data());
+            } catch (IllegalArgumentException ex) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            if (decoded.length > MAX_ATTACHMENT_BYTES) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            total += decoded.length;
+            if (total > MAX_ATTACHMENTS_TOTAL_BYTES) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+        }
+        return List.copyOf(attachments);
     }
 
     private static AuthenticatedUser requireSiteMember(long siteId) {
@@ -184,11 +529,19 @@ public class SiteAiServiceImpl implements SiteAiService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
     }
 
-    private void forwardStream(
-            ChatPreparation preparation, String userMessage, AgentChatRequest agentRequest, SseEmitter emitter) {
+    void forwardStream(
+            long siteId,
+            long siteUserId,
+            ChatPreparation preparation,
+            String userMessage,
+            List<AgentAttachmentDto> userAttachments,
+            AgentChatRequest agentRequest,
+            SseEmitter emitter) {
         StringBuilder doneReply = new StringBuilder();
         List<AgentTodoItem> doneTodos = new ArrayList<>();
         AtomicReference<AgentRunMeta> doneMeta = new AtomicReference<>(AgentRunMeta.EMPTY);
+        AtomicReference<List<AgentCitation>> doneCitations = new AtomicReference<>(List.of());
+        AtomicReference<List<String>> doneMemories = new AtomicReference<>(List.of());
         try {
             agentClient.chatStream(agentRequest, (event, dataJson) -> {
                 JsonNode data = readJson(dataJson);
@@ -196,6 +549,8 @@ public class SiteAiServiceImpl implements SiteAiService {
                     doneReply.append(extractReply(data));
                     doneTodos.addAll(extractTodos(data));
                     doneMeta.set(extractRunMeta(data));
+                    doneCitations.set(readDoneCitations(data));
+                    doneMemories.set(readExtractedMemories(data));
                 }
                 String clientData = toClientEventData(event, data, dataJson);
                 if (clientData == null) {
@@ -209,8 +564,17 @@ public class SiteAiServiceImpl implements SiteAiService {
                 }
             });
             if (doneReply.length() > 0) {
-                conversationService.recordExchange(
-                        preparation.conversation(), userMessage, doneReply.toString(), doneTodos, doneMeta.get());
+                persistTurn(
+                        siteId,
+                        siteUserId,
+                        preparation,
+                        userMessage,
+                        userAttachments,
+                        doneReply.toString(),
+                        doneTodos,
+                        doneMeta.get(),
+                        doneCitations.get(),
+                        doneMemories.get());
                 sendEventQuietly(
                         emitter,
                         "CONVERSATION",
@@ -221,12 +585,17 @@ public class SiteAiServiceImpl implements SiteAiService {
             // DONE 已收到但最后一帧没发出去：回复和工具副作用已经发生，必须落库，避免用户重试再写一次预约。
             if (doneReply.length() > 0) {
                 try {
-                    conversationService.recordExchange(
-                            preparation.conversation(),
+                    persistTurn(
+                            siteId,
+                            siteUserId,
+                            preparation,
                             userMessage,
+                            userAttachments,
                             doneReply.toString(),
                             doneTodos,
-                            doneMeta.get());
+                            doneMeta.get(),
+                            doneCitations.get(),
+                            doneMemories.get());
                 } catch (RuntimeException recordEx) {
                     log.warn("site ai stream reply was not stored after client disconnect", recordEx);
                 }
@@ -294,6 +663,10 @@ public class SiteAiServiceImpl implements SiteAiService {
     }
 
     private List<SiteAiChatResponseDto.Citation> extractCitations(JsonNode done) {
+        return toCitations(readDoneCitations(done));
+    }
+
+    private List<AgentCitation> readDoneCitations(JsonNode done) {
         JsonNode citations = done.get("citations");
         if (citations == null || !citations.isArray()) {
             return List.of();
@@ -303,11 +676,10 @@ public class SiteAiServiceImpl implements SiteAiService {
             if (parsed == null) {
                 return List.of();
             }
-            List<SiteAiChatResponseDto.Citation> mapped = new ArrayList<>();
+            List<AgentCitation> mapped = new ArrayList<>();
             for (AgentCitation citation : parsed) {
                 if (citation != null) {
-                    mapped.add(new SiteAiChatResponseDto.Citation(
-                            citation.sourceId(), citation.chunkIndex(), citation.score()));
+                    mapped.add(citation);
                 }
             }
             return List.copyOf(mapped);
@@ -315,6 +687,20 @@ public class SiteAiServiceImpl implements SiteAiService {
             log.warn("site ai stream DONE carried malformed citations, ignored", ex);
             return List.of();
         }
+    }
+
+    private List<String> readExtractedMemories(JsonNode done) {
+        JsonNode memories = done.get("extractedMemories");
+        if (memories == null || memories.isNull() || !memories.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : memories) {
+            if (item != null && item.isTextual()) {
+                values.add(item.asText());
+            }
+        }
+        return List.copyOf(values);
     }
 
     private List<AgentTodoItem> extractTodos(JsonNode done) {
@@ -352,6 +738,8 @@ public class SiteAiServiceImpl implements SiteAiService {
             // 客户端已断开
         }
     }
+
+    private record ValidatedChat(AuthenticatedUser user, String message, List<SiteAiAttachmentDto> attachments) {}
 
     private static final class ClientDisconnectedException extends RuntimeException {
         private ClientDisconnectedException(Throwable cause) {
