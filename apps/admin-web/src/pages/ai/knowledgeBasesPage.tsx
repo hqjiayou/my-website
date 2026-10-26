@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { siteApi } from '@/api'
 import { aiApi } from '@/api/apps/aiApi'
 import { PageHeader } from '@/components/page'
 import { SiteAiKnowledgePanel } from '@/pages/apps/sites/siteAiKnowledgePanel'
@@ -101,10 +102,143 @@ export function AiKnowledgeBasesPage() {
         </div>
       ) : null}
       <KnowledgeOverviewSection />
+      <KnowledgeBasesAdminSection />
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <AiSiteScope>{(siteId) => <SiteAiKnowledgePanel siteId={siteId} />}</AiSiteScope>
       </article>
     </section>
+  )
+}
+
+function KnowledgeBasesAdminSection() {
+  const { t } = useTranslation('aiAdmin')
+  const queryClient = useQueryClient()
+  const [linkTargets, setLinkTargets] = useState<Record<number, string>>({})
+  const basesQuery = useQuery({
+    queryKey: ['ai-knowledge-bases-all'],
+    queryFn: () => aiApi.listAllKnowledgeBases(),
+  })
+  const sitesQuery = useQuery({
+    queryKey: ['sites', { pageNum: 1, pageSize: 100 }],
+    queryFn: () => siteApi.listSites({ pageNum: 1, pageSize: 100 }),
+  })
+  const sites = sitesQuery.data?.records ?? []
+  const siteName = (siteId: number) =>
+    sites.find((site) => site.id === siteId)?.siteName ?? `#${siteId}`
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['ai-knowledge-bases-all'] })
+    void queryClient.invalidateQueries({ queryKey: ['ai-knowledge-overview'] })
+  }
+  const linkMutation = useMutation({
+    mutationFn: (input: { baseId: number; targetSiteId: number }) =>
+      aiApi.linkKnowledgeBase(input.baseId, input.targetSiteId),
+    onSuccess: () => {
+      toast.success(t('knowledgeBases.bases.linked'))
+      invalidate()
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+  const unlinkMutation = useMutation({
+    mutationFn: (input: { baseId: number; targetSiteId: number }) =>
+      aiApi.unlinkKnowledgeBase(input.baseId, input.targetSiteId),
+    onSuccess: () => {
+      toast.success(t('knowledgeBases.bases.unlinked'))
+      invalidate()
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+
+  const bases = basesQuery.data ?? []
+  if (bases.length === 0) {
+    return null
+  }
+  return (
+    <article className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">{t('knowledgeBases.bases.title')}</h2>
+      <p className="mt-1 text-xs text-slate-500">{t('knowledgeBases.bases.hint')}</p>
+      <div className="mt-3 space-y-3">
+        {bases.map((base) => {
+          const candidates = sites.filter(
+            (site) => site.id !== base.siteId && !base.linkedSiteIds.includes(site.id),
+          )
+          const chosen = linkTargets[base.id] ?? (candidates[0] ? String(candidates[0].id) : '')
+          return (
+            <div key={base.id} className="rounded-lg border border-slate-100 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium text-slate-900">{base.name}</span>
+                {base.isDefault ? (
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                    {t('knowledgeBases.bases.defaultBadge')}
+                  </span>
+                ) : null}
+                <span className="text-xs text-slate-500">
+                  {t('knowledgeBases.bases.owner')} {base.ownerSiteName ?? `#${base.siteId}`}
+                  {' · '}
+                  {t('knowledgeBases.bases.documents')} {base.documentCount}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-500">{t('knowledgeBases.bases.sharedWith')}</span>
+                {base.linkedSiteIds.length === 0 ? (
+                  <span className="text-xs text-slate-400">{t('knowledgeBases.bases.none')}</span>
+                ) : (
+                  base.linkedSiteIds.map((linkedSiteId) => (
+                    <span
+                      key={linkedSiteId}
+                      className="flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-800"
+                    >
+                      {siteName(linkedSiteId)}
+                      <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
+                        <button
+                          type="button"
+                          className="text-blue-600"
+                          title={t('knowledgeBases.bases.unlink')}
+                          onClick={() =>
+                            unlinkMutation.mutate({ baseId: base.id, targetSiteId: linkedSiteId })
+                          }
+                        >
+                          ×
+                        </button>
+                      </PermissionGate>
+                    </span>
+                  ))
+                )}
+                {candidates.length > 0 ? (
+                  <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
+                    <span className="flex items-center gap-1">
+                      <select
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                        value={chosen}
+                        onChange={(event) =>
+                          setLinkTargets((prev) => ({ ...prev, [base.id]: event.target.value }))
+                        }
+                      >
+                        {candidates.map((site) => (
+                          <option key={site.id} value={site.id}>
+                            {site.siteName}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs disabled:opacity-50"
+                        disabled={linkMutation.isPending || !chosen}
+                        onClick={() =>
+                          linkMutation.mutate({ baseId: base.id, targetSiteId: Number(chosen) })
+                        }
+                      >
+                        {t('knowledgeBases.bases.link')}
+                      </button>
+                    </span>
+                  </PermissionGate>
+                ) : null}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </article>
   )
 }
 

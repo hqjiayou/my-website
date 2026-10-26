@@ -55,6 +55,8 @@ export const AI_KB_STATUS_VALUES = Object.values(AI_KB_STATUS)
 export interface AiKnowledgeListItem {
   id: number
   siteId: number
+  baseId: number | null
+  owned: boolean
   title: string
   status: AiKnowledgeStatus
   indexStatus: string
@@ -105,11 +107,26 @@ export interface AiKnowledgeListQuery {
   pageNum?: number
   pageSize?: number
   status?: AiKnowledgeStatus | ''
+  baseId?: number
 }
 
 export interface CreateAiKnowledgeInput {
   title: string
   content: string
+  baseId?: number | null
+}
+
+export interface AiKnowledgeBase {
+  id: number
+  siteId: number
+  ownerSiteName: string | null
+  name: string
+  isDefault: boolean
+  owned: boolean
+  documentCount: number
+  linkedSiteIds: number[]
+  createdAt: string | null
+  updatedAt: string | null
 }
 
 export interface UpdateAiKnowledgeInput {
