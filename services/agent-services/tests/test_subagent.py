@@ -18,7 +18,12 @@ from pydantic_ai.usage import UsageLimits
 from agent_services.agent.harness import assemble_harness
 from agent_services.agent.runtime import ChatReply, RunBudget, run_chat
 from agent_services.agent.stream_runtime import stream_chat_events
-from agent_services.agent.subagent import build_delegate_tool, build_research_agent
+from agent_services.agent.subagent import (
+    DELEGATE_RESULT_MAX_CHARS,
+    _limit_result,
+    build_delegate_tool,
+    build_research_agent,
+)
 from agent_services.agent.todo_tools import TodoStore, build_todo_toolset
 from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.retrieval.store import RetrievedChunk
@@ -296,3 +301,10 @@ def _tool_names_from_toolset(toolset: object) -> set[str]:
         if isinstance(raw, str):
             names.add(raw)
     return names
+
+
+def test_limit_result_never_exceeds_max_chars() -> None:
+    assert _limit_result("short") == "short"
+    limited = _limit_result("x" * (DELEGATE_RESULT_MAX_CHARS + 500))
+    assert len(limited) == DELEGATE_RESULT_MAX_CHARS
+    assert limited.endswith("[truncated]")

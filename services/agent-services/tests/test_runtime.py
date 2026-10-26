@@ -162,6 +162,54 @@ def test_build_message_history_empty() -> None:
     assert build_message_history([]) == []
 
 
+def _user_contents(messages: list[ModelMessage]) -> list[object]:
+    contents: list[object] = []
+    for message in messages:
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if isinstance(part, UserPromptPart):
+                contents.append(part.content)
+    return contents
+
+
+def test_build_message_history_caps_replayed_images_at_most_recent_four() -> None:
+    def turn(text: str, tag: bytes) -> ChatHistoryMessage:
+        return ChatHistoryMessage(
+            role="USER",
+            content=text,
+            attachments=[_image(payload=tag + b"-a"), _image(payload=tag + b"-b")],
+        )
+
+    messages = build_message_history([
+        turn("oldest", b"one"),
+        ChatHistoryMessage(role="ASSISTANT", content="a1"),
+        turn("middle", b"two"),
+        ChatHistoryMessage(role="ASSISTANT", content="a2"),
+        turn("newest", b"three"),
+    ])
+    # 6 张历史图只重播最近 4 张：最旧一轮丢图保文字。
+    binaries = _binary_parts(messages)
+    assert len(binaries) == 4
+    assert all(item.data.startswith((b"two", b"three")) for _text, item in binaries)
+    contents = _user_contents(messages)
+    assert contents[0] == "oldest"
+
+
+def test_build_message_history_placeholder_when_images_dropped_and_text_empty() -> None:
+    def turn(tag: bytes) -> ChatHistoryMessage:
+        return ChatHistoryMessage(
+            role="USER",
+            content="",
+            attachments=[_image(payload=tag + b"-a"), _image(payload=tag + b"-b")],
+        )
+
+    messages = build_message_history([turn(b"one"), turn(b"two"), turn(b"three")])
+    contents = _user_contents(messages)
+    assert contents[0] == "[图片]"
+    assert len(_binary_parts(messages)) == 4
+
+
 _PNG_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
