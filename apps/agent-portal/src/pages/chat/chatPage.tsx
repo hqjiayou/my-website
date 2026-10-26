@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
+import { MarkdownText } from '@/components/markdown'
 import { resolvePortalSiteId } from '@/config/env'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
@@ -27,6 +28,12 @@ interface PendingImage extends ChatImage {
 }
 
 const SUGGESTIONS = ['這個站點提供哪些服務？', '幫我整理預約需要的資訊', '知識庫裡有什麼相關內容？']
+
+/** provider 狀態的人話文案：原始枚舉只作未知值兜底，不直接糊給用戶。 */
+const PROVIDER_STATUS_TEXT: Record<string, string> = {
+  EXTERNAL_DEPENDENCY_BLOCKED: 'AI 服務暫時不可用（外部服務受阻，請稍後再試）',
+  BLOCKED: 'AI 服務尚未就緒，請稍後再試',
+}
 
 interface ChatTurn {
   id: string
@@ -661,21 +668,28 @@ export function ChatPage() {
                         </div>
                       ) : null}
                       {message.content || message.pending ? (
-                        <p className="whitespace-pre-wrap break-words text-[15px] leading-7">
-                          {message.content}
-                          {message.pending ? (
-                            <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-gpt-ink align-middle" />
-                          ) : null}
-                        </p>
+                        isUser ? (
+                          <p className="whitespace-pre-wrap break-words text-[15px] leading-7">
+                            {message.content}
+                          </p>
+                        ) : (
+                          <div>
+                            <MarkdownText>{message.content}</MarkdownText>
+                            {message.pending ? (
+                              <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-gpt-ink align-middle" />
+                            ) : null}
+                          </div>
+                        )
                       ) : null}
                       {hasCitations ? (
                         <ul className="mt-3 flex flex-wrap gap-1.5">
                           {message.citations?.map((citation, index) => (
                             <li
                               key={`${citation.sourceId}-${citation.chunkIndex}-${index}`}
-                              className="max-w-full break-all rounded-full bg-gpt-sidebar px-2.5 py-1 text-xs text-gpt-muted"
+                              title={citation.sourceId}
+                              className="max-w-full rounded-full bg-gpt-sidebar px-2.5 py-1 text-xs text-gpt-muted"
                             >
-                              {citation.sourceId} {formatSimilarityPercent(citation.score)}
+                              來源 {index + 1} · {formatSimilarityPercent(citation.score)}
                             </li>
                           ))}
                         </ul>
@@ -691,7 +705,10 @@ export function ChatPage() {
                       ) : null}
                       {message.providerStatus !== undefined && message.providerStatus !== 'LIVE' ? (
                         <p className="mt-2 text-xs text-danger">
-                          {message.providerStatus ? `AI 服務狀態：${message.providerStatus}` : '尚未回傳 AI 服務狀態'}
+                          {message.providerStatus
+                            ? (PROVIDER_STATUS_TEXT[message.providerStatus] ??
+                              `AI 服務狀態：${message.providerStatus}`)
+                            : '尚未回傳 AI 服務狀態'}
                         </p>
                       ) : null}
                     </div>
