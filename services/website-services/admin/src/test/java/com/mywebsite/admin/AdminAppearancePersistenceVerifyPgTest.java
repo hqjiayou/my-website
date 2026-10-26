@@ -19,7 +19,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * Appearance 持久层真实 PostgreSQL 回归：template_id FK、site_appearance JSONB、软删同步。
+ * Appearance 持久层真实 PostgreSQL 回归：site_appearance JSONB、软删同步。
+ * （原 template_id FK 用例随行业模板下架移除，V30 已软删种子模板。）
  *
  * <p>{@code mvn test -Ppersistence-verify-pg -pl admin -am}
  */
@@ -43,22 +44,13 @@ class AdminAppearancePersistenceVerifyPgTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void siteTemplateFkAndAppearanceJsonb_roundTrip_andSoftDelete() {
-        Long templateId = jdbcTemplate.queryForObject(
-                """
-                SELECT id FROM site_template
-                WHERE code = 'japanese-car-repair-v1' AND deleted = FALSE
-                """,
-                Long.class);
-        assertThat(templateId).isNotNull();
-
+    void appearanceJsonb_roundTrip_andSoftDelete() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         AdminSiteEntity site = new AdminSiteEntity();
         site.setSiteCode("pg_ap_" + suffix);
         site.setSiteName("PG Appearance");
-        site.setSiteType("CAR_REPAIR");
+        site.setSiteType("PERSONAL");
         site.setStatus("ACTIVE");
-        site.setTemplateId(templateId);
         adminSiteMapper.insert(site);
         assertThat(site.getId()).isNotNull();
 
@@ -81,9 +73,6 @@ class AdminAppearancePersistenceVerifyPgTest {
         assertThat((String) row.get("config_text")).contains("#B91C1C");
         assertThat(row.get("deleted")).isEqualTo(false);
 
-        AdminSiteEntity loaded = adminSiteMapper.selectById(site.getId());
-        assertThat(loaded.getTemplateId()).isEqualTo(templateId);
-
         adminAppearanceMapper.deleteById(appearance.getId());
         adminSiteMapper.deleteById(site.getId());
 
@@ -98,27 +87,4 @@ class AdminAppearancePersistenceVerifyPgTest {
         assertThat(deletedSite).isEqualTo(1);
     }
 
-    @Test
-    void templateFkRestrictsHardDeleteOfReferencedTemplate() {
-        Long templateId = jdbcTemplate.queryForObject(
-                """
-                SELECT id FROM site_template
-                WHERE code = 'cake-shop-v1' AND deleted = FALSE
-                """,
-                Long.class);
-
-        String suffix = UUID.randomUUID().toString().substring(0, 8);
-        AdminSiteEntity site = new AdminSiteEntity();
-        site.setSiteCode("pg_fk_" + suffix);
-        site.setSiteName("FK Site");
-        site.setSiteType("CAKE");
-        site.setStatus("ACTIVE");
-        site.setTemplateId(templateId);
-        adminSiteMapper.insert(site);
-
-        // ON DELETE RESTRICT：物理删除被引用模板应失败
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbcTemplate.update(
-                        "DELETE FROM site_template WHERE id = ?", templateId))
-                .hasMessageContaining("violates foreign key constraint");
-    }
 }

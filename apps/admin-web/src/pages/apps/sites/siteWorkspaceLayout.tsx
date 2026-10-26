@@ -25,7 +25,6 @@ export function SiteWorkspaceLayout() {
   const { siteId } = useParams()
   const parsedId = Number(siteId)
   const canListContent = useHasPermission(PERMISSION_CODES.contentList)
-  const canListReservation = useHasPermission(PERMISSION_CODES.reservationList)
   const canListMedia = useHasPermission(PERMISSION_CODES.mediaList)
   const canReadPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
   const canListKb = useHasPermission(PERMISSION_CODES.aiKbList)
@@ -47,11 +46,10 @@ export function SiteWorkspaceLayout() {
       { key: 'domain', path: ROUTES.apps.siteDomain(site.id) },
     ]
     if (canListContent) items.push({ key: 'contents', path: ROUTES.apps.siteContents(site.id) })
-    if (canListReservation) items.push({ key: 'reservations', path: ROUTES.apps.siteReservations(site.id) })
     if (canAi) items.push({ key: 'ai', path: ROUTES.apps.siteAi(site.id) })
     if (canListMedia) items.push({ key: 'files', path: ROUTES.apps.siteFiles(site.id) })
     return items
-  }, [canAi, canListContent, canListMedia, canListReservation, site])
+  }, [canAi, canListContent, canListMedia, site])
 
   if (!Number.isFinite(parsedId)) {
     return (

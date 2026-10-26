@@ -33,15 +33,6 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** H2 seed：japanese-car-repair-v1 / CAR_REPAIR / ENABLED */
-    private static final long ENABLED_CAR_TEMPLATE_ID = 1L;
-
-    /** H2 seed：used-car-shop-v1 / USED_CAR / DRAFT */
-    private static final long DRAFT_USED_CAR_TEMPLATE_ID = 2L;
-
-    /** H2 seed：cake-shop-v1 / CAKE / ENABLED */
-    private static final long ENABLED_CAKE_TEMPLATE_ID = 3L;
-
     @Autowired
     private MockMvc mockMvc;
 
@@ -51,14 +42,13 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
     }
 
     @Test
-    void createWithTemplateAndAppearance_thenGetAppearance_workflow() throws Exception {
+    void createWithAppearance_thenGetAppearance_workflow() throws Exception {
         String token = tokenFor(500L);
         String siteCode = "wf_" + Long.toHexString(System.nanoTime());
         ObjectNode body = MAPPER.createObjectNode();
         body.put("siteCode", siteCode);
         body.put("siteName", "Workflow Site");
-        body.put("siteType", "CAR_REPAIR");
-        body.put("templateId", ENABLED_CAR_TEMPLATE_ID);
+        body.put("siteType", "PERSONAL");
         body.set(
                 "appearance",
                 MAPPER.valueToTree(new AdminAppearanceConfigV1Dto(
@@ -70,7 +60,6 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
                         .content(MAPPER.writeValueAsString(body)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.siteCode").value(siteCode))
-                .andExpect(jsonPath("$.data.templateId").value((int) ENABLED_CAR_TEMPLATE_ID))
                 .andReturn();
 
         long siteId = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
@@ -109,7 +98,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
         ObjectNode body = MAPPER.createObjectNode();
         body.put("siteCode", siteCode);
         body.put("siteName", "Core Only");
-        body.put("siteType", "CAKE");
+        body.put("siteType", "PERSONAL");
 
         MvcResult created = mockMvc.perform(post("/api/admin/sites")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -120,7 +109,6 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
 
         JsonNode detail = MAPPER.readTree(created.getResponse().getContentAsString()).path("data");
         long siteId = detail.path("id").asLong();
-        org.assertj.core.api.Assertions.assertThat(detail.path("templateId").isNull()).isTrue();
 
         mockMvc.perform(get("/api/admin/sites/" + siteId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -130,7 +118,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void rejectUnknownConfigKey() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createCoreSite(token, "CAKE");
+        long siteId = createCoreSite(token, "PERSONAL");
 
         String body =
                 """
@@ -148,7 +136,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void rejectInvalidJsonBody() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createCoreSite(token, "CAKE");
+        long siteId = createCoreSite(token, "PERSONAL");
         mockMvc.perform(put("/api/admin/sites/" + siteId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
@@ -159,7 +147,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void rejectWrongSchemaVersion() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createCoreSite(token, "CAKE");
+        long siteId = createCoreSite(token, "PERSONAL");
         Map<String, Object> put = new LinkedHashMap<>();
         put.put("schemaVersion", 2);
         put.put("version", 0);
@@ -176,7 +164,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void rejectInvalidEnumAndColor() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createCoreSite(token, "CAKE");
+        long siteId = createCoreSite(token, "PERSONAL");
         Map<String, Object> put = new LinkedHashMap<>();
         put.put("schemaVersion", 1);
         put.put("version", 0);
@@ -200,65 +188,13 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
     }
 
     @Test
-    void createRejectsTemplateSiteTypeMismatchAndNonEnabled() throws Exception {
-        String token = tokenFor(500L);
-
-        // 模板与站点标签已解耦：类型不一致不再拒绝（仅未启用模板仍拒绝，见下方 draft 用例）。
-        ObjectNode mismatch = MAPPER.createObjectNode();
-        mismatch.put("siteCode", "mm_" + Long.toHexString(System.nanoTime()));
-        mismatch.put("siteName", "Mismatch");
-        mismatch.put("siteType", "CAR_REPAIR");
-        mismatch.put("templateId", ENABLED_CAKE_TEMPLATE_ID);
-        mismatch.set(
-                "appearance",
-                MAPPER.valueToTree(new AdminAppearanceConfigV1Dto(
-                        "#B91C1C", "modern", "rounded", "centered")));
-        mockMvc.perform(post("/api/admin/sites")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .contentType(APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(mismatch)))
-                .andExpect(status().isOk());
-
-        ObjectNode draft = MAPPER.createObjectNode();
-        draft.put("siteCode", "dr_" + Long.toHexString(System.nanoTime()));
-        draft.put("siteName", "DraftTpl");
-        draft.put("siteType", "USED_CAR");
-        draft.put("templateId", DRAFT_USED_CAR_TEMPLATE_ID);
-        draft.set(
-                "appearance",
-                MAPPER.valueToTree(new AdminAppearanceConfigV1Dto(
-                        "#1D4ED8", "modern", "rounded", "centered")));
-        mockMvc.perform(post("/api/admin/sites")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .contentType(APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(draft)))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void createRejectsPartialTemplateAppearancePair() throws Exception {
-        String token = tokenFor(500L);
-        ObjectNode onlyTemplate = MAPPER.createObjectNode();
-        onlyTemplate.put("siteCode", "pt_" + Long.toHexString(System.nanoTime()));
-        onlyTemplate.put("siteName", "Partial");
-        onlyTemplate.put("siteType", "CAR_REPAIR");
-        onlyTemplate.put("templateId", ENABLED_CAR_TEMPLATE_ID);
-        mockMvc.perform(post("/api/admin/sites")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .contentType(APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(onlyTemplate)))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
     void softDeleteSiteAlsoSoftDeletesAppearance() throws Exception {
         String token = tokenFor(500L);
         String siteCode = "sd_" + Long.toHexString(System.nanoTime());
         ObjectNode body = MAPPER.createObjectNode();
         body.put("siteCode", siteCode);
         body.put("siteName", "SoftDel");
-        body.put("siteType", "CAR_REPAIR");
-        body.put("templateId", ENABLED_CAR_TEMPLATE_ID);
+        body.put("siteType", "PERSONAL");
         body.set(
                 "appearance",
                 MAPPER.valueToTree(new AdminAppearanceConfigV1Dto(

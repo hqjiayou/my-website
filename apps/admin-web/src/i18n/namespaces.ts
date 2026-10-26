@@ -2,7 +2,6 @@ import { AI_ADMIN_LOCALES } from '@/pages/ai/locales'
 import { ANALYTICS_LOCALES } from '@/pages/analytics/locales'
 import { SITES_LOCALES } from '@/pages/apps/sites/locales'
 import { STYLE_SETTINGS_LOCALES } from '@/pages/apps/locales'
-import { TEMPLATES_LOCALES } from '@/pages/apps/templates/locales'
 import { PARAMS_CONFIG_LOCALES } from '@/pages/config/locales'
 import { DASHBOARD_LOCALES } from '@/pages/dashboard/locales'
 import { DEVELOPER_LOCALES } from '@/pages/developer/locales'
@@ -21,7 +20,6 @@ export const PAGE_I18N_NAMESPACES = [
   'dashboard',
   'login',
   'sites',
-  'templates',
   'operation',
   'aiAdmin',
   'styleSettings',
@@ -40,7 +38,6 @@ export function pageNamespacesFor(locale: SupportedLocale) {
     dashboard: DASHBOARD_LOCALES[locale],
     login: LOGIN_LOCALES[locale],
     sites: SITES_LOCALES[locale],
-    templates: TEMPLATES_LOCALES[locale],
     operation: OPERATION_LOCALES[locale],
     aiAdmin: AI_ADMIN_LOCALES[locale],
     styleSettings: STYLE_SETTINGS_LOCALES[locale],

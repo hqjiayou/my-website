@@ -9,7 +9,6 @@ export default {
       siteName: 'Site Name',
       siteType: 'Site Type',
       industry: 'Industry',
-      template: 'Template',
       domain: 'Default Domain',
       status: 'Status',
       updatedAt: 'Updated At',
@@ -38,10 +37,9 @@ export default {
   },
   create: {
     title: 'Create Site',
-    description: 'Pick a template, configure appearance, then create the site in one submit.',
+    description: 'Fill in the basic info, configure appearance, then create the site in one submit.',
     steps: {
       basicInfo: 'Basic Info',
-      selectTemplate: 'Select Template',
       configureAppearance: 'Configure Appearance',
       confirm: 'Confirm',
     },
@@ -51,7 +49,6 @@ export default {
       siteType: 'Site Type',
       customSiteType: 'Custom tag',
       industry: 'Industry',
-      template: 'Template',
       domain: 'Domain',
       defaultDomain: 'Default Domain',
       siteDescription: 'Description',
@@ -73,20 +70,8 @@ export default {
       address: 'Enter business address',
       businessHours: 'e.g. 09:00 - 18:00',
     },
-    templates: {
-      noTemplateOption: 'No template',
-      noTemplateHint: 'Create the site without any template or appearance preset.',
-      selectPrompt: 'Please select a template',
-      loading: 'Loading templates...',
-      empty: 'No matching templates',
-    },
-    templateCard: {
-      supportedPages: 'Supported Pages',
-      supportedBlocks: 'Supported Blocks',
-    },
     preview: {
       title: 'Preview',
-      noTemplate: 'Please select a template',
       buttonPreview: 'Preview',
       buttonLabel: 'Button Preview',
     },
@@ -124,7 +109,6 @@ export default {
       invalidSiteCode: 'Site code must match ^[a-z][a-z0-9_-]{1,63}$',
       invalidSiteType: 'Tag must be 1-32 chars, start with a letter or digit, and contain only letters, digits, underscore, hyphen or space.',
       invalidPrimaryColor: 'Primary color must be #RRGGBB',
-      selectTemplateFirst: 'Please select a template first',
       createdSuccess: 'Site created successfully',
     },
   },
@@ -151,7 +135,6 @@ export default {
       siteType: 'Site Type',
       status: 'Status',
       domain: 'Default Domain',
-      template: 'Template',
       primaryColor: 'Primary Color',
       businessHours: 'Business Hours',
       phone: 'Phone',
@@ -172,16 +155,13 @@ export default {
     theme: {
       description: 'Read-only view of the persisted site appearance (schema v1).',
       loading: 'Loading theme configuration...',
-      loadingTemplate: 'Loading template...',
       unavailable: 'Unable to load theme configuration.',
-      noTemplate: 'No template bound',
       meta: 'Version info',
     },
     placeholders: {
       pendingSave: 'This is a frontend placeholder page. site-service persistence will be connected later.',
       domainFuture:
         'This section will be used to manage custom domain, DNS records, SSL certificates, and publish state.',
-      templateHint: 'A template is the starting point. Appearance can be overridden per site.',
       dnsHint: 'DNS placeholder: A/CNAME verification and propagation checks will be added later.',
       cdnHint: 'Cloudflare / CloudFront placeholder: for edge cache and HTTPS acceleration.',
     },
@@ -196,7 +176,6 @@ export default {
       theme: 'Theme Settings',
       domain: 'Domain Settings',
       contents: 'Page Content',
-      reservations: 'Reservations & Inquiries',
       ai: 'AI Settings',
       files: 'File Resources',
     },
@@ -209,11 +188,10 @@ export default {
   overview: {
     title: 'Site Overview',
     description: 'Review the current site setup status, operations data, and publish checklist.',
-    derivedNotice: 'Publish checklist and today reservations are derived from REAL APIs. Visits / AI stats have no backend yet and show as unavailable.',
+    derivedNotice: 'The publish checklist is derived from REAL APIs. Visits / AI stats have no backend yet and show as unavailable.',
     loadingRuntime: 'Loading site runtime status...',
     stats: {
       todayVisits: 'Today Visits',
-      todayReservations: 'Today Reservations',
       aiConsultations: 'AI Consultations',
       publishCompletion: 'Publish Completion',
       unavailable: 'N/A',
@@ -224,7 +202,6 @@ export default {
       theme: 'Configure Theme',
       domain: 'Configure Domain',
       contents: 'Manage Content',
-      reservations: 'View Reservations',
       ai: 'AI Settings',
     },
     publishChecklist: {
@@ -244,10 +221,6 @@ export default {
     currentSiteLabel: 'Current Site',
     contents: {
       description: 'Used to maintain homepage, service items, case studies, FAQs, banners, and announcements for this site.',
-    },
-    reservations: {
-      description:
-        'Used to view reservations, inquiries, customer contact details, and processing status received by this site.',
     },
     ai: {
       description:
@@ -356,57 +329,6 @@ export default {
       titleRequired: 'Title is required',
     },
   },
-  reservationManagement: {
-    description: 'Review and follow up reservations, contact details, and handling status for this site.',
-    empty: 'No reservations match the current filters.',
-    columns: {
-      customer: 'Customer',
-      serviceType: 'Service Type',
-      reservedAt: 'Reserved At',
-      status: 'Status',
-      createdAt: 'Created At',
-      actions: 'Actions',
-    },
-    filters: {
-      status: 'Status',
-      allStatuses: 'All statuses',
-      search: 'Search',
-      reset: 'Reset',
-    },
-    fields: {
-      customerName: 'Customer Name',
-      phone: 'Phone',
-      serviceType: 'Service Type',
-      reservedAt: 'Reserved At',
-      note: 'Note',
-    },
-    actions: {
-      create: 'Create Reservation',
-      delete: 'Delete',
-      save: 'Save',
-      saving: 'Saving...',
-      cancel: 'Cancel',
-    },
-    editor: {
-      createTitle: 'Create Reservation',
-    },
-    statusLabels: {
-      NEW: 'New',
-      CONFIRMED: 'Confirmed',
-      DONE: 'Done',
-      CANCELLED: 'Cancelled',
-    },
-    messages: {
-      created: 'Reservation created',
-      statusUpdated: 'Reservation status updated',
-      deleted: 'Reservation deleted',
-      confirmDelete: 'Delete reservation for “{{name}}”?',
-      customerNameRequired: 'Customer name is required',
-      phoneRequired: 'Phone is required',
-      serviceTypeRequired: 'Service type is required',
-      reservedAtRequired: 'Reserved time is required',
-    },
-  },
   status: {
     ACTIVE: 'Active',
     DISABLED: 'Disabled',
@@ -421,26 +343,6 @@ export default {
     KNOWLEDGE: 'Knowledge base',
     TOOL: 'Tool',
     OTHER: 'Other',
-    CAR_REPAIR: 'Car Repair',
-    USED_CAR: 'Used Car',
-    CAKE: 'Cake Shop',
-    SALON: 'Salon',
-    CLINIC: 'Clinic',
-    GYOSEISHOSHI: 'Gyoseishoshi Office',
-  },
-  industry: {
-    'car-repair': 'Car Repair',
-    'used-car': 'Used Car',
-    cake: 'Cake Shop',
-    salon: 'Salon',
-    clinic: 'Clinic',
-    gyoseishoshi: 'Gyoseishoshi Office',
-    CAR_REPAIR: 'Car Repair',
-    USED_CAR: 'Used Car',
-    CAKE: 'Cake Shop',
-    SALON: 'Salon',
-    CLINIC: 'Clinic',
-    GYOSEISHOSHI: 'Gyoseishoshi Office',
   },
   aiWorkspace: {
     description:

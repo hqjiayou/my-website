@@ -114,7 +114,7 @@ def test_research_agent_exposes_only_knowledge_search() -> None:
     assert _tool_names(agent) == {"search_site_knowledge"}
     assert "delegate_task" not in _tool_names(agent)
     joined = " ".join(_tool_names(agent))
-    for business in ("get_site_info", "list_site_contents", "create_reservation", "list_todos"):
+    for business in ("get_site_info", "list_site_contents", "list_todos"):
         assert business not in joined
 
 

@@ -21,10 +21,8 @@ export {
   SITE_STATUS_VALUES,
   SITE_TYPE_VALUES,
   SITE_TYPE_PRESETS,
-  SITE_TYPE_LEGACY,
   SITE_TAG_PATTERN,
 } from './apps/siteApi'
-export { templateApi, TEMPLATE_STATUS, TEMPLATE_STATUS_VALUES } from './apps/templateApi'
 export {
   mediaApi,
   MEDIA_ACCEPT,
@@ -38,16 +36,8 @@ export {
   CONTENT_STATUS_VALUES,
   CONTENT_TYPE_VALUES,
 } from './apps/contentApi'
-export {
-  reservationApi,
-  RESERVATION_ALLOWED_TRANSITIONS,
-  RESERVATION_STATUS,
-  RESERVATION_STATUS_VALUES,
-  getReservationStatusOptions,
-} from './apps/reservationApi'
 export { OPERATION_CONTENTS_CONNECTED } from './operation/contentApi'
 export { fileApi, OPERATION_FILES_CONNECTED } from './operation/fileApi'
-export { OPERATION_RESERVATIONS_CONNECTED } from './operation/reservationApi'
 
 export type {
   AppearanceConfigV1,
@@ -57,13 +47,6 @@ export type {
   HeroLayout,
   SiteFontStyle,
 } from './appearanceApi'
-export type {
-  TemplateDetail,
-  TemplateListItem,
-  TemplateListQuery,
-  TemplateStatus,
-  UpdateTemplateStatusInput,
-} from './apps/templateApi'
 export type {
   MediaDetail,
   MediaListItem,
@@ -81,14 +64,6 @@ export type {
   UpdateContentInput,
   UpdateContentStatusInput,
 } from './apps/contentApi'
-export type {
-  CreateReservationInput,
-  ReservationDetail,
-  ReservationListItem,
-  ReservationListQuery,
-  ReservationStatus,
-  UpdateReservationStatusInput,
-} from './apps/reservationApi'
 export type {
   CreateSiteInput,
   PageResult,

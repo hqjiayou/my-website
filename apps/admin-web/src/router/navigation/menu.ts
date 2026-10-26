@@ -4,11 +4,9 @@ import {
   BookOpen,
   Bot,
   Braces,
-  CalendarClock,
   FileText,
   FolderKanban,
   LayoutDashboard,
-  LayoutTemplate,
   Layers3,
   MessageSquare,
   Palette,
@@ -57,7 +55,6 @@ export const NAV_SECTIONS: NavSection[] = [
         labelKey: 'groups.myApp',
         children: [
           { labelKey: 'items.sites', path: ROUTES.apps.sites, icon: Layers3 },
-          { labelKey: 'items.templates', path: ROUTES.apps.templates, icon: LayoutTemplate },
           { labelKey: 'items.styleSettings', path: ROUTES.apps.style, icon: Palette },
         ],
       },
@@ -68,7 +65,6 @@ export const NAV_SECTIONS: NavSection[] = [
     titleKey: 'sections.operation',
     entries: [
       { labelKey: 'items.contents', path: ROUTES.operation.contents, icon: FileText },
-      { labelKey: 'items.reservations', path: ROUTES.operation.reservations, icon: CalendarClock },
       { labelKey: 'items.files', path: ROUTES.operation.files, icon: FolderKanban },
     ],
   },
@@ -118,17 +114,11 @@ export function resolveNavTitleKey(pathname: string): string | undefined {
   if (/^\/apps\/sites\/[^/]+\/contents(?:\/|$)/.test(pathname)) {
     return 'items.siteContents'
   }
-  if (/^\/apps\/sites\/[^/]+\/reservations(?:\/|$)/.test(pathname)) {
-    return 'items.siteReservations'
-  }
   if (/^\/apps\/sites\/[^/]+\/ai(?:\/|$)/.test(pathname)) {
     return 'items.siteAi'
   }
   if (/^\/apps\/sites\/[^/]+\/files(?:\/|$)/.test(pathname)) {
     return 'items.siteFiles'
-  }
-  if (/^\/apps\/templates\/[^/]+(?:\/|$)/.test(pathname)) {
-    return 'items.templateDetail'
   }
 
   for (const section of NAV_SECTIONS) {

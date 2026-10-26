@@ -18,7 +18,7 @@
 - `DELETE /internal/v1/retrieval/documents` — 删除派生索引文档（query `siteId`、`sourceId`）；成功 `{"ok":true,"data":null}`
 - `POST /internal/v1/retrieval/search` — `{siteId, query, topK?}` → `{hits:[{sourceId,chunkIndex,score,content}], degraded}`；嵌入或向量库失败时 **200**、`hits=[]`、`degraded=true`（不回 500）。`query` 上限与文档 `content` 相同；`topK` 缺省 4，大于 20 夹制到 20
 
-预约写入（工具 `create_reservation` → Java `POST /internal/site/v1/sites/{siteId}/reservations`）带 `Idempotency-Key`：`rsv-` + sha256(siteId 与排序键 JSON 拼接)。同一参数重试得到同一 key。Java 业务 API 需 honor 此 header 后才不会重复建单；Java 侧为后续工作包，本服务只负责发送。
+业务工具（`BUSINESS_API_BASE_URL` 配置时）：`get_site_info` / `list_site_contents` 只读回调 Java internal API。预约工具与 `reservation-assistant` 技能已于 2026-10-27 随预约功能下架移除。
 
 - 请求上限（纵深防御，§21.4）：`message`/history 单条 ≤16000 字符、history ≤50、skills ≤16、todos ≤20；超限或字段非法 → **400** `BAD_REQUEST`（扁平体，非 FastAPI 422）
 

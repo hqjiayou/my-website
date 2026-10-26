@@ -26,16 +26,12 @@ export const ROUTES = {
     siteTheme: (siteId: number | string) => `/apps/sites/${siteId}/theme`,
     siteDomain: (siteId: number | string) => `/apps/sites/${siteId}/domain`,
     siteContents: (siteId: number | string) => `/apps/sites/${siteId}/contents`,
-    siteReservations: (siteId: number | string) => `/apps/sites/${siteId}/reservations`,
     siteAi: (siteId: number | string) => `/apps/sites/${siteId}/ai`,
     siteFiles: (siteId: number | string) => `/apps/sites/${siteId}/files`,
-    templates: '/apps/templates',
-    templateDetail: (templateId: number | string) => `/apps/templates/${templateId}`,
     style: '/apps/style',
   },
   operation: {
     contents: '/operation/contents',
-    reservations: '/operation/reservations',
     files: '/operation/files',
   },
   ai: {
@@ -56,8 +52,6 @@ export const ROUTES = {
   },
   legacy: {
     sites: '/sites',
-    templates: '/templates',
-    reservations: '/reservations',
     ai: '/ai',
     settings: '/settings',
   },

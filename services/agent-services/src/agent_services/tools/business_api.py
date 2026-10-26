@@ -4,8 +4,6 @@
 禁止直连 Java 业务数据库。
 """
 
-import hashlib
-import json
 import logging
 from typing import Any
 from urllib.parse import quote
@@ -19,17 +17,6 @@ logger = logging.getLogger(__name__)
 
 class BusinessApiError(RuntimeError):
     """Java internal API 调用失败；工具层向模型返回可读错误，不伪造成功。"""
-
-
-def reservation_idempotency_key(site_id: str, payload: dict[str, Any]) -> str:
-    """rsv- + sha256(site_id 与排序键 JSON 拼接)。同一参数得到同一 key。
-
-    Java 业务 API 需 honor Idempotency-Key 后，重试才不会重复建单。
-    Java 侧为后续工作包；这里只负责算出 key 并放进请求头。
-    """
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    digest = hashlib.sha256(f"{site_id}{canonical}".encode()).hexdigest()
-    return f"rsv-{digest}"
 
 
 def _http_error_message(response: httpx.Response) -> str:
@@ -114,29 +101,3 @@ class BusinessApiClient:
         if content_type:
             params["type"] = content_type
         return await self._request("GET", self._site_path(site_id, "/contents"), params=params)
-
-    async def create_reservation(
-        self,
-        site_id: str,
-        *,
-        customer_name: str,
-        phone: str,
-        service_type: str,
-        reserved_at: str,
-        note: str | None = None,
-    ) -> Any:
-        payload: dict[str, Any] = {
-            "customerName": customer_name,
-            "phone": phone,
-            "serviceType": service_type,
-            "reservedAt": reserved_at,
-        }
-        if note:
-            payload["note"] = note
-        # 见 reservation_idempotency_key：Java 需 honor Idempotency-Key 才完整幂等。
-        return await self._request(
-            "POST",
-            self._site_path(site_id, "/reservations"),
-            json=payload,
-            headers={"Idempotency-Key": reservation_idempotency_key(site_id, payload)},
-        )

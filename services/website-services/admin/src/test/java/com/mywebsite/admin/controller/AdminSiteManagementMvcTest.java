@@ -65,7 +65,7 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
         String token = tokenFor(500L);
         String siteCode = "s" + Long.toHexString(System.nanoTime());
         String createBody = MAPPER.writeValueAsString(new AdminSiteCreateRequest(
-                siteCode, "Demo Site", "CAR_REPAIR", "demo.example.com", "desc", null, null));
+                siteCode, "Demo Site", "CAR_REPAIR", "demo.example.com", "desc", null));
 
         MvcResult createResult = mockMvc.perform(post("/api/admin/sites")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -129,7 +129,7 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
         String token = tokenFor(500L);
         String siteCode = "dup_site_" + Long.toHexString(System.nanoTime());
         String body = MAPPER.writeValueAsString(
-                new AdminSiteCreateRequest(siteCode, "One", "CAKE", null, null, null, null));
+                new AdminSiteCreateRequest(siteCode, "One", "CAKE", null, null, null));
 
         mockMvc.perform(post("/api/admin/sites")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -152,7 +152,7 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminSiteCreateRequest(siteCode, "OLV", "CLINIC", null, null, null, null))))
+                                new AdminSiteCreateRequest(siteCode, "OLV", "CLINIC", null, null, null))))
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode data = MAPPER.readTree(createResult.getResponse().getContentAsString()).path("data");
@@ -182,14 +182,14 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminSiteCreateRequest("BadCode", "n", "CAR_REPAIR", null, null, null, null))))
+                                new AdminSiteCreateRequest("BadCode", "n", "CAR_REPAIR", null, null, null))))
                 .andExpect(status().isBadRequest());
 
         mockMvc.perform(post("/api/admin/sites")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminSiteCreateRequest("ok_code", "n", "bad type!", null, null, null, null))))
+                                new AdminSiteCreateRequest("ok_code", "n", "bad type!", null, null, null))))
                 .andExpect(status().isBadRequest());
     }
 
@@ -203,7 +203,7 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminSiteCreateRequest(presetCode, "Preset", "PERSONAL", null, null, null, null))))
+                                new AdminSiteCreateRequest(presetCode, "Preset", "PERSONAL", null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.siteType").value("PERSONAL"));
 
@@ -211,17 +211,17 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminSiteCreateRequest(customCode, "Custom", "My-Docs_2", null, null, null, null))))
+                                new AdminSiteCreateRequest(customCode, "Custom", "My-Docs_2", null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.siteType").value("My-Docs_2"));
     }
 
     @Test
-    void createAllowsTemplateWhoseTypeDiffersFromSiteTag() throws Exception {
+    void createWithAppearanceAndCustomTag() throws Exception {
         String token = tokenFor(500L);
-        String siteCode = "tmpl_" + Long.toHexString(System.nanoTime());
+        String siteCode = "app_" + Long.toHexString(System.nanoTime());
 
-        // 模板 id=1 为旧 CAR_REPAIR 模板；站点标签 PERSONAL 与之不同——解耦后应可创建。
+        // 模板下架后 appearance 独立给出即可创建，与站点标签无关。
         mockMvc.perform(post("/api/admin/sites")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
@@ -231,7 +231,6 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                                 "PERSONAL",
                                 null,
                                 null,
-                                1L,
                                 new AdminAppearanceConfigV1Dto(
                                         "#B91C1C", "modern", "rounded", "left-text-right-visual")))))
                 .andExpect(status().isOk())
@@ -245,7 +244,7 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(100L))
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminSiteCreateRequest("no_perm_site", "n", "CAKE", null, null, null, null))))
+                                new AdminSiteCreateRequest("no_perm_site", "n", "CAKE", null, null, null))))
                 .andExpect(status().isForbidden());
     }
 
@@ -265,7 +264,7 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminSiteCreateRequest(disabledCode, "Dis", "USED_CAR", null, null, null, null))))
+                                new AdminSiteCreateRequest(disabledCode, "Dis", "USED_CAR", null, null, null))))
                 .andExpect(status().isOk())
                 .andReturn();
         long disabledId =
@@ -275,7 +274,7 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminSiteCreateRequest(activeCode, "Act", "USED_CAR", null, null, null, null))))
+                                new AdminSiteCreateRequest(activeCode, "Act", "USED_CAR", null, null, null))))
                 .andExpect(status().isOk());
 
         mockMvc.perform(patch("/api/admin/sites/" + disabledId + "/status")
@@ -301,7 +300,7 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(new AdminSiteCreateRequest(
-                                siteCode, "First", "GYOSEISHOSHI", null, null, null, null))))
+                                siteCode, "First", "GYOSEISHOSHI", null, null, null))))
                 .andExpect(status().isOk())
                 .andReturn();
         long id = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
@@ -313,7 +312,7 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(new AdminSiteCreateRequest(
-                                siteCode, "Second", "GYOSEISHOSHI", null, null, null, null))))
+                                siteCode, "Second", "GYOSEISHOSHI", null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.siteCode").value(siteCode));
     }
@@ -331,7 +330,6 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                                 "CAR_REPAIR",
                                 null,
                                 null,
-                                1L,
                                 new AdminAppearanceConfigV1Dto(
                                         "#B91C1C", "modern", "rounded", "left-text-right-visual")))))
                 .andExpect(status().isOk())

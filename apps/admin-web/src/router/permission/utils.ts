@@ -75,18 +75,9 @@ export function resolveRoutePermission(pathname: string): string | undefined {
     return PERMISSION_CODES.contentList
   }
 
-  // 站点预约：list；须先于通用 workspace detail 匹配
-  if (/^\/apps\/sites\/\d+\/reservations(?:\/|$)/.test(pathname)) {
-    return PERMISSION_CODES.reservationList
-  }
-
   // 站点 Workspace（含子页）需 detail；create 已在 ROUTE_PERMISSIONS 精确登记
   if (/^\/apps\/sites\/\d+(\/.*)?$/.test(pathname)) {
     return PERMISSION_CODES.siteDetail
-  }
-
-  if (/^\/apps\/templates\/\d+$/.test(pathname)) {
-    return PERMISSION_CODES.templateDetail
   }
 
   return undefined

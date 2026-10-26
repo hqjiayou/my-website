@@ -1,24 +1,13 @@
 """Phase 4 业务工具：Function Tools → Java internal API（httpx MockTransport，不出网）。"""
 
-import json
 
 import httpx
 from conftest import make_settings
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelResponse,
-    TextPart,
-    ToolCallPart,
-    ToolReturnPart,
-)
-from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from agent_services.agent.business_tools import build_business_toolset
-from agent_services.agent.runtime import ChatReply, run_chat
 from agent_services.tools.business_api import (
     BusinessApiClient,
     BusinessApiError,
-    reservation_idempotency_key,
 )
 
 
@@ -92,13 +81,7 @@ async def test_client_forwards_short_message_on_http_error() -> None:
         return httpx.Response(400, json={"code": 1001, "message": "phone: must not be blank", "data": None})
 
     try:
-        await _client_with(handler).create_reservation(
-            "7",
-            customer_name="Tanaka",
-            phone="",
-            service_type="cut",
-            reserved_at="2026-09-02T10:00:00+09:00",
-        )
+        await _client_with(handler).get_site_summary("7")
         raise AssertionError("expected BusinessApiError")
     except BusinessApiError as exc:
         assert str(exc) == "Business API error: phone: must not be blank"
@@ -138,109 +121,6 @@ async def test_client_hides_url_and_non_text_business_message() -> None:
     except BusinessApiError as exc:
         assert str(exc) == "Business API error: request failed"
         assert "db.internal" not in str(exc)
-
-
-async def test_create_reservation_tool_calls_java_internal_api() -> None:
-    """FunctionModel 先发 tool call，再产出最终回复；断言 Java internal API 真实被调、site_id 由闭包注入。"""
-    captured: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        return _api_response(
-            {"id": 55, "customerName": "Tanaka", "serviceType": "cut", "status": "NEW"}
-        )
-
-    client = _client_with(handler)
-    toolset = build_business_toolset(make_settings(), "42", client=client)
-    assert toolset is not None
-
-    def model_fn(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-        has_tool_result = any(
-            isinstance(part, ToolReturnPart) and part.tool_name == "create_reservation"
-            for message in messages
-            for part in message.parts
-        )
-        if not has_tool_result:
-            return ModelResponse(parts=[
-                ToolCallPart(
-                    tool_name="create_reservation",
-                    args={
-                        "customer_name": "Tanaka",
-                        "phone": "090-0000-0000",
-                        "service_type": "cut",
-                        "reserved_at": "2026-09-02T10:00:00+09:00",
-                    },
-                )
-            ])
-        return ModelResponse(parts=[TextPart("Reservation #55 confirmed.")])
-
-    outcome = await run_chat(
-        FunctionModel(model_fn), site_id="42", message="book me a cut tomorrow 10am", toolsets=[toolset]
-    )
-    assert isinstance(outcome, ChatReply)
-    assert "55" in outcome.reply
-
-    request = captured[0]
-    # site_id 来自请求上下文闭包（trusted），模型参数里没有 site_id
-    assert request.url.path == "/internal/site/v1/sites/42/reservations"
-    assert request.headers["Idempotency-Key"] == reservation_idempotency_key(
-        "42",
-        {
-            "customerName": "Tanaka",
-            "phone": "090-0000-0000",
-            "serviceType": "cut",
-            "reservedAt": "2026-09-02T10:00:00+09:00",
-        },
-    )
-    payload = json.loads(request.content)
-    assert payload["customerName"] == "Tanaka"
-    assert payload["reservedAt"] == "2026-09-02T10:00:00+09:00"
-
-
-def test_reservation_idempotency_key_ignores_dict_order() -> None:
-    left = {"phone": "1", "customerName": "A", "reservedAt": "t", "serviceType": "cut"}
-    right = {"serviceType": "cut", "reservedAt": "t", "customerName": "A", "phone": "1"}
-    assert reservation_idempotency_key("9", left) == reservation_idempotency_key("9", right)
-    assert reservation_idempotency_key("9", left).startswith("rsv-")
-    assert len(reservation_idempotency_key("9", left)) == 4 + 64
-    changed = dict(left)
-    changed["phone"] = "2"
-    assert reservation_idempotency_key("9", left) != reservation_idempotency_key("9", changed)
-    assert reservation_idempotency_key("9", left) != reservation_idempotency_key("8", left)
-
-
-async def test_create_reservation_sends_stable_idempotency_key() -> None:
-    captured: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        return _api_response({"id": 1})
-
-    client = _client_with(handler)
-    kwargs = {
-        "customer_name": "Tanaka",
-        "phone": "090",
-        "service_type": "cut",
-        "reserved_at": "2026-09-02T10:00:00+09:00",
-    }
-    await client.create_reservation("7", **kwargs)
-    await client.create_reservation("7", **kwargs)
-    await client.create_reservation("7", **kwargs, note="window")
-    await client.create_reservation("8", **kwargs)
-
-    keys = [request.headers["Idempotency-Key"] for request in captured]
-    payload = {
-        "customerName": "Tanaka",
-        "phone": "090",
-        "serviceType": "cut",
-        "reservedAt": "2026-09-02T10:00:00+09:00",
-    }
-    assert keys[0] == keys[1] == reservation_idempotency_key("7", payload)
-    assert keys[2] == reservation_idempotency_key("7", {**payload, "note": "window"})
-    assert keys[2] != keys[0]
-    assert keys[3] == reservation_idempotency_key("8", payload)
-    assert keys[3] != keys[0]
-    assert captured[0].headers["X-Internal-Service-Token"] == "test-internal-token"
 
 
 async def test_get_site_info_presents_site_type_as_neutral_category() -> None:

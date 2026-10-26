@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useOutletContext } from 'react-router-dom'
 
-import { appearanceApi, templateApi } from '@/api'
+import { appearanceApi } from '@/api'
 import { SiteAppearancePreview } from '@/pages/apps/style/siteAppearancePreview'
 
 import type { SiteWorkspaceOutletContext } from './siteWorkspaceLayout'
@@ -14,12 +14,6 @@ export function SiteThemePage() {
   const appearanceQuery = useQuery({
     queryKey: ['appearances', site.id],
     queryFn: () => appearanceApi.getAppearance(site.id),
-  })
-
-  const templateQuery = useQuery({
-    queryKey: ['templates', site.templateId],
-    queryFn: () => templateApi.getTemplate(site.templateId as number),
-    enabled: site.templateId != null,
   })
 
   if (appearanceQuery.isPending) {
@@ -44,9 +38,6 @@ export function SiteThemePage() {
   }
 
   const { config, version, updatedAt, schemaVersion } = appearanceQuery.data
-  const templateName =
-    templateQuery.data?.name ??
-    (site.templateId != null ? `#${site.templateId}` : t('detail.theme.noTemplate'))
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -54,12 +45,6 @@ export function SiteThemePage() {
       <p className="mt-1 text-sm text-slate-600">{t('detail.theme.description')}</p>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-          <p className="text-xs text-slate-500">{t('detail.labels.template')}</p>
-          <p className="mt-1 text-sm font-medium text-slate-900">
-            {templateQuery.isPending ? t('detail.theme.loadingTemplate') : templateName}
-          </p>
-        </div>
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
           <p className="text-xs text-slate-500">{t('detail.labels.primaryColor')}</p>
           <div className="mt-2 flex items-center gap-2">

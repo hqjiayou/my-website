@@ -4,8 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mywebsite.admin.constant.AdminSiteConstants;
 import com.mywebsite.admin.constant.AdminSiteMessageKeys;
-import com.mywebsite.admin.constant.AdminTemplateConstants;
-import com.mywebsite.admin.constant.AdminTemplateMessageKeys;
 import com.mywebsite.admin.dto.AdminSiteDtos.AdminSiteCreateRequest;
 import com.mywebsite.admin.dto.AdminSiteDtos.AdminSiteDetailDto;
 import com.mywebsite.admin.dto.AdminSiteDtos.AdminSiteListItemDto;
@@ -13,16 +11,13 @@ import com.mywebsite.admin.dto.AdminSiteDtos.AdminSiteListQuery;
 import com.mywebsite.admin.dto.AdminSiteDtos.AdminSiteStatusUpdateRequest;
 import com.mywebsite.admin.dto.AdminSiteDtos.AdminSiteUpdateRequest;
 import com.mywebsite.admin.entity.AdminSiteEntity;
-import com.mywebsite.admin.entity.AdminTemplateEntity;
 import com.mywebsite.admin.mapper.AdminSiteMapper;
-import com.mywebsite.admin.mapper.AdminTemplateMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
 import com.mywebsite.admin.service.AdminAiPromptService;
 import com.mywebsite.admin.service.AdminAppearanceService;
 import com.mywebsite.admin.service.AdminContentService;
 import com.mywebsite.admin.service.AdminMediaService;
-import com.mywebsite.admin.service.AdminReservationService;
 import com.mywebsite.admin.service.AdminSiteService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -38,31 +33,25 @@ import org.springframework.util.StringUtils;
 public class AdminSiteServiceImpl implements AdminSiteService {
 
     private final AdminSiteMapper adminSiteMapper;
-    private final AdminTemplateMapper adminTemplateMapper;
     private final AdminAppearanceService adminAppearanceService;
     private final AdminMediaService adminMediaService;
     private final AdminContentService adminContentService;
-    private final AdminReservationService adminReservationService;
     private final AdminAiPromptService adminAiPromptService;
     private final AdminAiKnowledgeService adminAiKnowledgeService;
     private final AdminAiConversationService adminAiConversationService;
 
     public AdminSiteServiceImpl(
             AdminSiteMapper adminSiteMapper,
-            AdminTemplateMapper adminTemplateMapper,
             AdminAppearanceService adminAppearanceService,
             AdminMediaService adminMediaService,
             AdminContentService adminContentService,
-            AdminReservationService adminReservationService,
             AdminAiPromptService adminAiPromptService,
             AdminAiKnowledgeService adminAiKnowledgeService,
             AdminAiConversationService adminAiConversationService) {
         this.adminSiteMapper = adminSiteMapper;
-        this.adminTemplateMapper = adminTemplateMapper;
         this.adminAppearanceService = adminAppearanceService;
         this.adminMediaService = adminMediaService;
         this.adminContentService = adminContentService;
-        this.adminReservationService = adminReservationService;
         this.adminAiPromptService = adminAiPromptService;
         this.adminAiKnowledgeService = adminAiKnowledgeService;
         this.adminAiConversationService = adminAiConversationService;
@@ -111,14 +100,8 @@ public class AdminSiteServiceImpl implements AdminSiteService {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminSiteMessageKeys.SITE_CODE_INVALID);
         }
         requireSiteType(request.siteType());
-        boolean hasTemplate = request.templateId() != null;
         boolean hasAppearance = request.appearance() != null;
-        if (hasTemplate != hasAppearance) {
-            throw new BusinessException(
-                    ErrorCode.BAD_REQUEST.getCode(), AdminSiteMessageKeys.SITE_TEMPLATE_APPEARANCE_PAIR);
-        }
-        if (hasTemplate) {
-            requireEnabledTemplate(request.templateId());
+        if (hasAppearance) {
             adminAppearanceService.requireValidConfigV1(request.appearance());
         }
         if (findBySiteCode(request.siteCode()) != null) {
@@ -132,7 +115,6 @@ public class AdminSiteServiceImpl implements AdminSiteService {
         entity.setDefaultDomain(blankToNull(request.defaultDomain()));
         entity.setDescription(blankToNull(request.description()));
         entity.setStatus(AdminSiteConstants.STATUS_ACTIVE);
-        entity.setTemplateId(request.templateId());
         try {
             adminSiteMapper.insert(entity);
         } catch (DuplicateKeyException ex) {
@@ -168,7 +150,6 @@ public class AdminSiteServiceImpl implements AdminSiteService {
         AdminSiteEntity site = requireSite(id);
         adminAppearanceService.softDeleteBySiteId(id);
         adminContentService.softDeleteBySiteId(id);
-        adminReservationService.softDeleteBySiteId(id);
         adminMediaService.softDeleteBySiteId(id);
         adminAiPromptService.softDeleteBySiteId(id);
         adminAiKnowledgeService.softDeleteBySiteId(id);
@@ -192,19 +173,6 @@ public class AdminSiteServiceImpl implements AdminSiteService {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminSiteMessageKeys.SITE_VERSION_CONFLICT);
         }
         return toDetail(requireSite(id));
-    }
-
-    private void requireEnabledTemplate(long templateId) {
-        AdminTemplateEntity template = adminTemplateMapper.selectById(templateId);
-        if (template == null) {
-            throw new BusinessException(
-                    ErrorCode.NOT_FOUND.getCode(), AdminTemplateMessageKeys.TEMPLATE_NOT_FOUND);
-        }
-        if (!AdminTemplateConstants.STATUS_ENABLED.equals(template.getStatus())) {
-            throw new BusinessException(
-                    ErrorCode.BAD_REQUEST.getCode(), AdminSiteMessageKeys.SITE_TEMPLATE_NOT_ENABLED);
-        }
-        // 模板与站点用途标签已解耦：不再要求模板类型与站点标签一致，存在且启用即可选用。
     }
 
     private AdminSiteEntity requireSite(long id) {
@@ -260,7 +228,6 @@ public class AdminSiteServiceImpl implements AdminSiteService {
                 entity.getStatus(),
                 entity.getDefaultDomain(),
                 entity.getDescription(),
-                entity.getTemplateId(),
                 entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
