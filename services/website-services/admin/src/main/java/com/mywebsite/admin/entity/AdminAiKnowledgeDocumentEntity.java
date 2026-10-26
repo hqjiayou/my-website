@@ -10,10 +10,19 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     public static final String STATUS_ACTIVE = "ACTIVE";
     public static final String STATUS_DISABLED = "DISABLED";
 
+    /** 派生索引状态：PENDING=未在索引中（新建待同步/已停用），INDEXED=已索引，FAILED=上次同步失败。 */
+    public static final String INDEX_STATUS_PENDING = "PENDING";
+
+    public static final String INDEX_STATUS_INDEXED = "INDEXED";
+    public static final String INDEX_STATUS_FAILED = "FAILED";
+
     private Long siteId;
     private String title;
     private String content;
     private String status;
+    private String indexStatus;
+    private String indexError;
+    private java.time.OffsetDateTime indexedAt;
 
     public Long getSiteId() {
         return siteId;
@@ -45,5 +54,29 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getIndexStatus() {
+        return indexStatus;
+    }
+
+    public void setIndexStatus(String indexStatus) {
+        this.indexStatus = indexStatus;
+    }
+
+    public String getIndexError() {
+        return indexError;
+    }
+
+    public void setIndexError(String indexError) {
+        this.indexError = indexError;
+    }
+
+    public java.time.OffsetDateTime getIndexedAt() {
+        return indexedAt;
+    }
+
+    public void setIndexedAt(java.time.OffsetDateTime indexedAt) {
+        this.indexedAt = indexedAt;
     }
 }

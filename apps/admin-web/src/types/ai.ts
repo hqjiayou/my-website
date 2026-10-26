@@ -57,6 +57,9 @@ export interface AiKnowledgeListItem {
   siteId: number
   title: string
   status: AiKnowledgeStatus
+  indexStatus: string
+  indexError: string | null
+  indexedAt: string | null
   version: number
   createdAt: string
   updatedAt: string

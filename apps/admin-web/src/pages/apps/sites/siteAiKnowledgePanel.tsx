@@ -11,7 +11,8 @@ import { PERMISSION_CODES } from '@/types/rbac'
 
 const KB_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 const KB_UPLOAD_ACCEPT =
-  '.txt,.md,.pdf,.docx,.html,.htm,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/html'
+  '.txt,.md,.pdf,.docx,.html,.htm,.xlsx,.pptx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/html,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation'
+const KB_UPLOAD_EXTENSIONS = ['txt', 'md', 'pdf', 'docx', 'html', 'htm', 'xlsx', 'pptx']
 
 interface EditorState {
   mode: 'create' | 'edit'
@@ -49,7 +50,7 @@ function formatFileSize(bytes: number) {
 
 function uploadFieldError(file: File): UploadDialogState['fieldError'] {
   const extension = knowledgeFileExtension(file.name)
-  if (!['txt', 'md', 'pdf', 'docx', 'html', 'htm'].includes(extension)) return 'extension'
+  if (!KB_UPLOAD_EXTENSIONS.includes(extension)) return 'extension'
   if (file.size > KB_UPLOAD_MAX_BYTES) return 'size'
   return null
 }
@@ -104,12 +105,62 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
   const uploadMutation = useMutation({
     mutationFn: (input: { file: File; title?: string }) =>
       aiApi.uploadKnowledgeDocument(siteId, input.file, input.title),
-    onSuccess: () => {
-      toast.success(t('aiWorkspace.knowledge.uploaded'))
+    onSuccess: (detail) => {
+      if (detail.indexStatus === 'INDEXED') toast.success(t('aiWorkspace.knowledge.uploadedIndexed'))
+      else if (detail.indexStatus === 'FAILED')
+        toast.warning(t('aiWorkspace.knowledge.uploadedIndexFailed'))
+      else toast.success(t('aiWorkspace.knowledge.uploaded'))
       setUploadDialog(null)
       void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
     },
   })
+
+  const reindexMutation = useMutation({
+    mutationFn: (id: number) => aiApi.reindexKnowledgeDocument(siteId, id),
+    onSuccess: (detail) => {
+      if (detail.indexStatus === 'INDEXED') toast.success(t('aiWorkspace.knowledge.reindexed'))
+      else toast.warning(t('aiWorkspace.knowledge.reindexFailed', { error: detail.indexError ?? '' }))
+      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+
+  const [batchUploading, setBatchUploading] = useState(false)
+  const [dragging, setDragging] = useState(false)
+
+  /** 多文件（选择多选或拖拽）：逐个直传（标题取文件名），最后汇总已索引/索引失败/被拒数量。 */
+  const uploadFilesBatch = useCallback(
+    async (files: File[]) => {
+      if (batchUploading || files.length === 0) return
+      setBatchUploading(true)
+      let indexed = 0
+      let indexFailed = 0
+      let rejected = 0
+      try {
+        for (const file of files) {
+          if (uploadFieldError(file)) {
+            rejected++
+            continue
+          }
+          try {
+            const detail = await aiApi.uploadKnowledgeDocument(siteId, file)
+            if (detail.indexStatus === 'INDEXED') indexed++
+            else if (detail.indexStatus === 'FAILED') indexFailed++
+            else indexed++
+          } catch {
+            rejected++
+          }
+        }
+        toast.success(
+          t('aiWorkspace.knowledge.batchResult', { indexed, indexFailed, rejected }),
+        )
+        void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
+      } finally {
+        setBatchUploading(false)
+      }
+    },
+    [batchUploading, queryClient, siteId, t],
+  )
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => aiApi.deleteKnowledgeDocument(siteId, id),
@@ -129,9 +180,15 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
   }, [uploadMutation.isPending])
 
   function onPickUploadFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
+    const files = Array.from(event.target.files ?? [])
     event.target.value = ''
-    if (!file) return
+    if (files.length === 0) return
+    if (files.length > 1) {
+      setUploadDialog(null)
+      void uploadFilesBatch(files)
+      return
+    }
+    const file = files[0]
     setUploadDialog({
       file,
       title: titleFromFilename(file.name),
@@ -175,6 +232,26 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
         cell: (item) => t(`aiWorkspace.knowledge.status.${item.status}`, { defaultValue: item.status }),
       },
       {
+        id: 'indexStatus',
+        header: t('aiWorkspace.knowledge.columns.index'),
+        cell: (item) => (
+          <span
+            className={
+              item.indexStatus === 'INDEXED'
+                ? 'text-emerald-700'
+                : item.indexStatus === 'FAILED'
+                  ? 'text-rose-700'
+                  : 'text-slate-500'
+            }
+            title={item.indexStatus === 'FAILED' ? (item.indexError ?? undefined) : undefined}
+          >
+            {t(`aiWorkspace.knowledge.indexStatus.${item.indexStatus}`, {
+              defaultValue: item.indexStatus,
+            })}
+          </span>
+        ),
+      },
+      {
         id: 'updatedAt',
         header: t('aiWorkspace.knowledge.columns.updatedAt'),
         cell: (item) => item.updatedAt,
@@ -193,6 +270,18 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
                 {t('aiWorkspace.knowledge.edit')}
               </button>
             </PermissionGate>
+            {item.status === 'ACTIVE' && item.indexStatus !== 'INDEXED' ? (
+              <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
+                <button
+                  type="button"
+                  className="text-sm underline"
+                  disabled={reindexMutation.isPending}
+                  onClick={() => reindexMutation.mutate(item.id)}
+                >
+                  {t('aiWorkspace.knowledge.reindex')}
+                </button>
+              </PermissionGate>
+            ) : null}
             <PermissionGate code={PERMISSION_CODES.aiKbDelete}>
               <button
                 type="button"
@@ -210,13 +299,28 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
         ),
       },
     ],
-    [deleteMutation, openEditor, t],
+    [deleteMutation, openEditor, reindexMutation, t],
   )
 
   const records = data?.records ?? []
 
   return (
-    <div className="space-y-4">
+    <div
+      className={`space-y-4 ${dragging ? 'rounded-xl outline-2 outline-dashed outline-blue-400 outline-offset-4' : ''}`}
+      onDragOver={(event) => {
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        event.preventDefault()
+        setDragging(false)
+        void uploadFilesBatch(Array.from(event.dataTransfer.files))
+      }}
+    >
+      <p className="text-xs text-slate-500">
+        {batchUploading ? t('aiWorkspace.knowledge.uploading') : t('aiWorkspace.knowledge.dropHint')}
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <select
           className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
@@ -357,6 +461,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
               ref={uploadInputRef}
               type="file"
               accept={KB_UPLOAD_ACCEPT}
+              multiple
               className="hidden"
               onChange={onPickUploadFile}
             />
