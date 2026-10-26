@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
@@ -13,6 +13,18 @@ import { ConversationSheet } from './conversationSheet'
 import { useKeyboardInset } from './useKeyboardInset'
 
 const MAX_MESSAGE_CHARS = 16_000
+const MAX_IMAGES = 3
+const MAX_IMAGE_EDGE = 1600
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024
+
+interface ChatImage {
+  mediaType: string
+  data: string
+}
+
+interface PendingImage extends ChatImage {
+  id: string
+}
 
 const SUGGESTIONS = ['這個站點提供哪些服務？', '幫我整理預約需要的資訊', '知識庫裡有什麼相關內容？']
 
@@ -20,6 +32,7 @@ interface ChatTurn {
   id: string
   role: string
   content: string
+  images?: ChatImage[]
   pending?: boolean
   providerStatus?: string
   citations?: SiteAiCitation[]
@@ -45,7 +58,14 @@ function toStoredTurns(items: SiteAiMessage[], extra?: Pick<StoredLoadOptions, '
   let lastAssistant = -1
   const turns: ChatTurn[] = items.map((item, index) => {
     if (item.role === 'ASSISTANT') lastAssistant = index
-    return { id: String(item.id), role: item.role, content: item.content }
+    return {
+      id: String(item.id),
+      role: item.role,
+      content: item.content,
+      images: item.attachments?.length
+        ? item.attachments.map((attachment) => ({ mediaType: attachment.mediaType, data: attachment.data }))
+        : undefined,
+    }
   })
   if (lastAssistant >= 0 && extra && (extra.citations || extra.providerStatus !== undefined)) {
     turns[lastAssistant] = {
@@ -60,6 +80,7 @@ function toStoredTurns(items: SiteAiMessage[], extra?: Pick<StoredLoadOptions, '
 interface SendFailure {
   message: string
   retryText: string
+  retryImages: ChatImage[]
   userId: string
   assistantId: string
 }
@@ -82,6 +103,9 @@ export function ChatPage() {
   const [historyLoading, setHistoryLoading] = useState(routeId != null)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [pending, setPending] = useState<PendingImage[]>([])
+  const [attachError, setAttachError] = useState<string | null>(null)
+  const [compressing, setCompressing] = useState(false)
   const [sending, setSending] = useState(false)
   const [failure, setFailure] = useState<SendFailure | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -91,6 +115,8 @@ export function ChatPage() {
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const draftRef = useRef<HTMLTextAreaElement | null>(null)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const compressingRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const generation = useRef(0)
   const sendingRef = useRef(false)
@@ -247,6 +273,8 @@ export function ChatPage() {
     setHistoryError(null)
     setHistoryLoading(false)
     setFailure(null)
+    setPending([])
+    setAttachError(null)
     setNavOpen(false)
     if (routeId) navigate(ROUTES.chat)
   }
@@ -257,23 +285,67 @@ export function ChatPage() {
     if (conversationId === routeId) return
     leaveStreaming()
     setFailure(null)
+    setPending([])
+    setAttachError(null)
     setHistoryLoading(true)
     navigate(conversationPath(conversationId))
   }
 
-  async function send(text: string, replace?: { userId: string; assistantId: string }) {
-    if (!site.ok || sendingRef.current || historyLoading) return
+  async function onPickFiles(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (files.length === 0 || sendingRef.current || compressingRef.current) return
+    if (pending.length >= MAX_IMAGES) {
+      setAttachError('最多附加 3 張圖片')
+      return
+    }
+    compressingRef.current = true
+    setCompressing(true)
+    setAttachError(null)
+    const room = MAX_IMAGES - pending.length
+    const added: PendingImage[] = []
+    let error: string | null = null
+    try {
+      for (const file of files) {
+        if (added.length >= room) {
+          error = '最多附加 3 張圖片'
+          break
+        }
+        try {
+          const image = await compressImageFile(file)
+          if (!image) {
+            if (!error) error = '這張圖片壓縮後仍超過 2MB，無法附加'
+            continue
+          }
+          added.push({ ...image, id: crypto.randomUUID() })
+        } catch {
+          if (!error) error = '無法處理這張圖片'
+        }
+      }
+    } finally {
+      compressingRef.current = false
+      setCompressing(false)
+    }
+    if (added.length > 0) setPending((current) => [...current, ...added].slice(0, MAX_IMAGES))
+    if (error) setAttachError(error)
+  }
+
+  async function send(text: string, images: ChatImage[] = [], replace?: { userId: string; assistantId: string }) {
+    if (!site.ok || sendingRef.current || historyLoading || compressingRef.current) return
     const trimmed = text.trim()
-    if (!trimmed) return
+    if (!trimmed && images.length === 0) return
     if (trimmed.length > MAX_MESSAGE_CHARS) {
       setFailure({
         message: `訊息超過 ${MAX_MESSAGE_CHARS} 字`,
         retryText: trimmed,
+        retryImages: images,
         userId: replace?.userId ?? '',
         assistantId: replace?.assistantId ?? '',
       })
       return
     }
+    if (images.length > 0) setPending([])
+    setAttachError(null)
 
     const gen = generation.current
     const conversationId = conversationRef.current
@@ -295,7 +367,7 @@ export function ChatPage() {
         : []
       return [
         ...base,
-        { id: userId, role: 'USER', content: trimmed },
+        { id: userId, role: 'USER', content: trimmed, images: images.length ? images : undefined },
         { id: assistantId, role: 'ASSISTANT', content: '', pending: true },
       ]
     })
@@ -311,7 +383,7 @@ export function ChatPage() {
     }
 
     const markFailed = (message: string) => {
-      setFailure({ message, retryText: trimmed, userId, assistantId })
+      setFailure({ message, retryText: trimmed, retryImages: images, userId, assistantId })
       setMessages((current) => current.map((item) => (item.id === assistantId ? { ...item, pending: false } : item)))
     }
 
@@ -321,7 +393,13 @@ export function ChatPage() {
     try {
       await siteAiApi.streamChat(
         site.siteId,
-        conversationId ? { message: trimmed, conversationId } : { message: trimmed },
+        {
+          message: trimmed,
+          ...(conversationId ? { conversationId } : {}),
+          ...(images.length
+            ? { attachments: images.map((image) => ({ mediaType: image.mediaType, data: image.data })) }
+            : {}),
+        },
         (event) => {
           if (generation.current !== gen) return
           if (event.event === 'TEXT_DELTA') {
@@ -395,7 +473,7 @@ export function ChatPage() {
       stopGenerating()
       return
     }
-    void send(draft)
+    void send(draft, pending)
   }
 
   async function renameConversation(id: string, title: string) {
@@ -553,19 +631,38 @@ export function ChatPage() {
               {visibleMessages.map((message) => {
                 const hasCitations =
                   !message.pending && message.role === 'ASSISTANT' && (message.citations?.length ?? 0) > 0
+                const hasImages = (message.images?.length ?? 0) > 0
                 const visible =
-                  Boolean(message.content) || message.pending || message.providerStatus !== undefined || hasCitations
+                  Boolean(message.content) ||
+                  message.pending ||
+                  message.providerStatus !== undefined ||
+                  hasCitations ||
+                  hasImages
                 if (!visible) return null
                 const isUser = message.role === 'USER'
                 return (
                   <li key={message.id} className={isUser ? 'flex justify-end' : 'flex justify-start'}>
                     <div className={isUser ? 'max-w-[85%] rounded-3xl bg-gpt-user px-4 py-2.5' : 'max-w-full'}>
-                      <p className="whitespace-pre-wrap break-words text-[15px] leading-7">
-                        {message.content || (message.pending ? '' : '')}
-                        {message.pending ? (
-                          <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-gpt-ink align-middle" />
-                        ) : null}
-                      </p>
+                      {hasImages ? (
+                        <div className={message.content ? 'mb-2 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
+                          {message.images?.map((image, index) => (
+                            <img
+                              key={`${message.id}-${index}`}
+                              src={imageSrc(image)}
+                              alt="附件圖片"
+                              className="max-h-48 max-w-full rounded-xl"
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                      {message.content || message.pending ? (
+                        <p className="whitespace-pre-wrap break-words text-[15px] leading-7">
+                          {message.content}
+                          {message.pending ? (
+                            <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-gpt-ink align-middle" />
+                          ) : null}
+                        </p>
+                      ) : null}
                       {hasCitations ? (
                         <ul className="mt-3 flex flex-wrap gap-1.5">
                           {message.citations?.map((citation, index) => (
@@ -602,7 +699,12 @@ export function ChatPage() {
                 <p className="text-sm text-danger">{failure.message}</p>
                 <button
                   type="button"
-                  onClick={() => void send(failure.retryText, { userId: failure.userId, assistantId: failure.assistantId })}
+                  onClick={() =>
+                    void send(failure.retryText, failure.retryImages, {
+                      userId: failure.userId,
+                      assistantId: failure.assistantId,
+                    })
+                  }
                   disabled={sending}
                   className="h-9 shrink-0 rounded-full border border-gpt-line px-3 text-sm disabled:opacity-60"
                 >
@@ -615,7 +717,48 @@ export function ChatPage() {
         </div>
 
         <form onSubmit={onSubmit} className="safe-x shrink-0 px-4 pb-4">
-          <div className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer">
+          <div className="mx-auto w-full max-w-3xl">
+            {attachError ? <p className="mb-2 text-center text-xs text-danger">{attachError}</p> : null}
+            {pending.length > 0 ? (
+              <ul className="mb-2 flex flex-wrap gap-2">
+                {pending.map((image) => (
+                  <li key={image.id} className="relative">
+                    <img src={imageSrc(image)} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                    <button
+                      type="button"
+                      aria-label="移除圖片"
+                      disabled={sending}
+                      onClick={() => {
+                        setPending((current) => current.filter((item) => item.id !== image.id))
+                        setAttachError(null)
+                      }}
+                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gpt-ink text-[10px] text-gpt-canvas disabled:opacity-30"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          <div className="flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="sr-only"
+              disabled={sending || compressing}
+              onChange={(event) => void onPickFiles(event)}
+            />
+            <button
+              type="button"
+              aria-label="附加圖片"
+              disabled={sending || compressing}
+              onClick={() => fileRef.current?.click()}
+              className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gpt-muted hover:bg-gpt-hover disabled:opacity-30"
+            >
+              <PaperclipIcon />
+            </button>
             <label className="sr-only" htmlFor="chat-draft">
               訊息
             </label>
@@ -630,19 +773,24 @@ export function ChatPage() {
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault()
-                  if (!sending) void send(draft)
+                  if (!sending && !compressing) void send(draft, pending)
                 }
               }}
               className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-base outline-none"
             />
             <button
               type="submit"
-              disabled={(historyLoading && !freshChat) || (!sending && !draft.trim())}
+              disabled={
+                compressing ||
+                (historyLoading && !freshChat) ||
+                (!sending && !draft.trim() && pending.length === 0)
+              }
               aria-label={sending ? '停止生成' : '傳送'}
               className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas disabled:opacity-30"
             >
               {sending ? <StopIcon /> : <SendIcon />}
             </button>
+          </div>
           </div>
           <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-gpt-muted">
             回覆成功後寫入這個帳號。內容由 AI 產生，請自行確認。
@@ -650,6 +798,76 @@ export function ChatPage() {
         </form>
       </section>
     </div>
+  )
+}
+
+async function compressImageFile(file: File): Promise<ChatImage | null> {
+  const bitmap = await createImageBitmap(file)
+  try {
+    const longest = Math.max(bitmap.width, bitmap.height)
+    const scale = longest > MAX_IMAGE_EDGE ? MAX_IMAGE_EDGE / longest : 1
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('canvas')
+    context.drawImage(bitmap, 0, 0, width, height)
+    const keepPng = file.type === 'image/png' && hasTransparency(context, width, height)
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((result) => resolve(result), keepPng ? 'image/png' : 'image/jpeg', keepPng ? undefined : 0.85)
+    })
+    if (!blob) throw new Error('blob')
+    if (blob.size > MAX_IMAGE_BYTES) return null
+    const data = await blobToBase64(blob)
+    return { mediaType: blob.type || (keepPng ? 'image/png' : 'image/jpeg'), data }
+  } finally {
+    bitmap.close()
+  }
+}
+
+function hasTransparency(context: CanvasRenderingContext2D, width: number, height: number): boolean {
+  try {
+    const pixels = context.getImageData(0, 0, width, height).data
+    for (let index = 3; index < pixels.length; index += 4) {
+      if (pixels[index] < 255) return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result ?? '')
+      const comma = result.indexOf(',')
+      resolve(comma >= 0 ? result.slice(comma + 1) : result)
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('read'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+function imageSrc(image: ChatImage): string {
+  return `data:${image.mediaType};base64,${image.data}`
+}
+
+function PaperclipIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M6.2 8.8 10.4 4.6a2.1 2.1 0 0 1 3 3L8.2 12.8a3.2 3.2 0 0 1-4.5-4.5l5-5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 

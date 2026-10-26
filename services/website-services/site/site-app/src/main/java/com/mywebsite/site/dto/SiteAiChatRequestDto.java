@@ -1,3 +1,5 @@
 package com.mywebsite.site.dto;
 
-public record SiteAiChatRequestDto(String message, String conversationId) {}
+import java.util.List;
+
+public record SiteAiChatRequestDto(String message, String conversationId, List<SiteAiAttachmentDto> attachments) {}

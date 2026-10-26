@@ -51,16 +51,23 @@ export interface SiteAiConversation {
   createdAt: string | null
 }
 
+export interface SiteAiAttachment {
+  mediaType: string
+  data: string
+}
+
 export interface SiteAiMessage {
   id: number
   role: string
   content: string
   createdAt: string | null
+  attachments?: SiteAiAttachment[] | null
 }
 
 export interface SiteAiChatRequest {
   message: string
   conversationId?: string
+  attachments?: SiteAiAttachment[]
 }
 
 /** 本輪實際採用的知識庫引用。歷史訊息介面不回這個欄位。 */

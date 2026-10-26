@@ -3,6 +3,7 @@ package com.mywebsite.agent.client;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.mywebsite.agent.dto.AgentAttachmentDto;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentPingResponse;
@@ -125,6 +126,27 @@ class HttpAgentClientPythonContractIT {
         assertThat(response.providerStatus()).isEqualTo("LIVE");
         // §22：成功体带回用量（TestModel 至少 1 次 model request）
         assertThat(response.runMeta().usage().requests()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    void chatWithAttachmentSucceedsAgainstRealPythonService() {
+        AgentChatResponse response = client.chat(new AgentChatRequest(
+                "42",
+                "describe",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(new AgentAttachmentDto(
+                        "image/png",
+                        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))));
+        assertThat(response.reply()).isEqualTo("contract-test-reply");
+        assertThat(response.providerStatus()).isEqualTo("LIVE");
     }
 
     @Test
