@@ -14,6 +14,9 @@ public final class AdminAiKnowledgeDtos {
             Long siteId,
             String title,
             String status,
+            String indexStatus,
+            String indexError,
+            OffsetDateTime indexedAt,
             Integer version,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {}
@@ -24,6 +27,9 @@ public final class AdminAiKnowledgeDtos {
             String title,
             String content,
             String status,
+            String indexStatus,
+            String indexError,
+            OffsetDateTime indexedAt,
             Integer version,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {}

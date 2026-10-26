@@ -46,4 +46,7 @@ public interface AdminAiKnowledgeService {
      * 维度冲突抛 {@link ReembedConflictException}，不重建、不 upsert。
      */
     AdminAiKnowledgeReembedResultDto reembedAll();
+
+    /** 重新同步单篇文档的派生索引，并落库 INDEXED/FAILED 结果。 */
+    AdminAiKnowledgeDetailDto reindexDocument(long siteId, long documentId);
 }

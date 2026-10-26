@@ -54,7 +54,8 @@ public class AdminAiKnowledgeController {
     private static final int MAX_CONTENT_CHARS = 3_000_000;
     private static final int MAX_TITLE_LENGTH = 255;
     private static final Set<String> TEXT_EXTENSIONS = Set.of("txt", "md");
-    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of("txt", "md", "pdf", "docx", "html", "htm");
+    private static final Set<String> SUPPORTED_EXTENSIONS =
+            Set.of("txt", "md", "pdf", "docx", "html", "htm", "xlsx", "pptx");
 
     private final AdminAiKnowledgeService adminAiKnowledgeService;
 
@@ -121,7 +122,7 @@ public class AdminAiKnowledgeController {
         if (bytes.length > MAX_UPLOAD_BYTES) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
         }
-        String content = TEXT_EXTENSIONS.contains(extension) ? decodeUtf8(bytes) : extractText(extension, bytes);
+        String content = TEXT_EXTENSIONS.contains(extension) ? decodeText(bytes) : extractText(extension, bytes);
         if (!StringUtils.hasText(content)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_EMPTY);
         }
@@ -151,21 +152,37 @@ public class AdminAiKnowledgeController {
         }
     }
 
-    private static String decodeUtf8(byte[] bytes) {
+    /**
+     * 纯文本解码：先严格 UTF-8（去 BOM）；失败后按 MS932（日文）→GB18030（中文）回退，
+     * 兼容从 Windows/旧系统导出的非 UTF-8 文本；全部失败才按 FILE_ENCODING 拒绝。
+     * 回退字符集来自 jdk.charsets，运行镜像缺失时该步自动跳过。
+     */
+    private static String decodeText(byte[] bytes) {
         try {
-            String text = StandardCharsets.UTF_8
-                    .newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(bytes))
-                    .toString();
-            if (text.startsWith("\uFEFF")) {
-                return text.substring(1);
+            return decodeStrict(bytes, StandardCharsets.UTF_8);
+        } catch (CharacterCodingException utf8Failure) {
+            for (String fallbackName : new String[] {"MS932", "GB18030"}) {
+                try {
+                    return decodeStrict(bytes, java.nio.charset.Charset.forName(fallbackName));
+                } catch (CharacterCodingException | RuntimeException fallbackFailure) {
+                    // 继续下一个候选字符集
+                }
             }
-            return text;
-        } catch (CharacterCodingException ex) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_ENCODING);
         }
+    }
+
+    private static String decodeStrict(byte[] bytes, java.nio.charset.Charset charset)
+            throws CharacterCodingException {
+        String text = charset.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes))
+                .toString();
+        if (text.startsWith("\uFEFF")) {
+            return text.substring(1);
+        }
+        return text;
     }
 
     private static String baseName(String originalFilename) {
@@ -205,6 +222,15 @@ public class AdminAiKnowledgeController {
             @Valid @RequestBody AdminAiKnowledgeUpdateRequest request) {
         return ResponseEntity.ok(new HttpMessageBody<>(
                 ResponseMessages.SUCCESS, adminAiKnowledgeService.updateDocument(siteId, id, request)));
+    }
+
+    @PostMapping(DOCUMENTS + "/{id}/reindex")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @Operation(summary = "重新索引单篇 AI 知识库文档（同步派生向量索引并记录结果）")
+    public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> reindex(
+            @PathVariable long siteId, @PathVariable("id") long id) {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiKnowledgeService.reindexDocument(siteId, id)));
     }
 
     @DeleteMapping(DOCUMENTS + "/{id}")

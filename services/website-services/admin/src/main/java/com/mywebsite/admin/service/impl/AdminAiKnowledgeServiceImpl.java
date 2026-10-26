@@ -1,6 +1,7 @@
 package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mywebsite.admin.constant.AdminSiteMessageKeys;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest;
@@ -141,6 +142,18 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
     @Override
     @Transactional
+    public AdminAiKnowledgeDetailDto reindexDocument(long siteId, long documentId) {
+        requireSite(siteId);
+        AdminAiKnowledgeDocumentEntity entity = requireDocumentInSite(siteId, documentId);
+        if (!AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        syncDerivedIndex(entity);
+        return toDetail(entity);
+    }
+
+    @Override
+    @Transactional
     public void deleteDocument(long siteId, long documentId) {
         requireSite(siteId);
         AdminAiKnowledgeDocumentEntity entity = requireDocumentInSite(siteId, documentId);
@@ -238,7 +251,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 attempted++;
                 try {
                     upsertDerivedIndex(document, selection);
+                    recordIndexOutcome(document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null);
                 } catch (RuntimeException ex) {
+                    recordIndexOutcome(document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED, indexError(ex));
                     failed.add(new AdminAiKnowledgeReembedFailureDto(
                             document.getSiteId(), sourceId(document.getId()), indexError(ex)));
                 }
@@ -270,9 +285,11 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         try {
             if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
                 upsertDerivedIndex(entity, modelEntryService.currentSelection(entity.getSiteId()));
+                recordIndexOutcome(entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null);
             } else {
                 agentClient.deleteRetrievalDocument(
                         String.valueOf(entity.getSiteId()), sourceId(entity.getId()));
+                recordIndexOutcome(entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING, null);
             }
         } catch (RuntimeException ex) {
             log.warn(
@@ -280,7 +297,37 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     entity.getSiteId(),
                     entity.getId(),
                     ex);
+            if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
+                recordIndexOutcome(entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED, indexError(ex));
+            }
         }
+    }
+
+    /**
+     * 落库索引结果（定向更新三列，不动乐观锁 version）：INDEXED 时写 indexedAt 并清 error；
+     * FAILED 时保留上次 indexedAt 只记 error；PENDING（未在索引中）清两者。
+     * 同步更新内存实体，让本次请求的返回 DTO 立刻反映新状态。
+     */
+    private void recordIndexOutcome(
+            AdminAiKnowledgeDocumentEntity entity, String indexStatus, String indexError) {
+        OffsetDateTime indexedAt =
+                AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(indexStatus)
+                        ? OffsetDateTime.now(ZoneOffset.UTC)
+                        : AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING.equals(indexStatus)
+                                ? null
+                                : entity.getIndexedAt();
+        String error =
+                indexError == null ? null : indexError.substring(0, Math.min(indexError.length(), 500));
+        knowledgeMapper.update(
+                null,
+                new LambdaUpdateWrapper<AdminAiKnowledgeDocumentEntity>()
+                        .eq(AdminAiKnowledgeDocumentEntity::getId, entity.getId())
+                        .set(AdminAiKnowledgeDocumentEntity::getIndexStatus, indexStatus)
+                        .set(AdminAiKnowledgeDocumentEntity::getIndexError, error)
+                        .set(AdminAiKnowledgeDocumentEntity::getIndexedAt, indexedAt));
+        entity.setIndexStatus(indexStatus);
+        entity.setIndexError(error);
+        entity.setIndexedAt(indexedAt);
     }
 
     private void removeFromDerivedIndex(long siteId, long documentId) {
@@ -348,6 +395,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 entity.getSiteId(),
                 entity.getTitle(),
                 entity.getStatus(),
+                entity.getIndexStatus(),
+                entity.getIndexError(),
+                entity.getIndexedAt(),
                 entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
@@ -360,6 +410,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 entity.getTitle(),
                 entity.getContent(),
                 entity.getStatus(),
+                entity.getIndexStatus(),
+                entity.getIndexError(),
+                entity.getIndexedAt(),
                 entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());

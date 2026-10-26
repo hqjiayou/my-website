@@ -137,6 +137,15 @@ export const aiApi = {
       .then(unwrapData)
   },
 
+  reindexKnowledgeDocument(siteId: number, id: number): Promise<AiKnowledgeDetail> {
+    return httpClient
+      .post<HttpMessageBody<AiKnowledgeDetail>, Record<string, never>>(
+        `${aiBase(siteId)}/knowledge-documents/${id}/reindex`,
+        {},
+      )
+      .then(unwrapData)
+  },
+
   updateKnowledgeDocument(
     siteId: number,
     id: number,

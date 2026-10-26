@@ -96,4 +96,36 @@ class AdminAiKnowledgeTextExtractorTest {
         document.save(out);
         return out.toByteArray();
     }
+
+    @Test
+    void extractsXlsxCells() throws IOException {
+        byte[] bytes;
+        try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook =
+                new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+            var row = workbook.createSheet("s").createRow(0);
+            row.createCell(0).setCellValue("Hours");
+            row.createCell(1).setCellValue("9:00-18:00");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            bytes = out.toByteArray();
+        }
+        String text = AdminAiKnowledgeTextExtractor.extractText("xlsx", bytes);
+        assertThat(text).contains("Hours").contains("9:00-18:00");
+    }
+
+    @Test
+    void extractsPptxTextBoxes() throws IOException {
+        byte[] bytes;
+        try (org.apache.poi.xslf.usermodel.XMLSlideShow slideshow =
+                new org.apache.poi.xslf.usermodel.XMLSlideShow()) {
+            var slide = slideshow.createSlide();
+            var textBox = slide.createTextBox();
+            textBox.setText("Slide title text");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            slideshow.write(out);
+            bytes = out.toByteArray();
+        }
+        String text = AdminAiKnowledgeTextExtractor.extractText("pptx", bytes);
+        assertThat(text).contains("Slide title text");
+    }
 }
