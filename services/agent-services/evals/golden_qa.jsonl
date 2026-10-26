@@ -1,0 +1,12 @@
+{"id": "zh-proper-hours", "question": "北窗咖啡每周哪一天公休？", "expected_sources": ["cafe-hours"], "expected_keywords": ["北窗咖啡", "周二", "公休"], "category": "hours"}
+{"id": "zh-menu-name", "question": "焦糖海盐可颂的售价是多少？", "expected_sources": ["cafe-menu"], "expected_keywords": ["焦糖海盐可颂", "480"], "category": "menu"}
+{"id": "ja-access", "question": "北窓駅の東口から徒歩で何分ですか？", "expected_sources": ["cafe-access"], "expected_keywords": ["東口", "徒歩"], "category": "access"}
+{"id": "model-xj900", "question": "What is the burr size of the XJ-900?", "expected_sources": ["xj900-specs"], "expected_keywords": ["XJ-900", "48 mm"], "category": "model"}
+{"id": "multi-spec-warranty", "question": "XJ-900 的刀盘直径和保固月数分别是多少？", "expected_sources": ["xj900-specs", "xj900-warranty"], "expected_keywords": ["48 mm", "24 个月"], "category": "multi"}
+{"id": "reservation-hold", "question": "四人以上是否必须提前预约？座位保留几分钟？", "expected_sources": ["cafe-reservation"], "expected_keywords": ["四人", "15 分钟"], "category": "reservation"}
+{"id": "warranty-water", "question": "XJ-900 进水之后还在保固范围内吗？", "expected_sources": ["xj900-warranty"], "expected_keywords": ["进水", "不在保固"], "category": "warranty"}
+{"id": "weekend-open", "question": "北窗咖啡周末从几点开始营业？", "expected_sources": ["cafe-hours"], "expected_keywords": ["周末", "09:00"], "category": "hours"}
+{"id": "unans-wifi", "question": "访客无线网络登录口令写在哪张卡片？", "expected_sources": [], "expected_keywords": [], "category": "unanswerable"}
+{"id": "unans-orbit", "question": "Zephyr satellite orbital period", "expected_sources": [], "expected_keywords": [], "category": "unanswerable"}
+{"id": "unans-snow", "question": "人工降雪机夜间票价是多少？", "expected_sources": [], "expected_keywords": [], "category": "unanswerable"}
+{"id": "unans-ferry", "question": "青洲码头末班渡轮还停靠吗？", "expected_sources": [], "expected_keywords": [], "category": "unanswerable"}
