@@ -330,7 +330,11 @@ public final class AdminAiKnowledgeContentConverter {
             org.jsoup.nodes.Document document = Jsoup.parse(new ByteArrayInputStream(bytes), null, "");
             document.select("script, style, noscript").remove();
             String bodyHtml = document.body() == null ? "" : document.body().html();
-            String markdown = FlexmarkHtmlConverter.builder().build().convert(bodyHtml);
+            // 标题统一 ATX 风格（#），不用 Setext 下划线式——入库标准形要与按标题分块的切分规则一致
+            com.vladsch.flexmark.util.data.MutableDataSet options =
+                    new com.vladsch.flexmark.util.data.MutableDataSet();
+            options.set(FlexmarkHtmlConverter.SETEXT_HEADINGS, false);
+            String markdown = FlexmarkHtmlConverter.builder(options).build().convert(bodyHtml);
             if (markdown != null && !markdown.isBlank()) {
                 return markdown;
             }
