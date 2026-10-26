@@ -10,10 +10,12 @@ from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.test import TestModel
 
 from agent_services.agent.model_factory import (
+    EntryFallback,
     ModelHandle,
     create_model,
     create_model_for_entry,
 )
+from agent_services.agent.runtime import ChatReply, run_chat
 from agent_services.app import create_app
 
 
@@ -284,3 +286,107 @@ def test_entry_failure_does_not_echo_the_key(monkeypatch: pytest.MonkeyPatch) ->
     assert not handle.live
     assert handle.blocked_reason == "AI provider is not configured or invalid: RuntimeError"
     assert "entry-key" not in (handle.blocked_reason or "")
+
+
+
+# ---- 入口备援链：各自带凭证建模、顺序固定、主用坏掉不顶替 ----
+
+
+def test_entry_chain_order_entry_fallbacks_then_env() -> None:
+    handle = create_model_for_entry(
+        spec="fake:primary",
+        api_key="primary-key",
+        base_url=None,
+        settings=make_settings(ai_fallback_models="fake:env-backup"),
+        fallbacks=[
+            EntryFallback(spec="fake:backup-one", api_key="key-one", base_url=None),
+            EntryFallback(spec="fake:backup-two", api_key="key-two", base_url=None),
+        ],
+    )
+    assert handle.live
+    assert isinstance(handle.model, FallbackModel)
+    assert handle.fallback_specs == ("fake:backup-one", "fake:backup-two", "fake:env-backup")
+
+
+def test_entry_chain_skips_duplicates_primary_and_unbuildable() -> None:
+    handle = create_model_for_entry(
+        spec="fake:primary",
+        api_key="primary-key",
+        base_url=None,
+        settings=make_settings(ai_fallback_models="fake:backup-one"),
+        fallbacks=[
+            EntryFallback(spec="fake:primary", api_key="other-key", base_url=None),
+            EntryFallback(spec="bad:x", api_key="bad-key", base_url=None),
+            EntryFallback(spec="fake:backup-one", api_key="key-one", base_url=None),
+            EntryFallback(spec="fake:backup-one", api_key="key-one-again", base_url=None),
+        ],
+    )
+    assert handle.live
+    assert isinstance(handle.model, FallbackModel)
+    # 与主用同 spec、建不起来的、重复的、与 env 重复的都只保留一份
+    assert handle.fallback_specs == ("fake:backup-one",)
+
+
+def test_entry_chain_without_fallbacks_stays_plain() -> None:
+    handle = create_model_for_entry(
+        spec="fake:primary",
+        api_key="primary-key",
+        base_url=None,
+        settings=make_settings(),
+        fallbacks=[],
+    )
+    assert handle.live
+    assert isinstance(handle.model, TestModel)
+    assert handle.fallback_specs == ()
+
+
+def test_entry_blocked_primary_is_not_replaced_by_entry_fallbacks() -> None:
+    handle = create_model_for_entry(
+        spec="bad:x",
+        api_key="primary-key",
+        base_url=None,
+        settings=make_settings(),
+        fallbacks=[EntryFallback(spec="fake:backup", api_key="key", base_url=None)],
+    )
+    assert not handle.live
+    assert handle.fallback_specs == ()
+
+
+async def test_entry_chain_falls_back_on_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic_ai.exceptions import ModelAPIError
+    from pydantic_ai.models.function import FunctionModel
+
+    def build(spec: str, *, api_key: str, base_url: str) -> Model:
+        if spec == "fail:primary":
+            def fail(messages, _info):
+                raise ModelAPIError("fail:primary", "rate limited")
+
+            return FunctionModel(fail)
+        if spec == "fake:backup":
+            return TestModel(custom_output_text="from-backup")
+        raise AssertionError(f"unexpected spec {spec}")
+
+    monkeypatch.setattr("agent_services.agent.model_factory._build_primary", build)
+
+    # 本文件的 autouse fake infer 只认字符串 spec；Agent 构造时会拿 Model 实例再过一次
+    # infer_model，这里补上实例直通（真实 infer_model 本就如此）。
+    def infer(spec):
+        if isinstance(spec, Model):
+            return spec
+        if isinstance(spec, str) and spec.startswith("fake:"):
+            return TestModel(model_name=spec)
+        raise UserError(f"Unknown model: {spec}")
+
+    monkeypatch.setattr(pydantic_ai.models, "infer_model", infer)
+    handle = create_model_for_entry(
+        spec="fail:primary",
+        api_key="primary-key",
+        base_url=None,
+        settings=make_settings(),
+        fallbacks=[EntryFallback(spec="fake:backup", api_key="backup-key", base_url=None)],
+    )
+    assert handle.live
+    assert handle.fallback_specs == ("fake:backup",)
+    outcome = await run_chat(handle.model, site_id="1", message="hi")  # type: ignore[arg-type]
+    assert isinstance(outcome, ChatReply)
+    assert outcome.reply == "from-backup"

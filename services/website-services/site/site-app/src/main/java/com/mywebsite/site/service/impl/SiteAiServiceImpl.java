@@ -222,6 +222,7 @@ public class SiteAiServiceImpl implements SiteAiService {
             ChatPreparation preparation,
             List<String> memories) {
         Long conversationId = preparation.conversation().getId();
+        List<AgentModelSelection> chain = loadModelChain(siteId);
         return new AgentChatRequest(
                 String.valueOf(siteId),
                 message,
@@ -232,12 +233,13 @@ public class SiteAiServiceImpl implements SiteAiService {
                 // 终端用户不能指定 skills（防前台激活任意指令模块）；只用 agent-services 平台默认
                 null,
                 preparation.todos().isEmpty() ? null : preparation.todos(),
-                loadDefaultModel(siteId),
+                chain.isEmpty() ? null : chain.get(0),
                 callbackBaseUrl(),
                 knowledgeSnippets(siteId, message),
                 attachments.isEmpty() ? null : attachments,
                 memories == null || memories.isEmpty() ? null : memories,
-                Boolean.TRUE);
+                Boolean.TRUE,
+                chain.size() > 1 ? List.copyOf(chain.subList(1, chain.size())) : null);
     }
 
     private void persistTurn(
@@ -344,10 +346,75 @@ public class SiteAiServiceImpl implements SiteAiService {
 
     /** 站点默认入口优先，否则全站默认。没有时不带 model，Python 回退进程 AI_MODEL。 */
     private AgentModelSelection loadDefaultModel(long siteId) {
-        SiteAiModelEntryEntity entry = selectDefaultModel(siteId);
-        if (entry == null) {
-            entry = selectDefaultModel(null);
+        List<AgentModelSelection> chain = loadModelChain(siteId);
+        return chain.isEmpty() ? null : chain.get(0);
+    }
+
+    /**
+     * 生效链（与 admin AdminAiModelEntryServiceImpl.selectionChain 同规则，两处须一致）：
+     * 首元是主用（站点默认，否则全站默认），其后依次是同站其他启用入口、全站其他启用入口
+     * （各组内默认在前、id 升序）。主用不存在或解密不出 key 时返回空列表，备援不得越过坏主用顶上；
+     * 解密不出 key 的备援跳过。
+     */
+    private List<AgentModelSelection> loadModelChain(long siteId) {
+        List<SiteAiModelEntryEntity> siteEntries = enabledModelEntries(siteId);
+        List<SiteAiModelEntryEntity> globalEntries = enabledModelEntries(null);
+        SiteAiModelEntryEntity primary = firstDefaultEntry(siteEntries);
+        if (primary == null) {
+            primary = firstDefaultEntry(globalEntries);
         }
+        if (primary == null) {
+            return List.of();
+        }
+        AgentModelSelection primarySelection = toModelSelection(primary);
+        if (primarySelection == null) {
+            return List.of();
+        }
+        List<AgentModelSelection> chain = new ArrayList<>();
+        chain.add(primarySelection);
+        appendModelSelections(chain, siteEntries, primary.getId());
+        appendModelSelections(chain, globalEntries, primary.getId());
+        return List.copyOf(chain);
+    }
+
+    /** 作用域内启用入口：默认在前，其余 id 升序。 */
+    private List<SiteAiModelEntryEntity> enabledModelEntries(Long siteId) {
+        LambdaQueryWrapper<SiteAiModelEntryEntity> query = new LambdaQueryWrapper<SiteAiModelEntryEntity>()
+                .eq(SiteAiModelEntryEntity::getEnabled, true)
+                .orderByDesc(SiteAiModelEntryEntity::getDefaultEntry)
+                .orderByAsc(SiteAiModelEntryEntity::getId);
+        if (siteId == null) {
+            query.isNull(SiteAiModelEntryEntity::getSiteId);
+        } else {
+            query.eq(SiteAiModelEntryEntity::getSiteId, siteId);
+        }
+        List<SiteAiModelEntryEntity> entries = modelEntryMapper.selectList(query);
+        return entries == null ? List.of() : entries;
+    }
+
+    private static SiteAiModelEntryEntity firstDefaultEntry(List<SiteAiModelEntryEntity> entries) {
+        for (SiteAiModelEntryEntity entry : entries) {
+            if (Boolean.TRUE.equals(entry.getDefaultEntry())) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private void appendModelSelections(
+            List<AgentModelSelection> chain, List<SiteAiModelEntryEntity> entries, Long skipId) {
+        for (SiteAiModelEntryEntity entry : entries) {
+            if (entry.getId() != null && entry.getId().equals(skipId)) {
+                continue;
+            }
+            AgentModelSelection selection = toModelSelection(entry);
+            if (selection != null) {
+                chain.add(selection);
+            }
+        }
+    }
+
+    private AgentModelSelection toModelSelection(SiteAiModelEntryEntity entry) {
         if (entry == null || !StringUtils.hasText(entry.getModelSpec())) {
             return null;
         }
@@ -359,18 +426,6 @@ public class SiteAiServiceImpl implements SiteAiService {
         String embeddingSpec =
                 StringUtils.hasText(entry.getEmbeddingSpec()) ? entry.getEmbeddingSpec().trim() : null;
         return new AgentModelSelection(entry.getModelSpec().trim(), apiKey, baseUrl, embeddingSpec);
-    }
-
-    private SiteAiModelEntryEntity selectDefaultModel(Long siteId) {
-        LambdaQueryWrapper<SiteAiModelEntryEntity> query = new LambdaQueryWrapper<SiteAiModelEntryEntity>()
-                .eq(SiteAiModelEntryEntity::getEnabled, true)
-                .eq(SiteAiModelEntryEntity::getDefaultEntry, true);
-        if (siteId == null) {
-            query.isNull(SiteAiModelEntryEntity::getSiteId);
-        } else {
-            query.eq(SiteAiModelEntryEntity::getSiteId, siteId);
-        }
-        return modelEntryMapper.selectOne(query.last("LIMIT 1"));
     }
 
     private ValidatedChat validateChatAccess(long siteId, SiteAiChatRequestDto request) {

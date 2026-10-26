@@ -8,7 +8,9 @@ AI_FALLBACK_MODELS（§22.6）仅在主模型可用时生效：主模型 BLOCKED
 
 import logging
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
+from pydantic_ai.exceptions import ModelAPIError
 from pydantic_ai.models import Model
 
 from agent_services.api.errors import external_failure_message
@@ -27,6 +29,14 @@ class ModelHandle:
     @property
     def live(self) -> bool:
         return self.model is not None
+
+
+class EntryFallback(NamedTuple):
+    """Java 模型入口链里的一个备援候选：自带 spec / 凭证，不复用主入口的 key。"""
+
+    spec: str
+    api_key: str | None
+    base_url: str | None
 
 
 def public_model_spec(spec: str) -> str:
@@ -156,23 +166,78 @@ def create_model(settings: Settings) -> ModelHandle:
         )
 
     fallbacks = _build_fallbacks(settings, spec)
-    return _handle_with_fallbacks(primary, spec, fallbacks)
+    return _wrap_chain(primary, spec, fallbacks)
 
 
-def _handle_with_fallbacks(
+def _recording_fallback_handler(chain_specs: tuple[str, ...]):
+    """fallback_on 的异常记录器：只记日志（候选序号按触发次数推算），永不自行决定切换。
+
+    返回 False 让后面的 ModelAPIError 类型判断决定是否切换；业务/工具异常不触发、不记录。
+    """
+    triggered = {"count": 0}
+
+    def _record(exc: Exception) -> bool:
+        if isinstance(exc, ModelAPIError):
+            triggered["count"] += 1
+            logger.warning(
+                "AI model fallback triggered (event %d, %s); chain=%s",
+                triggered["count"],
+                type(exc).__name__,
+                ", ".join(public_model_spec(item) for item in chain_specs),
+            )
+        return False
+
+    return _record
+
+
+def _wrap_chain(
     primary: Model, spec: str, fallbacks: list[tuple[str, Model]]
 ) -> ModelHandle:
     if not fallbacks:
         return ModelHandle(model=primary, spec=spec, blocked_reason=None)
     from pydantic_ai.models.fallback import FallbackModel
 
-    # 默认 fallback_on=(ModelAPIError,)：仅 Provider API 错误（含 429/5xx）切换，业务/工具异常不切换
+    fallback_specs = tuple(name for name, _ in fallbacks)
+    # fallback_on 混排记录器 + ModelAPIError：仅 Provider API 错误（含 429/5xx）切换，
+    # 业务/工具异常不切换（与原默认语义一致），切换事件另记 warning 供事后核查。
     return ModelHandle(
-        model=FallbackModel(primary, *(model for _, model in fallbacks)),
+        model=FallbackModel(
+            primary,
+            *(model for _, model in fallbacks),
+            fallback_on=[_recording_fallback_handler((spec, *fallback_specs)), ModelAPIError],
+        ),
         spec=spec,
         blocked_reason=None,
-        fallback_specs=tuple(name for name, _ in fallbacks),
+        fallback_specs=fallback_specs,
     )
+
+
+def _build_entry_fallbacks(
+    fallbacks: list[EntryFallback] | None, primary_spec: str, seen_specs: set[str]
+) -> list[tuple[str, Model]]:
+    """入口备援逐个以自带凭证建模；与主用同 spec 或已在链上的跳过，建不起来记 warning 跳过。"""
+    built: list[tuple[str, Model]] = []
+    for entry in fallbacks or []:
+        cleaned = entry.spec.strip()
+        if not cleaned or cleaned == primary_spec or cleaned in seen_specs:
+            continue
+        try:
+            model = _build_primary(
+                cleaned,
+                api_key=(entry.api_key or "").strip(),
+                base_url=(entry.base_url or "").strip(),
+            )
+        except Exception as exc:  # noqa: BLE001 — 单个备援坏掉不拖垮整链，不回显密钥
+            logger.warning(
+                "Ignoring unbuildable AI model entry fallback %s: %s",
+                public_model_spec(cleaned),
+                type(exc).__name__,
+                exc_info=exc,
+            )
+            continue
+        seen_specs.add(cleaned)
+        built.append((cleaned, model))
+    return built
 
 
 def create_model_for_entry(
@@ -181,11 +246,13 @@ def create_model_for_entry(
     api_key: str,
     base_url: str | None,
     settings: Settings | None = None,
+    fallbacks: list[EntryFallback] | None = None,
 ) -> ModelHandle:
     """Java 模型入口。不用进程 AI_MODEL。
 
-    构建成功后挂 AI_FALLBACK_MODELS。入口 spec 或凭证建不起来时仍 BLOCKED，备用模型不顶替。
-    备用模型不使用入口 apiKey。
+    入口 spec 或凭证建不起来时仍 BLOCKED，备援不得顶替（ADR-0004）。
+    构建成功后依次挂：请求带入的入口备援链（各自带凭证，可混 provider），
+    再挂 AI_FALLBACK_MODELS（走原生环境凭证，不使用入口 apiKey）。
     """
     cleaned = spec.strip()
     if not cleaned:
@@ -203,6 +270,12 @@ def create_model_for_entry(
             spec=cleaned,
             blocked_reason=external_failure_message("AI provider is not configured or invalid", exc),
         )
-    if settings is None:
-        return ModelHandle(model=primary, spec=cleaned, blocked_reason=None)
-    return _handle_with_fallbacks(primary, cleaned, _build_fallbacks(settings, cleaned))
+    seen_specs: set[str] = set()
+    chain = _build_entry_fallbacks(fallbacks, cleaned, seen_specs)
+    if settings is not None:
+        for env_spec, env_model in _build_fallbacks(settings, cleaned):
+            if env_spec in seen_specs:
+                continue
+            seen_specs.add(env_spec)
+            chain.append((env_spec, env_model))
+    return _wrap_chain(primary, cleaned, chain)

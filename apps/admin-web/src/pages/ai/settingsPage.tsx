@@ -40,6 +40,26 @@ function emptyDraft(makeDefault: boolean): Draft {
   }
 }
 
+/**
+ * 生效链（与 Java selectionChain 同规则）：作用域预设为主用，其后同作用域其他启用入口、
+ * 再全站其余启用入口（各组内默认在前、id 升序）。没有默认入口时整链不启用。
+ */
+function computeChain(entries: AiModelEntry[], scopeSiteId: number | null): AiModelEntry[] {
+  const enabledIn = (scope: number | null) =>
+    entries
+      .filter((entry) => entry.enabled && (scope == null ? entry.siteId == null : entry.siteId === scope))
+      .sort((a, b) => Number(b.defaultEntry) - Number(a.defaultEntry) || a.id - b.id)
+  const scoped = scopeSiteId == null ? [] : enabledIn(scopeSiteId)
+  const global = enabledIn(null)
+  const primary = scoped.find((entry) => entry.defaultEntry) ?? global.find((entry) => entry.defaultEntry)
+  if (!primary) return []
+  return [
+    primary,
+    ...scoped.filter((entry) => entry.id !== primary.id),
+    ...global.filter((entry) => entry.id !== primary.id),
+  ]
+}
+
 function draftFromEntry(entry: AiModelEntry): Draft {
   return {
     id: entry.id,
@@ -61,6 +81,7 @@ export function AiSettingsPage() {
   const queryClient = useQueryClient()
   const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [chainScope, setChainScope] = useState('')
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['ai', 'model-entries'],
@@ -81,6 +102,27 @@ export function AiSettingsPage() {
     },
     onError: (saveError: Error) => {
       toast.error(saveError.message)
+    },
+  })
+
+  const setDefaultMutation = useMutation({
+    mutationFn: (entry: AiModelEntry) =>
+      aiApi.updateModelEntry(entry.id, {
+        displayName: entry.displayName,
+        modelSpec: entry.modelSpec,
+        baseUrl: entry.baseUrl,
+        siteId: entry.siteId,
+        embeddingSpec: entry.embeddingSpec,
+        enabled: true,
+        defaultEntry: true,
+        version: entry.version,
+      }),
+    onSuccess: () => {
+      toast.success(t('settings.defaultSet'))
+      void queryClient.invalidateQueries({ queryKey: ['ai', 'model-entries'] })
+    },
+    onError: (setError: Error) => {
+      toast.error(setError.message)
     },
   })
 
@@ -112,6 +154,7 @@ export function AiSettingsPage() {
   }
 
   const entries = data ?? []
+  const chain = computeChain(entries, chainScope === '' ? null : Number(chainScope))
 
   function submitDraft() {
     if (!draft || !canUpdate) return
@@ -138,10 +181,10 @@ export function AiSettingsPage() {
           {entries.length === 0 ? <p className="text-sm text-slate-600">{t('settings.empty')}</p> : null}
           <ul className="space-y-2">
             {entries.map((entry) => (
-              <li key={entry.id}>
+              <li key={entry.id} className="flex items-stretch gap-2">
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  className="flex flex-1 items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50"
                   onClick={() => setDraft(draftFromEntry(entry))}
                 >
                   <span>
@@ -154,6 +197,16 @@ export function AiSettingsPage() {
                     {entry.apiKeyConfigured ? ` ${entry.apiKeyHint}` : null}
                   </span>
                 </button>
+                {canUpdate && entry.enabled && !entry.defaultEntry ? (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
+                    disabled={setDefaultMutation.isPending}
+                    onClick={() => setDefaultMutation.mutate(entry)}
+                  >
+                    {t('settings.setDefault')}
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -166,6 +219,49 @@ export function AiSettingsPage() {
               {t('settings.add')}
             </button>
           </PermissionGate>
+        </article>
+
+        <article className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-slate-900">{t('settings.chainTitle')}</h3>
+            <select
+              className="rounded-lg border border-slate-200 px-2 py-1 text-sm"
+              value={chainScope}
+              onChange={(event) => setChainScope(event.target.value)}
+            >
+              <option value="">{t('settings.sitePlatform')}</option>
+              {(sitesQuery.data?.records ?? []).map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.siteName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-sm text-slate-600">{t('settings.chainHint')}</p>
+          {chain.length === 0 ? (
+            <p className="text-sm text-slate-600">{t('settings.chainEmpty')}</p>
+          ) : (
+            <ol className="space-y-1">
+              {chain.map((entry, index) => (
+                <li key={entry.id} className="flex items-center gap-2 text-sm">
+                  <span
+                    className={
+                      index === 0
+                        ? 'rounded bg-slate-900 px-2 py-0.5 text-xs font-medium text-white'
+                        : 'rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600'
+                    }
+                  >
+                    {index === 0 ? t('settings.chainPrimary') : t('settings.chainFallback', { n: index })}
+                  </span>
+                  <span className="font-medium text-slate-900">{entry.displayName}</span>
+                  <span className="text-slate-500">{entry.modelSpec}</span>
+                  <span className="text-xs text-slate-400">
+                    {entry.siteId == null ? t('settings.sitePlatform') : null}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
         </article>
 
         {draft ? (

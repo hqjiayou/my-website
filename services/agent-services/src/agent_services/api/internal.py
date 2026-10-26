@@ -9,6 +9,7 @@ from pydantic_ai.models import Model
 from agent_services.agent.harness import harness_component_flags
 from agent_services.agent.mcp_tools import mcp_config_snapshot, probe_mcp_ready
 from agent_services.agent.model_factory import (
+    EntryFallback,
     ModelHandle,
     create_model_for_entry,
     public_model_spec,
@@ -89,6 +90,10 @@ def _execution_handle(request: Request, body: ChatRequest) -> ModelHandle:
         api_key=selection.api_key,
         base_url=selection.base_url,
         settings=request.app.state.settings,
+        fallbacks=[
+            EntryFallback(spec=item.spec, api_key=item.api_key, base_url=item.base_url)
+            for item in body.fallback_models
+        ],
     )
 
 

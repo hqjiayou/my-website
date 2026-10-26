@@ -14,6 +14,7 @@ import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.infra.crypto.ModelEntryCipher;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -110,23 +111,69 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
     @Override
     @Transactional
     public AgentModelSelection currentSelection(long siteId) {
-        AdminAiModelEntryEntity entry = selectDefault(siteId);
-        if (entry == null) {
-            entry = selectDefault(null);
-        }
-        return toSelection(entry);
+        List<AgentModelSelection> chain = selectionChain(siteId);
+        return chain.isEmpty() ? null : chain.get(0);
     }
 
-    private AdminAiModelEntryEntity selectDefault(Long siteId) {
+    @Override
+    @Transactional
+    public List<AgentModelSelection> selectionChain(long siteId) {
+        List<AdminAiModelEntryEntity> siteEntries = enabledEntries(siteId);
+        List<AdminAiModelEntryEntity> globalEntries = enabledEntries(null);
+        AdminAiModelEntryEntity primary = firstDefault(siteEntries);
+        if (primary == null) {
+            primary = firstDefault(globalEntries);
+        }
+        if (primary == null) {
+            return List.of();
+        }
+        AgentModelSelection primarySelection = toSelection(primary);
+        if (primarySelection == null) {
+            // 主用坏掉（无 spec / 解密不出 key）时整链不启用，与 currentSelection 旧口径一致：
+            // 备援不得越过坏主用顶上，否则坏 key 会被静默掩盖。
+            return List.of();
+        }
+        List<AgentModelSelection> chain = new ArrayList<>();
+        chain.add(primarySelection);
+        appendSelections(chain, siteEntries, primary.getId());
+        appendSelections(chain, globalEntries, primary.getId());
+        return List.copyOf(chain);
+    }
+
+    /** 作用域内启用入口：默认在前，其余 id 升序（与 listEntries 的展示序一致）。 */
+    private List<AdminAiModelEntryEntity> enabledEntries(Long siteId) {
         LambdaQueryWrapper<AdminAiModelEntryEntity> query = new LambdaQueryWrapper<AdminAiModelEntryEntity>()
                 .eq(AdminAiModelEntryEntity::getEnabled, true)
-                .eq(AdminAiModelEntryEntity::getDefaultEntry, true);
+                .orderByDesc(AdminAiModelEntryEntity::getDefaultEntry)
+                .orderByAsc(AdminAiModelEntryEntity::getId);
         if (siteId == null) {
             query.isNull(AdminAiModelEntryEntity::getSiteId);
         } else {
             query.eq(AdminAiModelEntryEntity::getSiteId, siteId);
         }
-        return modelEntryMapper.selectOne(query.last("LIMIT 1"));
+        return modelEntryMapper.selectList(query);
+    }
+
+    private static AdminAiModelEntryEntity firstDefault(List<AdminAiModelEntryEntity> entries) {
+        for (AdminAiModelEntryEntity entry : entries) {
+            if (Boolean.TRUE.equals(entry.getDefaultEntry())) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private void appendSelections(
+            List<AgentModelSelection> chain, List<AdminAiModelEntryEntity> entries, Long skipId) {
+        for (AdminAiModelEntryEntity entry : entries) {
+            if (entry.getId() != null && entry.getId().equals(skipId)) {
+                continue;
+            }
+            AgentModelSelection selection = toSelection(entry);
+            if (selection != null) {
+                chain.add(selection);
+            }
+        }
     }
 
     private void clearOtherDefaults(Long siteId, Long keepId) {

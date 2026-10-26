@@ -10,7 +10,7 @@ export default {
     description: '集中维护模型 spec 和 API key。对话与预览使用当前启用的默认入口。',
     empty: '还没有模型入口。未设默认入口时，对话回退到 agent-services 的 AI_MODEL。',
     fallbackHint:
-      '运行时面板仍显示进程环境里的模型。知识库向量仍用进程里的 embedding 配置。密钥只保存在服务端，列表里只显示末尾提示。',
+      '运行时面板在选了入口时显示入口链，未设入口时显示进程环境里的模型。知识库向量仍用进程里的 embedding 配置。密钥只保存在服务端，列表里只显示末尾提示。',
     add: '新增入口',
     save: '保存',
     saving: '保存中…',
@@ -34,6 +34,14 @@ export default {
     defaultEntry: '作为默认入口',
     defaultBadge: '默认',
     disabledBadge: '已停用',
+    setDefault: '设为默认',
+    defaultSet: '已设为默认入口',
+    chainTitle: '生效链',
+    chainHint:
+      '对话实际顺序：主用遇到供应商 API 错误（限流 / 5xx）时自动顺链切换到下一个入口。停用入口不入链；没有默认入口时整链不启用。',
+    chainPrimary: '主用',
+    chainFallback: '备援 {{n}}',
+    chainEmpty: '当前作用域没有生效链（没有启用的默认入口）。',
   },
   prompts: {
     title: 'Prompt 配置',

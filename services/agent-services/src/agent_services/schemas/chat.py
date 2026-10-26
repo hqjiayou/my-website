@@ -123,6 +123,10 @@ class ChatRequest(BaseModel):
     skills: list[SkillId] | None = Field(default=None, max_length=MAX_SKILL_IDS)
     todos: list[TodoItem] | None = Field(default=None, max_length=MAX_TODO_ITEMS)
     model_selection: ModelSelection | None = Field(default=None, alias="model")
+    # 入口备援链（各自带凭证）；主用构建失败时不得顶替，仅运行期 API 错误时顺链切换
+    fallback_models: list[ModelSelection] = Field(
+        default_factory=list, alias="fallbackModels", max_length=8
+    )
     business_api_base_url: str | None = Field(default=None, alias="businessApiBaseUrl", max_length=512)
     knowledge_context: list[str] | None = Field(default=None, alias="knowledgeContext", max_length=4)
     memories: list[str] | None = Field(default=None, max_length=MAX_MEMORIES)
