@@ -256,6 +256,12 @@ class AdminAiKnowledgeServiceImplTest {
         defaultBase.setIsDefault(true);
         when(adminSiteMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminSiteEntity());
         when(baseMapper.selectOne(any())).thenReturn(defaultBase);
+        when(knowledgeMapper.insert(any(AdminAiKnowledgeDocumentEntity.class)))
+                .thenAnswer(invocation -> {
+                    AdminAiKnowledgeDocumentEntity inserted = invocation.getArgument(0);
+                    inserted.setId(11L);
+                    return 1;
+                });
         AdminAiKnowledgeDocumentEntity saved = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         saved.setBaseId(9L);
         when(knowledgeMapper.selectById(any())).thenReturn(saved);
