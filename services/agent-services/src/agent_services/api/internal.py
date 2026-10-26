@@ -246,7 +246,15 @@ async def list_skills(request: Request) -> dict[str, object]:
     catalog = list_skill_catalog(_skills_dir(request))
     payload = SkillCatalogResponse(
         skills=[
-            SkillCatalogItem(id=item.id, description=item.description, version=item.version)
+            SkillCatalogItem(
+                id=item.id,
+                description=item.description,
+                version=item.version,
+                license=item.license,
+                compatibility=item.compatibility,
+                metadata=dict(item.metadata),
+                allowed_tools=list(item.allowed_tools),
+            )
             for item in catalog
         ]
     )

@@ -139,7 +139,8 @@ tests/
 
 ## MCP（平台）
 
-- 配置：`MCP_SERVERS_JSON`（见 `.env.example`）。`transport` 仅 `http`/`sse`（url 以 `/sse` 结尾可省略）；`stdio` 及其它值跳过。health 只报配置态；深检用 `/internal/v1/mcp/ready`
+- 配置：`MCP_SERVERS_JSON`（见 `.env.example`）。`transport`：`http`（默认；url 以 `/sse` 结尾则视为 `sse`）、`sse`（MCP 2026-07-28 已弃用，解析时 warning，连接不变）、`stdio`（`command`，可选 `args` / `env` / `cwd`）。其它值跳过。health 只报配置态；深检 `GET /internal/v1/mcp/ready` 对 stdio 同样 `list_tools`
+- stdio 以本进程权限启动本地命令，只配置运维信任的 server。`env` 只传条目里的变量；MCP SDK 再并上默认可继承的一小套变量（不是整份父进程环境）
 - 连接失败：`503` + `errorCode=MCP_UNAVAILABLE`（不静默降级）
 - CI：in-process FastMCP（`tests/test_mcp_tools.py`），不依赖外部 MCP 进程
 - 本地 HTTP smoke：
@@ -164,7 +165,7 @@ uv run --extra dev python scripts/run_mcp_echo.py
 
 ## Skills（平台）
 
-- 目录：`skills/{id}/SKILL.md`；可选 frontmatter `description` / `version`
+- 目录：`skills/{id}/SKILL.md`。YAML frontmatter：`name`（与目录名一致，小写连字符，≤64）与 `description`（≤1024）；可选 `license`、`compatibility`、`metadata`、`allowed-tools`（只进 catalog，不做工具门控）。缺 `name` 回退目录名；缺 `description` 用正文首段。`version` 仍解析，但不是标准字段
 - 默认：`AGENT_DEFAULT_SKILLS`；请求体 `skills[]`；未知 id：`AGENT_SKILLS_UNKNOWN_POLICY=ignore|reject`
 - 注入上限：`AGENT_SKILLS_MAX_INSTRUCTION_CHARS`（默认 12000，须为正整数）。超出则按解析顺序整段跳过，并在提示末尾标记；第一个 skill 单独超限时截断该段
 - 目录 API：`GET /internal/v1/skills`（仅元数据）

@@ -1,22 +1,35 @@
 """Phase 5 / §20：Skills — 文件 SoT 指令模块（平台加载，非业务文案）。
 
-- 目录：`{skills_dir}/{id}/SKILL.md`
-- 可选 YAML frontmatter：`description` / `version`（`id` 以目录名为准）
-- 请求只传 skill id；内容不接受前端直传
+目录对齐 Agent Skills 开放标准：``{skills_dir}/{name}/SKILL.md``。``id`` 仍是目录名。
+Frontmatter 用 PyYAML ``safe_load`` 解析（顶层键按小写匹配，兼容旧文件大小写）。
+
+- ``name``：``^[a-z0-9]+(-[a-z0-9]+)*$`` 且不超过 64。写出时必须与目录名一致，否则跳过并 warning。
+  未写则回退目录名（旧文件兼容）；目录名不合格式同样跳过并 warning。
+- ``description``：不超过 1024。缺失时用正文第一个非空段落派生（截到 1024）并记 info；超长截断并 warning。
+- 可选：``license``、``compatibility``、``metadata``（字符串映射）、``allowed-tools``（实验性，空格分隔或字符串列表）。
+  ``allowed-tools`` 只解析进 catalog。本包不按它做工具门控，也不改工具注册。
+- ``version``：继续解析，供旧 skill 使用。它不是开放标准字段。
+
+请求只传 skill id；内容不接受前端直传。
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
 _SKILLS_ROOT = Path(__file__).resolve().parents[3] / "skills"
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
-_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+_SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+_SKILL_NAME_MAX = 64
+_DESCRIPTION_MAX = 1024
 _SKILL_SECTION_SPLIT = re.compile(r"\n\n(?=## Skill: )")
 _SECTION_TRUNCATED_MARK = "[... truncated]"
 
@@ -30,6 +43,10 @@ class SkillDefinition:
     body: str
     description: str = ""
     version: str | None = None
+    license: str | None = None
+    compatibility: str | None = None
+    metadata: dict[str, str] = field(default_factory=dict)
+    allowed_tools: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -61,19 +78,105 @@ def clear_skills_cache() -> None:
     _catalog_cache.clear()
 
 
-def _parse_frontmatter(raw: str) -> tuple[dict[str, str], str]:
+def _valid_skill_name(name: str) -> bool:
+    return len(name) <= _SKILL_NAME_MAX and _SKILL_NAME_RE.fullmatch(name) is not None
+
+
+def _parse_frontmatter(raw: str) -> tuple[dict[str, Any] | None, str]:
+    """返回 (meta, body)。meta 为 None 表示 frontmatter 不是合法 YAML，调用方跳过该 skill。"""
     text = raw.replace("\r\n", "\n").replace("\r", "\n").strip()
     match = _FRONTMATTER_RE.match(text)
     if not match:
         return {}, text
-    meta: dict[str, str] = {}
-    for line in match.group(1).splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        meta[key.strip().lower()] = value.strip().strip("\"'")
+    try:
+        loaded = yaml.safe_load(match.group(1))
+    except yaml.YAMLError:
+        return None, match.group(2).strip()
+    if loaded is None:
+        return {}, match.group(2).strip()
+    if not isinstance(loaded, dict):
+        return None, match.group(2).strip()
+    meta: dict[str, Any] = {}
+    for key, value in loaded.items():
+        if isinstance(key, str):
+            meta[key.strip().lower()] = value
     return meta, match.group(2).strip()
+
+
+def _optional_str(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
+def _legacy_version(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    if isinstance(value, (int, float)):
+        return str(value)
+    return None
+
+
+def _metadata_map(skill_id: str, value: object) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        logger.warning("Skill %s metadata is not a mapping, ignored", skill_id)
+        return {}
+    mapped: dict[str, str] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            logger.warning("Skill %s metadata key is not a string, skipped", skill_id)
+            continue
+        if isinstance(item, str):
+            mapped[key] = item
+        elif isinstance(item, bool):
+            mapped[key] = "true" if item else "false"
+        elif isinstance(item, (int, float)):
+            mapped[key] = str(item)
+        else:
+            logger.warning("Skill %s metadata %r is not a string, skipped", skill_id, key)
+    return mapped
+
+
+def _allowed_tools(skill_id: str, value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return tuple(part for part in value.split() if part)
+    if isinstance(value, list):
+        tools: list[str] = []
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                tools.append(item.strip())
+            else:
+                logger.warning("Skill %s allowed-tools entry is not a string, skipped", skill_id)
+        return tuple(tools)
+    logger.warning("Skill %s allowed-tools is not a string or list, ignored", skill_id)
+    return ()
+
+
+def _first_paragraph(body: str) -> str:
+    for paragraph in re.split(r"\n[ \t]*\n", body.strip()):
+        text = paragraph.strip()
+        if text:
+            return text
+    return ""
+
+
+def _fit_description(skill_id: str, text: str, *, derived: bool) -> str:
+    if derived:
+        logger.info("Skill %s description derived from body", skill_id)
+    if len(text) > _DESCRIPTION_MAX:
+        logger.warning("Skill %s description exceeds 1024 characters, truncated", skill_id)
+        return text[:_DESCRIPTION_MAX]
+    return text
 
 
 def _load_skill_file(skill_id: str, path: Path) -> SkillDefinition | None:
@@ -83,12 +186,42 @@ def _load_skill_file(skill_id: str, path: Path) -> SkillDefinition | None:
         logger.warning("Failed to read skill %s: %s", skill_id, type(exc).__name__, exc_info=exc)
         return None
     meta, body = _parse_frontmatter(raw)
+    if meta is None:
+        logger.warning("Skill %s frontmatter is not valid YAML, skipped", skill_id)
+        return None
     if not body:
         logger.warning("Skill %s has empty body, skipped", skill_id)
         return None
-    description = meta.get("description") or ""
-    version = meta.get("version") or None
-    return SkillDefinition(id=skill_id, body=body, description=description, version=version)
+
+    if "name" in meta and meta.get("name") is not None:
+        raw_name = meta.get("name")
+        name = raw_name.strip() if isinstance(raw_name, str) else ""
+        if not isinstance(raw_name, str) or name != skill_id or not _valid_skill_name(name):
+            logger.warning(
+                "Skill %s frontmatter name %r does not match the directory or name rules, skipped",
+                skill_id,
+                raw_name if isinstance(raw_name, str) else type(raw_name).__name__,
+            )
+            return None
+
+    raw_description = meta.get("description")
+    if isinstance(raw_description, str) and raw_description.strip():
+        description = _fit_description(skill_id, raw_description.strip(), derived=False)
+    else:
+        if raw_description is not None and not isinstance(raw_description, str):
+            logger.warning("Skill %s description is not a string, deriving from body", skill_id)
+        description = _fit_description(skill_id, _first_paragraph(body), derived=True)
+
+    return SkillDefinition(
+        id=skill_id,
+        body=body,
+        description=description,
+        version=_legacy_version(meta.get("version")),
+        license=_optional_str(meta.get("license")),
+        compatibility=_optional_str(meta.get("compatibility")),
+        metadata=_metadata_map(skill_id, meta.get("metadata")),
+        allowed_tools=_allowed_tools(skill_id, meta.get("allowed-tools")),
+    )
 
 
 def _dir_mtime_ns(root: Path) -> int:
@@ -142,10 +275,13 @@ def discover_skills(skills_dir: str) -> dict[str, SkillDefinition]:
         return {}
 
     for child in children:
-        if not child.is_dir() or not _NAME_RE.match(child.name):
+        if not child.is_dir():
             continue
         skill_file = child / "SKILL.md"
         if not skill_file.is_file():
+            continue
+        if not _valid_skill_name(child.name):
+            logger.warning("Skill directory %s does not match name rules, skipped", child.name)
             continue
         if not _is_within(root, skill_file):
             logger.warning("Skill %s escapes the skills directory, skipped", child.name)

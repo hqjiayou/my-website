@@ -1,4 +1,5 @@
 ---
+name: platform-smoke
 description: Platform smoke skill — acknowledge active skills only
 version: "1"
 ---
