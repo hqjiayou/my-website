@@ -164,7 +164,7 @@ MAX_TOOL_TRACE = 50
 
 
 def tool_succeeded(part: ToolReturnPart | RetryPromptPart) -> bool:
-    """框架层重试（参数校验失败 / MCP 工具报错 / 超时）或平台工具约定的 {"error": ...} 返回 → 失败。
+    """框架层重试、ToolFailed，或平台工具约定的 {"error": ...} 返回 → 失败。
 
     2.60 起工具超时与框架重试不再单独产出 RetryPromptPart，而是
     ToolReturnPart(outcome='retried', retry=...)；outcome / retry 防御式读取，
@@ -172,8 +172,10 @@ def tool_succeeded(part: ToolReturnPart | RetryPromptPart) -> bool:
     """
     if isinstance(part, RetryPromptPart):
         return False
-    # 任一成立即失败：outcome 标记 retried，或携带框架重试信息（2.60 为 RetryInfo）
-    if getattr(part, "outcome", None) == "retried" or getattr(part, "retry", None) is not None:
+    # 任一成立即失败：outcome 为 retried / failed，或携带框架重试信息（2.60 为 RetryInfo）。
+    # failed 是 ToolFailed 的终态（委派超时、超限等），模型看得到说明，但不再重试。
+    outcome = getattr(part, "outcome", None)
+    if outcome in {"retried", "failed"} or getattr(part, "retry", None) is not None:
         return False
     content = part.content
     return not (isinstance(content, dict) and "error" in content)
@@ -290,7 +292,13 @@ class _TimeoutToolset(WrapperToolset):
 def build_agent(model: Model, system_prompt: str, toolsets: list[object] | None, budget: RunBudget) -> Agent:
     resolved = list(toolsets or [])
     if budget.tool_timeout_seconds is not None:
-        resolved = [_TimeoutToolset(wrapped=ts, timeout_seconds=budget.tool_timeout_seconds) for ts in resolved]
+        # delegate_task 自己把超时收成工具返回。再套一层会变成 ModelRetry，委派失败会拖垮本轮。
+        resolved = [
+            ts
+            if getattr(ts, "skip_outer_tool_timeout", False)
+            else _TimeoutToolset(wrapped=ts, timeout_seconds=budget.tool_timeout_seconds)
+            for ts in resolved
+        ]
     return Agent(model, system_prompt=system_prompt, toolsets=resolved or None)
 
 

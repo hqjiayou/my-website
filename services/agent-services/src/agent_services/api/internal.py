@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic_ai.models import Model
 
 from agent_services.agent.harness import harness_component_flags
 from agent_services.agent.mcp_tools import mcp_config_snapshot, probe_mcp_ready
@@ -204,7 +205,7 @@ def _skills_dir(request: Request) -> str:
     return settings.agent_skills_dir.strip() or default_skills_directory()
 
 
-def _prepare_execution(request: Request, body: ChatRequest, site_id: str):
+def _prepare_execution(request: Request, body: ChatRequest, site_id: str, model: Model | None):
     settings = request.app.state.settings
     skills_dir = _skills_dir(request)
     resolution = resolve_skills(
@@ -224,6 +225,8 @@ def _prepare_execution(request: Request, body: ChatRequest, site_id: str):
         _business_settings(settings, body.business_api_base_url),
         site_id,
         todo_store=todo_store,
+        model=model,
+        retrieval=_retrieval_service_or_none(request),
     )
     return resolution, todo_store, toolsets
 
@@ -338,7 +341,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
             provider_status="BLOCKED",
         )
 
-    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id)
+    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id, handle.model)
 
     retrieval_context, retrieval_degraded, retrieval_chunks = await _grounding(
         request, body, site_id, message
@@ -417,7 +420,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
     retrieval_context, retrieval_degraded, retrieval_chunks = await _grounding(
         request, body, site_id, message
     )
-    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id)
+    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id, handle.model)
 
     async def event_generator():
         async for event in stream_chat_events(

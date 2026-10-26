@@ -188,9 +188,25 @@ def _compose(
             for item in tool_guidance
         ]
         sections.append("# Registered tools\n\n" + "\n".join(lines))
+    delegation = _delegation_section(tool_guidance)
+    if delegation:
+        sections.append(delegation)
     if mcp_servers:
         sections.append("# MCP servers\n\n" + "\n".join(f"- {name}" for name in mcp_servers))
     return "\n\n".join(sections)
+
+
+def _delegation_section(tool_guidance: tuple[ToolGuidance, ...]) -> str:
+    """工具未注册时返回空串，系统提示与未启用委派时逐字相同。"""
+    if not any(item.name == "delegate_task" or item.name.endswith("_delegate_task") for item in tool_guidance):
+        return ""
+    return (
+        "# Delegation\n\n"
+        "Use delegate_task for a self-contained sub-question, or when several independent angles "
+        "can be checked in parallel.\n"
+        "Do not delegate a simple question, or anything that needs a write or other business action.\n"
+        "Each delegated task must stand alone; the sub-agent does not see this conversation."
+    )
 
 
 def _history_summary_section(summary: str | None) -> str:
