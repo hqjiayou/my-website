@@ -17,12 +17,21 @@ def build_prompt_parts(
     todos: list[TodoItem] | None = None,
     locale: str | None = None,
     skills_max_instruction_chars: int | None = None,
+    knowledge_available: bool = False,
 ) -> tuple[str, str]:
     system = (
         prompt_profile.system_prompt.strip()
         if prompt_profile and prompt_profile.system_prompt and prompt_profile.system_prompt.strip()
         else f"You are the assistant for site: {site_id}. Answer in a concise and helpful way."
     )
+    if knowledge_available:
+        # 只在本轮确实注册了 search_site_knowledge 时才写，避免提示与工具不一致
+        system = (
+            f"{system}\n\n"
+            "When the user asks about this site's documents or facts, use the "
+            "search_site_knowledge tool first and answer from the returned passages; "
+            "if the search returns nothing relevant, say you could not find it."
+        )
     if skill_instructions:
         text = skill_instructions
         if skills_max_instruction_chars is not None:

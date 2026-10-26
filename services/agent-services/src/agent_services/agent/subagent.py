@@ -19,9 +19,9 @@ from pydantic_ai.models import Model
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.usage import RunUsage, UsageLimits
 
+from agent_services.agent.knowledge_tools import build_knowledge_toolset
 from agent_services.api.errors import external_failure_message
 from agent_services.retrieval.service import RetrievalService
-from agent_services.retrieval.store import RetrievedChunk
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def build_research_agent(
     retrieval: RetrievalService | None,
 ) -> Agent[None, str]:
     """只有知识搜索的子 agent。没有 delegate_task、业务工具、MCP 或 Todo。"""
-    return Agent(model, system_prompt=_RESEARCH_INSTRUCTIONS, toolsets=[_knowledge_toolset(site_id, retrieval)])
+    return Agent(model, system_prompt=_RESEARCH_INSTRUCTIONS, toolsets=[build_knowledge_toolset(site_id, retrieval)])
 
 
 def build_delegate_tool(
@@ -154,42 +154,6 @@ def build_delegate_tool(
         if not text:
             raise ToolFailed("Delegation returned an empty result.")
         return _limit_result(text)
-
-    return toolset
-
-
-def format_knowledge_chunks(chunks: list[RetrievedChunk]) -> str:
-    """与 chat grounding 一样用 `- ` 片段；工具返回另附来源标识。"""
-    if not chunks:
-        return "No matching site knowledge."
-    return "\n\n".join(
-        f"- {chunk.content} (source: {chunk.source_id}#{chunk.chunk_index})" for chunk in chunks
-    )
-
-
-def _knowledge_toolset(site_id: str, retrieval: RetrievalService | None) -> FunctionToolset:
-    toolset = FunctionToolset()
-
-    @toolset.tool_plain
-    async def search_site_knowledge(query: str) -> str:
-        """Search this site's knowledge base and return matching passages with their source ids.
-
-        Args:
-            query: what to look up in the site knowledge base.
-        """
-        cleaned = query.strip()
-        if not cleaned:
-            return "query is required."
-        if retrieval is None:
-            return "Site knowledge search is unavailable."
-        try:
-            chunks = await retrieval.retrieve_chunks(site_id=site_id, query=cleaned)
-        except Exception as exc:  # noqa: BLE001 — 检索失败不让子 run 失败
-            logger.warning("subagent knowledge search failed", exc_info=exc)
-            return "Site knowledge search failed."
-        if retrieval.degraded:
-            return "Site knowledge search failed."
-        return format_knowledge_chunks(chunks)
 
     return toolset
 
