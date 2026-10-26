@@ -215,4 +215,4 @@ def _remaining_tool_calls(usage: RunUsage, limits: UsageLimits | None) -> int | 
 def _limit_result(text: str) -> str:
     if len(text) <= DELEGATE_RESULT_MAX_CHARS:
         return text
-    return text[:DELEGATE_RESULT_MAX_CHARS] + _TRUNCATED
+    return text[: DELEGATE_RESULT_MAX_CHARS - len(_TRUNCATED)] + _TRUNCATED

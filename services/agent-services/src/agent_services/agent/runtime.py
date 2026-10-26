@@ -255,15 +255,41 @@ def build_user_prompt(text: str, attachments: list[ChatAttachment] | None) -> Us
     return parts
 
 
+MAX_HISTORY_IMAGES = 4
+IMAGE_ONLY_PLACEHOLDER = "[图片]"
+
+
 def build_message_history(history: list[ChatHistoryMessage] | None) -> list[ModelMessage]:
-    """Java 传入的扁平历史 → Pydantic AI ModelMessage；顺序保持原样。"""
+    """Java 传入的扁平历史 → Pydantic AI ModelMessage；顺序保持原样。
+
+    图片重播设全域上限：从最新往前数，最多带最近 MAX_HISTORY_IMAGES 张；
+    更早的 USER 轮次丢图保文字，文字为空时以占位符保留该轮，
+    避免长对话每轮重送全部历史图片。
+    """
     if not history:
         return []
+    effective: list[list[ChatAttachment] | None] = [item.attachments for item in history]
+    image_budget = MAX_HISTORY_IMAGES
+    for index in range(len(history) - 1, -1, -1):
+        item = history[index]
+        if item.role != "USER" or not item.attachments:
+            continue
+        if image_budget <= 0:
+            effective[index] = []
+            continue
+        take = item.attachments[:image_budget]
+        effective[index] = take
+        image_budget -= len(take)
     messages: list[ModelMessage] = []
-    for item in history:
+    for index, item in enumerate(history):
         if item.role == "USER":
+            attachments = effective[index]
+            dropped_images = len(item.attachments or []) - len(attachments or [])
+            text = item.content
+            if dropped_images > 0 and not attachments and not text:
+                text = IMAGE_ONLY_PLACEHOLDER
             messages.append(
-                ModelRequest(parts=[UserPromptPart(content=build_user_prompt(item.content, item.attachments))])
+                ModelRequest(parts=[UserPromptPart(content=build_user_prompt(text, attachments))])
             )
         else:
             messages.append(ModelResponse(parts=[TextPart(content=item.content)]))
