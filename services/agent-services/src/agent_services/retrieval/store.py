@@ -5,10 +5,16 @@
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass
 from typing import Protocol
 
 from agent_services.retrieval.embeddings import _finite_floats
+
+logger = logging.getLogger(__name__)
+
+# pgvector 的 vector 型 HNSW 索引上限。超过则不建索引，搜索仍走顺序扫描。
+HNSW_MAX_DIMENSIONS = 2000
 
 
 @dataclass(frozen=True)
@@ -37,6 +43,11 @@ def citation_sources(
         {"sourceId": item.source_id, "chunkIndex": item.chunk_index, "score": item.score}
         for item in ranked[:limit]
     ]
+
+
+def hnsw_index_allowed(dimensions: int) -> bool:
+    """维度不超过 pgvector HNSW 上限时才建索引。"""
+    return dimensions <= HNSW_MAX_DIMENSIONS
 
 
 def like_literal_pattern(token: str) -> str:
@@ -100,9 +111,10 @@ class PgVectorRetrievalStore:
     """pgvector 实现。schema/表首次使用时创建；CREATE EXTENSION 需要 DBA 预授权，
     失败时假定扩展已由运维预建（部署文档约定）。"""
 
-    def __init__(self, dsn: str, *, dimensions: int) -> None:
+    def __init__(self, dsn: str, *, dimensions: int, hnsw_ef_search: int = 40) -> None:
         self._dsn = dsn
         self._dimensions = dimensions
+        self._hnsw_ef_search = hnsw_ef_search
         self._pool = None
         self._pool_lock = asyncio.Lock()
 
@@ -150,6 +162,19 @@ class PgVectorRetrievalStore:
                 "CREATE INDEX IF NOT EXISTS idx_agent_retrieval_chunks_site_source "
                 "ON agent_retrieval.chunks (site_id, source_id)"
             )
+            if hnsw_index_allowed(self._dimensions):
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_agent_retrieval_chunks_embedding_hnsw "
+                    "ON agent_retrieval.chunks USING hnsw (embedding vector_cosine_ops) "
+                    "WITH (m = 16, ef_construction = 64)"
+                )
+            else:
+                logger.warning(
+                    "Skipping HNSW index: embedding dimensions %s exceed %s; "
+                    "vector search will scan",
+                    self._dimensions,
+                    HNSW_MAX_DIMENSIONS,
+                )
 
     def _vector_literal(self, embedding: list[float]) -> str:
         if len(embedding) != self._dimensions:
@@ -209,7 +234,17 @@ class PgVectorRetrievalStore:
         self, *, site_id: str, embedding: list[float], top_k: int
     ) -> list[RetrievedChunk]:
         pool = await self._get_pool()
-        async with pool.acquire() as conn:
+        # hnsw.ef_search 是事务局部参数。asyncpg 必须把 set_config 和查询放进同一个 transaction。
+        async with pool.acquire() as conn, conn.transaction():
+            if (
+                isinstance(self._hnsw_ef_search, int)
+                and not isinstance(self._hnsw_ef_search, bool)
+                and self._hnsw_ef_search > 0
+            ):
+                await conn.execute(
+                    "SELECT set_config('hnsw.ef_search', $1, true)",
+                    str(self._hnsw_ef_search),
+                )
             rows = await conn.fetch(
                 "SELECT source_id, chunk_index, content, "
                 "1 - (embedding <=> $2::vector) AS score "

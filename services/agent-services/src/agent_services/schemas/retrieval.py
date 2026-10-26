@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field, field_validator
 
 from agent_services.retrieval.service import DEFAULT_TOP_K
+from agent_services.schemas.chat import ModelSelection
 
 MAX_SITE_ID_LENGTH = 64
 MAX_SOURCE_ID_LENGTH = 128
@@ -37,6 +38,8 @@ class RetrievalSearchRequest(BaseModel):
     embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
     api_key: str | None = Field(default=None, alias="apiKey", max_length=4096)
     base_url: str | None = Field(default=None, alias="baseUrl", max_length=512)
+    # 与 chat 的 model 同一形状。Java 知识检索目前只带 embedding 凭证，缺省时 rerank 用进程 AI_MODEL。
+    model_selection: ModelSelection | None = Field(default=None, alias="model")
 
     model_config = {"populate_by_name": True}
 
@@ -62,5 +65,7 @@ class RetrievalSearchHit(BaseModel):
 class RetrievalSearchResponse(BaseModel):
     hits: list[RetrievalSearchHit]
     degraded: bool
+    # 只有重排成功才为 true。序列化时 false 不写出，既有响应体仍只有 hits 与 degraded。
+    rerank_applied: bool = Field(default=False, alias="rerankApplied")
 
     model_config = {"populate_by_name": True}

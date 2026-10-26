@@ -6,6 +6,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 余弦相似度门槛的默认值。0 关闭；低于此分的向量命中不返回，也不另取一批凑满 topK。
 RETRIEVAL_MIN_SCORE_DEFAULT = 0.35
+# 每次向量查询在事务内设置的 hnsw.ef_search。维度超过 2000 时不建 HNSW，此值仍会写入。
+RETRIEVAL_HNSW_EF_SEARCH_DEFAULT = 40
+# 融合候选多于 topK 且能解析聊天模型时，截断前做 listwise 重排。失败则维持融合原序。
+RETRIEVAL_RERANK_ENABLED_DEFAULT = True
+RETRIEVAL_RERANK_TIMEOUT_SECONDS_DEFAULT = 4.0
+RETRIEVAL_RERANK_MAX_CANDIDATES_DEFAULT = 12
 
 
 class Settings(BaseSettings):
@@ -53,6 +59,20 @@ class Settings(BaseSettings):
     ai_embedding_dimensions: int = Field(default=1536, validation_alias="AI_EMBEDDING_DIMENSIONS")
     retrieval_min_score: float = Field(
         default=RETRIEVAL_MIN_SCORE_DEFAULT, validation_alias="RETRIEVAL_MIN_SCORE"
+    )
+    retrieval_hnsw_ef_search: int = Field(
+        default=RETRIEVAL_HNSW_EF_SEARCH_DEFAULT, validation_alias="RETRIEVAL_HNSW_EF_SEARCH"
+    )
+    retrieval_rerank_enabled: bool = Field(
+        default=RETRIEVAL_RERANK_ENABLED_DEFAULT, validation_alias="RETRIEVAL_RERANK_ENABLED"
+    )
+    retrieval_rerank_timeout_seconds: float = Field(
+        default=RETRIEVAL_RERANK_TIMEOUT_SECONDS_DEFAULT,
+        validation_alias="RETRIEVAL_RERANK_TIMEOUT_SECONDS",
+    )
+    retrieval_rerank_max_candidates: int = Field(
+        default=RETRIEVAL_RERANK_MAX_CANDIDATES_DEFAULT,
+        validation_alias="RETRIEVAL_RERANK_MAX_CANDIDATES",
     )
 
     # ---- Phase 4 业务工具（Function Tools → Java internal API）----
