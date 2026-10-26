@@ -100,7 +100,15 @@ export type {
 
 export type { Site } from '@/types/site'
 
-export { SITE_STATUS, SITE_STATUS_VALUES, SITE_TYPE_VALUES, SITE_CODE_PATTERN } from '@/types/site'
+export {
+  SITE_STATUS,
+  SITE_STATUS_VALUES,
+  SITE_TYPE_VALUES,
+  SITE_TYPE_PRESETS,
+  SITE_TYPE_LEGACY,
+  SITE_TAG_PATTERN,
+  SITE_CODE_PATTERN,
+} from '@/types/site'
 
-/** @deprecated 使用 SITE_TYPE_VALUES；保留别名避免旧导入瞬时断裂。 */
+/** @deprecated 旧别名：现指向预设用途标签。 */
 export const SITE_INDUSTRY_VALUES = SITE_TYPE_VALUES

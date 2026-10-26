@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import {
-  SITE_TYPE_VALUES,
+  SITE_TYPE_LEGACY,
   templateApi,
   TEMPLATE_STATUS_VALUES,
   type TemplateListQuery,
@@ -99,7 +99,7 @@ export function TemplatesPage() {
             onChange={(event) => setDraft((prev) => ({ ...prev, siteType: event.target.value || undefined }))}
           >
             <option value="">{t('list.filters.allSiteType')}</option>
-            {SITE_TYPE_VALUES.map((value) => (
+            {SITE_TYPE_LEGACY.map((value) => (
               <option key={value} value={value}>
                 {tSites(`siteType.${value}`)}
               </option>

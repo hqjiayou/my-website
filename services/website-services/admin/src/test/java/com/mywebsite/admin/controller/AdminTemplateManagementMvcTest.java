@@ -134,10 +134,12 @@ class AdminTemplateManagementMvcTest extends AbstractAdminSpringBootTest {
                         .param("status", "ACTIVE"))
                 .andExpect(status().isBadRequest());
 
+        // siteType 已改自由标签：未知标签不再 400，而是过滤后返回空列表。
         mockMvc.perform(get("/api/admin/templates")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .param("siteType", "NOT_A_TYPE"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records").isEmpty());
 
         MvcResult detail = mockMvc.perform(get("/api/admin/templates/by-code/clinic-v1")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))

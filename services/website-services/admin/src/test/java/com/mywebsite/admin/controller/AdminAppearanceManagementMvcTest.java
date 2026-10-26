@@ -203,6 +203,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
     void createRejectsTemplateSiteTypeMismatchAndNonEnabled() throws Exception {
         String token = tokenFor(500L);
 
+        // 模板与站点标签已解耦：类型不一致不再拒绝（仅未启用模板仍拒绝，见下方 draft 用例）。
         ObjectNode mismatch = MAPPER.createObjectNode();
         mismatch.put("siteCode", "mm_" + Long.toHexString(System.nanoTime()));
         mismatch.put("siteName", "Mismatch");
@@ -216,7 +217,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(mismatch)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isOk());
 
         ObjectNode draft = MAPPER.createObjectNode();
         draft.put("siteCode", "dr_" + Long.toHexString(System.nanoTime()));

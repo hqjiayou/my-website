@@ -25,7 +25,7 @@ source_of_truth: Flyway + *Constants.java + apps/admin-web/src/types/*
 
 状态：`ACTIVE` | `DISABLED`（`AdminSiteConstants`）。库没有 CHECK。
 
-类型：`CAR_REPAIR` | `USED_CAR` | `CAKE` | `SALON` | `CLINIC` | `GYOSEISHOSHI`。不要用 V1 注释里的 `CAR`。
+用途标签（2026-10-26 起取代旧行业闭集）：自由标签，校验为 `SITE_TAG_PATTERN`（1–32 字符、字母/数字开头）；预设 `PERSONAL` | `PORTFOLIO` | `BLOG` | `KNOWLEDGE` | `TOOL` | `OTHER`，亦可自订。旧值 `CAR_REPAIR` | `USED_CAR` | `CAKE` | `SALON` | `CLINIC` | `GYOSEISHOSHI` 仍可读、仍可作标签存续；模板目录（site_template.site_type）仍按旧闭集对齐。模板与站点标签已解耦，建站不再要求两者一致。
 
 ## Template
 
