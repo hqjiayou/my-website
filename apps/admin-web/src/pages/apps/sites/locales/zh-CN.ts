@@ -465,9 +465,9 @@ export default {
       uploadDialogTitle: '上传文件',
       chooseFile: '选择文件',
       titleLabel: '标题',
-      uploadHint: '仅支持 .txt / .md，最大 1 MB。',
-      invalidExtension: '仅支持 .txt 或 .md 文件。',
-      fileTooLarge: '文件大小不能超过 1 MB。',
+      uploadHint: '仅支持 .txt / .md / .pdf / .docx / .html，最大 10 MB。',
+      invalidExtension: '仅支持 .txt / .md / .pdf / .docx / .html 文件。',
+      fileTooLarge: '文件大小不能超过 10 MB。',
       uploaded: '文件已上传',
       uploading: '上传中…',
       columns: {

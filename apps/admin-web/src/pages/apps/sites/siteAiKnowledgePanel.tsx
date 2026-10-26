@@ -9,8 +9,9 @@ import { AI_KB_STATUS, AI_KB_STATUS_VALUES, type AiKnowledgeListItem, type AiKno
 import { PermissionGate } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
-const KB_UPLOAD_MAX_BYTES = 1024 * 1024
-const KB_UPLOAD_ACCEPT = '.txt,.md,text/plain,text/markdown'
+const KB_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+const KB_UPLOAD_ACCEPT =
+  '.txt,.md,.pdf,.docx,.html,.htm,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/html'
 
 interface EditorState {
   mode: 'create' | 'edit'
@@ -48,7 +49,7 @@ function formatFileSize(bytes: number) {
 
 function uploadFieldError(file: File): UploadDialogState['fieldError'] {
   const extension = knowledgeFileExtension(file.name)
-  if (extension !== 'txt' && extension !== 'md') return 'extension'
+  if (!['txt', 'md', 'pdf', 'docx', 'html', 'htm'].includes(extension)) return 'extension'
   if (file.size > KB_UPLOAD_MAX_BYTES) return 'size'
   return null
 }

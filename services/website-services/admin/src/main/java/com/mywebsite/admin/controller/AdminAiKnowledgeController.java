@@ -9,6 +9,7 @@ import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedConfl
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedResultDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUpdateRequest;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
+import com.mywebsite.admin.service.AdminAiKnowledgeTextExtractor;
 import com.mywebsite.admin.service.AdminAiKnowledgeService.ReembedConflictException;
 import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.api.ResponseMessages;
@@ -48,9 +49,12 @@ import org.springframework.web.multipart.MultipartFile;
 public class AdminAiKnowledgeController {
 
     private static final String DOCUMENTS = "/api/admin/sites/{siteId}/ai/knowledge-documents";
-    private static final int MAX_UPLOAD_BYTES = 1024 * 1024;
+    private static final int MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+    /** 抽取文本上限（字符），与 agent-services 的 MAX_CONTENT_LENGTH 对齐。 */
+    private static final int MAX_CONTENT_CHARS = 3_000_000;
     private static final int MAX_TITLE_LENGTH = 255;
     private static final Set<String> TEXT_EXTENSIONS = Set.of("txt", "md");
+    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of("txt", "md", "pdf", "docx", "html", "htm");
 
     private final AdminAiKnowledgeService adminAiKnowledgeService;
 
@@ -91,7 +95,7 @@ public class AdminAiKnowledgeController {
 
     @PostMapping(value = DOCUMENTS + "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
-    @Operation(summary = "上传 AI 知识库纯文本（.txt/.md），走创建文档")
+    @Operation(summary = "上传 AI 知识库文件（.txt/.md/.pdf/.docx/.html），抽取文本走创建文档")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> upload(
             @PathVariable long siteId,
             @RequestPart("file") MultipartFile file,
@@ -107,7 +111,7 @@ public class AdminAiKnowledgeController {
         }
         String filename = baseName(file.getOriginalFilename());
         String extension = extensionOf(filename);
-        if (!TEXT_EXTENSIONS.contains(extension)) {
+        if (!SUPPORTED_EXTENSIONS.contains(extension)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_TYPE);
         }
         if (file.getSize() > MAX_UPLOAD_BYTES) {
@@ -117,15 +121,26 @@ public class AdminAiKnowledgeController {
         if (bytes.length > MAX_UPLOAD_BYTES) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
         }
-        String content = decodeUtf8(bytes);
+        String content = TEXT_EXTENSIONS.contains(extension) ? decodeUtf8(bytes) : extractText(extension, bytes);
         if (!StringUtils.hasText(content)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_EMPTY);
+        }
+        if (content.length() > MAX_CONTENT_CHARS) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
         }
         String title = StringUtils.hasText(titleOverride) ? titleOverride.trim() : titleFromFilename(filename);
         if (!StringUtils.hasText(title) || title.length() > MAX_TITLE_LENGTH) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.TITLE_INVALID);
         }
         return new AdminAiKnowledgeCreateRequest(title, content);
+    }
+
+    private static String extractText(String extension, byte[] bytes) {
+        try {
+            return AdminAiKnowledgeTextExtractor.extractText(extension, bytes);
+        } catch (AdminAiKnowledgeTextExtractor.ExtractionException ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_ENCODING);
+        }
     }
 
     private static byte[] readBytes(MultipartFile file) {
