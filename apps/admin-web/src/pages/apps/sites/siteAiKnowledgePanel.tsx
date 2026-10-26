@@ -10,9 +10,14 @@ import { PermissionGate } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
 const KB_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
-const KB_UPLOAD_ACCEPT =
-  '.txt,.md,.pdf,.docx,.html,.htm,.xlsx,.pptx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/html,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation'
-const KB_UPLOAD_EXTENSIONS = ['txt', 'md', 'pdf', 'docx', 'html', 'htm', 'xlsx', 'pptx']
+const KB_UPLOAD_EXTENSIONS = [
+  'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'log',
+  'py', 'java', 'js', 'ts', 'tsx', 'jsx', 'css', 'scss', 'sql', 'sh',
+  'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt',
+  'scala', 'pl', 'r', 'lua', 'vue',
+  'pdf', 'docx', 'html', 'htm', 'xlsx', 'pptx', 'epub', 'odt', 'ods', 'odp', 'rtf',
+]
+const KB_UPLOAD_ACCEPT = KB_UPLOAD_EXTENSIONS.map((ext) => `.${ext}`).join(',')
 
 interface EditorState {
   mode: 'create' | 'edit'
@@ -225,7 +230,22 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
 
   const columns = useMemo<DataTableColumn<AiKnowledgeListItem>[]>(
     () => [
-      { id: 'title', header: t('aiWorkspace.knowledge.columns.title'), cell: (item) => item.title },
+      {
+        id: 'title',
+        header: t('aiWorkspace.knowledge.columns.title'),
+        cell: (item) => (
+          <div>
+            <div>{item.title}</div>
+            {item.originalFilename ? (
+              <div className="text-xs text-slate-500">
+                {item.originalFilename}
+                {item.sourceFormat ? ` · ${item.sourceFormat}` : ''}
+                {item.fileSizeBytes != null ? ` · ${formatFileSize(item.fileSizeBytes)}` : ''}
+              </div>
+            ) : null}
+          </div>
+        ),
+      },
       {
         id: 'status',
         header: t('aiWorkspace.knowledge.columns.status'),
@@ -270,6 +290,20 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
                 {t('aiWorkspace.knowledge.edit')}
               </button>
             </PermissionGate>
+            {item.hasOriginal ? (
+              <button
+                type="button"
+                className="text-sm underline"
+                onClick={() => {
+                  void aiApi
+                    .getKnowledgeDocumentFile(siteId, item.id)
+                    .then((file) => window.open(file.url, '_blank', 'noopener'))
+                    .catch((error: Error) => toast.error(error.message))
+                }}
+              >
+                {t('aiWorkspace.knowledge.downloadOriginal')}
+              </button>
+            ) : null}
             {item.status === 'ACTIVE' && item.indexStatus !== 'INDEXED' ? (
               <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
                 <button
@@ -299,7 +333,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
         ),
       },
     ],
-    [deleteMutation, openEditor, reindexMutation, t],
+    [deleteMutation, openEditor, reindexMutation, siteId, t],
   )
 
   const records = data?.records ?? []

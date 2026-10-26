@@ -17,6 +17,10 @@ public final class AdminAiKnowledgeDtos {
             String indexStatus,
             String indexError,
             OffsetDateTime indexedAt,
+            String sourceFormat,
+            String originalFilename,
+            Long fileSizeBytes,
+            boolean hasOriginal,
             Integer version,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {}
@@ -30,9 +34,25 @@ public final class AdminAiKnowledgeDtos {
             String indexStatus,
             String indexError,
             OffsetDateTime indexedAt,
+            String sourceFormat,
+            String originalFilename,
+            Long fileSizeBytes,
+            boolean hasOriginal,
             Integer version,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {}
+
+    /** 上传元信息（原档留存与去重）：bytes 为原始文件内容，sha256 为其十六进制指纹。 */
+    public record AdminAiKnowledgeUploadMeta(
+            String originalFilename,
+            String sourceFormat,
+            String contentType,
+            long fileSizeBytes,
+            String sha256,
+            byte[] bytes) {}
+
+    /** 原档下载（短时 presigned URL）。 */
+    public record AdminAiKnowledgeFileDto(String url, String filename, String sourceFormat) {}
 
     public record AdminAiKnowledgeCreateRequest(
             @NotBlank @Size(max = 255) String title, @NotBlank String content) {}

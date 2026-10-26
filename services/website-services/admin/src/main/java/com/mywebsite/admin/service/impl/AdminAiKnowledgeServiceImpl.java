@@ -3,8 +3,11 @@ package com.mywebsite.admin.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mywebsite.admin.constant.AdminAiKnowledgeMessageKeys;
 import com.mywebsite.admin.constant.AdminSiteMessageKeys;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeFileDto;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeDetailDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListItemDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListQuery;
@@ -26,6 +29,10 @@ import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.page.PageResult;
+import com.mywebsite.infra.properties.StorageProperties;
+import com.mywebsite.infra.service.ObjectStorageService;
+import java.io.ByteArrayInputStream;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -57,16 +64,22 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     private final AdminSiteMapper adminSiteMapper;
     private final AgentClient agentClient;
     private final AdminAiModelEntryService modelEntryService;
+    private final ObjectStorageService objectStorageService;
+    private final StorageProperties storageProperties;
 
     public AdminAiKnowledgeServiceImpl(
             AdminAiKnowledgeDocumentMapper knowledgeMapper,
             AdminSiteMapper adminSiteMapper,
             AgentClient agentClient,
-            AdminAiModelEntryService modelEntryService) {
+            AdminAiModelEntryService modelEntryService,
+            ObjectStorageService objectStorageService,
+            StorageProperties storageProperties) {
         this.knowledgeMapper = knowledgeMapper;
         this.adminSiteMapper = adminSiteMapper;
         this.agentClient = agentClient;
         this.modelEntryService = modelEntryService;
+        this.objectStorageService = objectStorageService;
+        this.storageProperties = storageProperties;
     }
 
     @Override
@@ -121,6 +134,69 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
     @Override
     @Transactional
+    public AdminAiKnowledgeDetailDto createUploadedDocument(
+            long siteId, AdminAiKnowledgeCreateRequest request, AdminAiKnowledgeUploadMeta meta) {
+        requireSite(siteId);
+        AdminAiKnowledgeDocumentEntity duplicate = knowledgeMapper.selectOne(
+                new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
+                        .eq(AdminAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(AdminAiKnowledgeDocumentEntity::getSha256, meta.sha256()));
+        if (duplicate != null) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAiKnowledgeMessageKeys.FILE_DUPLICATE);
+        }
+
+        AdminAiKnowledgeDocumentEntity entity = new AdminAiKnowledgeDocumentEntity();
+        entity.setSiteId(siteId);
+        entity.setTitle(request.title().trim());
+        entity.setContent(request.content());
+        entity.setStatus(AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        entity.setSourceFormat(meta.sourceFormat());
+        entity.setOriginalFilename(meta.originalFilename());
+        entity.setFileSizeBytes(meta.fileSizeBytes());
+        entity.setSha256(meta.sha256());
+
+        // 存储已配置时先落原档（key 按内容指纹，天然幂等）；落档失败诚实拒绝整单，不假装存了。
+        String bucket = storageProperties == null ? null : storageProperties.getBucket();
+        if (StringUtils.hasText(bucket)) {
+            String objectKey =
+                    "sites/" + siteId + "/knowledge/" + meta.sha256() + "." + meta.sourceFormat();
+            try {
+                objectStorageService.put(
+                        bucket,
+                        objectKey,
+                        new ByteArrayInputStream(meta.bytes()),
+                        meta.bytes().length,
+                        meta.contentType());
+            } catch (RuntimeException ex) {
+                log.warn("KB original file put failed (siteId={}, key={})", siteId, objectKey, ex);
+                throw new BusinessException(
+                        ErrorCode.SYSTEM_ERROR.getCode(), AdminAiKnowledgeMessageKeys.FILE_STORAGE_FAILED);
+            }
+            entity.setStorageBucket(bucket);
+            entity.setStorageKey(objectKey);
+        }
+        knowledgeMapper.insert(entity);
+
+        AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(siteId, entity.getId());
+        syncDerivedIndex(saved);
+        return toDetail(saved);
+    }
+
+    @Override
+    public AdminAiKnowledgeFileDto originalFileUrl(long siteId, long documentId) {
+        requireSite(siteId);
+        AdminAiKnowledgeDocumentEntity entity = requireDocumentInSite(siteId, documentId);
+        if (!StringUtils.hasText(entity.getStorageKey())) {
+            throw new BusinessException(
+                    ErrorCode.NOT_FOUND.getCode(), AdminAiKnowledgeMessageKeys.FILE_ORIGINAL_MISSING);
+        }
+        String url = objectStorageService.presignedGet(
+                entity.getStorageBucket(), entity.getStorageKey(), Duration.ofMinutes(10));
+        return new AdminAiKnowledgeFileDto(url, entity.getOriginalFilename(), entity.getSourceFormat());
+    }
+
+    @Override
+    @Transactional
     public AdminAiKnowledgeDetailDto updateDocument(
             long siteId, long documentId, AdminAiKnowledgeUpdateRequest request) {
         requireSite(siteId);
@@ -164,6 +240,23 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         removeFromDerivedIndex(siteId, documentId);
+        removeOriginalObject(entity);
+    }
+
+    /** 原档清理（best-effort）：同站点同指纹只可能有一篇（上传去重），删文档即可删对象。 */
+    private void removeOriginalObject(AdminAiKnowledgeDocumentEntity entity) {
+        if (!StringUtils.hasText(entity.getStorageKey())) {
+            return;
+        }
+        try {
+            objectStorageService.remove(entity.getStorageBucket(), entity.getStorageKey());
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "KB original file remove failed (siteId={}, documentId={}); object may linger",
+                    entity.getSiteId(),
+                    entity.getId(),
+                    ex);
+        }
     }
 
     @Override
@@ -398,6 +491,10 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 entity.getIndexStatus(),
                 entity.getIndexError(),
                 entity.getIndexedAt(),
+                entity.getSourceFormat(),
+                entity.getOriginalFilename(),
+                entity.getFileSizeBytes(),
+                StringUtils.hasText(entity.getStorageKey()),
                 entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
@@ -413,6 +510,10 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 entity.getIndexStatus(),
                 entity.getIndexError(),
                 entity.getIndexedAt(),
+                entity.getSourceFormat(),
+                entity.getOriginalFilename(),
+                entity.getFileSizeBytes(),
+                StringUtils.hasText(entity.getStorageKey()),
                 entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
