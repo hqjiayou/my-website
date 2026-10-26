@@ -82,6 +82,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         if (request == null || !StringUtils.hasText(request.message())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(siteId);
         AgentChatRequest agentRequest = new AgentChatRequest(
                 String.valueOf(siteId),
                 request.message().trim(),
@@ -91,9 +92,13 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 toHistory(request.history()),
                 normalizeSkills(request.skills()),
                 toTodos(request.todos()),
-                modelEntryService.currentSelection(siteId),
+                chain.isEmpty() ? null : chain.get(0),
                 callbackBaseUrl(),
-                knowledgeSnippets(siteId, request.message().trim()));
+                knowledgeSnippets(siteId, request.message().trim()),
+                null,
+                null,
+                null,
+                chain.size() > 1 ? List.copyOf(chain.subList(1, chain.size())) : null);
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter));
         return emitter;
@@ -151,17 +156,18 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
      * 面板上的模型名是这次对话会用的入口，不是进程环境变量。
      * 状态用 CONFIGURED：库里有入口，并不表示刚才探测过供应商。
      * 检索状态保持 Python 的原话，不根据错误文案改成可用。
-     * 入口调用不使用进程 fallback，所以这里清空。
+     * 备援列显示入口链在主用之后的 specs（各入口自带 key，主用运行期 API 错误时 Python 顺链切换）；
+     * 进程级 AI_FALLBACK_MODELS 不在面板上，因为入口链在前、进程备援在后且面板无从得知其凭证状态。
      */
     private AgentRuntimeStatus overlayEntry(long siteId, AgentRuntimeStatus status) {
-        AgentModelSelection selection = modelEntryService.currentSelection(siteId);
-        if (selection == null || !StringUtils.hasText(selection.spec())) {
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(siteId);
+        if (chain.isEmpty() || !StringUtils.hasText(chain.get(0).spec())) {
             return status;
         }
         return new AgentRuntimeStatus(
-                selection.spec(),
+                chain.get(0).spec(),
                 "CONFIGURED",
-                List.of(),
+                chain.subList(1, chain.size()).stream().map(AgentModelSelection::spec).toList(),
                 status.mcpStatus(),
                 status.mcpServers(),
                 status.limits(),

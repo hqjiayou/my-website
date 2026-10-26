@@ -477,4 +477,31 @@ class HttpAgentClientTest {
             os.write(bytes);
         }
     }
+
+    @Test
+    void chatRequestSerializesFallbackModelsOnlyWhenPresent() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        AgentChatRequest withChain = new AgentChatRequest(
+                "10",
+                "hello",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new AgentModelSelection("google:gemini-3-flash-preview", "primary-key", null),
+                null,
+                null,
+                null,
+                null,
+                null,
+                java.util.List.of(new AgentModelSelection("openai:gpt-x", "backup-key", null)));
+        String json = mapper.writeValueAsString(withChain);
+        assertThat(json).contains("\"model\":{\"spec\":\"google:gemini-3-flash-preview\"");
+        assertThat(json).contains("\"fallbackModels\":[{\"spec\":\"openai:gpt-x\",\"apiKey\":\"backup-key\"}]");
+
+        String withoutChain = mapper.writeValueAsString(new AgentChatRequest("10", "hello"));
+        assertThat(withoutChain).doesNotContain("fallbackModels");
+    }
 }

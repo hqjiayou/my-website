@@ -332,3 +332,36 @@ def test_invalid_ai_model_spec_starts_blocked_not_crash() -> None:
     response = client.get("/internal/v1/health", headers=TOKEN_HEADER)
     assert response.status_code == 200
     assert response.json()["providerStatus"] == "BLOCKED"
+
+
+
+def test_chat_falls_back_to_request_fallback_models_on_api_error(monkeypatch) -> None:
+    from pydantic_ai.exceptions import ModelAPIError
+    from pydantic_ai.models.function import FunctionModel
+
+    def build(spec: str, *, api_key: str, base_url: str):
+        if spec == "fail:primary":
+            def fail(messages, _info):
+                raise ModelAPIError("fail:primary", "rate limited")
+
+            return FunctionModel(fail)
+        if spec == "fake:backup":
+            assert api_key == "backup-key"
+            return TestModel(custom_output_text="from-backup")
+        raise AssertionError(f"unexpected spec {spec}")
+
+    monkeypatch.setattr("agent_services.agent.model_factory._build_primary", build)
+    response = _blocked_client().post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "hello",
+            "model": {"spec": "fail:primary", "apiKey": "primary-key"},
+            "fallbackModels": [{"spec": "fake:backup", "apiKey": "backup-key"}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["reply"] == "from-backup"
+    assert "backup-key" not in response.text
+    assert "primary-key" not in response.text

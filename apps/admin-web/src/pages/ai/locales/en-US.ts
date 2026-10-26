@@ -10,7 +10,7 @@ export default {
     description: 'Keep model specs and API keys in one list. Chat and preview use the enabled default entry.',
     empty: 'No model entries yet. Without a default entry, chat falls back to the agent-services AI_MODEL variable.',
     fallbackHint:
-      'The runtime panel still shows the process environment model. Knowledge embeddings still use the process embedding settings. Keys stay on the server; the list shows only a short hint.',
+      'The runtime panel shows the entry chain when entries are selected, otherwise the process environment model. Knowledge embeddings still use the process embedding settings. Keys stay on the server; the list shows only a short hint.',
     add: 'Add entry',
     save: 'Save',
     saving: 'Saving…',
@@ -34,6 +34,14 @@ export default {
     defaultEntry: 'Use as the default entry',
     defaultBadge: 'Default',
     disabledBadge: 'Disabled',
+    setDefault: 'Set as default',
+    defaultSet: 'Default entry updated',
+    chainTitle: 'Effective chain',
+    chainHint:
+      'The order chat actually uses: when the primary hits a provider API error (rate limit / 5xx), it moves to the next entry automatically. Disabled entries are excluded; without a default entry the chain is inactive.',
+    chainPrimary: 'Primary',
+    chainFallback: 'Fallback {{n}}',
+    chainEmpty: 'No active chain for this scope (no enabled default entry).',
   },
   prompts: {
     title: 'Prompt Settings',
