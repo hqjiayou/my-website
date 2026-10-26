@@ -54,6 +54,35 @@ public final class AdminAiKnowledgeDtos {
     /** 原档下载（短时 presigned URL）。 */
     public record AdminAiKnowledgeFileDto(String url, String filename, String sourceFormat) {}
 
+    /** 知识中心总览：全平台聚合 + 分站点统计 + 最近索引失败。 */
+    public record AdminAiKnowledgeOverviewDto(
+            long totalDocuments,
+            long indexedDocuments,
+            long failedDocuments,
+            long pendingDocuments,
+            long originalBytes,
+            List<AdminAiKnowledgeSiteStatDto> sites,
+            List<AdminAiKnowledgeFailureDto> recentFailures) {}
+
+    public record AdminAiKnowledgeSiteStatDto(
+            Long siteId,
+            String siteName,
+            long totalDocuments,
+            long indexedDocuments,
+            long failedDocuments,
+            long originalBytes) {}
+
+    public record AdminAiKnowledgeFailureDto(
+            Long documentId,
+            Long siteId,
+            String siteName,
+            String title,
+            String indexError,
+            OffsetDateTime updatedAt) {}
+
+    /** 批量重试索引失败文档的结果。 */
+    public record AdminAiKnowledgeReindexFailedResultDto(int attempted, int succeeded) {}
+
     public record AdminAiKnowledgeCreateRequest(
             @NotBlank @Size(max = 255) String title, @NotBlank String content) {}
 

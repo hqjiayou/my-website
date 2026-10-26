@@ -69,6 +69,34 @@ export interface AiKnowledgeListItem {
   updatedAt: string
 }
 
+export interface AiKnowledgeSiteStat {
+  siteId: number
+  siteName: string | null
+  totalDocuments: number
+  indexedDocuments: number
+  failedDocuments: number
+  originalBytes: number
+}
+
+export interface AiKnowledgeFailure {
+  documentId: number
+  siteId: number
+  siteName: string | null
+  title: string
+  indexError: string | null
+  updatedAt: string | null
+}
+
+export interface AiKnowledgeOverview {
+  totalDocuments: number
+  indexedDocuments: number
+  failedDocuments: number
+  pendingDocuments: number
+  originalBytes: number
+  sites: AiKnowledgeSiteStat[]
+  recentFailures: AiKnowledgeFailure[]
+}
+
 export interface AiKnowledgeDetail extends AiKnowledgeListItem {
   content: string
 }

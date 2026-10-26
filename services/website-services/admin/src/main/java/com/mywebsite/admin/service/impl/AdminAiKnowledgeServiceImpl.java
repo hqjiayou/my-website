@@ -6,8 +6,13 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mywebsite.admin.constant.AdminAiKnowledgeMessageKeys;
 import com.mywebsite.admin.constant.AdminSiteMessageKeys;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeFailureDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeFileDto;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeOverviewDto;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReindexFailedResultDto;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeSiteStatDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta;
+import com.mywebsite.admin.entity.AdminSiteEntity;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeDetailDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListItemDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListQuery;
@@ -180,6 +185,96 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(siteId, entity.getId());
         syncDerivedIndex(saved);
         return toDetail(saved);
+    }
+
+    @Override
+    public AdminAiKnowledgeOverviewDto knowledgeOverview() {
+        List<AdminAiKnowledgeDocumentEntity> documents =
+                knowledgeMapper.selectList(new LambdaQueryWrapper<>());
+        Map<Long, String> siteNames = new LinkedHashMap<>();
+        for (AdminSiteEntity site : adminSiteMapper.selectList(new LambdaQueryWrapper<>())) {
+            siteNames.put(site.getId(), site.getSiteName());
+        }
+        long indexed = documents.stream()
+                .filter(doc -> AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(doc.getIndexStatus()))
+                .count();
+        long failed = documents.stream()
+                .filter(doc -> AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED.equals(doc.getIndexStatus()))
+                .count();
+        long originalBytes = documents.stream()
+                .mapToLong(doc -> doc.getFileSizeBytes() == null ? 0L : doc.getFileSizeBytes())
+                .sum();
+
+        Map<Long, List<AdminAiKnowledgeDocumentEntity>> bySite = new LinkedHashMap<>();
+        for (AdminAiKnowledgeDocumentEntity doc : documents) {
+            bySite.computeIfAbsent(doc.getSiteId(), key -> new ArrayList<>()).add(doc);
+        }
+        List<AdminAiKnowledgeSiteStatDto> siteStats = new ArrayList<>();
+        for (Map.Entry<Long, List<AdminAiKnowledgeDocumentEntity>> entry : bySite.entrySet()) {
+            List<AdminAiKnowledgeDocumentEntity> siteDocs = entry.getValue();
+            siteStats.add(new AdminAiKnowledgeSiteStatDto(
+                    entry.getKey(),
+                    siteNames.get(entry.getKey()),
+                    siteDocs.size(),
+                    siteDocs.stream()
+                            .filter(doc -> AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(
+                                    doc.getIndexStatus()))
+                            .count(),
+                    siteDocs.stream()
+                            .filter(doc -> AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED.equals(
+                                    doc.getIndexStatus()))
+                            .count(),
+                    siteDocs.stream()
+                            .mapToLong(doc -> doc.getFileSizeBytes() == null ? 0L : doc.getFileSizeBytes())
+                            .sum()));
+        }
+        siteStats.sort((a, b) -> a.siteId().compareTo(b.siteId()));
+
+        List<AdminAiKnowledgeFailureDto> recentFailures = documents.stream()
+                .filter(doc -> AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED.equals(doc.getIndexStatus()))
+                .sorted((a, b) -> {
+                    OffsetDateTime left = a.getUpdatedAt() == null ? OffsetDateTime.MIN : a.getUpdatedAt();
+                    OffsetDateTime right = b.getUpdatedAt() == null ? OffsetDateTime.MIN : b.getUpdatedAt();
+                    return right.compareTo(left);
+                })
+                .limit(10)
+                .map(doc -> new AdminAiKnowledgeFailureDto(
+                        doc.getId(),
+                        doc.getSiteId(),
+                        siteNames.get(doc.getSiteId()),
+                        doc.getTitle(),
+                        doc.getIndexError(),
+                        doc.getUpdatedAt()))
+                .toList();
+
+        return new AdminAiKnowledgeOverviewDto(
+                documents.size(),
+                indexed,
+                failed,
+                documents.size() - indexed - failed,
+                originalBytes,
+                siteStats,
+                recentFailures);
+    }
+
+    @Override
+    public AdminAiKnowledgeReindexFailedResultDto reindexFailedDocuments() {
+        List<AdminAiKnowledgeDocumentEntity> failedDocuments = knowledgeMapper.selectList(
+                new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
+                        .eq(
+                                AdminAiKnowledgeDocumentEntity::getIndexStatus,
+                                AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED)
+                        .eq(AdminAiKnowledgeDocumentEntity::getStatus, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE));
+        int succeeded = 0;
+        for (AdminAiKnowledgeDocumentEntity document : failedDocuments) {
+            syncDerivedIndex(document);
+            AdminAiKnowledgeDocumentEntity refreshed = knowledgeMapper.selectById(document.getId());
+            if (refreshed != null
+                    && AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(refreshed.getIndexStatus())) {
+                succeeded++;
+            }
+        }
+        return new AdminAiKnowledgeReindexFailedResultDto(failedDocuments.size(), succeeded);
     }
 
     @Override

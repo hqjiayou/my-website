@@ -10,6 +10,7 @@ import type {
   AiKnowledgeDetail,
   AiKnowledgeListItem,
   AiKnowledgeListQuery,
+  AiKnowledgeOverview,
   AiKnowledgeReembedResult,
   AiMessage,
   AiPreviewChatInput,
@@ -166,6 +167,21 @@ export const aiApi = {
       .put<HttpMessageBody<AiKnowledgeDetail>, UpdateAiKnowledgeInput>(
         `${aiBase(siteId)}/knowledge-documents/${id}`,
         input,
+      )
+      .then(unwrapData)
+  },
+
+  getKnowledgeOverview(): Promise<AiKnowledgeOverview> {
+    return httpClient
+      .get<HttpMessageBody<AiKnowledgeOverview>>(`/admin/ai/knowledge-overview`)
+      .then(unwrapData)
+  },
+
+  reindexFailedKnowledge(): Promise<{ attempted: number; succeeded: number }> {
+    return httpClient
+      .post<HttpMessageBody<{ attempted: number; succeeded: number }>>(
+        `/admin/ai/knowledge/reindex-failed`,
+        {},
       )
       .then(unwrapData)
   },

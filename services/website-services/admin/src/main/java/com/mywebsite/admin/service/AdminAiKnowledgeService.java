@@ -59,4 +59,10 @@ public interface AdminAiKnowledgeService {
 
     /** 原档短时下载 URL；未保存原档时抛 FILE_ORIGINAL_MISSING。 */
     AdminAiKnowledgeDtos.AdminAiKnowledgeFileDto originalFileUrl(long siteId, long documentId);
+
+    /** 知识中心总览：全平台文档/索引健康/原档用量聚合 + 分站点统计 + 最近失败。 */
+    AdminAiKnowledgeDtos.AdminAiKnowledgeOverviewDto knowledgeOverview();
+
+    /** 批量重试全部「索引失败且启用中」的文档，返回尝试/成功数。 */
+    AdminAiKnowledgeDtos.AdminAiKnowledgeReindexFailedResultDto reindexFailedDocuments();
 }
