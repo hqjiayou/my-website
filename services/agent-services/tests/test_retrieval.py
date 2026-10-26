@@ -2,6 +2,7 @@
 
 import json
 
+import anyio
 import httpx
 import pytest
 from conftest import TOKEN_HEADER, make_settings
@@ -23,9 +24,16 @@ from agent_services.retrieval.service import (
     DEFAULT_TOP_K,
     MAX_UPSERT_CHUNKS,
     RetrievalService,
+    code_tokens,
     create_retrieval_service,
+    query_terms,
 )
-from agent_services.retrieval.store import PgVectorRetrievalStore, RetrievedChunk
+from agent_services.retrieval.store import (
+    PgVectorRetrievalStore,
+    RetrievedChunk,
+    hnsw_index_allowed,
+)
+from agent_services.schemas.chat import ModelSelection
 from agent_services.schemas.retrieval import MAX_CONTENT_LENGTH
 
 # ---------------------------------------------------------------- chunking
@@ -1151,3 +1159,235 @@ def test_stream_omits_citations_without_grounding() -> None:
         failed = _done_event_data(response.read().decode("utf-8"))
     assert failed["retrievalDegraded"] is True
     assert "citations" not in failed
+
+
+# ---------------------------------------------------------------- lexical v2 / HNSW / rerank
+
+
+def test_query_terms_cover_cjk_bigrams_and_keep_code_tokens() -> None:
+    assert query_terms("什么是退货？") == ["什么", "么是", "是退", "退货"]
+    assert query_terms("桜の花") == ["桜の", "の花"]
+    assert query_terms("山") == ["山"]
+    assert query_terms("XJ-900退货") == ["XJ-900", "900", "退货"]
+    segment = "".join(chr(0x4E00 + index) for index in range(30))
+    terms = query_terms(segment)
+    assert len(terms) == 24
+    assert terms[0] == segment[0:2]
+    assert terms[-1] == segment[23:25]
+    for query in ("XJ-900", "v1.2", "M3", "ABCD"):
+        assert query_terms(query) == code_tokens(query)
+
+
+def test_hnsw_index_allowed_only_within_pgvector_limit() -> None:
+    assert hnsw_index_allowed(1536) is True
+    assert hnsw_index_allowed(3072) is False
+
+
+class _LexicalV2Store(FakeStore):
+    def __init__(self, chunk: RetrievedChunk) -> None:
+        super().__init__()
+        self.chunk = chunk
+        self.lexical_tokens: list[list[str]] = []
+
+    async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        self.search_calls.append(site_id)
+        return []
+
+    async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+        self.lexical_tokens.append(list(tokens))
+        return [self.chunk]
+
+
+async def test_chinese_bigram_hits_when_vector_search_is_empty() -> None:
+    store = _LexicalV2Store(RetrievedChunk("kb:fuji", 0, "参观富士山", 0.0))
+    service = RetrievalService(FakeEmbedder(), store)
+    hits = await service.search(site_id="7", query="富士山", top_k=4)
+    assert store.lexical_tokens == [["富士", "士山"]]
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:fuji", 1.0)]
+    assert service.degraded is False
+
+
+async def test_japanese_bigram_hits_when_vector_search_is_empty() -> None:
+    store = _LexicalV2Store(RetrievedChunk("kb:tokyo", 0, "東京都庁案内", 0.0))
+    service = RetrievalService(FakeEmbedder(), store)
+    hits = await service.search(site_id="7", query="東京都", top_k=4)
+    assert store.lexical_tokens == [["東京", "京都"]]
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:tokyo", 1.0)]
+
+
+_RERANK_HITS = [
+    RetrievedChunk("kb:a", 0, "alpha", 0.9),
+    RetrievedChunk("kb:b", 0, "beta", 0.8),
+    RetrievedChunk("kb:c", 0, "gamma", 0.7),
+    RetrievedChunk("kb:d", 0, "delta", 0.6),
+]
+
+
+class _RerankStore(FakeStore):
+    async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        return list(_RERANK_HITS)
+
+
+def _order_model(payload: str, calls: list[int]) -> FunctionModel:
+    def respond(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        calls.append(1)
+        return ModelResponse(parts=[TextPart(payload)])
+
+    return FunctionModel(respond)
+
+
+async def test_rerank_reorders_candidates_and_marks_applied() -> None:
+    calls: list[int] = []
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=_order_model("[3, 1, 4, 2]", calls),
+    )
+    hits = await service.search(site_id="1", query="q", top_k=2)
+    assert calls == [1]
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:c", 0.7), ("kb:a", 0.9)]
+    assert service.rerank_applied is True
+    assert service.degraded is False
+
+
+def test_rerank_response_includes_rerank_applied_when_reordered() -> None:
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=_order_model("[3, 1, 4, 2]", []),
+    )
+    response = _search_client(service).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "query": "q", "topK": 2},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["degraded"] is False
+    assert body["rerankApplied"] is True
+    assert [hit["sourceId"] for hit in body["hits"]] == ["kb:c", "kb:a"]
+
+
+async def test_rerank_model_error_keeps_fused_order() -> None:
+    def boom(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise RuntimeError("rerank down")
+
+    service = RetrievalService(FakeEmbedder(), _RerankStore(), rerank_model=FunctionModel(boom))
+    hits = await service.search(site_id="1", query="q", top_k=2)
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.9), ("kb:b", 0.8)]
+    assert service.rerank_applied is False
+    assert service.degraded is False
+
+
+def test_rerank_response_omits_flag_when_model_fails() -> None:
+    def boom(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise RuntimeError("rerank down")
+
+    service = RetrievalService(FakeEmbedder(), _RerankStore(), rerank_model=FunctionModel(boom))
+    response = _search_client(service).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"siteId": "1", "query": "q", "topK": 2},
+    )
+    body = response.json()
+    assert "rerankApplied" not in body
+    assert body["degraded"] is False
+    assert [hit["sourceId"] for hit in body["hits"]] == ["kb:a", "kb:b"]
+
+
+async def test_rerank_timeout_keeps_fused_order() -> None:
+    async def slow(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        await anyio.sleep(1)
+        return ModelResponse(parts=[TextPart("[4, 3, 2, 1]")])
+
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=FunctionModel(slow),
+        rerank_timeout_seconds=0.05,
+    )
+    hits = await service.search(site_id="1", query="q", top_k=2)
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.9), ("kb:b", 0.8)]
+    assert service.rerank_applied is False
+    assert service.degraded is False
+
+
+async def test_rerank_disabled_does_not_call_model() -> None:
+    calls: list[int] = []
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=_order_model("[4, 3, 2, 1]", calls),
+        rerank_enabled=False,
+    )
+    hits = await service.search(site_id="1", query="q", top_k=2)
+    assert calls == []
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.9), ("kb:b", 0.8)]
+    assert service.rerank_applied is False
+
+
+async def test_rerank_skips_model_when_candidates_fit_in_top_k() -> None:
+    calls: list[int] = []
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=_order_model("[4, 3, 2, 1]", calls),
+    )
+    hits = await service.search(site_id="1", query="q", top_k=4)
+    assert calls == []
+    assert [hit.source_id for hit in hits] == ["kb:a", "kb:b", "kb:c", "kb:d"]
+    assert service.rerank_applied is False
+
+
+async def test_rerank_prefers_request_model_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    def swap(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[TextPart("[2, 1]")])
+
+    def identity(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[TextPart("[1, 2]")])
+
+    def fake_entry(**kwargs: object) -> ModelHandle:
+        assert kwargs["spec"] == "openai:rerank-test"
+        return ModelHandle(model=FunctionModel(swap), spec="openai:rerank-test", blocked_reason=None)
+
+    def fake_process(_settings: object) -> ModelHandle:
+        raise AssertionError("process model should not be built when the request selection is live")
+
+    monkeypatch.setattr("agent_services.retrieval.service.create_model_for_entry", fake_entry)
+    monkeypatch.setattr("agent_services.retrieval.service.create_model", fake_process)
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=FunctionModel(identity),
+        settings=make_settings(),
+        rerank_enabled=True,
+        rerank_timeout_seconds=4,
+    )
+    hits = await service.search(
+        site_id="1",
+        query="q",
+        top_k=1,
+        model_selection=ModelSelection(spec="openai:rerank-test", api_key="test-key"),
+    )
+    assert [hit.source_id for hit in hits] == ["kb:b"]
+    assert service.rerank_applied is True
+
+
+async def test_rerank_uses_process_model_without_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    def swap(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[TextPart("[2, 1]")])
+
+    def fake_process(_settings: object) -> ModelHandle:
+        return ModelHandle(model=FunctionModel(swap), spec="test:process", blocked_reason=None)
+
+    monkeypatch.setattr("agent_services.retrieval.service.create_model", fake_process)
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        settings=make_settings(),
+        rerank_enabled=True,
+        rerank_timeout_seconds=4,
+    )
+    hits = await service.search(site_id="1", query="q", top_k=1)
+    assert [hit.source_id for hit in hits] == ["kb:b"]
+    assert service.rerank_applied is True

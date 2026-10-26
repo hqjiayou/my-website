@@ -3,23 +3,48 @@
 import logging
 import re
 
-from agent_services.config import RETRIEVAL_MIN_SCORE_DEFAULT, Settings
+import anyio
+from pydantic_ai import Agent
+from pydantic_ai.models import Model
+
+from agent_services.agent.model_factory import create_model, create_model_for_entry
+from agent_services.config import (
+    RETRIEVAL_MIN_SCORE_DEFAULT,
+    RETRIEVAL_RERANK_ENABLED_DEFAULT,
+    RETRIEVAL_RERANK_MAX_CANDIDATES_DEFAULT,
+    RETRIEVAL_RERANK_TIMEOUT_SECONDS_DEFAULT,
+    Settings,
+)
 from agent_services.retrieval.chunking import split_text
 from agent_services.retrieval.embeddings import EmbeddingClient, create_embedding_client
 from agent_services.retrieval.store import RetrievalStore, RetrievedChunk
+from agent_services.schemas.chat import ModelSelection
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TOP_K = 4
 DEFAULT_MIN_SCORE = RETRIEVAL_MIN_SCORE_DEFAULT
 MAX_UPSERT_CHUNKS = 256
-# 与检索 topK 上限一致：代码通道在向量窗口之外另取候选，再和向量结果一起截到 top_k。
+# 与检索 topK 上限一致：词法通道在向量窗口之外另取候选，再和向量结果一起截到 top_k。
 LEXICAL_CANDIDATE_LIMIT = 20
 MAX_CODE_TOKENS = 32
+MAX_QUERY_TERMS = 24
+RERANK_SNIPPET_CHARS = 300
 
 # 连字符/点号型号整段保留，例如 XJ-900、v1.2。
 _MODEL_TOKEN = re.compile(r"[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)+")
 _ALNUM_TOKEN = re.compile(r"[A-Za-z0-9]+")
+# 只匹配原文里已经是小写的英数词，避免把型号里的大写片段再拆一遍。
+_LOWER_ALNUM = re.compile(r"[a-z0-9]+")
+# 汉字、平假名、片假名。相邻的这三类算同一连续段。
+_CJK_SEGMENT = re.compile("[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]+")
+_JSON_INT_ARRAY = re.compile(r"\[\s*(?:\d+\s*(?:,\s*\d+\s*)*)?\]")
+
+_RERANK_INSTRUCTIONS = (
+    "You reorder search snippets by relevance to the question. "
+    "Reply with only a JSON array of candidate numbers, most relevant first. "
+    "Do not add any other text."
+)
 
 
 class RetrievalChunkLimitExceeded(Exception):
@@ -59,8 +84,42 @@ def code_tokens(query: str) -> list[str]:
     return found[:MAX_CODE_TOKENS]
 
 
+def query_terms(query: str) -> list[str]:
+    """代码型 token 优先，其次小写英数词，最后是 CJK 单字或重叠 bigram。总数不超过 24。"""
+    terms = code_tokens(query)[:MAX_QUERY_TERMS]
+    seen = {token.casefold() for token in terms}
+
+    def add(token: str) -> None:
+        if len(terms) >= MAX_QUERY_TERMS:
+            return
+        key = token.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        terms.append(token)
+
+    for match in _LOWER_ALNUM.finditer(query):
+        token = match.group(0)
+        if len(token) < 2:
+            continue
+        add(token)
+        if len(terms) >= MAX_QUERY_TERMS:
+            return terms
+    for match in _CJK_SEGMENT.finditer(query):
+        segment = match.group(0)
+        if len(segment) == 1:
+            pieces = [segment]
+        else:
+            pieces = [segment[index : index + 2] for index in range(len(segment) - 1)]
+        for piece in pieces:
+            add(piece)
+            if len(terms) >= MAX_QUERY_TERMS:
+                return terms
+    return terms
+
+
 def code_coverage(content: str, tokens: list[str]) -> float:
-    """命中的 token 数 / token 总数。比较时忽略 ASCII 大小写。"""
+    """命中的 term 数 / term 总数。子串命中即可；比较时忽略 ASCII 大小写。"""
     if not tokens:
         return 0.0
     folded = content.casefold()
@@ -68,17 +127,15 @@ def code_coverage(content: str, tokens: list[str]) -> float:
     return matched / len(tokens)
 
 
-def merge_code_hits(
+def _ranked_hits(
     vector_hits: list[RetrievedChunk],
     lexical_hits: list[RetrievedChunk],
     tokens: list[str],
-    *,
-    top_k: int,
 ) -> list[RetrievedChunk]:
-    """向量命中与代码命中按 (source_id, chunk_index) 合并。
+    """向量命中与词法命中按 (source_id, chunk_index) 合并，不截断。
 
-    只在向量侧的分数保持余弦。代码通道命中的分数是覆盖率。两边都有时取较大值。
-    覆盖率为 0 的词法行丢弃。结果按分数降序截到 top_k。
+    只在向量侧的分数保持余弦。词法命中的分数是 term 覆盖率。两边都有时取较大值。
+    覆盖率为 0 的词法行丢弃。
     """
     chosen: dict[tuple[str, int], RetrievedChunk] = {
         (hit.source_id, hit.chunk_index): hit for hit in vector_hits
@@ -98,8 +155,55 @@ def merge_code_hits(
             previous.content,
             max(previous.score, coverage),
         )
-    ranked = sorted(chosen.values(), key=lambda item: (-item.score, item.source_id, item.chunk_index))
-    return ranked[:top_k]
+    return sorted(chosen.values(), key=lambda item: (-item.score, item.source_id, item.chunk_index))
+
+
+def merge_code_hits(
+    vector_hits: list[RetrievedChunk],
+    lexical_hits: list[RetrievedChunk],
+    tokens: list[str],
+    *,
+    top_k: int,
+) -> list[RetrievedChunk]:
+    """向量命中与词法命中合并后按分数降序截到 top_k。
+
+    计分对任意 term 成立：term 在 content 里子串出现即算命中。
+    """
+    return _ranked_hits(vector_hits, lexical_hits, tokens)[:top_k]
+
+
+def parse_rerank_indices(text: str, count: int) -> list[int] | None:
+    """从模型回复抽出 1-based 候选编号，去重后把没提到的下标按原顺序补在后面。
+
+    优先取第一个 JSON 整数数组；没有数组时再扫全文里的整数。一个合法编号都没有则无法排序。
+    """
+    if count < 1:
+        return None
+    array_match = _JSON_INT_ARRAY.search(text)
+    source = array_match.group(0) if array_match else text
+    chosen: list[int] = []
+    seen: set[int] = set()
+    for raw in re.findall(r"\d+", source):
+        number = int(raw)
+        if number < 1 or number > count or number in seen:
+            continue
+        seen.add(number)
+        chosen.append(number - 1)
+    if not chosen:
+        return None
+    chosen_set = set(chosen)
+    for index in range(count):
+        if index not in chosen_set:
+            chosen.append(index)
+    return chosen
+
+
+def _rerank_prompt(query: str, candidates: list[RetrievedChunk]) -> str:
+    lines = [f"Question: {query}", "Candidates:"]
+    for number, chunk in enumerate(candidates, start=1):
+        lines.append(f"[{number}] {chunk.content[:RERANK_SNIPPET_CHARS]}")
+    lines.append("Return a JSON array of the candidate numbers ordered by relevance.")
+    return "\n".join(lines)
 
 
 class RetrievalService:
@@ -109,12 +213,41 @@ class RetrievalService:
         store: RetrievalStore,
         *,
         min_score: float = DEFAULT_MIN_SCORE,
+        settings: Settings | None = None,
+        rerank_model: Model | None = None,
+        rerank_enabled: bool | None = None,
+        rerank_timeout_seconds: float | None = None,
+        rerank_max_candidates: int | None = None,
     ) -> None:
         self._embedder = embedder
         self._store = store
         self._min_score = min_score
+        self._settings = settings
+        self._rerank_model = rerank_model
+        self._rerank_enabled = (
+            rerank_enabled
+            if rerank_enabled is not None
+            else settings.retrieval_rerank_enabled
+            if settings is not None
+            else RETRIEVAL_RERANK_ENABLED_DEFAULT
+        )
+        self._rerank_timeout_seconds = (
+            rerank_timeout_seconds
+            if rerank_timeout_seconds is not None
+            else settings.retrieval_rerank_timeout_seconds
+            if settings is not None
+            else RETRIEVAL_RERANK_TIMEOUT_SECONDS_DEFAULT
+        )
+        self._rerank_max_candidates = (
+            rerank_max_candidates
+            if rerank_max_candidates is not None
+            else settings.retrieval_rerank_max_candidates
+            if settings is not None
+            else RETRIEVAL_RERANK_MAX_CANDIDATES_DEFAULT
+        )
         self._degraded = False
         self._last_error: str | None = None
+        self._rerank_applied = False
 
     @property
     def has_process_embedder(self) -> bool:
@@ -127,6 +260,10 @@ class RetrievalService:
     @property
     def last_error(self) -> str | None:
         return self._last_error
+
+    @property
+    def rerank_applied(self) -> bool:
+        return self._rerank_applied
 
     async def upsert_document(
         self,
@@ -160,6 +297,38 @@ class RetrievalService:
     async def delete_document(self, *, site_id: str, source_id: str) -> None:
         await self._store.delete_document(site_id=site_id, source_id=source_id)
 
+    def _resolve_rerank_model(self, selection: ModelSelection | None) -> Model | None:
+        """请求里的模型入口优先；建不起来再用测试注入或进程 AI_MODEL。"""
+        if selection is not None:
+            handle = create_model_for_entry(
+                spec=selection.spec,
+                api_key=selection.api_key,
+                base_url=selection.base_url,
+                settings=self._settings,
+            )
+            if handle.model is not None:
+                return handle.model
+            logger.warning("retrieval rerank model selection was not built; trying the process model")
+        if self._rerank_model is not None:
+            return self._rerank_model
+        if self._settings is None:
+            return None
+        handle = create_model(self._settings)
+        if handle.model is None:
+            return None
+        return handle.model
+
+    async def _rerank(
+        self, model: Model, query: str, candidates: list[RetrievedChunk]
+    ) -> list[RetrievedChunk]:
+        agent = Agent(model, system_prompt=_RERANK_INSTRUCTIONS)
+        with anyio.fail_after(self._rerank_timeout_seconds):
+            result = await agent.run(_rerank_prompt(query, candidates))
+        order = parse_rerank_indices(str(result.output), len(candidates))
+        if order is None:
+            raise ValueError("unusable rerank order")
+        return [candidates[index] for index in order]
+
     async def search(
         self,
         *,
@@ -167,7 +336,9 @@ class RetrievalService:
         query: str,
         top_k: int = DEFAULT_TOP_K,
         embedder: EmbeddingClient | None = None,
+        model_selection: ModelSelection | None = None,
     ) -> list[RetrievedChunk]:
+        self._rerank_applied = False
         client = embedder or self._embedder
         if client is None:
             raise RuntimeError("Embedding client is not configured.")
@@ -176,16 +347,32 @@ class RetrievalService:
             await self._store.search(site_id=site_id, embedding=embedding, top_k=top_k),
             self._min_score,
         )
-        tokens = code_tokens(query)
+        terms = query_terms(query)
         lexical_hits: list[RetrievedChunk] = []
         # 上面的嵌入和向量查询若失败会直接抛出，词法查询不会先跑。
-        if tokens:
+        if terms:
             lexical_hits = await self._store.search_lexical(
                 site_id=site_id,
-                tokens=tokens,
+                tokens=terms,
                 limit=LEXICAL_CANDIDATE_LIMIT,
             )
-        return merge_code_hits(vector_hits, lexical_hits, tokens, top_k=top_k)
+        fused = _ranked_hits(vector_hits, lexical_hits, terms)
+        ordered = fused
+        if self._rerank_enabled and self._rerank_max_candidates > 0 and len(fused) > top_k:
+            model = self._resolve_rerank_model(model_selection)
+            if model is not None:
+                window = fused[: self._rerank_max_candidates]
+                try:
+                    ordered = await self._rerank(model, query, window) + fused[len(window) :]
+                    self._rerank_applied = True
+                except TimeoutError:
+                    logger.warning("retrieval rerank timed out; keeping fused order")
+                except Exception as exc:  # noqa: BLE001 — rerank 是增强，失败不让检索失败
+                    logger.warning(
+                        "retrieval rerank failed (%s); keeping fused order",
+                        type(exc).__name__,
+                    )
+        return ordered[:top_k]
 
     async def retrieve_chunks(
         self,
@@ -194,15 +381,23 @@ class RetrievalService:
         query: str,
         top_k: int = DEFAULT_TOP_K,
         embedder: EmbeddingClient | None = None,
+        model_selection: ModelSelection | None = None,
     ) -> list[RetrievedChunk]:
         """与 retrieve_context 同一条降级路径：嵌入或向量库失败时返回空列表并置 degraded。
 
         chat grounding 与 POST /retrieval/search 都走这里，避免另写一套错误格式。
         """
         try:
-            chunks = await self.search(site_id=site_id, query=query, top_k=top_k, embedder=embedder)
+            chunks = await self.search(
+                site_id=site_id,
+                query=query,
+                top_k=top_k,
+                embedder=embedder,
+                model_selection=model_selection,
+            )
         except Exception as exc:  # noqa: BLE001
             self._degraded = True
+            self._rerank_applied = False
             self._last_error = type(exc).__name__
             logger.warning("retrieval search failed; continuing without context", exc_info=True)
             return []
@@ -235,9 +430,13 @@ def create_retrieval_service(settings: Settings) -> tuple[RetrievalService | Non
     embedder, blocked_reason = create_embedding_client(settings)
     from agent_services.retrieval.store import PgVectorRetrievalStore
 
-    store = PgVectorRetrievalStore(dsn, dimensions=settings.ai_embedding_dimensions)
+    store = PgVectorRetrievalStore(
+        dsn,
+        dimensions=settings.ai_embedding_dimensions,
+        hnsw_ef_search=settings.retrieval_hnsw_ef_search,
+    )
     # 进程没配嵌入模型时仍保留库连接：请求可以带模型入口的 embedding spec 和 key。
     return (
-        RetrievalService(embedder, store, min_score=settings.retrieval_min_score),
+        RetrievalService(embedder, store, min_score=settings.retrieval_min_score, settings=settings),
         None if embedder is not None else blocked_reason,
     )

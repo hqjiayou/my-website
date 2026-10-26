@@ -43,6 +43,7 @@ from agent_services.schemas.chat import (
     ChatRequest,
     ChatSuccessData,
     ChatUsage,
+    ModelSelection,
     ToolTraceItem,
 )
 from agent_services.schemas.health import (
@@ -125,11 +126,17 @@ async def _retrieval_context(
     site_id: str,
     message: str,
     embedder: EmbeddingClient | None = None,
+    model_selection: ModelSelection | None = None,
 ) -> tuple[list[str] | None, bool, list[RetrievedChunk] | None]:
     service = _retrieval_service_or_none(request)
     if service is None:
         return None, False, None
-    chunks = await service.retrieve_chunks(site_id=site_id, query=message, embedder=embedder)
+    chunks = await service.retrieve_chunks(
+        site_id=site_id,
+        query=message,
+        embedder=embedder,
+        model_selection=model_selection,
+    )
     # 降级或没有命中时不把 chunks 交给 runtime，避免拼出假 citations。
     if service.degraded or not chunks:
         return None, service.degraded, None
@@ -146,7 +153,9 @@ async def _grounding(
         if selection is not None
         else None
     )
-    context, degraded, chunks = await _retrieval_context(request, site_id, message, embedder)
+    context, degraded, chunks = await _retrieval_context(
+        request, site_id, message, embedder, model_selection=selection
+    )
     if chunks:
         return context, degraded, chunks
     hints = list(body.knowledge_context or [])
@@ -511,6 +520,7 @@ async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> di
         query=query,
         top_k=body.top_k,
         embedder=_request_embedder(request, body.embedding_spec, body.api_key, body.base_url),
+        model_selection=body.model_selection,
     )
     payload = RetrievalSearchResponse(
         hits=[
@@ -523,5 +533,10 @@ async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> di
             for chunk in chunks
         ],
         degraded=service.degraded,
+        rerank_applied=service.rerank_applied,
     )
-    return payload.model_dump(by_alias=True)
+    dumped = payload.model_dump(by_alias=True)
+    # 未重排时不写出默认 false，避免既有 {hits, degraded} 精确断言被改写。
+    if not service.rerank_applied:
+        dumped.pop("rerankApplied", None)
+    return dumped
