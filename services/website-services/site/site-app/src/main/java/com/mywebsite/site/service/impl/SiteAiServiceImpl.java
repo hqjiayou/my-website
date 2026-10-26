@@ -181,6 +181,43 @@ public class SiteAiServiceImpl implements SiteAiService {
         return new SiteKnowledgeSearchResponseDto(List.of(), vectorDegraded);
     }
 
+    @Override
+    public List<com.mywebsite.site.dto.SiteKnowledgeDocumentDtos.ListItem> listKnowledgeDocuments(long siteId) {
+        AuthenticatedUser user = requireSiteMember(siteId);
+        requireSiteUserId(user);
+        return knowledgeDocumentMapper
+                .selectList(new LambdaQueryWrapper<SiteAiKnowledgeDocumentEntity>()
+                        .select(
+                                SiteAiKnowledgeDocumentEntity::getId,
+                                SiteAiKnowledgeDocumentEntity::getTitle,
+                                SiteAiKnowledgeDocumentEntity::getUpdatedAt)
+                        .eq(SiteAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(SiteAiKnowledgeDocumentEntity::getStatus, SiteAiKnowledgeDocumentEntity.STATUS_ACTIVE)
+                        .orderByDesc(SiteAiKnowledgeDocumentEntity::getUpdatedAt)
+                        .orderByDesc(SiteAiKnowledgeDocumentEntity::getId))
+                .stream()
+                .map(doc -> new com.mywebsite.site.dto.SiteKnowledgeDocumentDtos.ListItem(
+                        doc.getId(), doc.getTitle(), doc.getUpdatedAt()))
+                .toList();
+    }
+
+    @Override
+    public com.mywebsite.site.dto.SiteKnowledgeDocumentDtos.Detail getKnowledgeDocument(
+            long siteId, long documentId) {
+        AuthenticatedUser user = requireSiteMember(siteId);
+        requireSiteUserId(user);
+        SiteAiKnowledgeDocumentEntity doc = knowledgeDocumentMapper.selectOne(
+                new LambdaQueryWrapper<SiteAiKnowledgeDocumentEntity>()
+                        .eq(SiteAiKnowledgeDocumentEntity::getId, documentId)
+                        .eq(SiteAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(SiteAiKnowledgeDocumentEntity::getStatus, SiteAiKnowledgeDocumentEntity.STATUS_ACTIVE));
+        if (doc == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        return new com.mywebsite.site.dto.SiteKnowledgeDocumentDtos.Detail(
+                doc.getId(), doc.getTitle(), doc.getContent(), doc.getUpdatedAt());
+    }
+
     /** 与内容列表 limit 相同：越界夹进 1..{@link SiteKnowledgeSearchRequestDto#MAX_TOP_K}，null 交给 Python 默认。 */
     private static Integer clampTopK(Integer topK) {
         if (topK == null) {
