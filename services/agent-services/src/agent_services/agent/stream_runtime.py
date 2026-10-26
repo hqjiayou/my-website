@@ -10,6 +10,7 @@ from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
 from pydantic_ai.models import Model
 
 from agent_services.agent.harness import assemble_harness
+from agent_services.agent.memory import extract_memories
 from agent_services.agent.runtime import (
     BUDGET_EXCEEDED,
     MAX_TOOL_TRACE,
@@ -75,6 +76,9 @@ async def stream_chat_events(
     skills_max_instruction_chars: int | None = None,
     skill_ids: list[str] | None = None,
     harness_dir: str | None = None,
+    memories: list[str] | None = None,
+    memory_enabled: bool = False,
+    memory_extraction_enabled: bool = True,
 ) -> AsyncIterator[AgentStreamEvent]:
     resolved_budget = budget or RunBudget()
     history_summary = await prepare_history_summary(
@@ -96,6 +100,7 @@ async def stream_chat_events(
         budget=resolved_budget,
         harness_dir=harness_dir,
         history_summary=history_summary,
+        memories=memories,
     )
     system_prompt = harness.system_prompt
     user_prompt = build_user_prompt(harness.user_message, attachments)
@@ -208,6 +213,16 @@ async def stream_chat_events(
     citations = grounding_citations(retrieval_context, retrieval_chunks)
     if citations:
         done_data["citations"] = citations
+    # 独立 Agent，不传入本轮 UsageLimits，抽取不计入 run budget。
+    if memory_enabled and memory_extraction_enabled:
+        extracted = await extract_memories(
+            model,
+            user_message=message,
+            assistant_reply=output.reply,
+            existing=memories,
+        )
+        if extracted:
+            done_data["extractedMemories"] = extracted
     yield AgentStreamEvent(type=AgentStreamEventType.DONE, data=done_data)
 
 

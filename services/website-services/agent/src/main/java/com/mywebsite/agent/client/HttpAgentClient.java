@@ -34,6 +34,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
@@ -200,7 +201,37 @@ public class HttpAgentClient implements AgentClient {
                 providerStatus,
                 readList(data.get("todos"), AgentTodoItem.class),
                 readRunMeta(data),
-                readList(data.get("citations"), AgentCitation.class));
+                readList(data.get("citations"), AgentCitation.class),
+                readExtractedMemories(data));
+    }
+
+    /** 缺失或格式异常时为空，不让已经成功的回复失败。 */
+    private List<String> readExtractedMemories(JsonNode data) {
+        JsonNode node = data.get("extractedMemories");
+        if (node == null || node.isNull()) {
+            return List.of();
+        }
+        if (!node.isArray()) {
+            log.warn("agent-services returned malformed extractedMemories, ignored");
+            return List.of();
+        }
+        try {
+            List<String> values = objectMapper.convertValue(
+                    node, objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+            if (values == null) {
+                return List.of();
+            }
+            List<String> kept = new ArrayList<>();
+            for (String value : values) {
+                if (value != null) {
+                    kept.add(value);
+                }
+            }
+            return List.copyOf(kept);
+        } catch (IllegalArgumentException ex) {
+            log.warn("agent-services returned malformed extractedMemories, ignored", ex);
+            return List.of();
+        }
     }
 
     /** 观测元数据格式异常只丢弃元数据，不让已成功的回复失败（与 todos 不同：todos 影响编排正确性）。 */

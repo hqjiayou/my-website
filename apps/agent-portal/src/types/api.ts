@@ -90,3 +90,9 @@ export interface SiteKnowledgeSearchResult {
   hits: SiteKnowledgeHit[]
   degraded: boolean
 }
+
+export interface SiteUserMemory {
+  id: number
+  content: string
+  createdAt: string | null
+}

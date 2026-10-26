@@ -94,6 +94,11 @@ class Settings(BaseSettings):
         default=12000, validation_alias="AGENT_SKILLS_MAX_INSTRUCTION_CHARS"
     )
     agent_enable_todo_tools: bool = Field(default=True, validation_alias="AGENT_ENABLE_TODO_TOOLS")
+    # 对话成功后是否再调一次模型抽取长期记忆。关闭后仍可注入请求里已有的 memories。
+    # 抽取走独立 Agent，不占用本轮 UsageLimits。
+    agent_memory_extraction_enabled: bool = Field(
+        default=True, validation_alias="AGENT_MEMORY_EXTRACTION_ENABLED"
+    )
     # JSON 数组：[{"name":"demo","url":"http://host:port/mcp"}]；缺失 → 不注册 MCP
     mcp_servers_json: str = Field(default="", validation_alias="MCP_SERVERS_JSON")
 

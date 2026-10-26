@@ -51,7 +51,7 @@ export function HomePage() {
 
       <main className="safe-x with-bottom-nav flex flex-1 flex-col px-page pt-8">
         <h1 className="text-3xl font-semibold tracking-tight">Agent Portal</h1>
-        <p className="mt-3 text-sm leading-6 text-gpt-muted">從這裡進入 AI 對話，或在知識庫裡查找內容。</p>
+        <p className="mt-3 text-sm leading-6 text-gpt-muted">從這裡進入 AI 對話、知識搜尋，或查看已記住的內容。</p>
 
         <div className="mt-section flex flex-col gap-stack">
           <button
@@ -71,6 +71,15 @@ export function HomePage() {
           >
             <span className="block text-lg font-semibold">知識搜尋</span>
             <span className="mt-1 block text-sm leading-6 text-gpt-muted">在這個站點的知識庫裡查找相關內容</span>
+          </button>
+          <button
+            type="button"
+            disabled={!site.ok}
+            onClick={() => navigate(ROUTES.memories)}
+            className="rounded-2xl border border-gpt-line bg-gpt-canvas p-4 text-left hover:bg-gpt-hover disabled:opacity-60"
+          >
+            <span className="block text-lg font-semibold">我的記憶</span>
+            <span className="mt-1 block text-sm leading-6 text-gpt-muted">查看與刪除對話裡記住的內容</span>
           </button>
         </div>
 

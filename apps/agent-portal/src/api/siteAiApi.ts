@@ -4,6 +4,7 @@ import type {
   SiteAiConversation,
   SiteAiMessage,
   SiteKnowledgeSearchResult,
+  SiteUserMemory,
 } from '@/types/api'
 import { httpClient } from '@/utils/http/axios'
 import { ApiError } from '@/utils/http/apiError'
@@ -43,6 +44,28 @@ export const siteAiApi = {
           throw new ApiError(body.message || '請求失敗', { code: body.code })
         }
       })
+  },
+
+  listMemories(siteId: string) {
+    return httpClient
+      .get<HttpMessageBody<SiteUserMemory[]>>(`/api/site/${siteId}/ai/memories`)
+      .then(unwrapData)
+  },
+
+  deleteMemory(siteId: string, memoryId: string) {
+    return httpClient.delete<HttpMessageBody<null>>(`/api/site/${siteId}/ai/memories/${memoryId}`).then((body) => {
+      if (body.code != null && body.code !== 0) {
+        throw new ApiError(body.message || '請求失敗', { code: body.code })
+      }
+    })
+  },
+
+  clearMemories(siteId: string) {
+    return httpClient.delete<HttpMessageBody<null>>(`/api/site/${siteId}/ai/memories`).then((body) => {
+      if (body.code != null && body.code !== 0) {
+        throw new ApiError(body.message || '請求失敗', { code: body.code })
+      }
+    })
   },
 
   searchKnowledge(siteId: string, query: string, topK: number) {
