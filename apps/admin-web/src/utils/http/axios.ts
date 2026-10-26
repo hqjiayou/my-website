@@ -5,7 +5,7 @@ import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/utils/token'
 
-import { ApiError } from './apiError'
+import { ApiError, type ApiErrorConflict } from './apiError'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 const API_TIMEOUT = 15_000
@@ -63,7 +63,9 @@ axiosClient.interceptors.response.use(
     const originalConfig = error.config
 
     if (status !== 401 || !originalConfig || originalConfig._retry || isAuthBypassPath(originalConfig.url)) {
-      const payload = error.response?.data as { message?: string; code?: number | null } | undefined
+      const payload = error.response?.data as
+        | { message?: string; code?: number | null; conflicts?: ApiErrorConflict[] }
+        | undefined
       const message = payload?.message ?? error.message
       if (status === 401 && originalConfig && isAuthBypassPath(originalConfig.url)) {
         triggerSessionExpired()
@@ -72,6 +74,7 @@ axiosClient.interceptors.response.use(
         new ApiError(message, {
           status,
           code: payload?.code,
+          conflicts: payload?.conflicts,
         }),
       )
     }

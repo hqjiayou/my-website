@@ -42,6 +42,23 @@ export default {
   knowledgeBases: {
     title: 'ナレッジベース',
     description: 'サイトごとのナレッジ文書を管理します（Java が SoT、インデックスは Python 派生ストア）。',
+    reembed: {
+      action: 'ナレッジをすべて再埋め込み',
+      working: '再埋め込み中…',
+      confirm:
+        '各サイトの現在の embedding 入口で全文書を再埋め込みします。次元が変わる場合はベクトル表を作り直し、古いベクトルは残りません。embedding API を実際に呼び、利用量が発生します。もう一度押すと再度実行されます。',
+      done: 'ナレッジの再埋め込みが完了しました',
+      partial: '一部の文書の再埋め込みに失敗しました',
+      usage: 'この実行は embedding API を実際に呼び出しており、利用量が発生します。',
+      sites: 'サイト数',
+      documents: '文書数',
+      dimensions: 'ベクトル次元',
+      recreated: 'ベクトル表を再作成しました（古いベクトルは保持しません）',
+      notRecreated: 'ベクトル表は再作成していません',
+      failed: '失敗した文書',
+      conflicts:
+        'サイトごとに embedding 次元が異なるため、ベクトルデータは変更していません。入口を同じ次元に揃えてください。',
+    },
   },
   conversations: {
     title: '会話記録',

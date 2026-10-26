@@ -2,6 +2,7 @@
 
 import logging
 import re
+from dataclasses import dataclass
 
 import anyio
 from pydantic_ai import Agent
@@ -21,6 +22,26 @@ from agent_services.retrieval.store import RetrievalStore, RetrievedChunk
 from agent_services.schemas.chat import ModelSelection
 
 logger = logging.getLogger(__name__)
+
+# 只用来量向量长度，不写入索引。
+_DIMENSION_PROBE_TEXT = "dimension probe"
+
+
+class DimensionChangeRequired(Exception):
+    """探针维度与列维度不同，且调用方未确认重建。"""
+
+    def __init__(self, dimensions: int, column_dimensions: int) -> None:
+        super().__init__("Embedding dimensions differ from the vector column.")
+        self.dimensions = dimensions
+        self.column_dimensions = column_dimensions
+
+
+@dataclass(frozen=True)
+class ReembedPrepared:
+    dimensions: int
+    column_dimensions: int | None
+    recreated: bool
+
 
 DEFAULT_TOP_K = 4
 DEFAULT_MIN_SCORE = RETRIEVAL_MIN_SCORE_DEFAULT
@@ -292,6 +313,37 @@ class RetrievalService:
             title=title,
             chunks=chunks,
             embeddings=embeddings,
+        )
+
+    async def prepare_reembed(
+        self,
+        *,
+        embedder: EmbeddingClient | None = None,
+        confirm_recreate: bool = False,
+    ) -> ReembedPrepared:
+        """按 upsert 的 embedder 回退解析探针维度，必要时建表或重建。"""
+        client = embedder or self._embedder
+        if client is None:
+            raise RuntimeError("Embedding client is not configured.")
+        vectors = await client.embed_documents([_DIMENSION_PROBE_TEXT])
+        if len(vectors) != 1 or not vectors[0]:
+            raise RuntimeError("Embedding probe returned no vector.")
+        new_dim = len(vectors[0])
+        column_dim = await self._store.current_dimensions()
+        if column_dim is None:
+            await self._store.ensure_schema(new_dim)
+            return ReembedPrepared(
+                dimensions=new_dim, column_dimensions=None, recreated=False
+            )
+        if new_dim == column_dim:
+            return ReembedPrepared(
+                dimensions=new_dim, column_dimensions=column_dim, recreated=False
+            )
+        if not confirm_recreate:
+            raise DimensionChangeRequired(new_dim, column_dim)
+        await self._store.recreate_schema(new_dim)
+        return ReembedPrepared(
+            dimensions=new_dim, column_dimensions=column_dim, recreated=True
         )
 
     async def delete_document(self, *, site_id: str, source_id: str) -> None:

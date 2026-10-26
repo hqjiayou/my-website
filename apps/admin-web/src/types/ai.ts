@@ -84,6 +84,26 @@ export interface UpdateAiKnowledgeInput {
   version: number
 }
 
+export interface AiKnowledgeReembedFailure {
+  siteId: number
+  sourceId: string
+  error: string
+}
+
+export interface AiKnowledgeReembedResult {
+  sites: number
+  documents: number
+  dimensions: number | null
+  recreatedSchema: boolean
+  failed: AiKnowledgeReembedFailure[]
+  status: 'SUCCESS' | 'PARTIAL'
+}
+
+export interface AiKnowledgeReembedConflict {
+  siteId: number
+  dimensions: number
+}
+
 export interface AiConversationListItem {
   id: number
   siteId: number
