@@ -8,11 +8,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.client.AgentStreamListener;
+import com.mywebsite.site.dto.SiteAiMessageDto;
+import com.mywebsite.site.service.SiteAiConversationService;
 import com.mywebsite.site.testsupport.AbstractSiteSpringBootTest;
 import com.mywebsite.site.testsupport.SiteTestJwtSigner;
 import com.nimbusds.jose.jwk.RSAKey;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +26,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -29,6 +36,12 @@ class SiteAiChatStreamMvcTest extends AbstractSiteSpringBootTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private SiteAiConversationService conversationService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @MockBean
     private AgentClient agentClient;
@@ -98,6 +111,39 @@ class SiteAiChatStreamMvcTest extends AbstractSiteSpringBootTest {
 
         assertThat(body).contains("\"errorCode\":\"SYSTEM_ERROR\"");
         assertThat(body).doesNotContain("PROVIDER_STACKTRACE", "boom");
+    }
+
+    @Test
+    void streamPersistsCitationsOnAssistantMessage() throws Exception {
+        doAnswer(invocation -> {
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent("TEXT_DELTA", "{\"delta\":\"hi\"}");
+                    listener.onEvent(
+                            "DONE",
+                            "{\"reply\":\"hi\",\"providerStatus\":\"LIVE\",\"todos\":[],"
+                                    + "\"citations\":[{\"sourceId\":\"kb:4\",\"chunkIndex\":1,\"score\":0.25}]}");
+                    return null;
+                })
+                .when(agentClient)
+                .chatStream(any(), any());
+
+        String body = streamBody();
+        Matcher matcher = Pattern.compile("\"conversationId\":\"(\\d+)\"").matcher(body);
+        assertThat(matcher.find()).isTrue();
+        long conversationId = Long.parseLong(matcher.group(1));
+
+        String assistantMeta = jdbcTemplate.queryForObject(
+                "SELECT agent_meta FROM site_ai_message WHERE conversation_id = ? AND role = 'ASSISTANT'",
+                String.class,
+                conversationId);
+        assertThat(assistantMeta).contains("\"citations\"", "kb:4", "\"chunkIndex\":1");
+        assertThat(new ObjectMapper().readTree(assistantMeta).path("citations").path(0).path("score").asDouble())
+                .isEqualTo(0.25d);
+
+        List<SiteAiMessageDto> listed = conversationService.listMessages(10L, 200L, conversationId);
+        assertThat(listed).hasSize(2);
+        assertThat(listed.get(0).citations()).isNull();
+        assertThat(listed.get(1).citations()).containsExactly(new SiteAiMessageDto.Citation("kb:4", 1, 0.25d));
     }
 
     private String streamBody() throws Exception {

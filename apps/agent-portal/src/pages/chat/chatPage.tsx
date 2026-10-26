@@ -65,12 +65,14 @@ function toStoredTurns(items: SiteAiMessage[], extra?: Pick<StoredLoadOptions, '
       images: item.attachments?.length
         ? item.attachments.map((attachment) => ({ mediaType: attachment.mediaType, data: attachment.data }))
         : undefined,
+      citations: item.role === 'ASSISTANT' && item.citations?.length ? item.citations : undefined,
     }
   })
-  if (lastAssistant >= 0 && extra && (extra.citations || extra.providerStatus !== undefined)) {
+  // 即時輪的 extra 只覆蓋最後一條 ASSISTANT；沒有 extra citations 時保留該條已存的引用。
+  if (lastAssistant >= 0 && extra && (extra.citations?.length || extra.providerStatus !== undefined)) {
     turns[lastAssistant] = {
       ...turns[lastAssistant],
-      citations: extra.citations,
+      citations: extra.citations?.length ? extra.citations : turns[lastAssistant].citations,
       providerStatus: extra.providerStatus,
     }
   }

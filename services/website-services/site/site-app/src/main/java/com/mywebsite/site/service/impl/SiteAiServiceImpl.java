@@ -121,7 +121,8 @@ public class SiteAiServiceImpl implements SiteAiService {
                 response.reply(),
                 response.todos(),
                 response.runMeta(),
-                attachments);
+                attachments,
+                response.citations());
 
         return new SiteAiChatResponseDto(
                 response.reply(),
@@ -406,6 +407,7 @@ public class SiteAiServiceImpl implements SiteAiService {
         StringBuilder doneReply = new StringBuilder();
         List<AgentTodoItem> doneTodos = new ArrayList<>();
         AtomicReference<AgentRunMeta> doneMeta = new AtomicReference<>(AgentRunMeta.EMPTY);
+        AtomicReference<List<AgentCitation>> doneCitations = new AtomicReference<>(List.of());
         try {
             agentClient.chatStream(agentRequest, (event, dataJson) -> {
                 JsonNode data = readJson(dataJson);
@@ -413,6 +415,7 @@ public class SiteAiServiceImpl implements SiteAiService {
                     doneReply.append(extractReply(data));
                     doneTodos.addAll(extractTodos(data));
                     doneMeta.set(extractRunMeta(data));
+                    doneCitations.set(readDoneCitations(data));
                 }
                 String clientData = toClientEventData(event, data, dataJson);
                 if (clientData == null) {
@@ -432,7 +435,8 @@ public class SiteAiServiceImpl implements SiteAiService {
                         doneReply.toString(),
                         doneTodos,
                         doneMeta.get(),
-                        userAttachments);
+                        userAttachments,
+                        doneCitations.get());
                 sendEventQuietly(
                         emitter,
                         "CONVERSATION",
@@ -449,7 +453,8 @@ public class SiteAiServiceImpl implements SiteAiService {
                             doneReply.toString(),
                             doneTodos,
                             doneMeta.get(),
-                            userAttachments);
+                            userAttachments,
+                            doneCitations.get());
                 } catch (RuntimeException recordEx) {
                     log.warn("site ai stream reply was not stored after client disconnect", recordEx);
                 }
@@ -517,6 +522,10 @@ public class SiteAiServiceImpl implements SiteAiService {
     }
 
     private List<SiteAiChatResponseDto.Citation> extractCitations(JsonNode done) {
+        return toCitations(readDoneCitations(done));
+    }
+
+    private List<AgentCitation> readDoneCitations(JsonNode done) {
         JsonNode citations = done.get("citations");
         if (citations == null || !citations.isArray()) {
             return List.of();
@@ -526,11 +535,10 @@ public class SiteAiServiceImpl implements SiteAiService {
             if (parsed == null) {
                 return List.of();
             }
-            List<SiteAiChatResponseDto.Citation> mapped = new ArrayList<>();
+            List<AgentCitation> mapped = new ArrayList<>();
             for (AgentCitation citation : parsed) {
                 if (citation != null) {
-                    mapped.add(new SiteAiChatResponseDto.Citation(
-                            citation.sourceId(), citation.chunkIndex(), citation.score()));
+                    mapped.add(citation);
                 }
             }
             return List.copyOf(mapped);

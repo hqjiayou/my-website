@@ -2,9 +2,12 @@ package com.mywebsite.site.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mywebsite.agent.dto.AgentAttachmentDto;
 import com.mywebsite.agent.dto.AgentChatHistoryMessage;
+import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentPromptProfile;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentTodoItem;
@@ -105,6 +108,19 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             List<AgentTodoItem> todos,
             AgentRunMeta runMeta,
             List<AgentAttachmentDto> userAttachments) {
+        recordExchange(conversation, userMessage, reply, todos, runMeta, userAttachments, null);
+    }
+
+    @Override
+    @Transactional
+    public void recordExchange(
+            SiteAiConversationEntity conversation,
+            String userMessage,
+            String reply,
+            List<AgentTodoItem> todos,
+            AgentRunMeta runMeta,
+            List<AgentAttachmentDto> userAttachments,
+            List<AgentCitation> citations) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         conversation.setAgentTodos(writeTodos(todos));
         if (conversation.getId() == null) {
@@ -116,7 +132,12 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             conversationMapper.updateById(conversation);
         }
         insertMessage(conversation, SiteAiMessageEntity.ROLE_USER, userMessage, null, writeAttachments(userAttachments));
-        insertMessage(conversation, SiteAiMessageEntity.ROLE_ASSISTANT, reply, writeRunMeta(runMeta), null);
+        insertMessage(
+                conversation,
+                SiteAiMessageEntity.ROLE_ASSISTANT,
+                reply,
+                writeAgentMeta(runMeta, citations),
+                null);
     }
 
     @Override
@@ -139,7 +160,12 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                         .orderByAsc(SiteAiMessageEntity::getId))
                 .stream()
                 .map(m -> new SiteAiMessageDto(
-                        m.getId(), m.getRole(), m.getContent(), m.getCreatedAt(), readPublicAttachments(m)))
+                        m.getId(),
+                        m.getRole(),
+                        m.getContent(),
+                        m.getCreatedAt(),
+                        readPublicAttachments(m),
+                        readCitations(m)))
                 .toList();
     }
 
@@ -319,6 +345,63 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             return objectMapper.writeValueAsString(attachments);
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Failed to serialize chat attachments", ex);
+        }
+    }
+
+    /**
+     * citations 为空时原样返回 {@link #writeRunMeta}。非空时写入 {@code citations} 字段；
+     * 已有 run meta 的键保留，观测数据仍可被按原结构读取。
+     */
+    private String writeAgentMeta(AgentRunMeta runMeta, List<AgentCitation> citations) {
+        String meta = writeRunMeta(runMeta);
+        if (citations == null || citations.isEmpty()) {
+            return meta;
+        }
+        try {
+            ObjectNode node =
+                    meta == null ? objectMapper.createObjectNode() : objectMapper.readValue(meta, ObjectNode.class);
+            node.set("citations", objectMapper.valueToTree(citations));
+            return objectMapper.writeValueAsString(node);
+        } catch (RuntimeException | JsonProcessingException ex) {
+            log.warn("Failed to serialize citations into agent meta, kept previous payload", ex);
+            return meta;
+        }
+    }
+
+    /** 无 citations、空数组或 agentMeta 损坏时返回 null，不让消息列表失败。 */
+    private List<SiteAiMessageDto.Citation> readCitations(SiteAiMessageEntity message) {
+        if (!StringUtils.hasText(message.getAgentMeta())) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(message.getAgentMeta());
+            if (root == null || !root.isObject()) {
+                log.warn("site ai message {} has malformed agent_meta citations, ignored", message.getId());
+                return null;
+            }
+            JsonNode citations = root.get("citations");
+            if (citations == null || citations.isNull()) {
+                return null;
+            }
+            if (!citations.isArray()) {
+                log.warn("site ai message {} has malformed agent_meta citations, ignored", message.getId());
+                return null;
+            }
+            SiteAiMessageDto.Citation[] parsed =
+                    objectMapper.treeToValue(citations, SiteAiMessageDto.Citation[].class);
+            if (parsed == null || parsed.length == 0) {
+                return null;
+            }
+            List<SiteAiMessageDto.Citation> items = new ArrayList<>();
+            for (SiteAiMessageDto.Citation item : parsed) {
+                if (item != null) {
+                    items.add(item);
+                }
+            }
+            return items.isEmpty() ? null : List.copyOf(items);
+        } catch (Exception ex) {
+            log.warn("site ai message {} has malformed agent_meta citations, ignored", message.getId(), ex);
+            return null;
         }
     }
 

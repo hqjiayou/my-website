@@ -176,6 +176,58 @@ class SiteAiConversationTodosTest extends AbstractSiteSpringBootTest {
         assertThat(users.get(1).attachments()).hasSize(3);
     }
 
+    @Test
+    void absentCitationsKeepExistingAgentMeta() {
+        AgentRunMeta meta = new AgentRunMeta(
+                new AgentRunMeta.Usage(2, 1, 30, 5),
+                List.of(new AgentRunMeta.ToolCall("list_todos", true)),
+                List.of("orchestration"));
+        ChatPreparation withMeta = conversationService.prepare(10L, 214L, null);
+        conversationService.recordExchange(
+                withMeta.conversation(), "hi", "ok", List.of(), meta, null, List.of());
+
+        List<SiteAiMessageEntity> stored = messagesOf(withMeta.conversation().getId());
+        assertThat(stored.get(0).getAgentMeta()).isNull();
+        assertThat(stored.get(1).getAgentMeta())
+                .contains("\"toolCalls\":1")
+                .contains("\"name\":\"list_todos\"")
+                .contains("orchestration")
+                .doesNotContain("citations");
+        assertThat(conversationService.listMessages(10L, 214L, withMeta.conversation().getId()).get(1).citations())
+                .isNull();
+
+        ChatPreparation empty = conversationService.prepare(10L, 215L, null);
+        conversationService.recordExchange(empty.conversation(), "hi", "ok", List.of(), null, null, null);
+        assertThat(messagesOf(empty.conversation().getId()).get(1).getAgentMeta()).isNull();
+        assertThat(conversationService.listMessages(10L, 215L, empty.conversation().getId()).get(1).citations())
+                .isNull();
+    }
+
+    @Test
+    void malformedAgentMetaDoesNotFailMessageList() {
+        ChatPreparation first = conversationService.prepare(10L, 213L, null);
+        conversationService.recordExchange(first.conversation(), "hi", "ok", List.of(), null);
+        SiteAiMessageEntity assistant = messagesOf(first.conversation().getId()).get(1);
+        assistant.setAgentMeta("{not-json");
+        messageMapper.updateById(assistant);
+
+        List<SiteAiMessageDto> broken = conversationService.listMessages(10L, 213L, first.conversation().getId());
+        assertThat(broken).hasSize(2);
+        assertThat(broken.get(1).content()).isEqualTo("ok");
+        assertThat(broken.get(1).citations()).isNull();
+
+        assistant.setAgentMeta("{\"citations\":{\"sourceId\":\"kb:1\"}}");
+        messageMapper.updateById(assistant);
+        assertThat(conversationService.listMessages(10L, 213L, first.conversation().getId()).get(1).citations())
+                .isNull();
+    }
+
+    private List<SiteAiMessageEntity> messagesOf(long conversationId) {
+        return messageMapper.selectList(new LambdaQueryWrapper<SiteAiMessageEntity>()
+                .eq(SiteAiMessageEntity::getConversationId, conversationId)
+                .orderByAsc(SiteAiMessageEntity::getId));
+    }
+
     private static AgentAttachmentDto image(String seed) {
         return new AgentAttachmentDto(
                 "image/png", Base64.getEncoder().encodeToString(seed.getBytes(StandardCharsets.UTF_8)));
