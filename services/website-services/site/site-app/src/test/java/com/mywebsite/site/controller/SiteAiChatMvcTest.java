@@ -2,7 +2,10 @@ package com.mywebsite.site.controller;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,11 +15,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentChatRequest;
+import com.mywebsite.agent.dto.AgentChatResponse;
+import com.mywebsite.agent.dto.AgentCitation;
+import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
+import com.mywebsite.site.dto.SiteAiMessageDto;
 import com.mywebsite.site.service.SiteAiConversationService;
 import com.mywebsite.site.service.SiteAiConversationService.ChatPreparation;
 import com.mywebsite.site.testsupport.AbstractSiteSpringBootTest;
@@ -201,6 +209,51 @@ class SiteAiChatMvcTest extends AbstractSiteSpringBootTest {
                         .content("{\"message\":\"hello\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(ErrorCode.FORBIDDEN.getCode()));
+    }
+
+    @Test
+    void chatPersistsCitationsAndMessageListReadsThemBack() throws Exception {
+        doReturn(new AgentChatResponse(
+                        "grounded",
+                        null,
+                        "LIVE",
+                        List.of(),
+                        AgentRunMeta.EMPTY,
+                        List.of(new AgentCitation("kb:9", 3, 0.75d))))
+                .when(agentClient)
+                .chat(any());
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+
+        String body = mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"hello\"}"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        long conversationId = Long.parseLong(
+                new ObjectMapper().readTree(body).path("data").path("conversationId").asText());
+
+        String assistantMeta = jdbcTemplate.queryForObject(
+                "SELECT agent_meta FROM site_ai_message WHERE conversation_id = ? AND role = 'ASSISTANT'",
+                String.class,
+                conversationId);
+        String userMeta = jdbcTemplate.queryForObject(
+                "SELECT agent_meta FROM site_ai_message WHERE conversation_id = ? AND role = 'USER'",
+                String.class,
+                conversationId);
+        assertNull(userMeta);
+        JsonNode stored = new ObjectMapper().readTree(assistantMeta);
+        assertTrue(stored.has("citations"));
+        assertEquals("kb:9", stored.path("citations").path(0).path("sourceId").asText());
+        assertEquals(3, stored.path("citations").path(0).path("chunkIndex").asInt());
+        assertEquals(0.75d, stored.path("citations").path(0).path("score").asDouble());
+
+        List<SiteAiMessageDto> listed = conversationService.listMessages(10L, 200L, conversationId);
+        assertEquals(2, listed.size());
+        assertNull(listed.get(0).citations());
+        assertEquals(List.of(new SiteAiMessageDto.Citation("kb:9", 3, 0.75d)), listed.get(1).citations());
     }
 
     @Test

@@ -15,7 +15,7 @@ public class SiteAiMessageEntity extends AbstractAuditableEntity {
     private Long siteId;
     private String role;
     private String content;
-    /** ASSISTANT 消息的 Agent 运行元数据 JSON（V21）；不对终端用户暴露。 */
+    /** ASSISTANT 消息的 agent_meta JSON（V21）。终端列表只解析其中的 citations，不回传整段。 */
     private String agentMeta;
 
     /** USER 消息图片附件 JSON 数组原文（V25 JSONB）；ASSISTANT 为 null。 */

@@ -12,7 +12,7 @@ last_verified: 2026-10-24
 |------|------|
 | Site Auth login/refresh/logout/me | **BACKEND_COMPLETE** |
 | site-web 对接 | **IN_TREE**（`apps/site-web` 只接下方匿名公开内容；Site Auth 前端仍未接） |
-| Site AI chat/stream | **BACKEND_COMPLETE**（会话落库；无 `AI_MODEL` 时诚实 503）。SSE 对终端用户只下发 `START`(`{}`) / `TEXT_DELTA` / `DONE`(`reply`,`providerStatus`,`citations`——仅本轮实际采用知识库 grounding 时出现，每项 `sourceId`/`chunkIndex`/`score`) / `CONVERSATION`(`conversationId`) / `ERROR`(`errorCode` ∈ `EXTERNAL_DEPENDENCY_BLOCKED`·`MCP_UNAVAILABLE`·`AGENT_BUDGET_EXCEEDED`·`SYSTEM_ERROR`)；工具事件、用量、skills、原始错误信息不下发。请求可带 `attachments`（`{mediaType,data}`，`image/jpeg|image/png|image/webp|image/gif`，每条 ≤3、单张解码后 ≤2MiB、合计 ≤5MiB）；`message` 可空白仅当 attachments 非空。历史消息带回 `attachments`。会话管理见下 |
+| Site AI chat/stream | **BACKEND_COMPLETE**（会话落库；无 `AI_MODEL` 时诚实 503）。SSE 对终端用户只下发 `START`(`{}`) / `TEXT_DELTA` / `DONE`(`reply`,`providerStatus`,`citations`——仅本轮实际采用知识库 grounding 时出现，每项 `sourceId`/`chunkIndex`/`score`) / `CONVERSATION`(`conversationId`) / `ERROR`(`errorCode` ∈ `EXTERNAL_DEPENDENCY_BLOCKED`·`MCP_UNAVAILABLE`·`AGENT_BUDGET_EXCEEDED`·`SYSTEM_ERROR`)；工具事件、用量、skills、原始错误信息不下发。请求可带 `attachments`（`{mediaType,data}`，`image/jpeg|image/png|image/webp|image/gif`，每条 ≤3、单张解码后 ≤2MiB、合计 ≤5MiB）；`message` 可空白仅当 attachments 非空。历史消息带回 `attachments`。消息列表 DTO 的 ASSISTANT 项另含 `citations`（`sourceId`/`chunkIndex`/`score`；无引用或 `agentMeta` 无法解析时为 null）。会话管理见下 |
 | 访客内容 / 预约公开 API | 内容公开读见下方「公开内容」。预约公开 API 仍没有。管理端在 `/api/admin/sites/{id}/contents|reservations`。Agent 建预约走 `POST /internal/site/v1/sites/{siteId}/reservations` |
 
 Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之亦然）。

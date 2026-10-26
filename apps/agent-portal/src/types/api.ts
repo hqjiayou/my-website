@@ -62,6 +62,8 @@ export interface SiteAiMessage {
   content: string
   createdAt: string | null
   attachments?: SiteAiAttachment[] | null
+  /** 僅 ASSISTANT。無引用時為 null。 */
+  citations?: SiteAiCitation[] | null
 }
 
 export interface SiteAiChatRequest {
@@ -70,7 +72,7 @@ export interface SiteAiChatRequest {
   attachments?: SiteAiAttachment[]
 }
 
-/** 本輪實際採用的知識庫引用。歷史訊息介面不回這個欄位。 */
+/** 本輪實際採用的知識庫引用。歷史訊息的 ASSISTANT 項也帶回這個欄位。 */
 export interface SiteAiCitation {
   sourceId: string
   chunkIndex: number
