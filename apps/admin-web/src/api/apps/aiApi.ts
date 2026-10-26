@@ -10,6 +10,7 @@ import type {
   AiKnowledgeDetail,
   AiKnowledgeListItem,
   AiKnowledgeListQuery,
+  AiKnowledgeBase,
   AiKnowledgeOverview,
   AiKnowledgeReembedResult,
   AiMessage,
@@ -99,6 +100,7 @@ export const aiApi = {
       pageNum: query.pageNum ?? 1,
       pageSize: query.pageSize ?? 20,
       status: query.status,
+      baseId: query.baseId,
     })
     return httpClient
       .get<HttpMessageBody<PageResult<AiKnowledgeListItem>>>(
@@ -122,12 +124,20 @@ export const aiApi = {
       .then(unwrapData)
   },
 
-  uploadKnowledgeDocument(siteId: number, file: File, title?: string): Promise<AiKnowledgeDetail> {
+  uploadKnowledgeDocument(
+    siteId: number,
+    file: File,
+    title?: string,
+    baseId?: number | null,
+  ): Promise<AiKnowledgeDetail> {
     const form = new FormData()
     form.append('file', file)
     const trimmed = title?.trim()
     if (trimmed) {
       form.append('title', trimmed)
+    }
+    if (baseId != null) {
+      form.append('baseId', String(baseId))
     }
     return httpClient
       .post<HttpMessageBody<AiKnowledgeDetail>, FormData>(
@@ -169,6 +179,44 @@ export const aiApi = {
         input,
       )
       .then(unwrapData)
+  },
+
+  listKnowledgeBases(siteId: number): Promise<AiKnowledgeBase[]> {
+    return httpClient
+      .get<HttpMessageBody<AiKnowledgeBase[]>>(`${aiBase(siteId)}/knowledge-bases`)
+      .then(unwrapData)
+  },
+
+  createKnowledgeBase(siteId: number, name: string): Promise<AiKnowledgeBase> {
+    return httpClient
+      .post<HttpMessageBody<AiKnowledgeBase>, { name: string }>(`${aiBase(siteId)}/knowledge-bases`, {
+        name,
+      })
+      .then(unwrapData)
+  },
+
+  deleteKnowledgeBase(siteId: number, baseId: number): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null>>(`${aiBase(siteId)}/knowledge-bases/${baseId}`)
+      .then(() => undefined)
+  },
+
+  listAllKnowledgeBases(): Promise<AiKnowledgeBase[]> {
+    return httpClient
+      .get<HttpMessageBody<AiKnowledgeBase[]>>(`/admin/ai/knowledge-bases`)
+      .then(unwrapData)
+  },
+
+  linkKnowledgeBase(baseId: number, targetSiteId: number): Promise<void> {
+    return httpClient
+      .post<HttpMessageBody<null>>(`/admin/ai/knowledge-bases/${baseId}/links/${targetSiteId}`, {})
+      .then(() => undefined)
+  },
+
+  unlinkKnowledgeBase(baseId: number, targetSiteId: number): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null>>(`/admin/ai/knowledge-bases/${baseId}/links/${targetSiteId}`)
+      .then(() => undefined)
   },
 
   getKnowledgeOverview(): Promise<AiKnowledgeOverview> {

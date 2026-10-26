@@ -12,6 +12,8 @@ public final class AdminAiKnowledgeDtos {
     public record AdminAiKnowledgeListItemDto(
             Long id,
             Long siteId,
+            Long baseId,
+            boolean owned,
             String title,
             String status,
             String indexStatus,
@@ -28,6 +30,8 @@ public final class AdminAiKnowledgeDtos {
     public record AdminAiKnowledgeDetailDto(
             Long id,
             Long siteId,
+            Long baseId,
+            boolean owned,
             String title,
             String content,
             String status,
@@ -84,7 +88,27 @@ public final class AdminAiKnowledgeDtos {
     public record AdminAiKnowledgeReindexFailedResultDto(int attempted, int succeeded) {}
 
     public record AdminAiKnowledgeCreateRequest(
-            @NotBlank @Size(max = 255) String title, @NotBlank String content) {}
+            @NotBlank @Size(max = 255) String title, @NotBlank String content, Long baseId) {
+
+        public AdminAiKnowledgeCreateRequest(String title, String content) {
+            this(title, content, null);
+        }
+    }
+
+    /** 知识库（base）：owned=false 表示经共享链接可见（只读）。 */
+    public record AdminAiKnowledgeBaseDto(
+            Long id,
+            Long siteId,
+            String ownerSiteName,
+            String name,
+            boolean isDefault,
+            boolean owned,
+            long documentCount,
+            List<Long> linkedSiteIds,
+            OffsetDateTime createdAt,
+            OffsetDateTime updatedAt) {}
+
+    public record AdminAiKnowledgeBaseCreateRequest(@NotBlank @Size(max = 128) String name) {}
 
     public record AdminAiKnowledgeUpdateRequest(
             @NotBlank @Size(max = 255) String title,
@@ -92,7 +116,12 @@ public final class AdminAiKnowledgeDtos {
             @NotBlank String status,
             Integer version) {}
 
-    public record AdminAiKnowledgeListQuery(Integer pageNum, Integer pageSize, String status) {}
+    public record AdminAiKnowledgeListQuery(Integer pageNum, Integer pageSize, String status, Long baseId) {
+
+        public AdminAiKnowledgeListQuery(Integer pageNum, Integer pageSize, String status) {
+            this(pageNum, pageSize, status, null);
+        }
+    }
 
     public record AdminAiKnowledgeReembedConflictDto(Long siteId, Integer dimensions) {}
 
