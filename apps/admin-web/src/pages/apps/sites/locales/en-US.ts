@@ -469,9 +469,9 @@ export default {
       uploadDialogTitle: 'Upload file',
       chooseFile: 'Choose file',
       titleLabel: 'Title',
-      uploadHint: 'Only .txt and .md files are supported, up to 1 MB.',
-      invalidExtension: 'Only .txt or .md files are supported.',
-      fileTooLarge: 'File must be 1 MB or smaller.',
+      uploadHint: 'Only .txt, .md, .pdf, .docx and .html files are supported, up to 10 MB.',
+      invalidExtension: 'Only .txt, .md, .pdf, .docx or .html files are supported.',
+      fileTooLarge: 'File must be 10 MB or smaller.',
       uploaded: 'File uploaded',
       uploading: 'Uploading…',
       columns: {

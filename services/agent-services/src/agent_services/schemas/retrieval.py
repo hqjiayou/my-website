@@ -8,7 +8,8 @@ from agent_services.schemas.chat import ModelSelection
 MAX_SITE_ID_LENGTH = 64
 MAX_SOURCE_ID_LENGTH = 128
 MAX_TITLE_LENGTH = 512
-MAX_CONTENT_LENGTH = 200_000
+# 与 Java 上传侧对齐：文件上限 10MB，抽取文本上限 300 万字符（10MB 纯文本的最坏情形）。
+MAX_CONTENT_LENGTH = 3_000_000
 # 单次检索返回条数上限；超过则夹到此值，而不是 400。
 MAX_SEARCH_TOP_K = 20
 

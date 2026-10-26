@@ -468,9 +468,9 @@ export default {
       uploadDialogTitle: 'ファイルをアップロード',
       chooseFile: 'ファイルを選択',
       titleLabel: 'タイトル',
-      uploadHint: '.txt / .md のみ、最大 1 MB。',
-      invalidExtension: '.txt または .md ファイルのみ対応しています。',
-      fileTooLarge: 'ファイルサイズは 1 MB 以下にしてください。',
+      uploadHint: '.txt / .md / .pdf / .docx / .html のみ、最大 10 MB。',
+      invalidExtension: '.txt / .md / .pdf / .docx / .html ファイルのみ対応しています。',
+      fileTooLarge: 'ファイルサイズは 10 MB 以下にしてください。',
       uploaded: 'ファイルをアップロードしました',
       uploading: 'アップロード中…',
       columns: {
