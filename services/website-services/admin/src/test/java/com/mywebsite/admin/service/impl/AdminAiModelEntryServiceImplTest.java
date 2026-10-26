@@ -75,6 +75,15 @@ class AdminAiModelEntryServiceImplTest {
                 .containsExactly(
                         "google:site-default", "openai:site-alt", "google:global-default", "anthropic:global-alt");
         assertThat(chain.get(0).apiKey()).isEqualTo("key-3");
+    }
+
+    @Test
+    void currentSelectionReturnsChainHead() {
+        when(modelEntryMapper.selectList(any()))
+                .thenReturn(
+                        List.of(entry(3L, 10L, "google:site-default", true)),
+                        List.of(entry(1L, null, "google:global-default", true)));
+
         assertThat(service.currentSelection(10L).spec()).isEqualTo("google:site-default");
     }
 
