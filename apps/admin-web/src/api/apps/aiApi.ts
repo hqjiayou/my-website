@@ -137,6 +137,17 @@ export const aiApi = {
       .then(unwrapData)
   },
 
+  getKnowledgeDocumentFile(
+    siteId: number,
+    id: number,
+  ): Promise<{ url: string; filename: string | null; sourceFormat: string | null }> {
+    return httpClient
+      .get<HttpMessageBody<{ url: string; filename: string | null; sourceFormat: string | null }>>(
+        `${aiBase(siteId)}/knowledge-documents/${id}/file`,
+      )
+      .then(unwrapData)
+  },
+
   reindexKnowledgeDocument(siteId: number, id: number): Promise<AiKnowledgeDetail> {
     return httpClient
       .post<HttpMessageBody<AiKnowledgeDetail>, Record<string, never>>(

@@ -50,7 +50,12 @@ class AdminAiKnowledgeServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new AdminAiKnowledgeServiceImpl(
-                knowledgeMapper, adminSiteMapper, agentClient, modelEntryService);
+                knowledgeMapper,
+                adminSiteMapper,
+                agentClient,
+                modelEntryService,
+                org.mockito.Mockito.mock(com.mywebsite.infra.service.ObjectStorageService.class),
+                new com.mywebsite.infra.properties.StorageProperties());
     }
 
     @Test

@@ -23,6 +23,12 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     private String indexStatus;
     private String indexError;
     private java.time.OffsetDateTime indexedAt;
+    private String sourceFormat;
+    private String originalFilename;
+    private String storageBucket;
+    private String storageKey;
+    private Long fileSizeBytes;
+    private String sha256;
 
     public Long getSiteId() {
         return siteId;
@@ -78,5 +84,53 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public void setIndexedAt(java.time.OffsetDateTime indexedAt) {
         this.indexedAt = indexedAt;
+    }
+
+    public String getSourceFormat() {
+        return sourceFormat;
+    }
+
+    public void setSourceFormat(String sourceFormat) {
+        this.sourceFormat = sourceFormat;
+    }
+
+    public String getOriginalFilename() {
+        return originalFilename;
+    }
+
+    public void setOriginalFilename(String originalFilename) {
+        this.originalFilename = originalFilename;
+    }
+
+    public String getStorageBucket() {
+        return storageBucket;
+    }
+
+    public void setStorageBucket(String storageBucket) {
+        this.storageBucket = storageBucket;
+    }
+
+    public String getStorageKey() {
+        return storageKey;
+    }
+
+    public void setStorageKey(String storageKey) {
+        this.storageKey = storageKey;
+    }
+
+    public Long getFileSizeBytes() {
+        return fileSizeBytes;
+    }
+
+    public void setFileSizeBytes(Long fileSizeBytes) {
+        this.fileSizeBytes = fileSizeBytes;
+    }
+
+    public String getSha256() {
+        return sha256;
+    }
+
+    public void setSha256(String sha256) {
+        this.sha256 = sha256;
     }
 }

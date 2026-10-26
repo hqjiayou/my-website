@@ -1,5 +1,6 @@
 package com.mywebsite.admin.service;
 
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeDetailDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListItemDto;
@@ -49,4 +50,13 @@ public interface AdminAiKnowledgeService {
 
     /** 重新同步单篇文档的派生索引，并落库 INDEXED/FAILED 结果。 */
     AdminAiKnowledgeDetailDto reindexDocument(long siteId, long documentId);
+
+    /** 上传建档：同站点同 SHA-256 去重、原档落对象存储（已配置时）、再走建档与索引同步。 */
+    AdminAiKnowledgeDetailDto createUploadedDocument(
+            long siteId,
+            AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest request,
+            AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta meta);
+
+    /** 原档短时下载 URL；未保存原档时抛 FILE_ORIGINAL_MISSING。 */
+    AdminAiKnowledgeDtos.AdminAiKnowledgeFileDto originalFileUrl(long siteId, long documentId);
 }

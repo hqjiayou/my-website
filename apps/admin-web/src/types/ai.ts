@@ -60,6 +60,10 @@ export interface AiKnowledgeListItem {
   indexStatus: string
   indexError: string | null
   indexedAt: string | null
+  sourceFormat: string | null
+  originalFilename: string | null
+  fileSizeBytes: number | null
+  hasOriginal: boolean
   version: number
   createdAt: string
   updatedAt: string

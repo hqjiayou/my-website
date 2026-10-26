@@ -1,13 +1,16 @@
 package com.mywebsite.admin.controller;
 
 import com.mywebsite.admin.constant.AdminAiKnowledgeMessageKeys;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeDetailDto;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeFileDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListItemDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListQuery;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedConflictResponse;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedResultDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUpdateRequest;
+import com.mywebsite.admin.service.AdminAiKnowledgeContentConverter;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
 import com.mywebsite.admin.service.AdminAiKnowledgeTextExtractor;
 import com.mywebsite.admin.service.AdminAiKnowledgeService.ReembedConflictException;
@@ -21,10 +24,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.CodingErrorAction;
-import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
@@ -53,9 +52,28 @@ public class AdminAiKnowledgeController {
     /** 抽取文本上限（字符），与 agent-services 的 MAX_CONTENT_LENGTH 对齐。 */
     private static final int MAX_CONTENT_CHARS = 3_000_000;
     private static final int MAX_TITLE_LENGTH = 255;
-    private static final Set<String> TEXT_EXTENSIONS = Set.of("txt", "md");
-    private static final Set<String> SUPPORTED_EXTENSIONS =
-            Set.of("txt", "md", "pdf", "docx", "html", "htm", "xlsx", "pptx");
+    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
+            "txt", "md", "markdown", "csv", "tsv", "json", "xml", "yaml", "yml", "toml", "ini", "log",
+            "py", "java", "js", "ts", "tsx", "jsx", "css", "scss", "sql", "sh",
+            "go", "rs", "c", "h", "cpp", "hpp", "cs", "rb", "php", "swift", "kt",
+            "scala", "pl", "r", "lua", "vue",
+            "pdf", "docx", "html", "htm", "xlsx", "pptx", "epub", "odt", "ods", "odp", "rtf");
+
+    private static final java.util.Map<String, String> CONTENT_TYPES = java.util.Map.ofEntries(
+            java.util.Map.entry("pdf", "application/pdf"),
+            java.util.Map.entry("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            java.util.Map.entry("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            java.util.Map.entry("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+            java.util.Map.entry("html", "text/html"),
+            java.util.Map.entry("htm", "text/html"),
+            java.util.Map.entry("epub", "application/epub+zip"),
+            java.util.Map.entry("odt", "application/vnd.oasis.opendocument.text"),
+            java.util.Map.entry("ods", "application/vnd.oasis.opendocument.spreadsheet"),
+            java.util.Map.entry("odp", "application/vnd.oasis.opendocument.presentation"),
+            java.util.Map.entry("rtf", "application/rtf"),
+            java.util.Map.entry("json", "application/json"),
+            java.util.Map.entry("csv", "text/csv"),
+            java.util.Map.entry("md", "text/markdown"));
 
     private final AdminAiKnowledgeService adminAiKnowledgeService;
 
@@ -96,17 +114,30 @@ public class AdminAiKnowledgeController {
 
     @PostMapping(value = DOCUMENTS + "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
-    @Operation(summary = "上传 AI 知识库文件（.txt/.md/.pdf/.docx/.html），抽取文本走创建文档")
+    @Operation(summary = "上传 AI 知识库文件（多格式，归一化为 Markdown 入库，原档留存对象存储）")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> upload(
             @PathVariable long siteId,
             @RequestPart("file") MultipartFile file,
             @RequestParam(value = "title", required = false) String title) {
+        UploadPayload payload = toUploadPayload(file, title);
         return ResponseEntity.ok(new HttpMessageBody<>(
                 ResponseMessages.SUCCESS,
-                adminAiKnowledgeService.createDocument(siteId, toCreateRequest(file, title))));
+                adminAiKnowledgeService.createUploadedDocument(siteId, payload.request(), payload.meta())));
     }
 
-    private static AdminAiKnowledgeCreateRequest toCreateRequest(MultipartFile file, String titleOverride) {
+    @GetMapping(DOCUMENTS + "/{id}/file")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
+    @Operation(summary = "AI 知识库文档原档下载（短时 presigned URL）")
+    public ResponseEntity<HttpMessageBody<AdminAiKnowledgeFileDto>> originalFile(
+            @PathVariable long siteId, @PathVariable("id") long id) {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiKnowledgeService.originalFileUrl(siteId, id)));
+    }
+
+    private record UploadPayload(
+            AdminAiKnowledgeCreateRequest request, AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta meta) {}
+
+    private static UploadPayload toUploadPayload(MultipartFile file, String titleOverride) {
         if (file == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_REQUIRED);
         }
@@ -122,7 +153,7 @@ public class AdminAiKnowledgeController {
         if (bytes.length > MAX_UPLOAD_BYTES) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
         }
-        String content = TEXT_EXTENSIONS.contains(extension) ? decodeText(bytes) : extractText(extension, bytes);
+        String content = convertContent(extension, bytes);
         if (!StringUtils.hasText(content)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_EMPTY);
         }
@@ -133,12 +164,19 @@ public class AdminAiKnowledgeController {
         if (!StringUtils.hasText(title) || title.length() > MAX_TITLE_LENGTH) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.TITLE_INVALID);
         }
-        return new AdminAiKnowledgeCreateRequest(title, content);
+        AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta meta = new AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta(
+                filename,
+                extension,
+                CONTENT_TYPES.getOrDefault(extension, "application/octet-stream"),
+                bytes.length,
+                sha256Hex(bytes),
+                bytes);
+        return new UploadPayload(new AdminAiKnowledgeCreateRequest(title, content), meta);
     }
 
-    private static String extractText(String extension, byte[] bytes) {
+    private static String convertContent(String extension, byte[] bytes) {
         try {
-            return AdminAiKnowledgeTextExtractor.extractText(extension, bytes);
+            return AdminAiKnowledgeContentConverter.toStoredContent(extension, bytes);
         } catch (AdminAiKnowledgeTextExtractor.ExtractionException ex) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_ENCODING);
         }
@@ -152,37 +190,13 @@ public class AdminAiKnowledgeController {
         }
     }
 
-    /**
-     * 纯文本解码：先严格 UTF-8（去 BOM）；失败后按 MS932（日文）→GB18030（中文）回退，
-     * 兼容从 Windows/旧系统导出的非 UTF-8 文本；全部失败才按 FILE_ENCODING 拒绝。
-     * 回退字符集来自 jdk.charsets，运行镜像缺失时该步自动跳过。
-     */
-    private static String decodeText(byte[] bytes) {
+    private static String sha256Hex(byte[] bytes) {
         try {
-            return decodeStrict(bytes, StandardCharsets.UTF_8);
-        } catch (CharacterCodingException utf8Failure) {
-            for (String fallbackName : new String[] {"MS932", "GB18030"}) {
-                try {
-                    return decodeStrict(bytes, java.nio.charset.Charset.forName(fallbackName));
-                } catch (CharacterCodingException | RuntimeException fallbackFailure) {
-                    // 继续下一个候选字符集
-                }
-            }
-            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_ENCODING);
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 unavailable", ex);
         }
-    }
-
-    private static String decodeStrict(byte[] bytes, java.nio.charset.Charset charset)
-            throws CharacterCodingException {
-        String text = charset.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT)
-                .decode(ByteBuffer.wrap(bytes))
-                .toString();
-        if (text.startsWith("\uFEFF")) {
-            return text.substring(1);
-        }
-        return text;
     }
 
     private static String baseName(String originalFilename) {
