@@ -37,7 +37,7 @@ CREATE INDEX idx_kb_document_base ON site_ai_knowledge_document (base_id, delete
 
 -- 存量文档回填：每个已有文档的站点建一个默认库，文档全部归入。
 INSERT INTO site_ai_knowledge_base (site_id, name, is_default, status)
-SELECT DISTINCT site_id, '默认知识库', 1, 'ACTIVE'
+SELECT DISTINCT site_id, '默认知识库', TRUE, 'ACTIVE'
 FROM site_ai_knowledge_document;
 
 UPDATE site_ai_knowledge_document d
