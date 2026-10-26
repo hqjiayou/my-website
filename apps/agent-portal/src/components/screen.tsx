@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 export function Screen({ children }: { children: ReactNode }) {
-  return <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-gpt-canvas text-gpt-ink">{children}</div>
+  return <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-background text-gpt-ink">{children}</div>
 }
 
 export function FullScreenStatus({ text }: { text: string }) {

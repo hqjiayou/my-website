@@ -3,6 +3,8 @@ import type {
   SiteAiChatRequest,
   SiteAiConversation,
   SiteAiMessage,
+  SiteKnowledgeDocumentDetail,
+  SiteKnowledgeDocumentListItem,
   SiteKnowledgeSearchResult,
   SiteUserMemory,
 } from '@/types/api'
@@ -73,6 +75,20 @@ export const siteAiApi = {
       .post<HttpMessageBody<SiteKnowledgeSearchResult>, { query: string; topK: number }>(
         `/api/site/${siteId}/ai/knowledge/search`,
         { query, topK },
+      )
+      .then(unwrapData)
+  },
+
+  listKnowledgeDocuments(siteId: string) {
+    return httpClient
+      .get<HttpMessageBody<SiteKnowledgeDocumentListItem[]>>(`/api/site/${siteId}/ai/knowledge-documents`)
+      .then(unwrapData)
+  },
+
+  getKnowledgeDocument(siteId: string, documentId: number) {
+    return httpClient
+      .get<HttpMessageBody<SiteKnowledgeDocumentDetail>>(
+        `/api/site/${siteId}/ai/knowledge-documents/${documentId}`,
       )
       .then(unwrapData)
   },

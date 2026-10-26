@@ -92,6 +92,19 @@ export interface SiteKnowledgeSearchResult {
   rerankApplied?: boolean
 }
 
+export interface SiteKnowledgeDocumentListItem {
+  id: number
+  title: string
+  updatedAt: string | null
+}
+
+export interface SiteKnowledgeDocumentDetail {
+  id: number
+  title: string
+  content: string
+  updatedAt: string | null
+}
+
 export interface SiteUserMemory {
   id: number
   content: string
