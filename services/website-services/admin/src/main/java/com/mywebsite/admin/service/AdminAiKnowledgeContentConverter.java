@@ -321,6 +321,7 @@ public final class AdminAiKnowledgeContentConverter {
         } catch (IOException | RuntimeException ex) {
             throw new ExtractionException("failed to convert PPTX", ex);
         }
+    }
 
     // ---------- HTML → Md ----------
 
