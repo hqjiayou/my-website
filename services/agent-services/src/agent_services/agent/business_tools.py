@@ -10,6 +10,19 @@ from agent_services.config import Settings
 from agent_services.tools.business_api import BusinessApiClient, BusinessApiError
 
 
+def _present_site_summary(summary: object) -> object:
+    """呈现给模型时把 siteType 改名为中性的 category（用途标签原文不变）。
+
+    siteType 现为自由用途标签而非行业分类；改名避免模型把标签误读为行业定性
+    （曾出现把演示站说成诊所的臆造）。Java 契约字段本身不动。
+    """
+    if isinstance(summary, dict) and "siteType" in summary:
+        presented = dict(summary)
+        presented["category"] = presented.pop("siteType")
+        return presented
+    return summary
+
+
 def build_business_toolset(
     settings: Settings,
     site_id: str,
@@ -27,9 +40,9 @@ def build_business_toolset(
 
     @toolset.tool_plain
     async def get_site_info() -> dict:
-        """Get basic information about the current site (name, type, description)."""
+        """Get basic information about the current site (name, category tag, description)."""
         try:
-            return {"site": await client.get_site_summary(site_id)}
+            return {"site": _present_site_summary(await client.get_site_summary(site_id))}
         except BusinessApiError as exc:
             return {"error": str(exc)}
 
