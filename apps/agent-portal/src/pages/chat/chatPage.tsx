@@ -574,7 +574,7 @@ export function ChatPage() {
                 首頁
               </Link>
               <Link to={ROUTES.knowledge} className="rounded-lg px-2 py-1.5 text-xs text-gpt-muted hover:bg-gpt-hover">
-                知識搜尋
+                知識庫
               </Link>
               <Link to={ROUTES.memories} className="rounded-lg px-2 py-1.5 text-xs text-gpt-muted hover:bg-gpt-hover">
                 我的記憶

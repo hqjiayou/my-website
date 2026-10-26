@@ -66,6 +66,18 @@ public class SiteAiController {
         return ApiResponse.success(siteAiService.searchKnowledge(siteId, request));
     }
 
+    @GetMapping("/{siteId}/ai/knowledge-documents")
+    public ApiResponse<List<com.mywebsite.site.dto.SiteKnowledgeDocumentDtos.ListItem>> listKnowledgeDocuments(
+            @PathVariable("siteId") long siteId) {
+        return ApiResponse.success(siteAiService.listKnowledgeDocuments(siteId));
+    }
+
+    @GetMapping("/{siteId}/ai/knowledge-documents/{documentId}")
+    public ApiResponse<com.mywebsite.site.dto.SiteKnowledgeDocumentDtos.Detail> getKnowledgeDocument(
+            @PathVariable("siteId") long siteId, @PathVariable("documentId") long documentId) {
+        return ApiResponse.success(siteAiService.getKnowledgeDocument(siteId, documentId));
+    }
+
     @GetMapping("/{siteId}/ai/conversations")
     public ApiResponse<List<SiteAiConversationDto>> listConversations(@PathVariable("siteId") long siteId) {
         return ApiResponse.success(
