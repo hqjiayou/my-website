@@ -62,6 +62,23 @@ class RetrievalSearchHit(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class ReembedPrepareRequest(BaseModel):
+    """POST /internal/v1/retrieval/reembed/prepare。model 与 chat / upsert 同一形状。"""
+
+    model_selection: ModelSelection | None = Field(default=None, alias="model")
+    confirm_recreate: bool = Field(alias="confirmRecreate")
+
+    model_config = {"populate_by_name": True}
+
+
+class ReembedPrepareResponse(BaseModel):
+    dimensions: int
+    column_dimensions: int | None = Field(alias="columnDimensions")
+    recreated: bool
+
+    model_config = {"populate_by_name": True}
+
+
 class RetrievalSearchResponse(BaseModel):
     hits: list[RetrievalSearchHit]
     degraded: bool

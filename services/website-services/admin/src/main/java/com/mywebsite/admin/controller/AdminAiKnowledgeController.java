@@ -5,8 +5,11 @@ import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateReques
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeDetailDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListItemDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListQuery;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedConflictResponse;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedResultDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUpdateRequest;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
+import com.mywebsite.admin.service.AdminAiKnowledgeService.ReembedConflictException;
 import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.api.ResponseMessages;
 import com.mywebsite.common.enums.ErrorCode;
@@ -23,6 +26,7 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Set;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -33,18 +37,17 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api/admin/sites/{siteId}/ai/knowledge-documents")
 @Tag(name = "Admin · AI Knowledge Base")
 @SecurityRequirement(name = "adminBearer")
 public class AdminAiKnowledgeController {
 
+    private static final String DOCUMENTS = "/api/admin/sites/{siteId}/ai/knowledge-documents";
     private static final int MAX_UPLOAD_BYTES = 1024 * 1024;
     private static final int MAX_TITLE_LENGTH = 255;
     private static final Set<String> TEXT_EXTENSIONS = Set.of("txt", "md");
@@ -55,7 +58,7 @@ public class AdminAiKnowledgeController {
         this.adminAiKnowledgeService = adminAiKnowledgeService;
     }
 
-    @GetMapping
+    @GetMapping(DOCUMENTS)
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "AI 知识库文档分页列表")
     public ResponseEntity<HttpMessageBody<PageResult<AdminAiKnowledgeListItemDto>>> list(
@@ -68,7 +71,7 @@ public class AdminAiKnowledgeController {
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, data));
     }
 
-    @GetMapping("/{id}")
+    @GetMapping(DOCUMENTS + "/{id}")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "AI 知识库文档详情")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> get(
@@ -77,7 +80,7 @@ public class AdminAiKnowledgeController {
                 ResponseMessages.SUCCESS, adminAiKnowledgeService.getDocument(siteId, id)));
     }
 
-    @PostMapping
+    @PostMapping(DOCUMENTS)
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
     @Operation(summary = "创建 AI 知识库文档")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> create(
@@ -86,7 +89,7 @@ public class AdminAiKnowledgeController {
                 ResponseMessages.SUCCESS, adminAiKnowledgeService.createDocument(siteId, request)));
     }
 
-    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = DOCUMENTS + "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
     @Operation(summary = "上传 AI 知识库纯文本（.txt/.md），走创建文档")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> upload(
@@ -178,7 +181,7 @@ public class AdminAiKnowledgeController {
         return filename.substring(0, dot).trim();
     }
 
-    @PutMapping("/{id}")
+    @PutMapping(DOCUMENTS + "/{id}")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
     @Operation(summary = "更新 AI 知识库文档")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> update(
@@ -189,12 +192,26 @@ public class AdminAiKnowledgeController {
                 ResponseMessages.SUCCESS, adminAiKnowledgeService.updateDocument(siteId, id, request)));
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping(DOCUMENTS + "/{id}")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:delete')")
     @Operation(summary = "删除 AI 知识库文档（软删除，并移除派生索引）")
     public ResponseEntity<HttpMessageBody<Void>> delete(
             @PathVariable long siteId, @PathVariable("id") long id) {
         adminAiKnowledgeService.deleteDocument(siteId, id);
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
+    }
+
+    @PostMapping("/api/admin/ai/knowledge/reembed")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @Operation(summary = "按各站点当前模型入口重嵌全部知识库文档")
+    public ResponseEntity<?> reembed() {
+        try {
+            AdminAiKnowledgeReembedResultDto result = adminAiKnowledgeService.reembedAll();
+            return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, result));
+        } catch (ReembedConflictException ex) {
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                    .body(new AdminAiKnowledgeReembedConflictResponse(
+                            "各站点的 embedding 维度不一致，未改动任何向量数据。", ex.conflicts()));
+        }
     }
 }

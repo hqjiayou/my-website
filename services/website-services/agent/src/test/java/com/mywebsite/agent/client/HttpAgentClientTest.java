@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentMcpReady;
+import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
@@ -388,6 +389,31 @@ class HttpAgentClientTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getCode())
                 .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());
+    }
+
+    @Test
+    void prepareReembedMapsDimensionChangeRequired() throws IOException {
+        AtomicInteger hits = new AtomicInteger();
+        server.createContext("/internal/v1/retrieval/reembed/prepare", exchange -> {
+            hits.incrementAndGet();
+            write(
+                    exchange,
+                    409,
+                    "{\"ok\":false,\"errorCode\":\"DIMENSION_CHANGE_REQUIRED\","
+                            + "\"message\":\"dimensions differ\",\"dimensions\":8,\"columnDimensions\":3}");
+        });
+
+        assertThatThrownBy(() -> client.prepareReembed(
+                        new AgentModelSelection("openai:gpt", "key", null, "openai:embed"), false))
+                .isInstanceOf(AgentDimensionChangeRequiredException.class)
+                .satisfies(ex -> {
+                    AgentDimensionChangeRequiredException dimension =
+                            (AgentDimensionChangeRequiredException) ex;
+                    assertThat(dimension.dimensions()).isEqualTo(8);
+                    assertThat(dimension.columnDimensions()).isEqualTo(3);
+                    assertThat(dimension.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode());
+                });
+        assertThat(hits.get()).isEqualTo(1);
     }
 
     private static void write(com.sun.net.httpserver.HttpExchange exchange, int status, String body)

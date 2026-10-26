@@ -42,6 +42,22 @@ export default {
   knowledgeBases: {
     title: '知识库',
     description: '按站点维护知识库文档（Java 为真相源；索引同步到 Python 派生库）。',
+    reembed: {
+      action: '重新嵌入全部知识',
+      working: '正在重新嵌入…',
+      confirm:
+        '将按各站点当前入口的 embedding 规格重嵌全部文件。维度变更时会重建向量表，旧向量不保留。此操作会真实调用 embedding API 并产生用量；再次点击会再跑一遍。',
+      done: '已重新嵌入全部知识',
+      partial: '部分文件重新嵌入失败',
+      usage: '本次已真实调用 embedding API，会产生用量。',
+      sites: '站点数',
+      documents: '文件数',
+      dimensions: '向量维度',
+      recreated: '已重建向量表（旧向量未保留）',
+      notRecreated: '未重建向量表',
+      failed: '失败文件',
+      conflicts: '各站点向量维度不一致，未改动向量数据。请先把各站点入口统一到同一 embedding 维度。',
+    },
   },
   conversations: {
     title: '对话记录',

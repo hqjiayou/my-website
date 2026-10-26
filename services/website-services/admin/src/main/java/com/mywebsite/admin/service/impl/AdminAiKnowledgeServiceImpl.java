@@ -7,21 +7,31 @@ import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateReques
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeDetailDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListItemDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListQuery;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedConflictDto;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedFailureDto;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedResultDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUpdateRequest;
 import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminSiteMapper;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
+import com.mywebsite.admin.service.AdminAiKnowledgeService.ReembedConflictException;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.agent.client.AgentClient;
+import com.mywebsite.agent.client.AgentDimensionChangeRequiredException;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.page.PageResult;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +49,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     private static final int MAX_PAGE_SIZE = 100;
     private static final Set<String> ALLOWED_STATUSES = Set.of(
             AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE, AdminAiKnowledgeDocumentEntity.STATUS_DISABLED);
+    private static final String REEMBED_SUCCESS = "SUCCESS";
+    private static final String REEMBED_PARTIAL = "PARTIAL";
 
     private final AdminAiKnowledgeDocumentMapper knowledgeMapper;
     private final AdminSiteMapper adminSiteMapper;
@@ -156,6 +168,100 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
     }
 
+    @Override
+    public AdminAiKnowledgeReembedResultDto reembedAll() {
+        List<AdminAiKnowledgeDocumentEntity> documents = knowledgeMapper.selectList(
+                new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
+                        .orderByAsc(AdminAiKnowledgeDocumentEntity::getSiteId)
+                        .orderByAsc(AdminAiKnowledgeDocumentEntity::getId));
+        Map<Long, List<AdminAiKnowledgeDocumentEntity>> documentsBySite = new LinkedHashMap<>();
+        for (AdminAiKnowledgeDocumentEntity document : documents) {
+            if (document.getSiteId() == null || document.getId() == null) {
+                continue;
+            }
+            documentsBySite.computeIfAbsent(document.getSiteId(), ignored -> new ArrayList<>()).add(document);
+        }
+        if (documentsBySite.isEmpty()) {
+            return new AdminAiKnowledgeReembedResultDto(0, 0, null, false, List.of(), REEMBED_SUCCESS);
+        }
+
+        Map<SelectionGroup, List<Long>> sitesBySelection = new LinkedHashMap<>();
+        Map<Long, AgentModelSelection> selectionBySite = new LinkedHashMap<>();
+        for (Long siteId : documentsBySite.keySet()) {
+            AgentModelSelection selection = modelEntryService.currentSelection(siteId);
+            selectionBySite.put(siteId, selection);
+            sitesBySelection.computeIfAbsent(new SelectionGroup(selection), ignored -> new ArrayList<>()).add(siteId);
+        }
+
+        Map<Long, Integer> dimensionsBySite = new LinkedHashMap<>();
+        Integer columnDimensions = null;
+        AgentModelSelection confirmSelection = null;
+        boolean sawSelection = false;
+        for (Map.Entry<SelectionGroup, List<Long>> group : sitesBySelection.entrySet()) {
+            Probe probe = probeSelection(group.getKey().selection());
+            if (!sawSelection) {
+                confirmSelection = group.getKey().selection();
+                sawSelection = true;
+            }
+            if (probe.columnDimensions() != null) {
+                columnDimensions = probe.columnDimensions();
+            }
+            for (Long siteId : group.getValue()) {
+                dimensionsBySite.put(siteId, probe.dimensions());
+            }
+        }
+
+        if (new LinkedHashSet<>(dimensionsBySite.values()).size() > 1) {
+            List<AdminAiKnowledgeReembedConflictDto> conflicts = new ArrayList<>();
+            for (Map.Entry<Long, Integer> entry : dimensionsBySite.entrySet()) {
+                conflicts.add(new AdminAiKnowledgeReembedConflictDto(entry.getKey(), entry.getValue()));
+            }
+            throw new ReembedConflictException(conflicts);
+        }
+
+        int dimensions = dimensionsBySite.values().iterator().next();
+        boolean recreatedSchema = false;
+        if (columnDimensions == null || columnDimensions != dimensions) {
+            AgentReembedPrepareResult recreated = agentClient.prepareReembed(confirmSelection, true);
+            dimensions = recreated.dimensions();
+            recreatedSchema = recreated.recreated();
+        }
+
+        List<AdminAiKnowledgeReembedFailureDto> failed = new ArrayList<>();
+        int attempted = 0;
+        for (Map.Entry<Long, List<AdminAiKnowledgeDocumentEntity>> site : documentsBySite.entrySet()) {
+            AgentModelSelection selection = selectionBySite.get(site.getKey());
+            for (AdminAiKnowledgeDocumentEntity document : site.getValue()) {
+                if (!AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(document.getStatus())) {
+                    continue;
+                }
+                attempted++;
+                try {
+                    upsertDerivedIndex(document, selection);
+                } catch (RuntimeException ex) {
+                    failed.add(new AdminAiKnowledgeReembedFailureDto(
+                            document.getSiteId(), sourceId(document.getId()), indexError(ex)));
+                }
+            }
+        }
+        return new AdminAiKnowledgeReembedResultDto(
+                documentsBySite.size(),
+                attempted,
+                dimensions,
+                recreatedSchema,
+                List.copyOf(failed),
+                failed.isEmpty() ? REEMBED_SUCCESS : REEMBED_PARTIAL);
+    }
+
+    private Probe probeSelection(AgentModelSelection selection) {
+        try {
+            AgentReembedPrepareResult result = agentClient.prepareReembed(selection, false);
+            return new Probe(result.dimensions(), result.columnDimensions());
+        } catch (AgentDimensionChangeRequiredException ex) {
+            return new Probe(ex.dimensions(), ex.columnDimensions());
+        }
+    }
+
     /**
      * 派生索引 best-effort 同步：SoT 在 Java，索引允许滞后；
      * agent-services 未配置检索（BLOCKED）或临时不可用时不阻断 KB CRUD，只记录日志。
@@ -163,15 +269,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     private void syncDerivedIndex(AdminAiKnowledgeDocumentEntity entity) {
         try {
             if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
-                AgentModelSelection selection = modelEntryService.currentSelection(entity.getSiteId());
-                agentClient.upsertRetrievalDocument(new AgentRetrievalDocument(
-                        String.valueOf(entity.getSiteId()),
-                        sourceId(entity.getId()),
-                        entity.getTitle(),
-                        entity.getContent(),
-                        selection == null ? null : selection.embeddingSpec(),
-                        selection == null ? null : selection.apiKey(),
-                        selection == null ? null : selection.baseUrl()));
+                upsertDerivedIndex(entity, modelEntryService.currentSelection(entity.getSiteId()));
             } else {
                 agentClient.deleteRetrievalDocument(
                         String.valueOf(entity.getSiteId()), sourceId(entity.getId()));
@@ -197,9 +295,31 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
     }
 
+    private void upsertDerivedIndex(AdminAiKnowledgeDocumentEntity entity, AgentModelSelection selection) {
+        agentClient.upsertRetrievalDocument(new AgentRetrievalDocument(
+                String.valueOf(entity.getSiteId()),
+                sourceId(entity.getId()),
+                entity.getTitle(),
+                entity.getContent(),
+                selection == null ? null : selection.embeddingSpec(),
+                selection == null ? null : selection.apiKey(),
+                selection == null ? null : selection.baseUrl()));
+    }
+
+    private static String indexError(RuntimeException ex) {
+        if (ex instanceof BusinessException business) {
+            return business.getMessageKey();
+        }
+        return ex.getClass().getSimpleName();
+    }
+
     private static String sourceId(long documentId) {
         return "kb:" + documentId;
     }
+
+    private record SelectionGroup(AgentModelSelection selection) {}
+
+    private record Probe(int dimensions, Integer columnDimensions) {}
 
     private void requireSite(long siteId) {
         if (adminSiteMapper.selectById(siteId) == null) {

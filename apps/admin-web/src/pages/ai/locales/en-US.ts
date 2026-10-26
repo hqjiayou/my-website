@@ -42,6 +42,23 @@ export default {
   knowledgeBases: {
     title: 'Knowledge Bases',
     description: 'Maintain per-site knowledge documents (Java is source of truth; the index is a Python derived store).',
+    reembed: {
+      action: 'Re-embed all knowledge',
+      working: 'Re-embedding…',
+      confirm:
+        'Re-embeds every document using each site’s current embedding entry. A dimension change rebuilds the vector table and drops old vectors. This calls the embedding API and incurs usage; running it again does the same.',
+      done: 'Re-embedded all knowledge',
+      partial: 'Some documents failed to re-embed',
+      usage: 'This run called the embedding API and incurs usage.',
+      sites: 'Sites',
+      documents: 'Documents',
+      dimensions: 'Dimensions',
+      recreated: 'Vector table rebuilt (old vectors were not kept)',
+      notRecreated: 'Vector table was not rebuilt',
+      failed: 'Failed documents',
+      conflicts:
+        'Sites resolved to different embedding dimensions, so no vector data was changed. Align the entries first.',
+    },
   },
   conversations: {
     title: 'Conversations',

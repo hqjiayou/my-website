@@ -20,6 +20,7 @@ class InternalApiError(Exception):
         error_code: str,
         message: str,
         provider_status: str | None = None,
+        details: dict[str, object] | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
@@ -30,6 +31,8 @@ class InternalApiError(Exception):
         }
         if provider_status is not None:
             self.body["providerStatus"] = provider_status
+        if details:
+            self.body.update(details)
 
 
 def external_failure_message(prefix: str, exc: BaseException) -> str:

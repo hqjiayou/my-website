@@ -3,7 +3,9 @@ package com.mywebsite.agent.client;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentMcpReady;
+import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentPingResponse;
+import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
 import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
@@ -36,6 +38,12 @@ public interface AgentClient {
 
     /** KB 派生索引同步（同 sourceId 覆盖）；检索未配置时抛 EXTERNAL_DEPENDENCY_BLOCKED。 */
     void upsertRetrievalDocument(AgentRetrievalDocument document);
+
+    /**
+     * 重嵌前探针。维度不一致且未确认重建时抛 {@link AgentDimensionChangeRequiredException}，
+     * 携带目标维度与当前列维度。
+     */
+    AgentReembedPrepareResult prepareReembed(AgentModelSelection selection, boolean confirmRecreate);
 
     /** 从派生索引移除文档。 */
     void deleteRetrievalDocument(String siteId, String sourceId);

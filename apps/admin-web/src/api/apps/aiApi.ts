@@ -10,6 +10,7 @@ import type {
   AiKnowledgeDetail,
   AiKnowledgeListItem,
   AiKnowledgeListQuery,
+  AiKnowledgeReembedResult,
   AiMessage,
   AiPreviewChatInput,
   AiPreviewHistoryMessage,
@@ -45,6 +46,7 @@ function unwrapVoid(body: HttpMessageBody<null | void>) {
 }
 
 const UPLOAD_TIMEOUT_MS = 60_000
+const REEMBED_TIMEOUT_MS = 600_000
 
 function aiBase(siteId: number) {
   return `/admin/sites/${siteId}/ai`
@@ -145,6 +147,14 @@ export const aiApi = {
         `${aiBase(siteId)}/knowledge-documents/${id}`,
         input,
       )
+      .then(unwrapData)
+  },
+
+  reembedKnowledge(): Promise<AiKnowledgeReembedResult> {
+    return httpClient
+      .post<HttpMessageBody<AiKnowledgeReembedResult>>('/admin/ai/knowledge/reembed', undefined, {
+        timeout: REEMBED_TIMEOUT_MS,
+      })
       .then(unwrapData)
   },
 

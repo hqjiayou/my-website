@@ -454,6 +454,10 @@ class FakeStore:
         self.docs: dict[tuple[str, str], list[str]] = {}
         self.search_calls: list[str] = []
         self.search_top_ks: list[int] = []
+        self.column_dimensions: int | None = None
+        self.dimensions: int | None = None
+        self.recreate_calls: list[int] = []
+        self.ensure_calls: list[int] = []
 
     async def upsert_document(self, *, site_id, source_id, title, chunks, embeddings) -> int:
         assert len(chunks) == len(embeddings)
@@ -478,6 +482,18 @@ class FakeStore:
 
     async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
         return []
+
+    async def current_dimensions(self) -> int | None:
+        return self.column_dimensions
+
+    async def ensure_schema(self, dimensions: int) -> None:
+        self.ensure_calls.append(dimensions)
+        self.dimensions = dimensions
+        self.column_dimensions = dimensions
+
+    async def recreate_schema(self, new_dimensions: int) -> None:
+        self.recreate_calls.append(new_dimensions)
+        self.dimensions = new_dimensions
 
     async def close(self) -> None:
         pass
@@ -1391,3 +1407,88 @@ async def test_rerank_uses_process_model_without_selection(monkeypatch: pytest.M
     hits = await service.search(site_id="1", query="q", top_k=1)
     assert [hit.source_id for hit in hits] == ["kb:b"]
     assert service.rerank_applied is True
+
+
+# ---------------------------------------------------------------- reembed prepare
+
+
+class SizedEmbedder:
+    def __init__(self, dimensions: int) -> None:
+        self.dimensions = dimensions
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return [[0.1] * self.dimensions for _ in texts]
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return await self.embed(texts)
+
+    async def embed_query(self, text: str) -> list[float]:
+        vectors = await self.embed([text])
+        return vectors[0]
+
+
+def _prepare(service: RetrievalService, body: dict[str, object]):
+    return TestClient(create_app(make_settings(), retrieval_service=service)).post(
+        "/internal/v1/retrieval/reembed/prepare",
+        headers=TOKEN_HEADER,
+        json=body,
+    )
+
+
+def test_reembed_prepare_same_dimension_does_not_recreate() -> None:
+    store = FakeStore()
+    store.column_dimensions = 3
+    response = _prepare(RetrievalService(FakeEmbedder(), store), {"confirmRecreate": False})
+    assert response.status_code == 200
+    assert response.json() == {"dimensions": 3, "columnDimensions": 3, "recreated": False}
+    assert store.recreate_calls == []
+    assert store.ensure_calls == []
+
+
+def test_reembed_prepare_dimension_change_without_confirm_is_409() -> None:
+    store = FakeStore()
+    store.column_dimensions = 3
+    response = _prepare(RetrievalService(SizedEmbedder(4), store), {"confirmRecreate": False})
+    assert response.status_code == 409
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "DIMENSION_CHANGE_REQUIRED"
+    assert body["dimensions"] == 4
+    assert body["columnDimensions"] == 3
+    assert "providerStatus" not in body
+    assert store.recreate_calls == []
+
+
+def test_reembed_prepare_dimension_change_confirm_recreates() -> None:
+    store = FakeStore()
+    store.column_dimensions = 3
+    response = _prepare(RetrievalService(SizedEmbedder(4), store), {"confirmRecreate": True})
+    assert response.status_code == 200
+    assert response.json() == {"dimensions": 4, "columnDimensions": 3, "recreated": True}
+    assert store.recreate_calls == [4]
+    assert store.dimensions == 4
+    assert store.ensure_calls == []
+
+
+def test_reembed_prepare_missing_table_creates_schema() -> None:
+    store = FakeStore()
+    store.column_dimensions = None
+    response = _prepare(RetrievalService(FakeEmbedder(), store), {"confirmRecreate": False})
+    assert response.status_code == 200
+    assert response.json() == {"dimensions": 3, "columnDimensions": None, "recreated": False}
+    assert store.ensure_calls == [3]
+    assert store.dimensions == 3
+    assert store.recreate_calls == []
+
+
+def test_reembed_prepare_without_embedder_is_blocked() -> None:
+    store = FakeStore()
+    response = _prepare(RetrievalService(None, store), {"confirmRecreate": True})
+    assert response.status_code == 503
+    body = response.json()
+    assert body["ok"] is False
+    assert body["errorCode"] == "EXTERNAL_DEPENDENCY_BLOCKED"
+    assert body["providerStatus"] == "BLOCKED"
+    assert "Embedding client is not configured" not in body["message"]
+    assert store.recreate_calls == []
+    assert store.ensure_calls == []

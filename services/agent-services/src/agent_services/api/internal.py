@@ -34,6 +34,8 @@ from agent_services.retrieval.embeddings import (
     create_embedding_client_for,
 )
 from agent_services.retrieval.service import (
+    DimensionChangeRequired,
+    ReembedPrepared,
     RetrievalChunkLimitExceeded,
     RetrievalService,
 )
@@ -55,6 +57,8 @@ from agent_services.schemas.health import (
     RuntimeLimits,
 )
 from agent_services.schemas.retrieval import (
+    ReembedPrepareRequest,
+    ReembedPrepareResponse,
     RetrievalSearchHit,
     RetrievalSearchRequest,
     RetrievalSearchResponse,
@@ -469,6 +473,45 @@ async def upsert_retrieval_document(
             provider_status="BLOCKED",
         ) from exc
     return {"ok": True, "data": {"chunks": chunk_count}}
+
+
+@router.post("/retrieval/reembed/prepare")
+async def prepare_retrieval_reembed(
+    request: Request, body: ReembedPrepareRequest
+) -> dict[str, object]:
+    """探针目标 embedding 维度。列维度不同且未确认时 409，不改表。"""
+    service = _require_retrieval_service(request)
+    selection = body.model_selection
+    embedder = (
+        _request_embedder(request, selection.embedding_spec, selection.api_key, selection.base_url)
+        if selection is not None
+        else None
+    )
+    try:
+        prepared: ReembedPrepared = await service.prepare_reembed(
+            embedder=embedder,
+            confirm_recreate=body.confirm_recreate,
+        )
+    except DimensionChangeRequired as exc:
+        raise InternalApiError(
+            status_code=409,
+            error_code="DIMENSION_CHANGE_REQUIRED",
+            message="Embedding dimensions differ from the vector column; confirm recreate to rebuild.",
+            details={"dimensions": exc.dimensions, "columnDimensions": exc.column_dimensions},
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 — 无 embedder / embedding / DB 故障对 Java 诚实报 503
+        logger.warning("Retrieval reembed prepare failed", exc_info=exc)
+        raise InternalApiError(
+            status_code=503,
+            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
+            message=external_failure_message("Retrieval reembed prepare failed", exc),
+            provider_status="BLOCKED",
+        ) from exc
+    return ReembedPrepareResponse(
+        dimensions=prepared.dimensions,
+        column_dimensions=prepared.column_dimensions,
+        recreated=prepared.recreated,
+    ).model_dump(by_alias=True)
 
 
 @router.delete("/retrieval/documents")

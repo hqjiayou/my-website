@@ -9,7 +9,10 @@ import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentMcpReady;
+import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentPingResponse;
+import com.mywebsite.agent.dto.AgentReembedPrepareRequest;
+import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.agent.dto.AgentRetrievalHit;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
@@ -249,6 +252,22 @@ public class HttpAgentClient implements AgentClient {
     }
 
     @Override
+    public AgentReembedPrepareResult prepareReembed(AgentModelSelection selection, boolean confirmRecreate) {
+        ensureTokenConfigured();
+        JsonNode body = exchangeWithRetry(
+                "POST",
+                "/internal/v1/retrieval/reembed/prepare",
+                new AgentReembedPrepareRequest(selection, confirmRecreate));
+        JsonNode dimensions = body.get("dimensions");
+        if (dimensions == null || !dimensions.isNumber() || !body.has("recreated")) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+        JsonNode column = body.get("columnDimensions");
+        Integer columnDimensions = column != null && column.isNumber() ? column.asInt() : null;
+        return new AgentReembedPrepareResult(dimensions.asInt(), columnDimensions, body.get("recreated").asBoolean());
+    }
+
+    @Override
     public void deleteRetrievalDocument(String siteId, String sourceId) {
         if (!StringUtils.hasText(siteId) || !StringUtils.hasText(sourceId)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
@@ -460,6 +479,9 @@ public class HttpAgentClient implements AgentClient {
 
     private BusinessException mapErrorBody(JsonNode node, int httpStatus) {
         String errorCode = textOrNull(node, "errorCode");
+        if ("DIMENSION_CHANGE_REQUIRED".equals(errorCode)) {
+            return dimensionChangeRequired(node);
+        }
         // MCP 不可用与 Provider BLOCKED 同属外部依赖失败（ADR-0004/§19.10）
         if ("EXTERNAL_DEPENDENCY_BLOCKED".equals(errorCode)
                 || "MCP_UNAVAILABLE".equals(errorCode)
@@ -480,6 +502,16 @@ public class HttpAgentClient implements AgentClient {
             return new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
         return new BusinessException(ErrorCode.SYSTEM_ERROR);
+    }
+
+    private static BusinessException dimensionChangeRequired(JsonNode node) {
+        JsonNode dimensions = node.get("dimensions");
+        if (dimensions == null || !dimensions.isNumber()) {
+            return new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+        JsonNode column = node.get("columnDimensions");
+        Integer columnDimensions = column != null && column.isNumber() ? column.asInt() : null;
+        return new AgentDimensionChangeRequiredException(dimensions.asInt(), columnDimensions);
     }
 
     private static boolean isReadTimeout(Throwable error) {
