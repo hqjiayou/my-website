@@ -8,7 +8,6 @@ DELETE FROM site_content;
 DELETE FROM media_file;
 DELETE FROM site_appearance;
 DELETE FROM site;
-DELETE FROM site_template;
 
 INSERT INTO admin_user (id, username, display_name, status, deleted, created_at, updated_at, version)
 VALUES
@@ -67,10 +66,6 @@ VALUES
     (35, 'admin:user:update', 'Update user', 'ACTION', 'user:update', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (36, 'admin:user:delete', 'Delete user', 'ACTION', 'user:delete', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (37, 'admin:user:status', 'Update user status', 'ACTION', 'user:status', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (38, 'admin:template:list', 'List templates', 'ACTION', 'template:list', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (39, 'admin:template:detail', 'Template detail', 'ACTION', 'template:detail', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (40, 'admin:template:status', 'Update template status', 'ACTION', 'template:status', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (41, 'admin:menu:apps.templates', 'Templates menu', 'MENU', 'apps.templates', 'ACTIVE', 31, 20, '/apps/templates', 'block', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (42, 'admin:media:list', 'List site media', 'ACTION', 'media:list', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (43, 'admin:media:upload', 'Upload site media', 'ACTION', 'media:upload', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (44, 'admin:media:download', 'Download site media', 'ACTION', 'media:download', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
@@ -80,10 +75,6 @@ VALUES
     (48, 'admin:content:update', 'Update site content', 'ACTION', 'content:update', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (49, 'admin:content:delete', 'Delete site content', 'ACTION', 'content:delete', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (50, 'admin:content:status', 'Update site content status', 'ACTION', 'content:status', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (51, 'admin:reservation:list', 'List site reservations', 'ACTION', 'reservation:list', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (52, 'admin:reservation:create', 'Create site reservation', 'ACTION', 'reservation:create', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (53, 'admin:reservation:update', 'Update site reservation status', 'ACTION', 'reservation:update', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (54, 'admin:reservation:delete', 'Delete site reservation', 'ACTION', 'reservation:delete', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (55, 'admin:ai-prompt:read', 'Read site AI prompt profile', 'ACTION', 'ai-prompt:read', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (56, 'admin:ai-prompt:update', 'Update site AI prompt profile', 'ACTION', 'ai-prompt:update', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (57, 'admin:ai-kb:list', 'List AI knowledge documents', 'ACTION', 'ai-kb:list', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
@@ -94,28 +85,6 @@ VALUES
     (62, 'admin:ai-model:read', 'Read AI model entries', 'ACTION', 'ai-model:read', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (63, 'admin:ai-model:update', 'Update AI model entries', 'ACTION', 'ai-model:update', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
-INSERT INTO site_template (
-    id, code, name, site_type, status, description, default_primary_color, sort_order,
-    deleted, created_at, updated_at, version)
-VALUES
-    (1, 'japanese-car-repair-v1', 'Japanese Car Repair v1', 'CAR_REPAIR', 'ENABLED',
-     'Starter for local Japanese car repair shops.', '#B91C1C', 10,
-     FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (2, 'used-car-shop-v1', 'Used Car Shop v1', 'USED_CAR', 'DRAFT',
-     'Starter for used-car dealers.', '#1D4ED8', 20,
-     FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (3, 'cake-shop-v1', 'Cake Shop v1', 'CAKE', 'ENABLED',
-     'Starter for cake and dessert shops.', '#DB2777', 30,
-     FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (4, 'salon-v1', 'Salon v1', 'SALON', 'DISABLED',
-     'Starter for beauty salons.', '#7C3AED', 40,
-     FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (5, 'clinic-v1', 'Clinic v1', 'CLINIC', 'DRAFT',
-     'Starter for clinics.', '#0F766E', 50,
-     FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (6, 'gyoseishoshi-v1', 'Gyoseishoshi Office v1', 'GYOSEISHOSHI', 'DRAFT',
-     'Starter for administrative scrivener offices.', '#0F172A', 60,
-     FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0);
 
 INSERT INTO admin_user_role (admin_user_id, admin_role_id, deleted, created_at, updated_at, version)
 VALUES
@@ -162,10 +131,6 @@ VALUES
     (4, 35, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 36, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 37, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (4, 38, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (4, 39, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (4, 40, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (4, 41, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 42, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 43, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 44, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
@@ -175,10 +140,6 @@ VALUES
     (4, 48, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 49, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 50, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (4, 51, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (4, 52, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (4, 53, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (4, 54, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 55, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 56, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (4, 57, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
@@ -198,7 +159,6 @@ ALTER TABLE admin_user ALTER COLUMN id RESTART WITH 501;
 ALTER TABLE admin_role ALTER COLUMN id RESTART WITH 5;
 ALTER TABLE admin_permission ALTER COLUMN id RESTART WITH 64;
 ALTER TABLE site ALTER COLUMN id RESTART WITH 1;
-ALTER TABLE site_template ALTER COLUMN id RESTART WITH 7;
 ALTER TABLE media_file ALTER COLUMN id RESTART WITH 1;
 ALTER TABLE site_content ALTER COLUMN id RESTART WITH 1;
 ALTER TABLE site_reservation ALTER COLUMN id RESTART WITH 1;

@@ -4,7 +4,6 @@ import {
   Circle,
   Layers,
   LayoutDashboard,
-  LayoutTemplate,
   Menu,
   Settings2,
   Shield,
@@ -42,10 +41,6 @@ const ICON_MAP: Record<string, LucideIcon> = {
   layers: Layers,
   appstore: AppWindow,
   apps: AppWindow,
-  // V7 MENU seed：admin:menu:apps.templates → icon 'block'
-  block: LayoutTemplate,
-  template: LayoutTemplate,
-  templates: LayoutTemplate,
 }
 
 function mapBackendIcon(icon: string | null | undefined): LucideIcon {

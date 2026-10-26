@@ -9,16 +9,6 @@ export type SiteStatus = 'ACTIVE' | 'DISABLED'
 
 export const SITE_TYPE_PRESETS: string[] = ['PERSONAL', 'PORTFOLIO', 'BLOG', 'KNOWLEDGE', 'TOOL', 'OTHER']
 
-/** 旧行业类型：仅历史站点与模板目录仍会出现，用于筛选与标签展示。 */
-export const SITE_TYPE_LEGACY: string[] = [
-  'CAR_REPAIR',
-  'USED_CAR',
-  'CAKE',
-  'SALON',
-  'CLINIC',
-  'GYOSEISHOSHI',
-]
-
 /** @deprecated 旧名兼容：现语义为预设用途标签。 */
 export const SITE_TYPE_VALUES: string[] = SITE_TYPE_PRESETS
 
@@ -69,8 +59,6 @@ export interface SiteDetail {
   status: string
   defaultDomain: string | null
   description: string | null
-  /** Phase 5：创建时绑定的模板；无模板创建时为 null。 */
-  templateId: number | null
   version: number
   createdAt: string
   updatedAt: string
@@ -79,17 +67,13 @@ export interface SiteDetail {
 /** Workspace / 详情页统一使用的 Site Core 详情别名。 */
 export type Site = SiteDetail
 
-/**
- * Create 加法：`templateId` 与 `appearance` 同有或同无。
- * 向导路径必须两者都带，同事务写入 site + site_appearance。
- */
+/** Create 加法：`appearance` 可选；向导给出时同事务写入 site + site_appearance。 */
 export interface CreateSiteInput {
   siteCode: string
   siteName: string
   siteType: string
   defaultDomain?: string
   description?: string
-  templateId?: number
   appearance?: AppearanceConfigV1
 }
 
@@ -122,7 +106,6 @@ export interface SiteRuntimeStatus {
   siteId: number
   /** 暂无 analytics 后端时为 null，UI 应展示「未接入」而非 0。 */
   visitCountToday: number | null
-  reservationCountToday: number | null
   /** 暂无 AI 统计后端时为 null。 */
   aiConversationCountToday: number | null
   publishChecklist: SitePublishChecklist

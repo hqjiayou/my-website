@@ -17,7 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * RBAC 种子 Flyway（V1–V23：含 Site/User/Template/Media/Content/Reservation/AI）在真实 PostgreSQL 上的迁移与数据验证。
+ * RBAC 种子 Flyway（V1–V30：含 Site/User/Media/Content/AI；模板与预约权限已由 V30 下架）在真实 PostgreSQL 上的迁移与数据验证。
  *
  * <p>默认由 Testcontainers 自举一次性 PostgreSQL（库名 {@code my_website_rbac_verify}）；执行：
  * {@code mvn clean test -Ppersistence-verify-pg -pl admin -am -Dtest=AdminRbacSeedVerifyPgTest}
@@ -55,9 +55,6 @@ class AdminRbacSeedVerifyPgTest {
             "admin:site:update",
             "admin:site:delete",
             "admin:site:status",
-            "admin:template:list",
-            "admin:template:detail",
-            "admin:template:status",
             "admin:media:list",
             "admin:media:upload",
             "admin:media:download",
@@ -67,10 +64,6 @@ class AdminRbacSeedVerifyPgTest {
             "admin:content:update",
             "admin:content:delete",
             "admin:content:status",
-            "admin:reservation:list",
-            "admin:reservation:create",
-            "admin:reservation:update",
-            "admin:reservation:delete",
             "admin:dashboard:view",
             "admin:menu:system",
             "admin:menu:system.user",
@@ -79,7 +72,6 @@ class AdminRbacSeedVerifyPgTest {
             "admin:menu:system.menu",
             "admin:menu:apps",
             "admin:menu:apps.sites",
-            "admin:menu:apps.templates",
             "admin:menu:list",
             "admin:menu:detail",
             "admin:menu:create",
@@ -97,8 +89,8 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-model:read",
             "admin:ai-model:update");
 
-    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 29;
-    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 63;
+    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 30;
+    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 55;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -165,15 +157,6 @@ class AdminRbacSeedVerifyPgTest {
                 """,
                 Long.class);
         assertThat(appsSitesMenu.get("parent_id")).isEqualTo(appsParentId);
-
-        Map<String, Object> appsTemplatesMenu = jdbcTemplate.queryForMap(
-                """
-                SELECT permission_code, route_path, parent_id
-                FROM admin_permission
-                WHERE permission_code = 'admin:menu:apps.templates' AND deleted = FALSE
-                """);
-        assertThat(appsTemplatesMenu.get("route_path")).isEqualTo("/apps/templates");
-        assertThat(appsTemplatesMenu.get("parent_id")).isEqualTo(appsParentId);
 
         List<Map<String, Object>> adminBindings = jdbcTemplate.queryForList(
                 """

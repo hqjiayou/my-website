@@ -24,29 +24,6 @@ export default {
       manage: 'Open site workspace',
     },
   },
-  reservations: {
-    title: 'Reservations',
-    description: 'View reservations and handling status across sites.',
-    aggregateNotice: 'Data is aggregated from per-site REAL APIs. Manage in the site workspace.',
-    empty: 'No cross-site reservation records',
-    columns: {
-      site: 'Site',
-      customer: 'Customer',
-      serviceType: 'Service',
-      reservedAt: 'Reserved at',
-      status: 'Status',
-      actions: 'Actions',
-    },
-    filters: {
-      status: 'Status',
-      allStatuses: 'All statuses',
-      search: 'Filter',
-      reset: 'Reset',
-    },
-    actions: {
-      manage: 'Open site workspace',
-    },
-  },
   files: {
     title: 'File Assets',
     description: 'View media assets and upload state across sites.',

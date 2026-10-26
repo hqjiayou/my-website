@@ -58,37 +58,4 @@ def build_business_toolset(
         except BusinessApiError as exc:
             return {"error": str(exc)}
 
-    @toolset.tool_plain
-    async def create_reservation(
-        customer_name: str,
-        phone: str,
-        service_type: str,
-        reserved_at: str,
-        note: str | None = None,
-    ) -> dict:
-        """Create a reservation for the customer on this site.
-
-        Only call this after the customer explicitly confirmed name, phone,
-        service type and the reservation time.
-
-        Args:
-            customer_name: customer's name.
-            phone: customer's contact phone number.
-            service_type: requested service described in a short phrase.
-            reserved_at: reservation time, ISO-8601 with offset (e.g. 2026-09-01T15:00:00+09:00).
-            note: optional extra request from the customer.
-        """
-        try:
-            reservation = await client.create_reservation(
-                site_id,
-                customer_name=customer_name,
-                phone=phone,
-                service_type=service_type,
-                reserved_at=reserved_at,
-                note=note,
-            )
-            return {"reservation": reservation}
-        except BusinessApiError as exc:
-            return {"error": str(exc)}
-
     return toolset

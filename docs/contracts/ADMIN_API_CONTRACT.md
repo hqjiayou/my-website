@@ -14,11 +14,9 @@ last_verified: 2026-10-10
 | Roles / Permissions | `/roles` CRUD 与权限绑定；`GET /permissions`（不在后台创建权限码） | `rbacApi` |
 | Users | `/users`、`/users/{id}/roles`… | `rbacApi`（**不是** legacy `userApi`） |
 | Sites | `/sites` CRUD + `/status` | `siteApi` FORCE REAL |
-| Templates | `/templates` list/get/by-code/status | `templateApi` |
 | Appearance | `/sites/{id}/appearance` GET/PUT | `appearanceApi` |
 | Media | `/sites/{id}/media` | `mediaApi` |
 | Contents | `/sites/{id}/contents` | `contentApi` |
-| Reservations | `/sites/{id}/reservations` | `reservationApi` |
 | AI Model Entry | `/ai/model-entries`（平台级，不按站点）GET/POST、`/{id}` PUT/DELETE。响应不含 `apiKey`，只有 `apiKeyConfigured` 与 `apiKeyHint`；更新时 `apiKey` 留空保留原密钥。权限 `admin:ai-model:read` / `admin:ai-model:update`。启用且 `defaultEntry` 的那一条由 Java 注入站点对话与预览；没有则 Python 回退 `AI_MODEL` | `aiApi` FORCE REAL |
 | AI Prompt | `/sites/{id}/ai/prompt-profile` | `aiApi` FORCE REAL |
 | AI Knowledge | `/sites/{id}/ai/knowledge-documents` | `aiApi` FORCE REAL |

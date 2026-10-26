@@ -43,18 +43,9 @@ const SiteContentsPage = lazyNamed(
   () => import('@/pages/apps/sites/siteContentsPage'),
   'SiteContentsPage',
 )
-const SiteReservationsPage = lazyNamed(
-  () => import('@/pages/apps/sites/siteReservationsPage'),
-  'SiteReservationsPage',
-)
 const SiteAiPage = lazyNamed(() => import('@/pages/apps/sites/siteAiPage'), 'SiteAiPage')
 const SiteFilesPage = lazyNamed(() => import('@/pages/apps/sites/siteFilesPage'), 'SiteFilesPage')
 
-const TemplatesPage = lazyNamed(() => import('@/pages/apps/templates/templatesPage'), 'TemplatesPage')
-const TemplateDetailPage = lazyNamed(
-  () => import('@/pages/apps/templates/templateDetailPage'),
-  'TemplateDetailPage',
-)
 const StyleSettingsPage = lazyNamed(
   () => import('@/pages/apps/styleSettingsPage'),
   'StyleSettingsPage',
@@ -63,10 +54,6 @@ const StyleSettingsPage = lazyNamed(
 const OperationContentsPage = lazyNamed(
   () => import('@/pages/operation/contentsPage'),
   'OperationContentsPage',
-)
-const OperationReservationsPage = lazyNamed(
-  () => import('@/pages/operation/reservationsPage'),
-  'OperationReservationsPage',
 )
 const OperationFilesPage = lazyNamed(
   () => import('@/pages/operation/filesPage'),
@@ -122,16 +109,12 @@ export const adminRoutes = (
       <Route path="theme" element={<SiteThemePage />} />
       <Route path="domain" element={<SiteDomainPage />} />
       <Route path="contents" element={<SiteContentsPage />} />
-      <Route path="reservations" element={<SiteReservationsPage />} />
       <Route path="ai" element={<SiteAiPage />} />
       <Route path="files" element={<SiteFilesPage />} />
     </Route>
-    <Route path={ROUTES.apps.templates} element={<TemplatesPage />} />
-    <Route path={ROUTES.apps.templateDetail(':templateId')} element={<TemplateDetailPage />} />
     <Route path={ROUTES.apps.style} element={<StyleSettingsPage />} />
 
     <Route path={ROUTES.operation.contents} element={<OperationContentsPage />} />
-    <Route path={ROUTES.operation.reservations} element={<OperationReservationsPage />} />
     <Route path={ROUTES.operation.files} element={<OperationFilesPage />} />
 
     <Route path={ROUTES.ai.settings} element={<AiSettingsPage />} />
