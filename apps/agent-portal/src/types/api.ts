@@ -89,6 +89,7 @@ export interface SiteKnowledgeHit {
 export interface SiteKnowledgeSearchResult {
   hits: SiteKnowledgeHit[]
   degraded: boolean
+  rerankApplied?: boolean
 }
 
 export interface SiteUserMemory {

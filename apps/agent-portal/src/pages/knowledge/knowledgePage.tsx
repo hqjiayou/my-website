@@ -20,6 +20,7 @@ export function KnowledgePage() {
   const [error, setError] = useState<string | null>(null)
   const [hits, setHits] = useState<SiteKnowledgeHit[]>([])
   const [degraded, setDegraded] = useState(false)
+  const [rerankApplied, setRerankApplied] = useState(false)
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -35,9 +36,11 @@ export function KnowledgePage() {
       const result = await siteAiApi.searchKnowledge(site.siteId, trimmed, TOP_K)
       setHits(Array.isArray(result.hits) ? result.hits : [])
       setDegraded(result.degraded === true)
+      setRerankApplied(result.rerankApplied === true)
     } catch (caught) {
       setHits([])
       setDegraded(false)
+      setRerankApplied(false)
       setError(errorMessage(caught))
     } finally {
       setLoading(false)
@@ -96,6 +99,11 @@ export function KnowledgePage() {
         {!loading && !error && degraded ? (
           <p className="rounded-2xl border border-gpt-line px-3 py-2 text-sm leading-6" role="status">
             知識庫暫時不穩定，結果可能不完整
+          </p>
+        ) : null}
+        {!loading && !error && rerankApplied && hits.length > 0 ? (
+          <p className="text-xs text-gpt-muted" role="status">
+            結果已由 AI 依相關性重排
           </p>
         ) : null}
         {!loading && !error && searched && hits.length === 0 ? (

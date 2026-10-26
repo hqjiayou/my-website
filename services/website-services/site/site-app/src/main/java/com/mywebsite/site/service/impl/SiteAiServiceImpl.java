@@ -165,7 +165,7 @@ public class SiteAiServiceImpl implements SiteAiService {
                         .map(hit -> new SiteKnowledgeSearchResponseDto.Hit(
                                 hit.sourceId(), hit.chunkIndex(), hit.score(), hit.content()))
                         .toList();
-                return new SiteKnowledgeSearchResponseDto(hits, false);
+                return new SiteKnowledgeSearchResponseDto(hits, false, result.rerankApplied());
             }
             vectorDegraded = result.degraded();
         } catch (BusinessException ex) {
