@@ -45,6 +45,12 @@ class AdminAiKnowledgeServiceImplTest {
     @Mock
     private AdminAiModelEntryService modelEntryService;
 
+    @Mock
+    private com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper baseMapper;
+
+    @Mock
+    private com.mywebsite.admin.mapper.AdminAiKnowledgeBaseLinkMapper linkMapper;
+
     private AdminAiKnowledgeServiceImpl service;
 
     @BeforeEach
@@ -55,7 +61,9 @@ class AdminAiKnowledgeServiceImplTest {
                 agentClient,
                 modelEntryService,
                 org.mockito.Mockito.mock(com.mywebsite.infra.service.ObjectStorageService.class),
-                new com.mywebsite.infra.properties.StorageProperties());
+                new com.mywebsite.infra.properties.StorageProperties(),
+                baseMapper,
+                linkMapper);
     }
 
     @Test
@@ -161,6 +169,135 @@ class AdminAiKnowledgeServiceImplTest {
 
     private static AgentModelSelection selection(String embeddingSpec) {
         return new AgentModelSelection("openai:gpt", "key", null, embeddingSpec);
+    }
+
+    @Test
+    void overviewAggregatesAcrossSites() {
+        AdminAiKnowledgeDocumentEntity indexedDoc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        indexedDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        indexedDoc.setFileSizeBytes(100L);
+        AdminAiKnowledgeDocumentEntity failedDoc = document(1L, 12L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        failedDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED);
+        failedDoc.setIndexError("boom");
+        failedDoc.setFileSizeBytes(50L);
+        AdminAiKnowledgeDocumentEntity pendingDoc = document(2L, 21L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        pendingDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING);
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(indexedDoc, failedDoc, pendingDoc));
+        com.mywebsite.admin.entity.AdminSiteEntity site1 = new com.mywebsite.admin.entity.AdminSiteEntity();
+        site1.setId(1L);
+        site1.setSiteName("Site One");
+        com.mywebsite.admin.entity.AdminSiteEntity site2 = new com.mywebsite.admin.entity.AdminSiteEntity();
+        site2.setId(2L);
+        site2.setSiteName("Site Two");
+        when(adminSiteMapper.selectList(any())).thenReturn(List.of(site1, site2));
+
+        var overview = service.knowledgeOverview();
+
+        assertThat(overview.totalDocuments()).isEqualTo(3);
+        assertThat(overview.indexedDocuments()).isEqualTo(1);
+        assertThat(overview.failedDocuments()).isEqualTo(1);
+        assertThat(overview.pendingDocuments()).isEqualTo(1);
+        assertThat(overview.originalBytes()).isEqualTo(150L);
+        assertThat(overview.sites()).hasSize(2);
+        assertThat(overview.sites().get(0).siteName()).isEqualTo("Site One");
+        assertThat(overview.sites().get(0).failedDocuments()).isEqualTo(1);
+        assertThat(overview.recentFailures()).hasSize(1);
+        assertThat(overview.recentFailures().get(0).indexError()).isEqualTo("boom");
+    }
+
+    @Test
+    void reindexFailedRetriesAndCountsSuccesses() {
+        AdminAiKnowledgeDocumentEntity failed = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        failed.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED);
+        AdminAiKnowledgeDocumentEntity refreshed = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        refreshed.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(failed));
+        when(modelEntryService.currentSelection(1L)).thenReturn(selection("openai:embed-a"));
+        when(knowledgeMapper.selectById(11L)).thenReturn(refreshed);
+        when(knowledgeMapper.update(any(), any())).thenReturn(1);
+
+        var result = service.reindexFailedDocuments();
+
+        assertThat(result.attempted()).isEqualTo(1);
+        assertThat(result.succeeded()).isEqualTo(1);
+        verify(agentClient).upsertRetrievalDocument(any());
+    }
+
+    @Test
+    void linkBaseFansOutActiveDocumentsToTargetPartition() {
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(9L);
+        base.setSiteId(1L);
+        when(baseMapper.selectById(9L)).thenReturn(base);
+        com.mywebsite.admin.entity.AdminSiteEntity target = new com.mywebsite.admin.entity.AdminSiteEntity();
+        target.setId(2L);
+        when(adminSiteMapper.selectById(2L)).thenReturn(target);
+        when(linkMapper.selectOne(any())).thenReturn(null);
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setBaseId(9L);
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(doc));
+        when(modelEntryService.currentSelection(2L)).thenReturn(selection("openai:embed-a"));
+
+        service.linkBase(9L, 2L);
+
+        verify(linkMapper).insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity.class));
+        var captor = org.mockito.ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getValue().siteId()).isEqualTo("2");
+    }
+
+    @Test
+    void createDocumentSyncsToOwnerAndLinkedPartitions() {
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity defaultBase =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        defaultBase.setId(9L);
+        defaultBase.setSiteId(1L);
+        defaultBase.setIsDefault(true);
+        when(adminSiteMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminSiteEntity());
+        when(baseMapper.selectOne(any())).thenReturn(defaultBase);
+        when(knowledgeMapper.insert(any(AdminAiKnowledgeDocumentEntity.class)))
+                .thenAnswer(invocation -> {
+                    AdminAiKnowledgeDocumentEntity inserted = invocation.getArgument(0);
+                    inserted.setId(11L);
+                    return 1;
+                });
+        AdminAiKnowledgeDocumentEntity saved = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        saved.setBaseId(9L);
+        when(knowledgeMapper.selectById(any())).thenReturn(saved);
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
+        link.setBaseId(9L);
+        link.setSiteId(3L);
+        when(linkMapper.selectList(any())).thenReturn(List.of(link));
+        when(modelEntryService.currentSelection(1L)).thenReturn(selection("openai:embed-a"));
+        when(modelEntryService.currentSelection(3L)).thenReturn(selection("openai:embed-a"));
+        when(knowledgeMapper.update(any(), any())).thenReturn(1);
+
+        service.createDocument(
+                1L,
+                new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest("t", "c"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient, times(2)).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(AgentRetrievalDocument::siteId)
+                .containsExactlyInAnyOrder("1", "3");
+    }
+
+    @Test
+    void deleteBaseRejectsNonEmptyBase() {
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(9L);
+        base.setSiteId(1L);
+        base.setIsDefault(false);
+        when(adminSiteMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminSiteEntity());
+        when(baseMapper.selectById(9L)).thenReturn(base);
+        when(knowledgeMapper.selectCount(any())).thenReturn(2L);
+
+        assertThatThrownBy(() -> service.deleteBase(1L, 9L)).isInstanceOf(BusinessException.class);
+        verify(baseMapper, never()).deleteById(any());
     }
 
     private static AdminAiKnowledgeDocumentEntity document(long siteId, long id, String status) {

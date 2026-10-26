@@ -88,10 +88,67 @@ public class AdminAiKnowledgeController {
             @PathVariable long siteId,
             @RequestParam(required = false) Integer pageNum,
             @RequestParam(required = false) Integer pageSize,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long baseId) {
         PageResult<AdminAiKnowledgeListItemDto> data = adminAiKnowledgeService.listDocuments(
-                siteId, new AdminAiKnowledgeListQuery(pageNum, pageSize, status));
+                siteId, new AdminAiKnowledgeListQuery(pageNum, pageSize, status, baseId));
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, data));
+    }
+
+    private static final String BASES = "/api/admin/sites/{siteId}/ai/knowledge-bases";
+
+    @GetMapping(BASES)
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
+    @Operation(summary = "本站可见知识库（自有＋被共享）")
+    public ResponseEntity<HttpMessageBody<java.util.List<AdminAiKnowledgeDtos.AdminAiKnowledgeBaseDto>>> listBases(
+            @PathVariable long siteId) {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiKnowledgeService.listBasesForSite(siteId)));
+    }
+
+    @PostMapping(BASES)
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
+    @Operation(summary = "新建知识库")
+    public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeBaseDto>> createBase(
+            @PathVariable long siteId,
+            @Valid @RequestBody AdminAiKnowledgeDtos.AdminAiKnowledgeBaseCreateRequest request) {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiKnowledgeService.createBase(siteId, request)));
+    }
+
+    @DeleteMapping(BASES + "/{baseId}")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:delete')")
+    @Operation(summary = "删除知识库（默认库与非空库不可删）")
+    public ResponseEntity<HttpMessageBody<Void>> deleteBase(
+            @PathVariable long siteId, @PathVariable long baseId) {
+        adminAiKnowledgeService.deleteBase(siteId, baseId);
+        return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
+    }
+
+    @GetMapping("/api/admin/ai/knowledge-bases")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
+    @Operation(summary = "全平台知识库列表（知识中心）")
+    public ResponseEntity<HttpMessageBody<java.util.List<AdminAiKnowledgeDtos.AdminAiKnowledgeBaseDto>>> listAllBases() {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiKnowledgeService.listAllBases()));
+    }
+
+    @PostMapping("/api/admin/ai/knowledge-bases/{baseId}/links/{targetSiteId}")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @Operation(summary = "把知识库共享给目标站点（文档扇出同步）")
+    public ResponseEntity<HttpMessageBody<Void>> linkBase(
+            @PathVariable long baseId, @PathVariable long targetSiteId) {
+        adminAiKnowledgeService.linkBase(baseId, targetSiteId);
+        return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
+    }
+
+    @DeleteMapping("/api/admin/ai/knowledge-bases/{baseId}/links/{targetSiteId}")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @Operation(summary = "取消知识库对目标站点的共享（文档从其分区移除）")
+    public ResponseEntity<HttpMessageBody<Void>> unlinkBase(
+            @PathVariable long baseId, @PathVariable long targetSiteId) {
+        adminAiKnowledgeService.unlinkBase(baseId, targetSiteId);
+        return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
     }
 
     @GetMapping(DOCUMENTS + "/{id}")
@@ -118,8 +175,9 @@ public class AdminAiKnowledgeController {
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> upload(
             @PathVariable long siteId,
             @RequestPart("file") MultipartFile file,
-            @RequestParam(value = "title", required = false) String title) {
-        UploadPayload payload = toUploadPayload(file, title);
+            @RequestParam(value = "title", required = false) String title,
+            @RequestParam(value = "baseId", required = false) Long baseId) {
+        UploadPayload payload = toUploadPayload(file, title, baseId);
         return ResponseEntity.ok(new HttpMessageBody<>(
                 ResponseMessages.SUCCESS,
                 adminAiKnowledgeService.createUploadedDocument(siteId, payload.request(), payload.meta())));
@@ -137,7 +195,7 @@ public class AdminAiKnowledgeController {
     private record UploadPayload(
             AdminAiKnowledgeCreateRequest request, AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta meta) {}
 
-    private static UploadPayload toUploadPayload(MultipartFile file, String titleOverride) {
+    private static UploadPayload toUploadPayload(MultipartFile file, String titleOverride, Long baseId) {
         if (file == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_REQUIRED);
         }
@@ -171,7 +229,7 @@ public class AdminAiKnowledgeController {
                 bytes.length,
                 sha256Hex(bytes),
                 bytes);
-        return new UploadPayload(new AdminAiKnowledgeCreateRequest(title, content), meta);
+        return new UploadPayload(new AdminAiKnowledgeCreateRequest(title, content, baseId), meta);
     }
 
     private static String convertContent(String extension, byte[] bytes) {
@@ -254,6 +312,23 @@ public class AdminAiKnowledgeController {
             @PathVariable long siteId, @PathVariable("id") long id) {
         adminAiKnowledgeService.deleteDocument(siteId, id);
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
+    }
+
+    @GetMapping("/api/admin/ai/knowledge-overview")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
+    @Operation(summary = "知识中心总览（全平台文档/索引健康/原档用量）")
+    public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeOverviewDto>> overview() {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiKnowledgeService.knowledgeOverview()));
+    }
+
+    @PostMapping("/api/admin/ai/knowledge/reindex-failed")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @Operation(summary = "批量重试全部索引失败的知识库文档")
+    public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeReindexFailedResultDto>>
+            reindexFailed() {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiKnowledgeService.reindexFailedDocuments()));
     }
 
     @PostMapping("/api/admin/ai/knowledge/reembed")

@@ -59,4 +59,28 @@ public interface AdminAiKnowledgeService {
 
     /** 原档短时下载 URL；未保存原档时抛 FILE_ORIGINAL_MISSING。 */
     AdminAiKnowledgeDtos.AdminAiKnowledgeFileDto originalFileUrl(long siteId, long documentId);
+
+    /** 知识中心总览：全平台文档/索引健康/原档用量聚合 + 分站点统计 + 最近失败。 */
+    AdminAiKnowledgeDtos.AdminAiKnowledgeOverviewDto knowledgeOverview();
+
+    /** 批量重试全部「索引失败且启用中」的文档，返回尝试/成功数。 */
+    AdminAiKnowledgeDtos.AdminAiKnowledgeReindexFailedResultDto reindexFailedDocuments();
+
+    /** 本站可见的知识库：自有 + 被共享链接的（只读）。 */
+    java.util.List<AdminAiKnowledgeDtos.AdminAiKnowledgeBaseDto> listBasesForSite(long siteId);
+
+    /** 全平台知识库列表（知识中心管理用）。 */
+    java.util.List<AdminAiKnowledgeDtos.AdminAiKnowledgeBaseDto> listAllBases();
+
+    AdminAiKnowledgeDtos.AdminAiKnowledgeBaseDto createBase(
+            long siteId, AdminAiKnowledgeDtos.AdminAiKnowledgeBaseCreateRequest request);
+
+    /** 删除知识库：默认库不可删、非空不可删（先移走/删除其文档）。 */
+    void deleteBase(long siteId, long baseId);
+
+    /** 把知识库共享链接给目标站点，并把其 ACTIVE 文档扇出同步到目标分区。 */
+    void linkBase(long baseId, long targetSiteId);
+
+    /** 取消共享链接，并把该库文档从目标分区移除。 */
+    void unlinkBase(long baseId, long targetSiteId);
 }

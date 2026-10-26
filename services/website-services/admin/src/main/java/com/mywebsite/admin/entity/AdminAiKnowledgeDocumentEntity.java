@@ -23,12 +23,21 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     private String indexStatus;
     private String indexError;
     private java.time.OffsetDateTime indexedAt;
+    private Long baseId;
     private String sourceFormat;
     private String originalFilename;
     private String storageBucket;
     private String storageKey;
     private Long fileSizeBytes;
     private String sha256;
+
+    public Long getBaseId() {
+        return baseId;
+    }
+
+    public void setBaseId(Long baseId) {
+        this.baseId = baseId;
+    }
 
     public Long getSiteId() {
         return siteId;
