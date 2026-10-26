@@ -1,6 +1,16 @@
 """Phase 5/§19：MCP — 外部工具经 MCPToolset 接入（配置驱动，可选）。
 
 业务真相仍在 Java；MCP 仅作外部/横切工具总线，禁止替代 Java internal Tools。
+
+传输：``http``（Streamable HTTP）、``sse``（HTTP+SSE；MCP 2026-07-28 已弃用，解析到 sse 时记 warning，连接行为不变）、``stdio``（本地子进程）。
+
+stdio 会以本服务进程的权限启动条目里的 ``command``。只配置运维自己信任的 server。
+``env`` 只把条目里写出的字符串原样交给 FastMCP ``StdioTransport``。本模块不读 ``os.environ``，也不自行合并或裁剪。
+锁里的 MCP SDK 2.3.0（``mcp/client/stdio.py``）不会把父进程环境整份交出去：子进程环境是
+``get_default_environment()`` 再覆盖条目里的键。非 Windows 默认可继承的只有
+``HOME``、``LOGNAME``、``PATH``、``SHELL``、``TERM``、``USER``。省略 ``env`` 时只剩这一组；
+条目里的同名键会覆盖它们。``VIRTUAL_ENV`` 和其它密钥不会自动进去。
+``keep_alive`` 传 ``False``：每次请求新建 Client，库默认 ``True`` 会在上下文退出后留下子进程。
 """
 
 from __future__ import annotations
@@ -13,7 +23,11 @@ from typing import Any, Literal
 
 import anyio
 from fastmcp import Client
-from fastmcp.client.transports import SSETransport, StreamableHttpTransport
+from fastmcp.client.transports import (
+    SSETransport,
+    StdioTransport,
+    StreamableHttpTransport,
+)
 from pydantic_ai.mcp import MCPToolset
 
 from agent_services.config import Settings
@@ -21,7 +35,7 @@ from agent_services.config import Settings
 logger = logging.getLogger(__name__)
 
 _NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
-_SUPPORTED_TRANSPORTS = frozenset({"http", "sse"})
+_SUPPORTED_TRANSPORTS = frozenset({"http", "sse", "stdio"})
 # 深检默认短超时：不进 /health，避免拖慢探活（§19.6）
 MCP_READY_DEFAULT_TIMEOUT_SECONDS = 3.0
 # 全部 enabled server 并行探测的总预算；到点未完成的记为失败，避免慢服务器耗时相加
@@ -39,6 +53,10 @@ class McpServerConfig:
     tool_prefix: str | None = None
     init_timeout_seconds: float | None = None
     transport: str = "http"
+    command: str | None = None
+    args: tuple[str, ...] = ()
+    env: dict[str, str] | None = None
+    cwd: str | None = None
 
 
 @dataclass(frozen=True)
@@ -133,14 +151,23 @@ def parse_mcp_server_configs(raw: str) -> list[McpServerConfig]:
             continue
 
         raw_transport = entry.get("transport")
+        declared = ""
         if raw_transport is not None and str(raw_transport).strip():
             declared = str(raw_transport).strip().lower()
             if declared not in _SUPPORTED_TRANSPORTS:
                 logger.warning(
-                    "MCP entry %r transport is not supported (http|sse only; stdio is future), skipped",
+                    "MCP entry %r transport is not supported (http|sse|stdio), skipped",
                     name,
                 )
                 continue
+
+        if declared == "stdio":
+            stdio_config = _parse_stdio_entry(name, entry)
+            if stdio_config is None:
+                continue
+            seen_names.add(name)
+            configs.append(stdio_config)
+            continue
 
         url = entry.get("url")
         url_text = str(url).strip() if url else ""
@@ -168,6 +195,12 @@ def parse_mcp_server_configs(raw: str) -> list[McpServerConfig]:
             except (TypeError, ValueError):
                 logger.warning("MCP entry %r bad initTimeoutSeconds, ignored", name)
 
+        if transport == "sse":
+            logger.warning(
+                "MCP entry %r uses deprecated HTTP+SSE transport (MCP spec 2026-07-28)",
+                name,
+            )
+
         seen_names.add(name)
         configs.append(
             McpServerConfig(
@@ -183,8 +216,68 @@ def parse_mcp_server_configs(raw: str) -> list[McpServerConfig]:
     return configs
 
 
+def _parse_stdio_entry(name: str, entry: dict[str, Any]) -> McpServerConfig | None:
+    """stdio 条目：坏字段跳过整条，不拖垮其它 server。"""
+    command = entry.get("command")
+    if not isinstance(command, str) or not command.strip():
+        logger.warning("MCP entry %r missing command, skipped", name)
+        return None
+
+    args_raw = entry.get("args")
+    if args_raw is None:
+        args: tuple[str, ...] = ()
+    elif isinstance(args_raw, list) and all(isinstance(item, str) for item in args_raw):
+        args = tuple(args_raw)
+    else:
+        logger.warning("MCP entry %r args must be an array of strings, skipped", name)
+        return None
+
+    if "env" not in entry or entry.get("env") is None:
+        env: dict[str, str] | None = None
+    else:
+        env_raw = entry.get("env")
+        if not isinstance(env_raw, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str) for key, value in env_raw.items()
+        ):
+            logger.warning("MCP entry %r env must be string-to-string, skipped", name)
+            return None
+        env = dict(env_raw)
+
+    cwd_raw = entry.get("cwd")
+    cwd: str | None = None
+    if cwd_raw is not None:
+        if not isinstance(cwd_raw, str) or not cwd_raw.strip():
+            logger.warning("MCP entry %r cwd is not a string, skipped", name)
+            return None
+        cwd = cwd_raw.strip()
+
+    tool_prefix = entry.get("toolPrefix")
+    prefix = str(tool_prefix).strip() if tool_prefix else name
+
+    timeout_raw = entry.get("initTimeoutSeconds")
+    init_timeout: float | None = None
+    if timeout_raw is not None:
+        try:
+            init_timeout = float(timeout_raw)
+        except (TypeError, ValueError):
+            logger.warning("MCP entry %r bad initTimeoutSeconds, ignored", name)
+
+    return McpServerConfig(
+        name=name,
+        url="",
+        enabled=True,
+        tool_prefix=prefix,
+        init_timeout_seconds=init_timeout,
+        transport="stdio",
+        command=command.strip(),
+        args=args,
+        env=env,
+        cwd=cwd,
+    )
+
+
 def _resolve_transport(raw: object, url: str) -> str | None:
-    """http / sse 才注册。未写 transport 时，url 以 /sse 结尾视为 sse，否则 http。"""
+    """http / sse。未写 transport 时，url 以 /sse 结尾视为 sse，否则 http。stdio 在解析处单独处理。"""
     if raw is None or str(raw).strip() == "":
         return "sse" if url.rstrip("/").endswith("/sse") else "http"
     transport = str(raw).strip().lower()
@@ -200,6 +293,19 @@ def build_mcp_client(config: McpServerConfig) -> Client[Any]:
         # 预构建 Client 时不能再把 init_timeout 传给 MCPToolset
         timeout_kwargs["init_timeout"] = config.init_timeout_seconds
         timeout_kwargs["timeout"] = config.init_timeout_seconds
+    if config.transport == "stdio":
+        # env 原样交给库；SDK 再并上默认可继承变量，不是整份父进程环境。
+        # keep_alive 默认 True 会在 client 上下文退出后留下子进程；本服务每次请求新建 Client。
+        return Client(
+            StdioTransport(
+                config.command or "",
+                args=list(config.args),
+                env=config.env,
+                cwd=config.cwd,
+                keep_alive=False,
+            ),
+            **timeout_kwargs,
+        )
     if config.transport == "sse":
         return Client(SSETransport(config.url, headers=headers), **timeout_kwargs)
     return Client(StreamableHttpTransport(config.url, headers=headers), **timeout_kwargs)

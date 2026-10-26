@@ -1,4 +1,5 @@
 ---
+name: reservation-assistant
 description: Sample reservation-flow guidance (optional demo skill)
 version: "1"
 ---
