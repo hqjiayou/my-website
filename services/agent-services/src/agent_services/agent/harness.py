@@ -87,6 +87,13 @@ def assemble_harness(
     resolved_budget = budget or RunBudget()
     guardrails = _guardrails(resolved_budget, skills_max_instruction_chars)
     memory = tuple(trim_history(history, resolved_budget.history_max_chars))
+    tool_guidance, mcp_servers = _inspect_toolsets(toolsets or [])
+    # 知识可用性直接看本轮 toolsets 里有没有 search_site_knowledge：
+    # 同步与流式两条 runtime 都经这里组装，旗标不会与实际注册的工具脱节。
+    knowledge_available = any(
+        item.name == "search_site_knowledge" or item.name.endswith("_search_site_knowledge")
+        for item in tool_guidance
+    )
     site_prompt, user_message = build_prompt_parts(
         site_id,
         message,
@@ -96,12 +103,12 @@ def assemble_harness(
         todos=todos,
         locale=locale,
         skills_max_instruction_chars=skills_max_instruction_chars,
+        knowledge_available=knowledge_available,
     )
     root = Path(harness_dir) if harness_dir else Path(default_harness_directory())
     background = _read_component(root, "background.md")
     guardrails_text = _read_component(root, "guardrails.md")
     tool_file = _read_component(root, "tool_guidance.md")
-    tool_guidance, mcp_servers = _inspect_toolsets(toolsets or [])
     system_prompt = _compose(
         background=background,
         guardrails_text=guardrails_text,
