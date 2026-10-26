@@ -256,6 +256,23 @@ public class AdminAiKnowledgeController {
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
     }
 
+    @GetMapping("/api/admin/ai/knowledge-overview")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
+    @Operation(summary = "知识中心总览（全平台文档/索引健康/原档用量）")
+    public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeOverviewDto>> overview() {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiKnowledgeService.knowledgeOverview()));
+    }
+
+    @PostMapping("/api/admin/ai/knowledge/reindex-failed")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @Operation(summary = "批量重试全部索引失败的知识库文档")
+    public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeReindexFailedResultDto>>
+            reindexFailed() {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiKnowledgeService.reindexFailedDocuments()));
+    }
+
     @PostMapping("/api/admin/ai/knowledge/reembed")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
     @Operation(summary = "按各站点当前模型入口重嵌全部知识库文档")

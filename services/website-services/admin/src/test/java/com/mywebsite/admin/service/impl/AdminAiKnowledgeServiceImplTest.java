@@ -163,6 +163,58 @@ class AdminAiKnowledgeServiceImplTest {
         return new AgentModelSelection("openai:gpt", "key", null, embeddingSpec);
     }
 
+    @Test
+    void overviewAggregatesAcrossSites() {
+        AdminAiKnowledgeDocumentEntity indexedDoc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        indexedDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        indexedDoc.setFileSizeBytes(100L);
+        AdminAiKnowledgeDocumentEntity failedDoc = document(1L, 12L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        failedDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED);
+        failedDoc.setIndexError("boom");
+        failedDoc.setFileSizeBytes(50L);
+        AdminAiKnowledgeDocumentEntity pendingDoc = document(2L, 21L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        pendingDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING);
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(indexedDoc, failedDoc, pendingDoc));
+        com.mywebsite.admin.entity.AdminSiteEntity site1 = new com.mywebsite.admin.entity.AdminSiteEntity();
+        site1.setId(1L);
+        site1.setSiteName("Site One");
+        com.mywebsite.admin.entity.AdminSiteEntity site2 = new com.mywebsite.admin.entity.AdminSiteEntity();
+        site2.setId(2L);
+        site2.setSiteName("Site Two");
+        when(adminSiteMapper.selectList(any())).thenReturn(List.of(site1, site2));
+
+        var overview = service.knowledgeOverview();
+
+        assertThat(overview.totalDocuments()).isEqualTo(3);
+        assertThat(overview.indexedDocuments()).isEqualTo(1);
+        assertThat(overview.failedDocuments()).isEqualTo(1);
+        assertThat(overview.pendingDocuments()).isEqualTo(1);
+        assertThat(overview.originalBytes()).isEqualTo(150L);
+        assertThat(overview.sites()).hasSize(2);
+        assertThat(overview.sites().get(0).siteName()).isEqualTo("Site One");
+        assertThat(overview.sites().get(0).failedDocuments()).isEqualTo(1);
+        assertThat(overview.recentFailures()).hasSize(1);
+        assertThat(overview.recentFailures().get(0).indexError()).isEqualTo("boom");
+    }
+
+    @Test
+    void reindexFailedRetriesAndCountsSuccesses() {
+        AdminAiKnowledgeDocumentEntity failed = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        failed.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED);
+        AdminAiKnowledgeDocumentEntity refreshed = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        refreshed.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(failed));
+        when(modelEntryService.currentSelection(1L)).thenReturn(selection("openai:embed-a"));
+        when(knowledgeMapper.selectById(11L)).thenReturn(refreshed);
+        when(knowledgeMapper.update(any(), any())).thenReturn(1);
+
+        var result = service.reindexFailedDocuments();
+
+        assertThat(result.attempted()).isEqualTo(1);
+        assertThat(result.succeeded()).isEqualTo(1);
+        verify(agentClient).upsertRetrievalDocument(any());
+    }
+
     private static AdminAiKnowledgeDocumentEntity document(long siteId, long id, String status) {
         AdminAiKnowledgeDocumentEntity entity = new AdminAiKnowledgeDocumentEntity();
         entity.setId(id);
