@@ -241,3 +241,20 @@ async def test_create_reservation_sends_stable_idempotency_key() -> None:
     assert keys[3] == reservation_idempotency_key("8", payload)
     assert keys[3] != keys[0]
     assert captured[0].headers["X-Internal-Service-Token"] == "test-internal-token"
+
+
+async def test_get_site_info_presents_site_type_as_neutral_category() -> None:
+    """呈现给模型时 siteType 改名 category（值不变），避免被误读为行业定性。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _api_response(
+            {"id": 7, "siteName": "Demo", "siteType": "PERSONAL", "description": "d"}
+        )
+
+    toolset = build_business_toolset(make_settings(), "7", client=_client_with(handler))
+    assert toolset is not None
+    tool = toolset.tools["get_site_info"]
+    result = await tool.function()
+    assert result == {
+        "site": {"id": 7, "siteName": "Demo", "category": "PERSONAL", "description": "d"}
+    }

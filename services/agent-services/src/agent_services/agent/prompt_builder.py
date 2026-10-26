@@ -24,6 +24,14 @@ def build_prompt_parts(
         if prompt_profile and prompt_profile.system_prompt and prompt_profile.system_prompt.strip()
         else f"You are the assistant for site: {site_id}. Answer in a concise and helpful way."
     )
+    # 事实锚定（常开）：关于本站的陈述只能来自工具结果与既有上下文；
+    # category 只是组织用标签、不是行业定性；工具没覆盖的就说不可用，禁止臆造站点业务与身份。
+    system = (
+        f"{system}\n\n"
+        "Describe this site only from tool results and the provided context. "
+        "The site's category is just an organizational tag, not a business classification. "
+        "If no tool data covers something, say it is not available instead of guessing."
+    )
     if knowledge_available:
         # 只在本轮确实注册了 search_site_knowledge 时才写，避免提示与工具不一致
         system = (

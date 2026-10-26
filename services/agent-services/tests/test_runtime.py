@@ -71,7 +71,9 @@ def test_prompt_profile_drops_unusable_temperature_and_caps_prompt() -> None:
 def test_prompt_builder_uses_trusted_profile_prompt() -> None:
     profile = PromptProfile(systemPrompt="  You are a cake shop assistant.  ")
     system, _ = build_prompt_parts("1", "hi", profile)
-    assert system == "You are a cake shop assistant."
+    # profile 原文打头，其后常开事实锚定护栏（见 grounding guardrail 测试）
+    assert system.startswith("You are a cake shop assistant.")
+    assert "organizational tag, not a business classification" in system
 
 
 async def test_run_chat_returns_reply_from_test_model() -> None:
@@ -335,3 +337,9 @@ def test_retried_tool_return_is_failed_in_non_stream_trace() -> None:
         ]
     )
     assert tool_trace_from_messages([request]) == [{"name": "slow", "ok": False}]
+
+
+def test_prompt_builder_includes_grounding_guardrail() -> None:
+    system, _ = build_prompt_parts("42", "hello", None)
+    assert "organizational tag, not a business classification" in system
+    assert "instead of guessing" in system
