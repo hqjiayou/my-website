@@ -118,7 +118,7 @@ public class AdminSiteServiceImpl implements AdminSiteService {
                     ErrorCode.BAD_REQUEST.getCode(), AdminSiteMessageKeys.SITE_TEMPLATE_APPEARANCE_PAIR);
         }
         if (hasTemplate) {
-            requireEnabledTemplateMatchingSiteType(request.templateId(), request.siteType());
+            requireEnabledTemplate(request.templateId());
             adminAppearanceService.requireValidConfigV1(request.appearance());
         }
         if (findBySiteCode(request.siteCode()) != null) {
@@ -194,7 +194,7 @@ public class AdminSiteServiceImpl implements AdminSiteService {
         return toDetail(requireSite(id));
     }
 
-    private void requireEnabledTemplateMatchingSiteType(long templateId, String siteType) {
+    private void requireEnabledTemplate(long templateId) {
         AdminTemplateEntity template = adminTemplateMapper.selectById(templateId);
         if (template == null) {
             throw new BusinessException(
@@ -204,10 +204,7 @@ public class AdminSiteServiceImpl implements AdminSiteService {
             throw new BusinessException(
                     ErrorCode.BAD_REQUEST.getCode(), AdminSiteMessageKeys.SITE_TEMPLATE_NOT_ENABLED);
         }
-        if (!siteType.equals(template.getSiteType())) {
-            throw new BusinessException(
-                    ErrorCode.BAD_REQUEST.getCode(), AdminSiteMessageKeys.SITE_TEMPLATE_SITE_TYPE_MISMATCH);
-        }
+        // 模板与站点用途标签已解耦：不再要求模板类型与站点标签一致，存在且启用即可选用。
     }
 
     private AdminSiteEntity requireSite(long id) {
@@ -224,8 +221,9 @@ public class AdminSiteServiceImpl implements AdminSiteService {
                 new LambdaQueryWrapper<AdminSiteEntity>().eq(AdminSiteEntity::getSiteCode, siteCode));
     }
 
+    /** 用途标签校验：非空且符合标签模式（预设标签与自订标签同等对待），不再受旧行业闭集约束。 */
     private static void requireSiteType(String siteType) {
-        if (!AdminSiteConstants.ALLOWED_SITE_TYPES.contains(siteType)) {
+        if (!StringUtils.hasText(siteType) || !siteType.trim().matches(AdminSiteConstants.SITE_TAG_PATTERN)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminSiteMessageKeys.SITE_TYPE_INVALID);
         }
     }

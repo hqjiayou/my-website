@@ -2,7 +2,6 @@ package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.mywebsite.admin.constant.AdminSiteConstants;
 import com.mywebsite.admin.constant.AdminTemplateConstants;
 import com.mywebsite.admin.constant.AdminTemplateMessageKeys;
 import com.mywebsite.admin.dto.AdminTemplateDtos.AdminTemplateDetailDto;
@@ -43,7 +42,7 @@ public class AdminTemplateServiceImpl implements AdminTemplateService {
                 wrapper.eq(AdminTemplateEntity::getStatus, query.status());
             }
             if (StringUtils.hasText(query.siteType())) {
-                requireSiteType(query.siteType());
+                // 不再校验闭集：按任意标签过滤，无匹配时自然返回空列表（模板目录本身仍是旧类型种子）。
                 wrapper.eq(AdminTemplateEntity::getSiteType, query.siteType());
             }
         }
@@ -96,13 +95,6 @@ public class AdminTemplateServiceImpl implements AdminTemplateService {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminTemplateMessageKeys.TEMPLATE_NOT_FOUND);
         }
         return template;
-    }
-
-    private static void requireSiteType(String siteType) {
-        if (!AdminSiteConstants.ALLOWED_SITE_TYPES.contains(siteType)) {
-            throw new BusinessException(
-                    ErrorCode.BAD_REQUEST.getCode(), AdminTemplateMessageKeys.TEMPLATE_SITE_TYPE_INVALID);
-        }
     }
 
     private static void requireStatus(String status) {

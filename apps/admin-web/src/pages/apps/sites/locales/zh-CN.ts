@@ -49,6 +49,7 @@ export default {
       siteName: '站点名称',
       siteCode: '站点编码',
       siteType: '站点类型',
+      customSiteType: '自定义标签',
       industry: '行业类型',
       template: '模板',
       domain: '域名',
@@ -63,6 +64,7 @@ export default {
       heroLayout: 'Hero 布局',
     },
     placeholders: {
+      customSiteType: '例如：My-Docs',
       siteName: '例如：示例站点',
       siteCode: '例如：demo-site',
       domain: '例如：demo.example.com',
@@ -72,6 +74,8 @@ export default {
       businessHours: '例如：09:00 - 18:00',
     },
     templates: {
+      noTemplateOption: '不使用模板',
+      noTemplateHint: '不套用任何模板与外观预设，直接创建。',
       selectPrompt: '请选择模板',
       loading: '模板加载中...',
       empty: '没有匹配的模板',
@@ -118,6 +122,7 @@ export default {
     messages: {
       requiredFields: '请填写必填项',
       invalidSiteCode: '站点编码须匹配 ^[a-z][a-z0-9_-]{1,63}$',
+      invalidSiteType: '标签须为 1–32 字符，以字母或数字开头，可含字母、数字、底线、连字符与空格',
       invalidPrimaryColor: '主题色须为 #RRGGBB',
       selectTemplateFirst: '请先选择模板',
       createdSuccess: '站点创建成功',
@@ -407,6 +412,12 @@ export default {
     inactive: '停用',
   },
   siteType: {
+    PERSONAL: '个人网站',
+    PORTFOLIO: '作品集',
+    BLOG: '博客',
+    KNOWLEDGE: '知识站',
+    TOOL: '工具站',
+    OTHER: '其他',
     CAR_REPAIR: '汽车维修',
     USED_CAR: '中古车',
     CAKE: '蛋糕店',

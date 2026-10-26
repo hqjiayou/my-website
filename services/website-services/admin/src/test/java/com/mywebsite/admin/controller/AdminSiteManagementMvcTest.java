@@ -189,8 +189,53 @@ class AdminSiteManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminSiteCreateRequest("ok_code", "n", "NOT_A_TYPE", null, null, null, null))))
+                                new AdminSiteCreateRequest("ok_code", "n", "bad type!", null, null, null, null))))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createAcceptsPresetAndCustomTags() throws Exception {
+        String token = tokenFor(500L);
+        String presetCode = "tag_p_" + Long.toHexString(System.nanoTime());
+        String customCode = "tag_c_" + Long.toHexString(System.nanoTime());
+
+        mockMvc.perform(post("/api/admin/sites")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(
+                                new AdminSiteCreateRequest(presetCode, "Preset", "PERSONAL", null, null, null, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.siteType").value("PERSONAL"));
+
+        mockMvc.perform(post("/api/admin/sites")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(
+                                new AdminSiteCreateRequest(customCode, "Custom", "My-Docs_2", null, null, null, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.siteType").value("My-Docs_2"));
+    }
+
+    @Test
+    void createAllowsTemplateWhoseTypeDiffersFromSiteTag() throws Exception {
+        String token = tokenFor(500L);
+        String siteCode = "tmpl_" + Long.toHexString(System.nanoTime());
+
+        // 模板 id=1 为旧 CAR_REPAIR 模板；站点标签 PERSONAL 与之不同——解耦后应可创建。
+        mockMvc.perform(post("/api/admin/sites")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminSiteCreateRequest(
+                                siteCode,
+                                "Decoupled",
+                                "PERSONAL",
+                                null,
+                                null,
+                                1L,
+                                new AdminAppearanceConfigV1Dto(
+                                        "#B91C1C", "modern", "rounded", "left-text-right-visual")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.siteType").value("PERSONAL"));
     }
 
     @Test

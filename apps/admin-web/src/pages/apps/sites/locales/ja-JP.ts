@@ -49,6 +49,7 @@ export default {
       siteName: 'サイト名',
       siteCode: 'サイトコード',
       siteType: 'サイト種別',
+      customSiteType: 'カスタムタグ',
       industry: '業種',
       template: 'テンプレート',
       domain: 'ドメイン',
@@ -63,6 +64,7 @@ export default {
       heroLayout: 'Hero レイアウト',
     },
     placeholders: {
+      customSiteType: '例：My-Docs',
       siteName: '例: サンプルサイト',
       siteCode: '例: demo-site',
       domain: '例: demo.example.com',
@@ -72,6 +74,8 @@ export default {
       businessHours: '例: 09:00 - 18:00',
     },
     templates: {
+      noTemplateOption: 'テンプレートなし',
+      noTemplateHint: 'テンプレートと外観プリセットなしで作成します。',
       selectPrompt: 'テンプレートを選択してください',
       loading: 'テンプレートを読み込み中...',
       empty: '一致するテンプレートがありません',
@@ -118,6 +122,7 @@ export default {
     messages: {
       requiredFields: '必須項目を入力してください',
       invalidSiteCode: 'サイトコードは ^[a-z][a-z0-9_-]{1,63}$ に一致する必要があります',
+      invalidSiteType: 'タグは1–32文字で、英数字で始まり、英数字・_・-・スペースのみ使用できます',
       invalidPrimaryColor: 'テーマカラーは #RRGGBB 形式である必要があります',
       selectTemplateFirst: '先にテンプレートを選択してください',
       createdSuccess: 'サイトを作成しました',
@@ -409,6 +414,12 @@ export default {
     inactive: '無効',
   },
   siteType: {
+    PERSONAL: '個人サイト',
+    PORTFOLIO: 'ポートフォリオ',
+    BLOG: 'ブログ',
+    KNOWLEDGE: 'ナレッジ',
+    TOOL: 'ツール',
+    OTHER: 'その他',
     CAR_REPAIR: '自動車整備',
     USED_CAR: '中古車',
     CAKE: 'ケーキ店',

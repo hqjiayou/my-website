@@ -11,7 +11,8 @@ import {
   HERO_LAYOUT_VALUES,
   PRIMARY_COLOR_PATTERN,
   SITE_CODE_PATTERN,
-  SITE_TYPE_VALUES,
+  SITE_TAG_PATTERN,
+  SITE_TYPE_PRESETS,
   createDefaultAppearanceConfig,
   siteApi,
   templateApi,
@@ -52,10 +53,12 @@ export function SiteCreatePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [step, setStep] = useState<CreateSiteStep>('basicInfo')
+  const [customType, setCustomType] = useState(false)
+  const [noTemplate, setNoTemplate] = useState(false)
   const [form, setForm] = useState<SiteCreateFormState>({
     siteName: '',
     siteCode: '',
-    siteType: SITE_TYPE_VALUES[0],
+    siteType: SITE_TYPE_PRESETS[0],
     defaultDomain: '',
     description: '',
     templateId: null,
@@ -64,11 +67,11 @@ export function SiteCreatePage() {
 
   const currentStepIndex = CREATE_SITE_STEPS.indexOf(step)
 
+  // 模板已与站点用途标签解耦：列出全部启用模板，不再按类型过滤。
   const templateFilters = {
     pageNum: 1,
     pageSize: 100,
     status: 'ENABLED' as const,
-    siteType: form.siteType,
   }
 
   const templatesQuery = useQuery({
@@ -105,7 +108,7 @@ export function SiteCreatePage() {
   }
 
   function validateBasicInfo() {
-    if (!form.siteName.trim() || !form.siteCode.trim() || !form.siteType) {
+    if (!form.siteName.trim() || !form.siteCode.trim() || !form.siteType.trim()) {
       toast.warning(t('create.messages.requiredFields'))
       return false
     }
@@ -113,11 +116,15 @@ export function SiteCreatePage() {
       toast.warning(t('create.messages.invalidSiteCode'))
       return false
     }
+    if (!SITE_TAG_PATTERN.test(form.siteType.trim())) {
+      toast.warning(t('create.messages.invalidSiteType'))
+      return false
+    }
     return true
   }
 
   function validateTemplate() {
-    if (form.templateId == null) {
+    if (!noTemplate && form.templateId == null) {
       toast.warning(t('create.messages.selectTemplateFirst'))
       return false
     }
@@ -133,6 +140,7 @@ export function SiteCreatePage() {
   }
 
   function selectTemplate(template: TemplateListItem) {
+    setNoTemplate(false)
     setForm((prev) => ({
       ...prev,
       templateId: template.id,
@@ -143,6 +151,11 @@ export function SiteCreatePage() {
     }))
   }
 
+  function selectNoTemplate() {
+    setNoTemplate(true)
+    setForm((prev) => ({ ...prev, templateId: null }))
+  }
+
   function goToNextStep() {
     if (step === 'basicInfo') {
       if (!validateBasicInfo()) return
@@ -151,7 +164,7 @@ export function SiteCreatePage() {
     }
     if (step === 'selectTemplate') {
       if (!validateTemplate()) return
-      setStep('configureAppearance')
+      setStep(noTemplate ? 'confirm' : 'configureAppearance')
       return
     }
     if (step === 'configureAppearance') {
@@ -163,16 +176,22 @@ export function SiteCreatePage() {
   function goToPrevStep() {
     if (step === 'selectTemplate') setStep('basicInfo')
     else if (step === 'configureAppearance') setStep('selectTemplate')
-    else if (step === 'confirm') setStep('configureAppearance')
+    else if (step === 'confirm') setStep(noTemplate ? 'selectTemplate' : 'configureAppearance')
   }
 
   function handleSiteTypeChange(siteType: SiteType) {
-    setForm((prev) => ({
-      ...prev,
-      siteType,
-      templateId: null,
-      appearance: createDefaultAppearanceConfig(),
-    }))
+    // 标签与模板已解耦：改标签不再重置已选模板与外观。
+    setForm((prev) => ({ ...prev, siteType }))
+  }
+
+  function handleTypeSelect(value: string) {
+    if (value === '__CUSTOM__') {
+      setCustomType(true)
+      handleSiteTypeChange('')
+      return
+    }
+    setCustomType(false)
+    handleSiteTypeChange(value)
   }
 
   function handleCreateSite() {
@@ -184,20 +203,21 @@ export function SiteCreatePage() {
       setStep('selectTemplate')
       return
     }
-    if (!validateAppearance()) {
+    if (!noTemplate && !validateAppearance()) {
       setStep('configureAppearance')
       return
     }
-    if (createMutation.isPending || form.templateId == null) return
+    if (createMutation.isPending) return
+    if (!noTemplate && form.templateId == null) return
 
     createMutation.mutate({
       siteCode: form.siteCode.trim(),
       siteName: form.siteName.trim(),
-      siteType: form.siteType,
+      siteType: form.siteType.trim(),
       defaultDomain: form.defaultDomain.trim() || undefined,
       description: form.description.trim() || undefined,
-      templateId: form.templateId,
-      appearance: { ...form.appearance },
+      templateId: noTemplate ? undefined : (form.templateId ?? undefined),
+      appearance: noTemplate ? undefined : { ...form.appearance },
     })
   }
 
@@ -274,16 +294,25 @@ export function SiteCreatePage() {
               <label className="space-y-1.5 text-sm">
                 <span className="font-medium text-slate-700">{t('create.fields.siteType')}</span>
                 <select
-                  value={form.siteType}
-                  onChange={(event) => handleSiteTypeChange(event.target.value as SiteType)}
+                  value={customType ? '__CUSTOM__' : form.siteType}
+                  onChange={(event) => handleTypeSelect(event.target.value)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
                 >
-                  {SITE_TYPE_VALUES.map((value) => (
+                  {SITE_TYPE_PRESETS.map((value) => (
                     <option key={value} value={value}>
                       {t(`siteType.${value}`)}
                     </option>
                   ))}
+                  <option value="__CUSTOM__">{t('create.fields.customSiteType')}</option>
                 </select>
+                {customType ? (
+                  <input
+                    value={form.siteType}
+                    onChange={(event) => handleSiteTypeChange(event.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+                    placeholder={t('create.placeholders.customSiteType')}
+                  />
+                ) : null}
               </label>
 
               <label className="space-y-1.5 text-sm">
@@ -334,6 +363,28 @@ export function SiteCreatePage() {
                 </p>
               ) : null}
               <div className="grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={selectNoTemplate}
+                  className={cn(
+                    'rounded-xl border p-4 text-left transition',
+                    noTemplate
+                      ? 'border-blue-300 bg-blue-50 shadow-sm'
+                      : 'border-dashed border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{t('create.templates.noTemplateOption')}</p>
+                      <p className="mt-1 text-xs text-slate-500">{t('create.templates.noTemplateHint')}</p>
+                    </div>
+                    {noTemplate ? (
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white">
+                        <Check className="h-3 w-3" />
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
                 {templates.map((template) => {
                   const selected = form.templateId === template.id
                   return (
@@ -445,26 +496,35 @@ export function SiteCreatePage() {
               <div className="grid gap-3 md:grid-cols-2">
                 {renderConfirmationItem(t('create.fields.siteName'), form.siteName)}
                 {renderConfirmationItem(t('create.fields.siteCode'), form.siteCode)}
-                {renderConfirmationItem(t('create.fields.siteType'), t(`siteType.${form.siteType}`))}
+                {renderConfirmationItem(
+                  t('create.fields.siteType'),
+                  t(`siteType.${form.siteType}`, { defaultValue: form.siteType }),
+                )}
                 {renderConfirmationItem(t('create.fields.defaultDomain'), form.defaultDomain || '—')}
                 {renderConfirmationItem(t('create.fields.siteDescription'), form.description || '—')}
                 {renderConfirmationItem(
                   t('create.fields.template'),
-                  selectedTemplate?.name ?? (form.templateId != null ? `#${form.templateId}` : '—'),
+                  noTemplate
+                    ? t('create.templates.noTemplateOption')
+                    : (selectedTemplate?.name ?? (form.templateId != null ? `#${form.templateId}` : '—')),
                 )}
-                {renderConfirmationItem(t('create.fields.primaryColor'), form.appearance.primaryColor)}
-                {renderConfirmationItem(
-                  t('create.fields.fontStyle'),
-                  t(`create.options.fontStyle.${form.appearance.fontStyle}`),
-                )}
-                {renderConfirmationItem(
-                  t('create.fields.buttonStyle'),
-                  t(`create.options.buttonStyle.${form.appearance.buttonStyle}`),
-                )}
-                {renderConfirmationItem(
-                  t('create.fields.heroLayout'),
-                  t(`create.options.heroLayout.${form.appearance.heroLayout}`),
-                )}
+                {!noTemplate ? (
+                  <>
+                    {renderConfirmationItem(t('create.fields.primaryColor'), form.appearance.primaryColor)}
+                    {renderConfirmationItem(
+                      t('create.fields.fontStyle'),
+                      t(`create.options.fontStyle.${form.appearance.fontStyle}`),
+                    )}
+                    {renderConfirmationItem(
+                      t('create.fields.buttonStyle'),
+                      t(`create.options.buttonStyle.${form.appearance.buttonStyle}`),
+                    )}
+                    {renderConfirmationItem(
+                      t('create.fields.heroLayout'),
+                      t(`create.options.heroLayout.${form.appearance.heroLayout}`),
+                    )}
+                  </>
+                ) : null}
               </div>
             </div>
           ) : null}

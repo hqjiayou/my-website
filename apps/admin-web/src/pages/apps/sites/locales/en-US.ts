@@ -49,6 +49,7 @@ export default {
       siteName: 'Site Name',
       siteCode: 'Site Code',
       siteType: 'Site Type',
+      customSiteType: 'Custom tag',
       industry: 'Industry',
       template: 'Template',
       domain: 'Domain',
@@ -63,6 +64,7 @@ export default {
       heroLayout: 'Hero Layout',
     },
     placeholders: {
+      customSiteType: 'e.g. My-Docs',
       siteName: 'e.g. Example Site',
       siteCode: 'e.g. demo-site',
       domain: 'e.g. demo.example.com',
@@ -72,6 +74,8 @@ export default {
       businessHours: 'e.g. 09:00 - 18:00',
     },
     templates: {
+      noTemplateOption: 'No template',
+      noTemplateHint: 'Create the site without any template or appearance preset.',
       selectPrompt: 'Please select a template',
       loading: 'Loading templates...',
       empty: 'No matching templates',
@@ -118,6 +122,7 @@ export default {
     messages: {
       requiredFields: 'Please fill in required fields',
       invalidSiteCode: 'Site code must match ^[a-z][a-z0-9_-]{1,63}$',
+      invalidSiteType: 'Tag must be 1-32 chars, start with a letter or digit, and contain only letters, digits, underscore, hyphen or space.',
       invalidPrimaryColor: 'Primary color must be #RRGGBB',
       selectTemplateFirst: 'Please select a template first',
       createdSuccess: 'Site created successfully',
@@ -410,6 +415,12 @@ export default {
     inactive: 'Inactive',
   },
   siteType: {
+    PERSONAL: 'Personal',
+    PORTFOLIO: 'Portfolio',
+    BLOG: 'Blog',
+    KNOWLEDGE: 'Knowledge base',
+    TOOL: 'Tool',
+    OTHER: 'Other',
     CAR_REPAIR: 'Car Repair',
     USED_CAR: 'Used Car',
     CAKE: 'Cake Shop',
