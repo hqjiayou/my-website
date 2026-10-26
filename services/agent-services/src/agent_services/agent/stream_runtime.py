@@ -14,9 +14,11 @@ from agent_services.agent.runtime import (
     BUDGET_EXCEEDED,
     MAX_TOOL_TRACE,
     RunBudget,
+    UserPrompt,
     budget_exceeded_message,
     build_agent,
     build_run_kwargs,
+    build_user_prompt,
     grounding_citations,
     mcp_unavailable_message,
     prepare_history_summary,
@@ -27,7 +29,11 @@ from agent_services.agent.todo_tools import TodoStore
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.api.errors import external_failure_message
 from agent_services.retrieval.store import RetrievedChunk
-from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
+from agent_services.schemas.chat import (
+    ChatAttachment,
+    ChatHistoryMessage,
+    PromptProfile,
+)
 from agent_services.schemas.stream import AgentStreamEvent, AgentStreamEventType
 from agent_services.schemas.todo import TodoItem
 
@@ -52,6 +58,7 @@ async def stream_chat_events(
     *,
     site_id: str,
     message: str,
+    attachments: list[ChatAttachment] | None = None,
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
@@ -90,7 +97,8 @@ async def stream_chat_events(
         harness_dir=harness_dir,
         history_summary=history_summary,
     )
-    system_prompt, user_message = harness.system_prompt, harness.user_message
+    system_prompt = harness.system_prompt
+    user_prompt = build_user_prompt(harness.user_message, attachments)
     start_data: dict[str, object] = {"siteId": site_id}
     if skills_applied:
         start_data["skillsApplied"] = list(skills_applied)
@@ -140,7 +148,7 @@ async def stream_chat_events(
             try:
                 async with agent:
                     entered = True
-                    async for event in _emit_agent_stream(agent, user_message, run_kwargs, side_events):
+                    async for event in _emit_agent_stream(agent, user_prompt, run_kwargs, side_events):
                         if isinstance(event, AgentStreamEvent):
                             yield event
                         else:
@@ -158,7 +166,7 @@ async def stream_chat_events(
                 )
                 return
         else:
-            async for event in _emit_agent_stream(agent, user_message, run_kwargs, side_events):
+            async for event in _emit_agent_stream(agent, user_prompt, run_kwargs, side_events):
                 if isinstance(event, AgentStreamEvent):
                     yield event
                 else:
@@ -205,11 +213,11 @@ async def stream_chat_events(
 
 async def _emit_agent_stream(
     agent: Agent,
-    user_message: str,
+    user_prompt: UserPrompt,
     run_kwargs: dict[str, object],
     side_events: list[AgentStreamEvent],
 ) -> AsyncIterator[AgentStreamEvent | _StreamOutput]:
-    async with agent.run_stream(user_message, **run_kwargs) as stream:
+    async with agent.run_stream(user_prompt, **run_kwargs) as stream:
         async for chunk in stream.stream_text(delta=True):
             while side_events:
                 yield side_events.pop(0)

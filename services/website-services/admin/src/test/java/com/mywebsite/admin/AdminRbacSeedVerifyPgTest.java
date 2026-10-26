@@ -97,7 +97,7 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-model:read",
             "admin:ai-model:update");
 
-    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 24;
+    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 25;
     private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 63;
 
     @Autowired

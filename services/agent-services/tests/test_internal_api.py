@@ -225,6 +225,35 @@ def test_chat_oversized_request_returns_400_flat_body() -> None:
     assert "detail" not in body
 
 
+def test_chat_blank_message_without_image_is_rejected() -> None:
+    response = _live_client().post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={"siteId": "10", "message": "   "},
+    )
+    assert response.status_code == 400
+    assert response.json()["message"] == "siteId and message are required."
+
+
+def test_chat_image_only_message_is_accepted() -> None:
+    response = _live_client().post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={
+            "siteId": "10",
+            "message": "",
+            "attachments": [
+                {
+                    "mediaType": "image/png",
+                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["reply"] == "hello from test model"
+
+
 def test_chat_blank_input_returns_400_flat_body() -> None:
     response = _live_client().post(
         "/internal/v1/chat",

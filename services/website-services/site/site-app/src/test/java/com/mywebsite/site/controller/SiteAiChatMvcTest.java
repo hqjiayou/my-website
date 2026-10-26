@@ -4,13 +4,17 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.client.AgentClient;
+import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.site.service.SiteAiConversationService;
@@ -18,9 +22,13 @@ import com.mywebsite.site.service.SiteAiConversationService.ChatPreparation;
 import com.mywebsite.site.testsupport.AbstractSiteSpringBootTest;
 import com.mywebsite.site.testsupport.SiteTestJwtSigner;
 import com.nimbusds.jose.jwk.RSAKey;
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -107,6 +115,83 @@ class SiteAiChatMvcTest extends AbstractSiteSpringBootTest {
     }
 
     @Test
+    void chatRejectsBlankMessageWithoutAttachments() throws Exception {
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+
+        mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(chatJson("   ", null)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()));
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
+    void chatRejectsIllegalAttachmentMediaType() throws Exception {
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+
+        mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(chatJson("hi", List.of(attachment("image/bmp", "YQ==")))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()));
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
+    void chatRejectsMoreThanThreeAttachments() throws Exception {
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+        List<Map<String, String>> attachments =
+                List.of(attachment("image/png", "YQ=="), attachment("image/png", "YQ=="),
+                        attachment("image/png", "YQ=="), attachment("image/png", "YQ=="));
+
+        mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(chatJson("hi", attachments)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()));
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
+    void chatRejectsAttachmentLargerThanTwoMebibytes() throws Exception {
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+        String data = Base64.getEncoder().encodeToString(new byte[2 * 1024 * 1024 + 1]);
+
+        mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(chatJson("hi", List.of(attachment("image/jpeg", data)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()));
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
+    void chatAllowsBlankMessageWhenAttachmentIsPresent() throws Exception {
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+        String data =
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+        mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(chatJson("", List.of(attachment("image/png", data)))))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()));
+
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        verify(agentClient).chat(captor.capture());
+        assertEquals("", captor.getValue().message());
+        assertEquals(1, captor.getValue().attachments().size());
+        assertEquals("image/png", captor.getValue().attachments().get(0).mediaType());
+        assertEquals(data, captor.getValue().attachments().get(0).data());
+    }
+
+    @Test
     void chatRejectsMismatchedSiteId() throws Exception {
         String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
 
@@ -156,5 +241,21 @@ class SiteAiChatMvcTest extends AbstractSiteSpringBootTest {
                 "SELECT COUNT(*) FROM site_ai_message WHERE conversation_id = ?", Number.class, id);
         assertEquals(0L, conversations.longValue());
         assertEquals(0L, messages.longValue());
+    }
+
+    private static Map<String, String> attachment(String mediaType, String data) {
+        Map<String, String> attachment = new LinkedHashMap<>();
+        attachment.put("mediaType", mediaType);
+        attachment.put("data", data);
+        return attachment;
+    }
+
+    private static String chatJson(String message, List<Map<String, String>> attachments) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("message", message);
+        if (attachments != null) {
+            body.put("attachments", attachments);
+        }
+        return new ObjectMapper().writeValueAsString(body);
     }
 }

@@ -5,11 +5,12 @@ Python 不保存会话状态（stateless between business requests）；
 运行预算（§22.4）：每轮 UsageLimits + 工具超时；超限诚实失败 AGENT_BUDGET_EXCEEDED。
 """
 
+import base64
 import logging
 from dataclasses import dataclass, field
 
 import anyio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.exceptions import ModelRetry, UsageLimitExceeded
 from pydantic_ai.messages import (
     ModelMessage,
@@ -31,7 +32,11 @@ from agent_services.api.errors import external_failure_message
 from agent_services.config import Settings
 from agent_services.observability.request_id import current_request_id
 from agent_services.retrieval.store import RetrievedChunk, citation_sources
-from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
+from agent_services.schemas.chat import (
+    ChatAttachment,
+    ChatHistoryMessage,
+    PromptProfile,
+)
 from agent_services.schemas.todo import TodoItem
 
 BUDGET_EXCEEDED = "AGENT_BUDGET_EXCEEDED"
@@ -228,6 +233,24 @@ def budget_exceeded_message(exc: BaseException) -> str:
     return f"Agent run budget exceeded: {detail}"
 
 
+UserPrompt = str | list[str | BinaryContent]
+
+
+def build_user_prompt(text: str, attachments: list[ChatAttachment] | None) -> UserPrompt:
+    """无附件时原样返回字符串。有图时为 [非空文字] + 每张图一个 BinaryContent。"""
+    images = [
+        BinaryContent(data=base64.b64decode(item.data), media_type=item.media_type)
+        for item in attachments or []
+    ]
+    if not images:
+        return text
+    parts: list[str | BinaryContent] = []
+    if text:
+        parts.append(text)
+    parts.extend(images)
+    return parts
+
+
 def build_message_history(history: list[ChatHistoryMessage] | None) -> list[ModelMessage]:
     """Java 传入的扁平历史 → Pydantic AI ModelMessage；顺序保持原样。"""
     if not history:
@@ -235,7 +258,9 @@ def build_message_history(history: list[ChatHistoryMessage] | None) -> list[Mode
     messages: list[ModelMessage] = []
     for item in history:
         if item.role == "USER":
-            messages.append(ModelRequest(parts=[UserPromptPart(content=item.content)]))
+            messages.append(
+                ModelRequest(parts=[UserPromptPart(content=build_user_prompt(item.content, item.attachments))])
+            )
         else:
             messages.append(ModelResponse(parts=[TextPart(content=item.content)]))
     return messages
@@ -293,6 +318,7 @@ async def run_chat(
     *,
     site_id: str,
     message: str,
+    attachments: list[ChatAttachment] | None = None,
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
@@ -329,6 +355,7 @@ async def run_chat(
         history_summary=history_summary,
     )
     run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
+    user_prompt = build_user_prompt(harness.user_message, attachments)
 
     needs_mcp_context = execution_needs_agent_context(toolsets or [])
     try:
@@ -339,7 +366,7 @@ async def run_chat(
             try:
                 async with agent:
                     entered = True
-                    result = await agent.run(harness.user_message, **run_kwargs)
+                    result = await agent.run(user_prompt, **run_kwargs)
             except UsageLimitExceeded:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -351,7 +378,7 @@ async def run_chat(
                 logger.warning("AI provider call failed after MCP connect", exc_info=exc)
                 return ChatBlocked(message=external_failure_message("AI provider call failed", exc))
         else:
-            result = await agent.run(harness.user_message, **run_kwargs)
+            result = await agent.run(user_prompt, **run_kwargs)
     except UsageLimitExceeded as exc:
         # 预算超限不是外部依赖故障：单独错误码，便于调用方区分与告警
         return ChatBlocked(message=budget_exceeded_message(exc), error_code=BUDGET_EXCEEDED)

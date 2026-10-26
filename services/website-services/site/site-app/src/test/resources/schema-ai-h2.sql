@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS site_ai_message (
     role                VARCHAR(16) NOT NULL,
     content             TEXT NOT NULL,
     agent_meta          TEXT,
+    attachments         CLOB,
     created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     created_by          BIGINT,
     updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),

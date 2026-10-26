@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mywebsite.agent.client.AgentClient;
+import com.mywebsite.agent.dto.AgentAttachmentDto;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
@@ -22,6 +23,7 @@ import com.mywebsite.infra.service.LocalizedMessageService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.properties.AgentProperties;
+import com.mywebsite.site.dto.SiteAiAttachmentDto;
 import com.mywebsite.site.dto.SiteAiChatRequestDto;
 import com.mywebsite.site.entity.SiteAiKnowledgeDocumentEntity;
 import com.mywebsite.site.entity.SiteAiModelEntryEntity;
@@ -36,6 +38,7 @@ import com.mywebsite.site.service.SiteAiRateLimitService;
 import com.mywebsite.site.service.SiteAiService;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -58,6 +61,11 @@ public class SiteAiServiceImpl implements SiteAiService {
 
     /** 与 agent-services ChatRequest.message 上限一致。超长在进会话和限流之前拒绝。 */
     private static final int MAX_MESSAGE_CHARS = 16_000;
+    private static final int MAX_ATTACHMENTS = 3;
+    private static final int MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_ATTACHMENTS_TOTAL_BYTES = 5 * 1024 * 1024;
+    private static final Set<String> ATTACHMENT_MEDIA_TYPES =
+            Set.of("image/jpeg", "image/png", "image/webp", "image/gif");
     private static final int KNOWLEDGE_NEEDLE_CHARS = 80;
     private static final int KNOWLEDGE_SNIPPET_CHARS = 800;
     private static final int KNOWLEDGE_SNIPPET_LIMIT = 4;
@@ -98,15 +106,22 @@ public class SiteAiServiceImpl implements SiteAiService {
 
     @Override
     public SiteAiChatResponseDto chat(long siteId, SiteAiChatRequestDto request) {
-        AuthenticatedUser user = validateChatAccess(siteId, request);
-        long siteUserId = requireSiteUserId(user);
-        String message = request.message().trim();
+        ValidatedChat validated = validateChatAccess(siteId, request);
+        long siteUserId = requireSiteUserId(validated.user());
+        String message = validated.message();
+        List<AgentAttachmentDto> attachments = toAgentAttachments(validated.attachments());
 
         ChatPreparation preparation =
                 conversationService.prepare(siteId, siteUserId, request.conversationId());
-        AgentChatResponse response = agentClient.chat(buildAgentRequest(siteId, message, preparation));
+        AgentChatResponse response =
+                agentClient.chat(buildAgentRequest(siteId, message, attachments, preparation));
         conversationService.recordExchange(
-                preparation.conversation(), message, response.reply(), response.todos(), response.runMeta());
+                preparation.conversation(),
+                message,
+                response.reply(),
+                response.todos(),
+                response.runMeta(),
+                attachments);
 
         return new SiteAiChatResponseDto(
                 response.reply(),
@@ -174,20 +189,23 @@ public class SiteAiServiceImpl implements SiteAiService {
 
     @Override
     public SseEmitter chatStream(long siteId, SiteAiChatRequestDto request) {
-        AuthenticatedUser user = validateChatAccess(siteId, request);
-        long siteUserId = requireSiteUserId(user);
-        String message = request.message().trim();
+        ValidatedChat validated = validateChatAccess(siteId, request);
+        long siteUserId = requireSiteUserId(validated.user());
+        String message = validated.message();
+        List<AgentAttachmentDto> attachments = toAgentAttachments(validated.attachments());
 
         ChatPreparation preparation =
                 conversationService.prepare(siteId, siteUserId, request.conversationId());
-        AgentChatRequest agentRequest = buildAgentRequest(siteId, message, preparation);
+        AgentChatRequest agentRequest = buildAgentRequest(siteId, message, attachments, preparation);
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
-        siteAiStreamExecutor.execute(() -> forwardStream(preparation, message, agentRequest, emitter));
+        siteAiStreamExecutor.execute(
+                () -> forwardStream(preparation, message, attachments, agentRequest, emitter));
         return emitter;
     }
 
-    private AgentChatRequest buildAgentRequest(long siteId, String message, ChatPreparation preparation) {
+    private AgentChatRequest buildAgentRequest(
+            long siteId, String message, List<AgentAttachmentDto> attachments, ChatPreparation preparation) {
         Long conversationId = preparation.conversation().getId();
         return new AgentChatRequest(
                 String.valueOf(siteId),
@@ -201,7 +219,17 @@ public class SiteAiServiceImpl implements SiteAiService {
                 preparation.todos().isEmpty() ? null : preparation.todos(),
                 loadDefaultModel(siteId),
                 callbackBaseUrl(),
-                knowledgeSnippets(siteId, message));
+                knowledgeSnippets(siteId, message),
+                attachments.isEmpty() ? null : attachments);
+    }
+
+    private static List<AgentAttachmentDto> toAgentAttachments(List<SiteAiAttachmentDto> attachments) {
+        if (attachments.isEmpty()) {
+            return List.of();
+        }
+        return attachments.stream()
+                .map(item -> new AgentAttachmentDto(item.mediaType(), item.data()))
+                .toList();
     }
 
     private String callbackBaseUrl() {
@@ -305,18 +333,54 @@ public class SiteAiServiceImpl implements SiteAiService {
         return modelEntryMapper.selectOne(query.last("LIMIT 1"));
     }
 
-    private AuthenticatedUser validateChatAccess(long siteId, SiteAiChatRequestDto request) {
+    private ValidatedChat validateChatAccess(long siteId, SiteAiChatRequestDto request) {
         AuthenticatedUser user = requireSiteMember(siteId);
-        if (request == null || !StringUtils.hasText(request.message())) {
+        if (request == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        if (request.message().trim().length() > MAX_MESSAGE_CHARS) {
+        String message = request.message() == null ? "" : request.message().trim();
+        List<SiteAiAttachmentDto> attachments = validateAttachments(request.attachments());
+        if (!StringUtils.hasText(message) && attachments.isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        if (message.length() > MAX_MESSAGE_CHARS) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         if (!rateLimitService.tryAcquire(siteId, user.subject())) {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS);
         }
-        return user;
+        return new ValidatedChat(user, message, attachments);
+    }
+
+    private static List<SiteAiAttachmentDto> validateAttachments(List<SiteAiAttachmentDto> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return List.of();
+        }
+        if (attachments.size() > MAX_ATTACHMENTS) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        long total = 0;
+        for (SiteAiAttachmentDto attachment : attachments) {
+            if (attachment == null
+                    || !ATTACHMENT_MEDIA_TYPES.contains(attachment.mediaType())
+                    || !StringUtils.hasText(attachment.data())) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            byte[] decoded;
+            try {
+                decoded = Base64.getDecoder().decode(attachment.data());
+            } catch (IllegalArgumentException ex) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            if (decoded.length > MAX_ATTACHMENT_BYTES) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            total += decoded.length;
+            if (total > MAX_ATTACHMENTS_TOTAL_BYTES) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+        }
+        return List.copyOf(attachments);
     }
 
     private static AuthenticatedUser requireSiteMember(long siteId) {
@@ -334,7 +398,11 @@ public class SiteAiServiceImpl implements SiteAiService {
     }
 
     private void forwardStream(
-            ChatPreparation preparation, String userMessage, AgentChatRequest agentRequest, SseEmitter emitter) {
+            ChatPreparation preparation,
+            String userMessage,
+            List<AgentAttachmentDto> userAttachments,
+            AgentChatRequest agentRequest,
+            SseEmitter emitter) {
         StringBuilder doneReply = new StringBuilder();
         List<AgentTodoItem> doneTodos = new ArrayList<>();
         AtomicReference<AgentRunMeta> doneMeta = new AtomicReference<>(AgentRunMeta.EMPTY);
@@ -359,7 +427,12 @@ public class SiteAiServiceImpl implements SiteAiService {
             });
             if (doneReply.length() > 0) {
                 conversationService.recordExchange(
-                        preparation.conversation(), userMessage, doneReply.toString(), doneTodos, doneMeta.get());
+                        preparation.conversation(),
+                        userMessage,
+                        doneReply.toString(),
+                        doneTodos,
+                        doneMeta.get(),
+                        userAttachments);
                 sendEventQuietly(
                         emitter,
                         "CONVERSATION",
@@ -375,7 +448,8 @@ public class SiteAiServiceImpl implements SiteAiService {
                             userMessage,
                             doneReply.toString(),
                             doneTodos,
-                            doneMeta.get());
+                            doneMeta.get(),
+                            userAttachments);
                 } catch (RuntimeException recordEx) {
                     log.warn("site ai stream reply was not stored after client disconnect", recordEx);
                 }
@@ -501,6 +575,8 @@ public class SiteAiServiceImpl implements SiteAiService {
             // 客户端已断开
         }
     }
+
+    private record ValidatedChat(AuthenticatedUser user, String message, List<SiteAiAttachmentDto> attachments) {}
 
     private static final class ClientDisconnectedException extends RuntimeException {
         private ClientDisconnectedException(Throwable cause) {

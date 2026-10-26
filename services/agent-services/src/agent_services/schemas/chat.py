@@ -1,3 +1,5 @@
+import base64
+import binascii
 import math
 from typing import Annotated, Literal
 
@@ -10,6 +12,11 @@ MAX_MESSAGE_CHARS = 16000
 MAX_HISTORY_ITEMS = 50
 MAX_SKILL_IDS = 16
 MAX_SKILL_ID_LENGTH = 64
+MAX_ATTACHMENTS = 3
+MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024
+MAX_ATTACHMENTS_TOTAL_BYTES = 5 * 1024 * 1024
+
+ImageMediaType = Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
 
 SkillId = Annotated[str, StringConstraints(max_length=MAX_SKILL_ID_LENGTH)]
 
@@ -36,11 +43,45 @@ class PromptProfile(BaseModel):
         return value
 
 
+class ChatAttachment(BaseModel):
+    """图片附件。data 为标准 base64，解码后单张不超过 2MiB。"""
+
+    media_type: ImageMediaType = Field(alias="mediaType")
+    data: str
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("data")
+    @classmethod
+    def validate_base64_payload(cls, value: str) -> str:
+        if _decoded_attachment_size(value) > MAX_ATTACHMENT_BYTES:
+            raise ValueError("attachment exceeds 2MiB")
+        return value
+
+
+def _decoded_attachment_size(value: str) -> int:
+    try:
+        decoded = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("attachment data is not valid base64") from exc
+    return len(decoded)
+
+
+def limit_attachment_list(value: list[ChatAttachment] | None) -> list[ChatAttachment] | None:
+    if not value:
+        return None
+    total = sum(_decoded_attachment_size(item.data) for item in value)
+    if total > MAX_ATTACHMENTS_TOTAL_BYTES:
+        raise ValueError("attachments exceed 5MiB")
+    return value
+
+
 class ChatHistoryMessage(BaseModel):
     """多轮历史消息；由 Java 从会话真相源加载后随请求传入（Python stateless）。"""
 
     role: Literal["USER", "ASSISTANT"]
     content: str
+    attachments: list[ChatAttachment] | None = Field(default=None, max_length=MAX_ATTACHMENTS)
 
     @field_validator("content")
     @classmethod
@@ -49,6 +90,13 @@ class ChatHistoryMessage(BaseModel):
         if len(value) <= MAX_MESSAGE_CHARS:
             return value
         return value[:MAX_MESSAGE_CHARS]
+
+    @field_validator("attachments")
+    @classmethod
+    def cap_history_attachments(
+        cls, value: list[ChatAttachment] | None
+    ) -> list[ChatAttachment] | None:
+        return limit_attachment_list(value)
 
 
 class ModelSelection(BaseModel):
@@ -65,6 +113,7 @@ class ModelSelection(BaseModel):
 class ChatRequest(BaseModel):
     site_id: str = Field(alias="siteId")
     message: str = Field(max_length=MAX_MESSAGE_CHARS)
+    attachments: list[ChatAttachment] | None = Field(default=None, max_length=MAX_ATTACHMENTS)
     locale: str | None = None
     conversation_id: str | None = Field(default=None, alias="conversationId")
     prompt_profile: PromptProfile | None = Field(default=None, alias="promptProfile")
@@ -76,6 +125,13 @@ class ChatRequest(BaseModel):
     knowledge_context: list[str] | None = Field(default=None, alias="knowledgeContext", max_length=4)
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("attachments")
+    @classmethod
+    def cap_request_attachments(
+        cls, value: list[ChatAttachment] | None
+    ) -> list[ChatAttachment] | None:
+        return limit_attachment_list(value)
 
     @field_validator("knowledge_context")
     @classmethod
