@@ -35,6 +35,8 @@ import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.client.AgentDimensionChangeRequiredException;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.dto.AgentOcrPdfRequest;
+import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.common.enums.ErrorCode;
@@ -747,6 +749,36 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 recreatedSchema,
                 List.copyOf(failed),
                 failed.isEmpty() ? REEMBED_SUCCESS : REEMBED_PARTIAL);
+    }
+
+    @Override
+    public String transcribeScannedPdf(long siteId, byte[] pdfBytes) {
+        if (pdfBytes == null || pdfBytes.length == 0) {
+            return "";
+        }
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(siteId);
+        if (chain.isEmpty()) {
+            log.info("KB OCR skipped for site {}: no usable model entry chain", siteId);
+            return "";
+        }
+        try {
+            AgentOcrPdfResult result =
+                    agentClient.ocrPdf(
+                            new AgentOcrPdfRequest(
+                                    chain.get(0),
+                                    chain.size() > 1 ? chain.subList(1, chain.size()) : List.of(),
+                                    java.util.Base64.getEncoder().encodeToString(pdfBytes)));
+            String text = result == null || result.text() == null ? "" : result.text().trim();
+            log.info(
+                    "KB OCR for site {} via {} produced {} chars",
+                    siteId,
+                    result == null ? null : result.modelSpec(),
+                    text.length());
+            return text;
+        } catch (RuntimeException ex) {
+            log.warn("KB OCR failed for site {}: {}", siteId, ex.getMessage());
+            return "";
+        }
     }
 
     private Probe probeSelection(AgentModelSelection selection) {

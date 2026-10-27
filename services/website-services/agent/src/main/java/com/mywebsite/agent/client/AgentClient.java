@@ -4,6 +4,8 @@ import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.dto.AgentOcrPdfRequest;
+import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
@@ -50,4 +52,10 @@ public interface AgentClient {
 
     /** 知识检索。检索未配置时抛 BusinessException（EXTERNAL_DEPENDENCY_BLOCKED，与 upsert 相同）。 */
     AgentRetrievalSearchResult searchRetrieval(AgentRetrievalSearchRequest request);
+
+    /**
+     * 扫描版 PDF 转写（模型原生文档理解）。模型链未配置或全部失败时抛
+     * BusinessException（EXTERNAL_DEPENDENCY_BLOCKED）；调用方决定是否降级。
+     */
+    AgentOcrPdfResult ocrPdf(AgentOcrPdfRequest request);
 }

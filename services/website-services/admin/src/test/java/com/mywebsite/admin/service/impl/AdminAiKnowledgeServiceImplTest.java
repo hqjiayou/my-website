@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -18,15 +19,20 @@ import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.client.AgentDimensionChangeRequiredException;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.dto.AgentOcrPdfRequest;
+import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -298,6 +304,48 @@ class AdminAiKnowledgeServiceImplTest {
 
         assertThatThrownBy(() -> service.deleteBase(1L, 9L)).isInstanceOf(BusinessException.class);
         verify(baseMapper, never()).deleteById(any());
+    }
+
+    @Test
+    void transcribeScannedPdfReturnsEmptyWhenChainEmpty() {
+        when(modelEntryService.selectionChain(7L)).thenReturn(List.of());
+
+        assertThat(service.transcribeScannedPdf(7L, new byte[] {1})).isEmpty();
+        verify(agentClient, never()).ocrPdf(any());
+    }
+
+    @Test
+    void transcribeScannedPdfSendsChainAndReturnsTrimmedText() {
+        AgentModelSelection primary = new AgentModelSelection("google:gemini", "k", null);
+        AgentModelSelection fallback = new AgentModelSelection("google:gemini-b", "k2", null);
+        byte[] pdf = "%PDF-fixture".getBytes(StandardCharsets.UTF_8);
+        when(modelEntryService.selectionChain(7L)).thenReturn(List.of(primary, fallback));
+        // 严格模式下 when 式打桩本身会被计为一次可校验调用，captor+verify 会误报；
+        // 改用 doAnswer 在打桩里直接截获请求参数，不再走 verify。
+        java.util.concurrent.atomic.AtomicReference<AgentOcrPdfRequest> sent =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(
+                        invocation -> {
+                            sent.set(invocation.getArgument(0));
+                            return new AgentOcrPdfResult("  转写文本  ", "google:gemini");
+                        })
+                .when(agentClient)
+                .ocrPdf(any());
+
+        assertThat(service.transcribeScannedPdf(7L, pdf)).isEqualTo("转写文本");
+
+        assertThat(sent.get().model()).isEqualTo(primary);
+        assertThat(sent.get().fallbackModels()).containsExactly(fallback);
+        assertThat(sent.get().contentBase64()).isEqualTo(Base64.getEncoder().encodeToString(pdf));
+    }
+
+    @Test
+    void transcribeScannedPdfSwallowsClientFailure() {
+        when(modelEntryService.selectionChain(7L))
+                .thenReturn(List.of(new AgentModelSelection("google:gemini", "k", null)));
+        when(agentClient.ocrPdf(any())).thenThrow(new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED));
+
+        assertThat(service.transcribeScannedPdf(7L, new byte[] {1})).isEmpty();
     }
 
     private static AdminAiKnowledgeDocumentEntity document(long siteId, long id, String status) {

@@ -34,6 +34,12 @@ public interface AdminAiKnowledgeService {
 
     AdminAiKnowledgeDetailDto createDocument(long siteId, AdminAiKnowledgeCreateRequest request);
 
+    /**
+     * 扫描版 PDF 转写：PDF 文本层抽取为空时，经站点生效模型链做原生文档理解。
+     * 无可用模型链、调用失败或结果为空一律回空串（上传侧据此维持 FILE_EMPTY 诚实拒绝）。
+     */
+    String transcribeScannedPdf(long siteId, byte[] pdfBytes);
+
     AdminAiKnowledgeDetailDto updateDocument(
             long siteId, long documentId, AdminAiKnowledgeUpdateRequest request);
 
