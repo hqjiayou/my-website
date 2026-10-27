@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -320,17 +320,23 @@ class AdminAiKnowledgeServiceImplTest {
         AgentModelSelection fallback = new AgentModelSelection("google:gemini-b", "k2", null);
         byte[] pdf = "%PDF-fixture".getBytes(StandardCharsets.UTF_8);
         when(modelEntryService.selectionChain(7L)).thenReturn(List.of(primary, fallback));
-        // doReturn 式打桩不计入 verify 的调用次数（when 式会计入，导致 captor 校验误报 2 次调用）。
-        doReturn(new AgentOcrPdfResult("  转写文本  ", "google:gemini")).when(agentClient).ocrPdf(any());
+        // 严格模式下 when 式打桩本身会被计为一次可校验调用，captor+verify 会误报；
+        // 改用 doAnswer 在打桩里直接截获请求参数，不再走 verify。
+        java.util.concurrent.atomic.AtomicReference<AgentOcrPdfRequest> sent =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(
+                        invocation -> {
+                            sent.set(invocation.getArgument(0));
+                            return new AgentOcrPdfResult("  转写文本  ", "google:gemini");
+                        })
+                .when(agentClient)
+                .ocrPdf(any());
 
         assertThat(service.transcribeScannedPdf(7L, pdf)).isEqualTo("转写文本");
 
-        ArgumentCaptor<AgentOcrPdfRequest> captor = ArgumentCaptor.forClass(AgentOcrPdfRequest.class);
-        verify(agentClient).ocrPdf(captor.capture());
-        assertThat(captor.getValue().model()).isEqualTo(primary);
-        assertThat(captor.getValue().fallbackModels()).containsExactly(fallback);
-        assertThat(captor.getValue().contentBase64())
-                .isEqualTo(Base64.getEncoder().encodeToString(pdf));
+        assertThat(sent.get().model()).isEqualTo(primary);
+        assertThat(sent.get().fallbackModels()).containsExactly(fallback);
+        assertThat(sent.get().contentBase64()).isEqualTo(Base64.getEncoder().encodeToString(pdf));
     }
 
     @Test
