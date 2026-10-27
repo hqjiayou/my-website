@@ -87,6 +87,16 @@ def _str_list(payload: dict[str, object], key: str, label: str) -> tuple[str, ..
     return tuple(item.strip() for item in value)
 
 
+def load_distractors(path: Path | None = None) -> list[CorpusDoc]:
+    """对抗性近失文档层（evals/distractors.json）：与黄金集同行但从不进确定性 CI 索引。
+
+    这些文档刻意与黄金集的问题近失（错型号的同类手册、相邻主题的指南、
+    共享「时间/费用」措辞的其他业务），只在真模型 eval（--distractors）时并入
+    索引，给检索与引用精度施加真实压力；黄金集病例的 expected_sources 不引用它们。
+    """
+    return load_corpus(path or evals_root() / "distractors.json")
+
+
 def load_corpus(path: Path | None = None) -> list[CorpusDoc]:
     raw = json.loads((path or evals_root() / "corpus.json").read_text(encoding="utf-8"))
     if not isinstance(raw, list):
@@ -617,6 +627,11 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="Directory or .json/.md path. Default: evals/reports/answer-eval-<utc>.json and .md",
     )
+    parser.add_argument(
+        "--distractors",
+        action="store_true",
+        help="Also index evals/distractors.json (adversarial near-miss documents) alongside the golden corpus.",
+    )
     return parser
 
 
@@ -627,8 +642,9 @@ def main(argv: list[str] | None = None) -> int:
         print(blocked or blocked_text("AI model is not configured (missing AI_MODEL)."), flush=True)
         return BLOCKED_EXIT
     destination = args.out if args.out is not None else evals_root() / "reports"
+    corpus = load_corpus() + load_distractors() if args.distractors else None
     result = asyncio.run(
-        run_answer_eval(model, model_name=spec, out=destination)
+        run_answer_eval(model, model_name=spec, out=destination, corpus=corpus)
     )
     if result.json_path is not None:
         print(result.json_path, flush=True)
