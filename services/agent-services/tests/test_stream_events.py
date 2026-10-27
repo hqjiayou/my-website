@@ -56,6 +56,7 @@ async def test_stream_maps_thinking_tool_and_citations() -> None:
         yield {0: DeltaThinkingPart(content="check the knowledge base first")}
         yield {1: DeltaToolCall(name="search_site_knowledge", json_args='{"query": "hours"}')}
 
+
     collector = KnowledgeSearchCollector()
     toolset = build_knowledge_toolset("1", _FakeRetrieval(), collector=collector)  # type: ignore[arg-type]
     events = await _collect(
@@ -90,6 +91,11 @@ async def test_stream_maps_thinking_tool_and_citations() -> None:
     citations = done.data["citations"]
     assert isinstance(citations, list)
     assert citations[0]["sourceId"] == "kb:1"  # type: ignore[index]
+    # 搜索摘要随 DONE 输出，供 Java 落库后在历史里回放过程摘要
+    searches = done.data["searches"]
+    assert isinstance(searches, list)
+    assert searches[0]["query"] == "hours"  # type: ignore[index]
+    assert searches[0]["hitCount"] == 1  # type: ignore[index]
 
 
 async def test_stream_without_thinking_parts_emits_no_thinking_event() -> None:

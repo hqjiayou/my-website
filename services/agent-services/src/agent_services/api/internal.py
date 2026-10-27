@@ -50,6 +50,7 @@ from agent_services.schemas.chat import (
     ChatRequest,
     ChatSuccessData,
     ChatUsage,
+    SearchSummaryItem,
     ToolTraceItem,
 )
 from agent_services.schemas.health import (
@@ -372,6 +373,9 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         retrieval_degraded=collector.degraded,
         citations=[ChatCitation.model_validate(item) for item in outcome.citations]
         if outcome.citations
+        else None,
+        searches=[SearchSummaryItem.model_validate(item) for item in collector.searches]
+        if collector.searches
         else None,
         extracted_memories=outcome.extracted_memories,
     )

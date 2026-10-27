@@ -165,7 +165,8 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                         m.getContent(),
                         m.getCreatedAt(),
                         readPublicAttachments(m),
-                        readCitations(m)))
+                        readCitations(m),
+                        readProcess(m)))
                 .toList();
     }
 
@@ -401,6 +402,50 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             return items.isEmpty() ? null : List.copyOf(items);
         } catch (Exception ex) {
             log.warn("site ai message {} has malformed agent_meta citations, ignored", message.getId(), ex);
+            return null;
+        }
+    }
+
+    /**
+     * 过程摘要回放：读 agent_meta 顶层的 tools / searches（与实时事件同一白名单，
+     * 只有工具名与成败、查询词与命中数）。两者皆空、缺失或损坏时返回 null，不让消息列表失败。
+     * 旧消息没有 searches 时只回放 tools。
+     */
+    private SiteAiMessageDto.Process readProcess(SiteAiMessageEntity message) {
+        if (!StringUtils.hasText(message.getAgentMeta())) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(message.getAgentMeta());
+            if (root == null || !root.isObject()) {
+                return null;
+            }
+            List<SiteAiMessageDto.Process.Tool> tools = new ArrayList<>();
+            JsonNode toolsNode = root.get("tools");
+            if (toolsNode != null && toolsNode.isArray()) {
+                for (JsonNode item : toolsNode) {
+                    if (item != null && item.isObject() && item.hasNonNull("name")) {
+                        tools.add(new SiteAiMessageDto.Process.Tool(
+                                item.path("name").asText(""), item.path("ok").asBoolean(false)));
+                    }
+                }
+            }
+            List<SiteAiMessageDto.Process.Search> searches = new ArrayList<>();
+            JsonNode searchesNode = root.get("searches");
+            if (searchesNode != null && searchesNode.isArray()) {
+                for (JsonNode item : searchesNode) {
+                    if (item != null && item.isObject()) {
+                        searches.add(new SiteAiMessageDto.Process.Search(
+                                item.path("query").asText(""), item.path("hitCount").asInt(0)));
+                    }
+                }
+            }
+            if (tools.isEmpty() && searches.isEmpty()) {
+                return null;
+            }
+            return new SiteAiMessageDto.Process(List.copyOf(tools), List.copyOf(searches));
+        } catch (Exception ex) {
+            log.warn("site ai message {} has malformed agent_meta process, ignored", message.getId(), ex);
             return null;
         }
     }

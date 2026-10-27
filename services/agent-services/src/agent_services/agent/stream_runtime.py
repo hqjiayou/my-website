@@ -201,6 +201,9 @@ async def stream_chat_events(
     )
     if citations:
         done_data["citations"] = citations
+    # 搜索摘要随 DONE 落库（Java agentMeta），供历史回放显示过程摘要。
+    if knowledge_collector is not None and knowledge_collector.searches:
+        done_data["searches"] = list(knowledge_collector.searches)
     # 独立 Agent，不传入本轮 UsageLimits，抽取不计入 run budget。
     if memory_enabled and memory_extraction_enabled:
         extracted = await extract_memories(

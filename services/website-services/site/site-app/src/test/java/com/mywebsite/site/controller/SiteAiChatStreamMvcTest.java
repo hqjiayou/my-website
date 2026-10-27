@@ -164,6 +164,36 @@ class SiteAiChatStreamMvcTest extends AbstractSiteSpringBootTest {
         assertThat(listed.get(1).citations()).containsExactly(new SiteAiMessageDto.Citation("kb:4", 1, 0.25d));
     }
 
+    @Test
+    void streamPersistsProcessSummaryOnAssistantMessage() throws Exception {
+        doAnswer(invocation -> {
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent("TEXT_DELTA", "{\"delta\":\"hi\"}");
+                    listener.onEvent(
+                            "DONE",
+                            "{\"reply\":\"hi\",\"providerStatus\":\"LIVE\",\"todos\":[],"
+                                    + "\"tools\":[{\"name\":\"search_site_knowledge\",\"ok\":true}],"
+                                    + "\"searches\":[{\"query\":\"hours\",\"hitCount\":2,"
+                                    + "\"sources\":[{\"sourceId\":\"kb:4\",\"chunkIndex\":1,\"score\":0.25}]}]}");
+                    return null;
+                })
+                .when(agentClient)
+                .chatStream(any(), any());
+
+        String body = streamBody();
+        Matcher matcher = Pattern.compile("\"conversationId\":\"(\\d+)\"").matcher(body);
+        assertThat(matcher.find()).isTrue();
+        long conversationId = Long.parseLong(matcher.group(1));
+
+        List<SiteAiMessageDto> listed = conversationService.listMessages(10L, 200L, conversationId);
+        assertThat(listed).hasSize(2);
+        assertThat(listed.get(0).process()).isNull();
+        SiteAiMessageDto.Process process = listed.get(1).process();
+        assertThat(process).isNotNull();
+        assertThat(process.tools()).containsExactly(new SiteAiMessageDto.Process.Tool("search_site_knowledge", true));
+        assertThat(process.searches()).containsExactly(new SiteAiMessageDto.Process.Search("hours", 2));
+    }
+
     private String streamBody() throws Exception {
         String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
         MvcResult mvcResult = mockMvc.perform(post("/api/site/10/ai/chat/stream")

@@ -206,6 +206,16 @@ class ChatCitation(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class SearchSummaryItem(BaseModel):
+    """一次知识搜索的安全摘要：查询词、命中数与来源标识，不含片段正文。"""
+
+    query: str
+    hit_count: int = Field(alias="hitCount")
+    sources: list[ChatCitation] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
 class ChatSuccessData(BaseModel):
     reply: str
     conversation_id: str | None = Field(default=None, alias="conversationId")
@@ -217,6 +227,7 @@ class ChatSuccessData(BaseModel):
     todos: list[TodoItem] | None = None
     retrieval_degraded: bool = Field(default=False, alias="retrievalDegraded")
     citations: list[ChatCitation] | None = None
+    searches: list[SearchSummaryItem] | None = None
     extracted_memories: list[str] = Field(default_factory=list, alias="extractedMemories")
 
     model_config = {"populate_by_name": True}
