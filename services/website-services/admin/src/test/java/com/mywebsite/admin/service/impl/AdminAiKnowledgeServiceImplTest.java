@@ -18,15 +18,20 @@ import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.client.AgentDimensionChangeRequiredException;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.dto.AgentOcrPdfRequest;
+import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -298,6 +303,41 @@ class AdminAiKnowledgeServiceImplTest {
 
         assertThatThrownBy(() -> service.deleteBase(1L, 9L)).isInstanceOf(BusinessException.class);
         verify(baseMapper, never()).deleteById(any());
+    }
+
+    @Test
+    void transcribeScannedPdfReturnsEmptyWhenChainEmpty() {
+        when(modelEntryService.selectionChain(7L)).thenReturn(List.of());
+
+        assertThat(service.transcribeScannedPdf(7L, new byte[] {1})).isEmpty();
+        verify(agentClient, never()).ocrPdf(any());
+    }
+
+    @Test
+    void transcribeScannedPdfSendsChainAndReturnsTrimmedText() {
+        AgentModelSelection primary = new AgentModelSelection("google:gemini", "k", null);
+        AgentModelSelection fallback = new AgentModelSelection("google:gemini-b", "k2", null);
+        byte[] pdf = "%PDF-fixture".getBytes(StandardCharsets.UTF_8);
+        when(modelEntryService.selectionChain(7L)).thenReturn(List.of(primary, fallback));
+        when(agentClient.ocrPdf(any())).thenReturn(new AgentOcrPdfResult("  转写文本  ", "google:gemini"));
+
+        assertThat(service.transcribeScannedPdf(7L, pdf)).isEqualTo("转写文本");
+
+        ArgumentCaptor<AgentOcrPdfRequest> captor = ArgumentCaptor.forClass(AgentOcrPdfRequest.class);
+        verify(agentClient).ocrPdf(captor.capture());
+        assertThat(captor.getValue().model()).isEqualTo(primary);
+        assertThat(captor.getValue().fallbackModels()).containsExactly(fallback);
+        assertThat(captor.getValue().contentBase64())
+                .isEqualTo(Base64.getEncoder().encodeToString(pdf));
+    }
+
+    @Test
+    void transcribeScannedPdfSwallowsClientFailure() {
+        when(modelEntryService.selectionChain(7L))
+                .thenReturn(List.of(new AgentModelSelection("google:gemini", "k", null)));
+        when(agentClient.ocrPdf(any())).thenThrow(new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED));
+
+        assertThat(service.transcribeScannedPdf(7L, new byte[] {1})).isEmpty();
     }
 
     private static AdminAiKnowledgeDocumentEntity document(long siteId, long id, String status) {

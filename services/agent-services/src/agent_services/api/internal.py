@@ -1,3 +1,5 @@
+import base64
+import binascii
 import logging
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
@@ -14,6 +16,7 @@ from agent_services.agent.model_factory import (
     create_model_for_entry,
     public_model_spec,
 )
+from agent_services.agent.ocr import OcrUnavailable, transcribe_pdf
 from agent_services.agent.runtime import (
     BUDGET_EXCEEDED,
     ChatBlocked,
@@ -58,6 +61,7 @@ from agent_services.schemas.health import (
     McpServerHealth,
     RuntimeLimits,
 )
+from agent_services.schemas.ocr import OcrPdfRequest, OcrPdfResponse
 from agent_services.schemas.retrieval import (
     ReembedPrepareRequest,
     ReembedPrepareResponse,
@@ -400,6 +404,45 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
     if not payload.get("extractedMemories"):
         payload.pop("extractedMemories", None)
     return {"ok": True, "data": payload}
+
+
+
+@router.post("/ocr/pdf")
+async def internal_ocr_pdf(request: Request, body: OcrPdfRequest) -> dict[str, object]:
+    """扫描版 PDF 转写：模型入口链与 chat 同形状（_execution_handle 只读 model/fallback 两字段）。"""
+    handle = _execution_handle(request, body)  # type: ignore[arg-type]
+    if not handle.live:
+        raise InternalApiError(
+            status_code=503,
+            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
+            message=handle.blocked_reason or "AI provider is not configured.",
+            provider_status="BLOCKED",
+        )
+    try:
+        pdf_bytes = base64.b64decode(body.content_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise InternalApiError(
+            status_code=400,
+            error_code="INVALID_PDF",
+            message="contentBase64 is not valid base64.",
+        ) from exc
+    if not pdf_bytes.startswith(b"%PDF"):
+        raise InternalApiError(
+            status_code=400,
+            error_code="INVALID_PDF",
+            message="content is not a PDF document.",
+        )
+    try:
+        text = await transcribe_pdf(handle.model, pdf_bytes)  # type: ignore[arg-type]
+    except OcrUnavailable as exc:
+        raise InternalApiError(
+            status_code=503,
+            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
+            message=str(exc),
+            provider_status="BLOCKED",
+        ) from exc
+    payload = OcrPdfResponse(text=text, model_spec=handle.spec)
+    return {"ok": True, "data": payload.model_dump(by_alias=True)}
 
 
 @router.post("/chat/stream")

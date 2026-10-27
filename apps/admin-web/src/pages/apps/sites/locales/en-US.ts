@@ -382,7 +382,7 @@ export default {
       uploadDialogTitle: 'Upload file',
       chooseFile: 'Choose file',
       titleLabel: 'Title',
-      uploadHint: 'Dozens of formats (documents, sheets, slides, ebooks, text, code, data), up to 10 MB. Everything is stored as Markdown.',
+      uploadHint: 'Dozens of formats (documents, sheets, slides, ebooks, text, code, data), up to 10 MB. Everything is stored as Markdown. Scanned PDFs are transcribed automatically by the site AI model.',
       invalidExtension: 'Unsupported file format.',
       fileTooLarge: 'File must be 10 MB or smaller.',
       uploaded: 'File uploaded',

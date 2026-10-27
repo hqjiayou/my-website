@@ -382,7 +382,7 @@ export default {
       uploadDialogTitle: 'ファイルをアップロード',
       chooseFile: 'ファイルを選択',
       titleLabel: 'タイトル',
-      uploadHint: 'ドキュメント/表計算/スライド/電子書籍/テキスト/コード/データなど数十形式対応、最大 10 MB。取り込み時に Markdown へ統一します。',
+      uploadHint: 'ドキュメント/表計算/スライド/電子書籍/テキスト/コード/データなど数十形式対応、最大 10 MB。取り込み時に Markdown へ統一します。スキャン版 PDF はサイトの AI モデルが自動で文字起こしします。',
       invalidExtension: '対応していないファイル形式です。',
       fileTooLarge: 'ファイルサイズは 10 MB 以下にしてください。',
       uploaded: 'ファイルをアップロードしました',

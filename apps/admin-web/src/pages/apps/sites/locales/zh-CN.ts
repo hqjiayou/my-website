@@ -379,7 +379,7 @@ export default {
       uploadDialogTitle: '上传文件',
       chooseFile: '选择文件',
       titleLabel: '标题',
-      uploadHint: '支持文档/表格/演示/电子书/文本/代码/数据等数十种格式，最大 10 MB；入库统一转为 Markdown。',
+      uploadHint: '支持文档/表格/演示/电子书/文本/代码/数据等数十种格式，最大 10 MB；入库统一转为 Markdown。扫描版 PDF 会经站点的 AI 模型自动识别转写。',
       invalidExtension: '不支持的文件格式。',
       fileTooLarge: '文件大小不能超过 10 MB。',
       uploaded: '文件已上传',

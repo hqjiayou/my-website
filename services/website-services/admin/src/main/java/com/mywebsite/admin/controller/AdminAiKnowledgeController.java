@@ -177,7 +177,7 @@ public class AdminAiKnowledgeController {
             @RequestPart("file") MultipartFile file,
             @RequestParam(value = "title", required = false) String title,
             @RequestParam(value = "baseId", required = false) Long baseId) {
-        UploadPayload payload = toUploadPayload(file, title, baseId);
+        UploadPayload payload = toUploadPayload(siteId, file, title, baseId);
         return ResponseEntity.ok(new HttpMessageBody<>(
                 ResponseMessages.SUCCESS,
                 adminAiKnowledgeService.createUploadedDocument(siteId, payload.request(), payload.meta())));
@@ -195,7 +195,7 @@ public class AdminAiKnowledgeController {
     private record UploadPayload(
             AdminAiKnowledgeCreateRequest request, AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta meta) {}
 
-    private static UploadPayload toUploadPayload(MultipartFile file, String titleOverride, Long baseId) {
+    private UploadPayload toUploadPayload(long siteId, MultipartFile file, String titleOverride, Long baseId) {
         if (file == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_REQUIRED);
         }
@@ -212,6 +212,10 @@ public class AdminAiKnowledgeController {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
         }
         String content = convertContent(extension, bytes);
+        if (!StringUtils.hasText(content) && "pdf".equals(extension)) {
+            // 扫描版 PDF 无文本层：经站点生效模型链转写；仍为空才按 FILE_EMPTY 拒绝。
+            content = adminAiKnowledgeService.transcribeScannedPdf(siteId, bytes);
+        }
         if (!StringUtils.hasText(content)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_EMPTY);
         }
