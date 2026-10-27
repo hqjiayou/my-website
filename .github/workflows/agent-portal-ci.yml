@@ -1,0 +1,50 @@
+name: agent-portal-ci
+
+# 站点用户端 apps/agent-portal。此前仓库三个 workflow 都不覆盖本应用，
+# 改动只能靠本地验收；本 workflow 补上与 admin-web 同级的 lint + build 门。
+# - pull_request：按指向 dev / main 的整个 PR 改动触发，不只看最后一次 push。
+# - push：按本次 push 改到的路径触发（含尚未开 PR 的功能分支）。
+
+on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'apps/agent-portal/**'
+      - '.github/workflows/agent-portal-ci.yml'
+  push:
+    paths:
+      - 'apps/agent-portal/**'
+      - '.github/workflows/agent-portal-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-build:
+    name: agent-portal lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/agent-portal
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: apps/agent-portal/pnpm-lock.yaml
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+      - name: lint
+        run: pnpm lint
+      - name: build
+        run: pnpm build
