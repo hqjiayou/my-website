@@ -16,6 +16,11 @@ RETRIEVAL_HNSW_EF_SEARCH_DEFAULT = 40
 RETRIEVAL_RERANK_ENABLED_DEFAULT = True
 RETRIEVAL_RERANK_TIMEOUT_SECONDS_DEFAULT = 4.0
 RETRIEVAL_RERANK_MAX_CANDIDATES_DEFAULT = 12
+# rerank 相关性裁门：开启时 rerank 不再只是重排，而是只保留模型判定相关的候选
+# （被省略的候选直接丢弃，不回填），且候选 ≥2 即触发（不再等超过 topK）。
+# 2026-10-27 对抗探针标定：干扰文档（错型号 XJ-800、招聘、同型号清洁指南）在
+# 分数管线下全部漏过，裁门模式下真模型逐题全对且多文档题两篇都保留。
+RETRIEVAL_RERANK_CUTOFF_DEFAULT = True
 
 
 class Settings(BaseSettings):
@@ -81,6 +86,10 @@ class Settings(BaseSettings):
     retrieval_rerank_max_candidates: int = Field(
         default=RETRIEVAL_RERANK_MAX_CANDIDATES_DEFAULT,
         validation_alias="RETRIEVAL_RERANK_MAX_CANDIDATES",
+    )
+    retrieval_rerank_cutoff: bool = Field(
+        default=RETRIEVAL_RERANK_CUTOFF_DEFAULT,
+        validation_alias="RETRIEVAL_RERANK_CUTOFF",
     )
 
     # ---- Phase 4 业务工具（Function Tools → Java internal API）----

@@ -1402,12 +1402,14 @@ async def test_rerank_disabled_does_not_call_model() -> None:
 
 
 async def test_rerank_skips_model_when_candidates_fit_in_top_k() -> None:
+    """重排模式（裁门关）的旧触发语义：候选不超过 topK 时不调用模型。"""
     calls: list[int] = []
     service = RetrievalService(
         FakeEmbedder(),
         _RerankStore(),
         rerank_model=_order_model("[4, 3, 2, 1]", calls),
         score_ratio_floor=0,
+        rerank_cutoff=False,
     )
     hits = await service.search(site_id="1", query="q", top_k=4)
     assert calls == []
@@ -1466,6 +1468,75 @@ async def test_rerank_uses_process_model_without_selection(monkeypatch: pytest.M
     )
     hits = await service.search(site_id="1", query="q", top_k=1)
     assert [hit.source_id for hit in hits] == ["kb:b"]
+    assert service.rerank_applied is True
+
+
+def test_parse_rerank_selection_is_strict() -> None:
+    from agent_services.retrieval.service import parse_rerank_selection
+
+    assert parse_rerank_selection("[3, 1]", 4) == [2, 0]
+    assert parse_rerank_selection("[2, 2, 9]", 4) == [1]
+    # 空数组、无数组、只有散文数字都不算有效选择（调用方回退融合原序）
+    assert parse_rerank_selection("[]", 4) is None
+    assert parse_rerank_selection("candidates 2 and 1", 4) is None
+    assert parse_rerank_selection("[1]", 0) is None
+
+
+async def test_rerank_cutoff_drops_omitted_candidates() -> None:
+    """裁门模式：候选数（4）没超过 topK（4）也触发；被省略的候选直接丢弃、不回填。"""
+    calls: list[int] = []
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=_order_model("[1, 3]", calls),
+        score_ratio_floor=0,
+    )
+    hits = await service.search(site_id="1", query="q", top_k=4)
+    assert calls == [1]
+    assert [hit.source_id for hit in hits] == ["kb:a", "kb:c"]
+    assert service.rerank_applied is True
+
+
+async def test_rerank_cutoff_empty_selection_falls_back_to_fused() -> None:
+    """模型回空数组视为不可用：回退融合原序、四条全保留、applied 不置位。"""
+    calls: list[int] = []
+    service = RetrievalService(
+        FakeEmbedder(),
+        _RerankStore(),
+        rerank_model=_order_model("[]", calls),
+        score_ratio_floor=0,
+    )
+    hits = await service.search(site_id="1", query="q", top_k=4)
+    assert calls == [1]
+    assert [hit.source_id for hit in hits] == ["kb:a", "kb:b", "kb:c", "kb:d"]
+    assert service.rerank_applied is False
+
+
+async def test_rerank_cutoff_disabled_keeps_legacy_append() -> None:
+    """裁门关时维持重排语义：模型没提到的候选按原序补在后面，不丢弃。"""
+
+    class FiveHitStore(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            return [
+                RetrievedChunk("kb:a", 0, "alpha", 0.9),
+                RetrievedChunk("kb:b", 0, "beta", 0.85),
+                RetrievedChunk("kb:c", 0, "gamma", 0.8),
+                RetrievedChunk("kb:d", 0, "delta", 0.75),
+                RetrievedChunk("kb:e", 0, "epsilon", 0.72),
+            ]
+
+    calls: list[int] = []
+    service = RetrievalService(
+        FakeEmbedder(),
+        FiveHitStore(),
+        rerank_model=_order_model("[2]", calls),
+        min_score=0,
+        score_ratio_floor=0,
+        rerank_cutoff=False,
+    )
+    hits = await service.search(site_id="1", query="q", top_k=4)
+    # 模型只提了 b；a/c/d 是被按原序补回的（e 同样补回但被 top_k 截掉）
+    assert [hit.source_id for hit in hits] == ["kb:b", "kb:a", "kb:c", "kb:d"]
     assert service.rerank_applied is True
 
 
