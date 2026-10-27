@@ -165,48 +165,48 @@ export default {
       cdnHint: 'Cloudflare / CloudFront 配置占位：用于边缘缓存与 HTTPS 加速。',
     },
   },
-  workspace: {
-    title: '站点工作台',
-    loading: '站点工作台加载中...',
-    backToList: '返回站点列表',
-    nav: {
-      overview: '站点概览',
-      basic: '基础信息',
-      theme: '主题风格',
-      domain: '域名发布',
-      contents: '页面内容',
-      ai: 'AI 配置',
-      files: '文件资源',
+  agentOverview: {
+    description: '一屏看清这个站点的 Agent 健康：模型链、Prompt、知识库与对话。',
+    unavailable: '不可用',
+    cards: {
+      modelChain: '模型链',
+      prompt: 'Prompt',
+      knowledge: '知识库',
+      conversations: '对话',
     },
-    notFound: {
-      title: '未找到站点',
-      description: '当前 siteId 对应的站点不存在，请返回站点列表重新选择。',
+    model: {
+      unreachable: 'Agent 服务不可达',
+      status: '状态',
+      fallbacks: '备援',
+      noFallback: '无',
     },
-    placeholderNotice: '当前为占位页面，后续将接入 site-service / agent-service',
-  },
-  overview: {
-    title: '站点概览',
-    description: '查看当前站点的配置状态、运营数据与发布检查项。',
-    derivedNotice: '发布检查来自 REAL API 推导；访问量 / AI 咨询暂无后端，显示为「未接入」。',
-    loadingRuntime: '正在加载站点运营状态...',
-    stats: {
-      todayVisits: '今日访问',
-      aiConsultations: 'AI 咨询',
-      publishCompletion: '发布完成度',
-      unavailable: '未接入',
+    prompt: {
+      configured: '已配置',
+      notConfigured: '尚未配置',
     },
-    quickActions: {
-      title: '快捷操作',
-      basic: '编辑基础信息',
-      theme: '配置主题',
-      domain: '配置域名',
-      contents: '管理内容',
-      ai: 'AI 设置',
+    knowledge: {
+      documents: '文件',
+      indexed: '已索引',
+      failed: '索引失败',
     },
-    publishChecklist: {
+    conversations: {
+      total: '总数',
+      latest: '最近活动',
+    },
+    recent: {
+      title: '近期对话',
+      empty: '暂无对话。',
+    },
+    actions: {
+      openRuntime: '查看运行状态',
+      openPrompt: '编辑 Prompt',
+      openKnowledge: '打开知识库',
+      openConversations: '全部对话',
+      openPreview: '试聊',
+      visitSite: '访问站点',
+    },
+    checklist: {
       title: '发布检查',
-      done: '已完成',
-      pending: '待完成',
       items: {
         basicInfo: '基础信息',
         theme: '主题配置',
@@ -215,6 +215,35 @@ export default {
         aiConfig: 'AI 配置',
       },
     },
+  },
+  workspace: {
+    title: '站点工作台',
+    loading: '站点工作台加载中...',
+    backToList: '返回站点列表',
+    groups: {
+      agent: 'Agent',
+      materials: '素材',
+      settings: '站点设置',
+    },
+    nav: {
+      agentOverview: 'Agent 概览',
+      agentPreview: '试聊',
+      agentPrompt: 'Prompt',
+      agentKnowledge: '知识库',
+      agentConversations: '对话记录',
+      agentRuntime: '运行状态',
+      basic: '基础信息',
+      theme: '主题风格',
+      domain: '域名发布',
+      contents: '页面内容',
+      files: '文件资源',
+    },
+    visitSite: '访问站点',
+    notFound: {
+      title: '未找到站点',
+      description: '当前 siteId 对应的站点不存在，请返回站点列表重新选择。',
+    },
+    placeholderNotice: '当前为占位页面，后续将接入 site-service / agent-service',
   },
   placeholderPages: {
     currentSiteLabel: '当前站点',
@@ -348,13 +377,6 @@ export default {
     error: '加载失败',
     retry: '重试',
     noPermission: '当前账号没有站点 AI 权限。',
-    tabs: {
-      prompt: 'Prompt',
-      knowledge: '知识库',
-      conversations: '会话',
-      preview: '预览对话',
-      runtime: '运行时',
-    },
     prompt: {
       systemPrompt: '系统 Prompt',
       temperature: '温度',
