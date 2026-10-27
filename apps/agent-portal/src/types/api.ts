@@ -56,6 +56,12 @@ export interface SiteAiAttachment {
   data: string
 }
 
+/** 历史消息的过程摘要（服务端自 agent_meta 回放）：工具名与成败、搜索查询词与命中数。 */
+export interface SiteAiMessageProcess {
+  tools: { name: string; ok: boolean }[]
+  searches: { query: string; hitCount: number }[]
+}
+
 export interface SiteAiMessage {
   id: number
   role: string
@@ -64,6 +70,8 @@ export interface SiteAiMessage {
   attachments?: SiteAiAttachment[] | null
   /** 僅 ASSISTANT。無引用時為 null。 */
   citations?: SiteAiCitation[] | null
+  /** 僅 ASSISTANT。無過程記錄時為 null。 */
+  process?: SiteAiMessageProcess | null
 }
 
 export interface SiteAiChatRequest {

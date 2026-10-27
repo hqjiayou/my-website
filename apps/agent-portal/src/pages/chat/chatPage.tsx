@@ -66,6 +66,27 @@ function readRouteConversationId(value: string | undefined): string | null {
   return value
 }
 
+/** 历史过程摘要 → 时间线步骤：只有工具步（无思考文本）；搜索摘要按序挂到搜索工具步。 */
+function storedProcessSteps(messageId: string, process: SiteAiMessage['process']): ProcessStep[] {
+  if (!process) return []
+  const steps: ProcessStep[] = []
+  let searchIndex = 0
+  for (const [index, tool] of (process.tools ?? []).entries()) {
+    const isSearch = tool.name === 'search_site_knowledge'
+    const search = isSearch ? process.searches?.[searchIndex] : undefined
+    if (isSearch) searchIndex += 1
+    steps.push({
+      kind: 'tool',
+      id: `hist-${messageId}-${index}`,
+      callId: `hist-${messageId}-${index}`,
+      name: tool.name,
+      status: tool.ok ? 'ok' : 'failed',
+      summary: search ? { query: search.query, hitCount: search.hitCount, sources: [] } : undefined,
+    })
+  }
+  return steps
+}
+
 function toStoredTurns(
   items: SiteAiMessage[],
   extra?: Pick<StoredLoadOptions, 'citations' | 'providerStatus' | 'process'>,
@@ -73,6 +94,7 @@ function toStoredTurns(
   let lastAssistant = -1
   const turns: ChatTurn[] = items.map((item, index) => {
     if (item.role === 'ASSISTANT') lastAssistant = index
+    const storedSteps = item.role === 'ASSISTANT' ? storedProcessSteps(String(item.id), item.process) : []
     return {
       id: String(item.id),
       role: item.role,
@@ -81,6 +103,7 @@ function toStoredTurns(
         ? item.attachments.map((attachment) => ({ mediaType: attachment.mediaType, data: attachment.data }))
         : undefined,
       citations: item.role === 'ASSISTANT' && item.citations?.length ? item.citations : undefined,
+      process: storedSteps.length ? storedSteps : undefined,
     }
   })
   // 即時輪的 extra 只覆蓋最後一條 ASSISTANT；沒有 extra citations 時保留該條已存的引用。
