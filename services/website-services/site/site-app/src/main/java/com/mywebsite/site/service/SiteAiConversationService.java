@@ -8,6 +8,7 @@ import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.site.dto.SiteAiConversationDto;
 import com.mywebsite.site.dto.SiteAiMessageDto;
+import com.mywebsite.site.dto.SiteAiSearchHitDto;
 import com.mywebsite.site.dto.SiteAiShareDto;
 import com.mywebsite.site.dto.SiteAiSharedConversationDto;
 import com.mywebsite.site.entity.SiteAiConversationEntity;
@@ -90,6 +91,12 @@ public interface SiteAiConversationService {
 
     /** 公开读：凭 token 读分享快照。token 空白、不存在或快照损坏一律 NOT_FOUND，不泄露原因。 */
     SiteAiSharedConversationDto getSharedConversation(String token);
+
+    /**
+     * 跨会话全文搜索（站点＋本人作用域）：消息正文 ILIKE 匹配（通配符已转义），
+     * 按消息 id 倒序最多 30 条，每条带围绕命中词的摘要。空白查询返回空列表。
+     */
+    List<SiteAiSearchHitDto> searchConversations(long siteId, long siteUserId, String query);
 
     record ChatPreparation(
             SiteAiConversationEntity conversation,

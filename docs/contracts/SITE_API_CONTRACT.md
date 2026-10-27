@@ -30,6 +30,7 @@ Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之
 | GET | `/api/site/{siteId}/ai/conversations/{conversationId}/share` | 当前分享的 `token`；未分享时 `data` 为 null |
 | DELETE | `/api/site/{siteId}/ai/conversations/{conversationId}/share` | 撤销分享（物理删行，token 立即失效）；成功时 `data` 为 null |
 | GET | `/api/site/public/ai/shares/{token}` | **公开**（permitAll，仅 GET）：凭 token 读分享快照（`title`/`sharedAt`/`messages[]{role,content,createdAt,imageCount,documentNames}`）；token 不存在为 NOT_FOUND。会话硬删时分享行级联删除、链接失效 |
+| GET | `/api/site/{siteId}/ai/search?q=` | 跨会话全文搜索（本站点＋本人作用域）：消息正文 ILIKE 匹配（`%`/`_` 已转义），按消息 id 倒序最多 30 条；每条含 `conversationId`/`conversationTitle`/`messageId`/`role`/`snippet`（命中词 ±30 字）/`createdAt`；空白查询返回空数组 |
 
 ### Site AI 记忆
 

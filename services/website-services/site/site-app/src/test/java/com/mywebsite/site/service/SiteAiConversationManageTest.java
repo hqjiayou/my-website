@@ -266,6 +266,50 @@ class SiteAiConversationManageTest {
                 .isEqualTo(ErrorCode.NOT_FOUND.getCode());
     }
 
+    @Test
+    void searchReturnsHitsWithSnippetAndConversationTitle() {
+        SiteAiConversationEntity idOnly = new SiteAiConversationEntity();
+        idOnly.setId(1L);
+        when(conversationMapper.selectList(any())).thenReturn(List.of(idOnly));
+        SiteAiMessageEntity hit = new SiteAiMessageEntity();
+        hit.setId(88L);
+        hit.setConversationId(1L);
+        hit.setRole(SiteAiMessageEntity.ROLE_ASSISTANT);
+        hit.setContent("前".repeat(50) + "關鍵內容" + "後".repeat(50));
+        when(messageMapper.selectList(any())).thenReturn(List.of(hit));
+        when(conversationMapper.selectBatchIds(any())).thenReturn(List.of(owned(1L, 10L, 200L, "標題甲")));
+
+        var results = service.searchConversations(10L, 200L, "關鍵");
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).conversationTitle()).isEqualTo("標題甲");
+        assertThat(results.get(0).messageId()).isEqualTo(88L);
+        assertThat(results.get(0).snippet()).contains("關鍵內容").startsWith("…").endsWith("…");
+    }
+
+    @Test
+    void searchEscapesLikeWildcardsInPattern() {
+        SiteAiConversationEntity idOnly = new SiteAiConversationEntity();
+        idOnly.setId(1L);
+        when(conversationMapper.selectList(any())).thenReturn(List.of(idOnly));
+        when(messageMapper.selectList(any())).thenReturn(List.of());
+
+        service.searchConversations(10L, 200L, "50%_");
+
+        org.mockito.ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<?>> captor =
+                org.mockito.ArgumentCaptor.forClass(
+                        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+        verify(messageMapper).selectList(captor.capture());
+        assertThat(captor.getValue().getParamNameValuePairs().values()).contains("%50\\%\\_%");
+    }
+
+    @Test
+    void searchBlankQueryReturnsEmptyWithoutTouchingMappers() {
+        assertThat(service.searchConversations(10L, 200L, "   ")).isEmpty();
+        verifyNoInteractions(conversationMapper);
+        verifyNoInteractions(messageMapper);
+    }
+
     private static SiteAiConversationEntity owned(long id, long siteId, long siteUserId, String title) {
         SiteAiConversationEntity entity = new SiteAiConversationEntity();
         entity.setId(id);

@@ -55,6 +55,16 @@ export interface SiteAiShare {
   token: string
 }
 
+/** 跨對話全文搜尋的一條命中。 */
+export interface SiteAiSearchHit {
+  conversationId: number
+  conversationTitle: string
+  messageId: number
+  role: string
+  snippet: string
+  createdAt: string | null
+}
+
 export interface SharedConversationMessage {
   role: 'USER' | 'ASSISTANT' | string
   content: string | null

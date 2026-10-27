@@ -11,6 +11,7 @@ import com.mywebsite.site.dto.SiteAiChatResponseDto;
 import com.mywebsite.site.dto.SiteAiConversationDto;
 import com.mywebsite.site.dto.SiteAiConversationRenameRequestDto;
 import com.mywebsite.site.dto.SiteAiMessageDto;
+import com.mywebsite.site.dto.SiteAiSearchHitDto;
 import com.mywebsite.site.dto.SiteAiShareDto;
 import com.mywebsite.site.dto.SiteAiSharedConversationDto;
 import com.mywebsite.site.dto.SiteKnowledgeSearchRequestDto;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -137,6 +139,13 @@ public class SiteAiController {
             @PathVariable("siteId") long siteId, @PathVariable("conversationId") long conversationId) {
         conversationService.revokeShare(siteId, requireSiteUserId(siteId), conversationId);
         return ApiResponse.success();
+    }
+
+    @GetMapping("/{siteId}/ai/search")
+    public ApiResponse<List<SiteAiSearchHitDto>> searchConversations(
+            @PathVariable("siteId") long siteId, @RequestParam("q") String query) {
+        return ApiResponse.success(
+                conversationService.searchConversations(siteId, requireSiteUserId(siteId), query));
     }
 
     /** 公開分享讀：/api/site/public/** 在 SiteSecurityConfig 已 permitAll（僅 GET），只憑 token，不走站點登入。 */
