@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowUp, Check, Copy, FileText, ImagePlus, Pencil, Plus, RotateCcw, Square } from 'lucide-react'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
 import { MarkdownText } from '@/components/markdown'
@@ -178,6 +179,9 @@ export function ChatPage() {
   const [failure, setFailure] = useState<SendFailure | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [copyErrorId, setCopyErrorId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const draftRef = useRef<HTMLTextAreaElement | null>(null)
@@ -286,6 +290,15 @@ export function ChatPage() {
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [messages, sending, failure])
 
+  useEffect(() => {
+    if (!attachMenuOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAttachMenuOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [attachMenuOpen])
+
   useLayoutEffect(() => {
     const node = draftRef.current
     if (!node) return
@@ -307,6 +320,53 @@ export function ChatPage() {
     }
   }
 
+  function startEdit(turn: ChatTurn) {
+    if (sendingRef.current) return
+    setFailure(null)
+    setEditingId(turn.id)
+    setEditDraft(turn.content)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditDraft('')
+  }
+
+  /** 編輯重發：截斷該條及其後的所有訊息，以新文字重新送出（圖片沿用原附件；
+   *  文件只有檔名存檔、原文不回傳，無法重傳，編輯框下有提示）。 */
+  function submitEdit(turn: ChatTurn) {
+    const text = editDraft.trim()
+    if (!text || sendingRef.current) return
+    const images = turn.images ?? []
+    setEditingId(null)
+    setEditDraft('')
+    setMessages((current) => {
+      const index = current.findIndex((item) => item.id === turn.id)
+      return index >= 0 ? current.slice(0, index) : current
+    })
+    void send(text, images, [])
+  }
+
+  /** 重新生成：以該回覆前最近的一條用戶訊息重發，視覺上替換這一問一答（同失敗重試機制）。 */
+  function regenerate(assistantTurn: ChatTurn) {
+    if (sendingRef.current) return
+    const index = messages.findIndex((item) => item.id === assistantTurn.id)
+    if (index < 0) return
+    let userTurn: ChatTurn | undefined
+    for (let i = index - 1; i >= 0; i -= 1) {
+      if (messages[i].role === 'USER') {
+        userTurn = messages[i]
+        break
+      }
+    }
+    if (!userTurn) return
+    setFailure(null)
+    void send(userTurn.content, userTurn.images ?? [], [], {
+      userId: userTurn.id,
+      assistantId: assistantTurn.id,
+    })
+  }
+
   function stopGenerating() {
     abortRef.current?.abort()
   }
@@ -321,6 +381,7 @@ export function ChatPage() {
 
   function startNewChat() {
     leaveStreaming()
+    setEditingId(null)
     loadToken.current += 1
     conversationRef.current = null
     setActiveId(null)
@@ -339,6 +400,7 @@ export function ChatPage() {
     closeDrawer()
     if (conversationId === routeId) return
     leaveStreaming()
+    setEditingId(null)
     setFailure(null)
     setPending([])
     setAttachError(null)
@@ -698,6 +760,12 @@ export function ChatPage() {
   }
 
   const showEmpty = visibleMessages.length === 0 && !visibleHistoryError && !(historyLoading && !freshChat)
+  const lastAssistantId = (() => {
+    for (let i = visibleMessages.length - 1; i >= 0; i -= 1) {
+      if (visibleMessages[i].role === 'ASSISTANT') return visibleMessages[i].id
+    }
+    return null
+  })()
 
   return (
     <section
@@ -714,7 +782,7 @@ export function ChatPage() {
           {historyLoading && !freshChat ? <p className="text-sm text-gpt-muted">正在載入訊息…</p> : null}
           {showEmpty ? (
             <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-              <h1 className="text-2xl font-semibold tracking-tight">
+              <h1 className="text-[26px] font-semibold leading-snug tracking-tight md:text-[32px]">
                 {displayName ? `${displayName}，有什麼可以幫忙的？` : '有什麼可以幫忙的？'}
               </h1>
               <p className="mt-3 max-w-md text-sm leading-6 text-gpt-muted">
@@ -768,8 +836,52 @@ export function ChatPage() {
                 hasProcess
               if (!visible) return null
               const isUser = message.role === 'USER'
+              if (isUser && editingId === message.id) {
+                return (
+                  <li key={message.id} className="flex flex-col items-end">
+                    <div className="w-full rounded-3xl border border-gpt-line bg-gpt-canvas px-3 py-2.5 shadow-composer">
+                      <textarea
+                        autoFocus
+                        value={editDraft}
+                        onChange={(event) => setEditDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') cancelEdit()
+                        }}
+                        rows={Math.min(6, Math.max(1, editDraft.split('\n').length))}
+                        className="max-h-40 w-full resize-none bg-transparent px-1 py-1 text-[15px] leading-7 outline-none"
+                        aria-label="編輯訊息"
+                      />
+                      {(message.documents?.length ?? 0) > 0 ? (
+                        <p className="px-1 pb-1 text-xs text-gpt-muted">
+                          原附加文件只有檔名留存，重新傳送時不會帶上。
+                        </p>
+                      ) : null}
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          className="h-9 rounded-full px-3.5 text-sm hover:bg-gpt-hover"
+                        >
+                          取消
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!editDraft.trim() || sending}
+                          onClick={() => submitEdit(message)}
+                          className="h-9 rounded-full bg-gpt-ink px-3.5 text-sm text-gpt-canvas disabled:opacity-40"
+                        >
+                          重新傳送
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                )
+              }
               return (
-                <li key={message.id} className={isUser ? 'flex justify-end' : 'flex justify-start'}>
+                <li
+                  key={message.id}
+                  className={isUser ? 'group flex flex-col items-end' : 'group flex flex-col items-start'}
+                >
                   <div className={isUser ? 'max-w-[85%] rounded-3xl bg-gpt-user px-4 py-2.5' : 'max-w-full'}>
                     {hasProcess ? (
                       <ProcessTimeline steps={message.process ?? []} live={!!message.pending} />
@@ -793,7 +905,7 @@ export function ChatPage() {
                             key={`${message.id}-doc-${index}`}
                             className="flex max-w-full items-center gap-1.5 rounded-full bg-gpt-sidebar px-2.5 py-1 text-xs text-gpt-muted"
                           >
-                            <DocIcon />
+                            <FileText size={14} className="shrink-0" />
                             <span className="truncate">{doc.fileName}</span>
                           </li>
                         ))}
@@ -826,15 +938,6 @@ export function ChatPage() {
                         ))}
                       </ul>
                     ) : null}
-                    {!isUser && !message.pending && message.content ? (
-                      <button
-                        type="button"
-                        onClick={() => void copyReply(message.id, message.content)}
-                        className="mt-2 h-8 rounded-lg px-2 text-xs text-gpt-muted hover:bg-gpt-hover"
-                      >
-                        {copiedId === message.id ? '已複製' : copyErrorId === message.id ? '無法複製' : '複製'}
-                      </button>
-                    ) : null}
                     {message.providerStatus !== undefined && message.providerStatus !== 'LIVE' ? (
                       <p className="mt-2 text-xs text-danger">
                         {message.providerStatus
@@ -844,6 +947,43 @@ export function ChatPage() {
                       </p>
                     ) : null}
                   </div>
+                  {message.content && (isUser || !message.pending) ? (
+                    <div className="mt-1 flex items-center gap-0.5 opacity-70 transition-opacity focus-within:opacity-100 md:opacity-0 md:group-hover:opacity-100">
+                      <button
+                        type="button"
+                        onClick={() => void copyReply(message.id, message.content)}
+                        aria-label="複製訊息"
+                        title={copyErrorId === message.id ? '無法複製，請再試一次' : '複製'}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink"
+                      >
+                        {copiedId === message.id ? <Check size={16} /> : <Copy size={16} />}
+                      </button>
+                      {isUser ? (
+                        <button
+                          type="button"
+                          onClick={() => startEdit(message)}
+                          disabled={sending}
+                          aria-label="編輯訊息"
+                          title="編輯"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink disabled:opacity-40"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                      ) : null}
+                      {!isUser && message.id === lastAssistantId ? (
+                        <button
+                          type="button"
+                          onClick={() => regenerate(message)}
+                          disabled={sending}
+                          aria-label="重新生成回覆"
+                          title="重新生成"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink disabled:opacity-40"
+                        >
+                          <RotateCcw size={16} />
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </li>
               )
             })}
@@ -901,7 +1041,7 @@ export function ChatPage() {
                   key={doc.id}
                   className="relative flex max-w-full items-center gap-1.5 rounded-full border border-gpt-line px-3 py-1.5 pr-7 text-xs text-gpt-muted"
                 >
-                  <DocIcon />
+                  <FileText size={14} className="shrink-0" />
                   <span className="truncate">{doc.fileName}</span>
                   <span className="shrink-0">{formatFileSize(doc.sizeBytes)}</span>
                   <button
@@ -920,7 +1060,7 @@ export function ChatPage() {
               ))}
             </ul>
           ) : null}
-        <div className="flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer">
+        <div className="relative flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer">
           <input
             ref={fileRef}
             type="file"
@@ -930,15 +1070,6 @@ export function ChatPage() {
             disabled={sending || compressing}
             onChange={(event) => void onPickFiles(event)}
           />
-          <button
-            type="button"
-            aria-label="附加圖片"
-            disabled={sending || compressing}
-            onClick={() => fileRef.current?.click()}
-            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gpt-muted hover:bg-gpt-hover disabled:opacity-30"
-          >
-            <PaperclipIcon />
-          </button>
           <input
             ref={docFileRef}
             type="file"
@@ -948,15 +1079,57 @@ export function ChatPage() {
             disabled={sending}
             onChange={(event) => void onPickDocuments(event)}
           />
-          <button
-            type="button"
-            aria-label="附加文件"
-            disabled={sending}
-            onClick={() => docFileRef.current?.click()}
-            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gpt-muted hover:bg-gpt-hover disabled:opacity-30"
-          >
-            <DocIcon />
-          </button>
+          {attachMenuOpen ? (
+            <button
+              type="button"
+              aria-hidden="true"
+              tabIndex={-1}
+              className="fixed inset-0 z-10 cursor-default"
+              onClick={() => setAttachMenuOpen(false)}
+            />
+          ) : null}
+          <div className="relative z-20 mb-0.5 shrink-0">
+            <button
+              type="button"
+              aria-label="附加內容"
+              aria-expanded={attachMenuOpen}
+              disabled={sending || compressing}
+              onClick={() => setAttachMenuOpen((open) => !open)}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink disabled:opacity-30"
+            >
+              <Plus size={21} strokeWidth={1.9} />
+            </button>
+            {attachMenuOpen ? (
+              <div className="absolute bottom-full left-0 z-20 mb-2 w-60 rounded-2xl border border-gpt-line bg-gpt-canvas p-1.5 shadow-xl">
+                <button
+                  type="button"
+                  disabled={sending || compressing}
+                  onClick={() => {
+                    setAttachMenuOpen(false)
+                    fileRef.current?.click()
+                  }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-gpt-hover disabled:opacity-40"
+                >
+                  <ImagePlus size={18} className="shrink-0 text-gpt-muted" />
+                  附加圖片
+                  <span className="ml-auto text-xs text-gpt-muted">最多 3 張</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={sending}
+                  onClick={() => {
+                    setAttachMenuOpen(false)
+                    docFileRef.current?.click()
+                  }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-gpt-hover disabled:opacity-40"
+                >
+                  <FileText size={18} className="shrink-0 text-gpt-muted" />
+                  附加文件
+                  <span className="ml-auto text-xs text-gpt-muted">PDF、Word 等</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
           <label className="sr-only" htmlFor="chat-draft">
             訊息
           </label>
@@ -986,7 +1159,7 @@ export function ChatPage() {
             aria-label={sending ? '停止生成' : '傳送'}
             className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas disabled:opacity-30"
           >
-            {sending ? <StopIcon /> : <SendIcon />}
+            {sending ? <Square size={12} fill="currentColor" /> : <ArrowUp size={18} strokeWidth={2.4} />}
           </button>
         </div>
         </div>
@@ -1059,44 +1232,3 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function DocIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" className="shrink-0">
-      <path
-        d="M4 1.5h5.5L12 4v10.5H4z M9.5 1.5V4H12"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-      />
-      <path d="M5.8 8h4.4M5.8 10.8h4.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function PaperclipIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        d="M6.2 8.8 10.4 4.6a2.1 2.1 0 0 1 3 3L8.2 12.8a3.2 3.2 0 0 1-4.5-4.5l5-5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function SendIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 13V3M8 3L4 7M8 3l4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function StopIcon() {
-  return <span className="block h-2.5 w-2.5 rounded-[2px] bg-current" />
-}

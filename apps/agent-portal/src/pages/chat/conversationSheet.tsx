@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Pencil, RefreshCw, SquarePen, Trash, X } from 'lucide-react'
 
 import type { SiteAiConversation } from '@/types/api'
 import { errorMessage } from '@/utils/http/apiError'
@@ -110,22 +111,34 @@ export function ConversationSheet({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-gpt-sidebar text-gpt-ink">
-      <header className="safe-top flex items-center justify-between px-3 pt-3">
-        <p className="px-2 text-sm font-semibold tracking-tight">Agent Portal</p>
-        <button type="button" onClick={onClose} className="h-9 rounded-lg px-2 text-sm text-gpt-muted hover:bg-gpt-hover md:hidden">
-          關閉
+      <header className="flex items-center justify-between px-3 pt-1">
+        <p className="px-2 text-xs font-medium tracking-wide text-gpt-muted">對話紀錄</p>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="關閉選單"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover md:hidden"
+        >
+          <X size={18} />
         </button>
       </header>
-      <div className="flex gap-2 px-3 py-3">
+      <div className="flex gap-2 px-3 py-2.5">
         <button
           type="button"
           onClick={onCreate}
-          className="h-10 flex-1 rounded-lg border border-gpt-line px-3 text-left text-sm hover:bg-gpt-hover"
+          className="flex h-10 flex-1 items-center gap-2.5 rounded-lg px-3 text-left text-sm hover:bg-gpt-hover"
         >
+          <SquarePen size={17} className="shrink-0 text-gpt-muted" />
           新對話
         </button>
-        <button type="button" onClick={onRefresh} className="h-10 rounded-lg px-3 text-sm text-gpt-muted hover:bg-gpt-hover">
-          重新整理
+        <button
+          type="button"
+          onClick={onRefresh}
+          aria-label="重新整理"
+          title="重新整理"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink"
+        >
+          <RefreshCw size={16} />
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
@@ -240,21 +253,24 @@ export function ConversationSheet({
                       type="button"
                       disabled={pending}
                       onClick={() => beginRename(item)}
-                      className="h-8 px-1.5 text-xs text-gpt-muted opacity-100 hover:text-gpt-ink disabled:opacity-60 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                      aria-label="重命名對話"
+                      title="重命名"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-gpt-muted opacity-100 hover:bg-gpt-hover hover:text-gpt-ink disabled:opacity-60 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
                     >
-                      重命名
+                      <Pencil size={14} />
                     </button>
                     <button
                       type="button"
                       disabled={pending || deleteLocked}
-                      title={deleteLocked ? '正在產生回覆，請稍後再刪除' : undefined}
+                      aria-label="刪除對話"
+                      title={deleteLocked ? '正在產生回覆，請稍後再刪除' : '刪除'}
                       onClick={() => {
                         setDeleteError(null)
                         setConfirmId(id)
                       }}
-                      className="h-8 px-1.5 text-xs text-danger opacity-100 disabled:opacity-60 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-gpt-muted opacity-100 hover:bg-gpt-hover hover:text-danger disabled:opacity-60 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
                     >
-                      刪除
+                      <Trash size={14} />
                     </button>
                   </div>
                 )}
