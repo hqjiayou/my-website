@@ -14,6 +14,8 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.Test;
 
+import com.mywebsite.infra.knowledge.KnowledgeTextExtractor.ExtractionException;
+
 
 /** PDF 文字层抽取（其余格式归一化见 {@link KnowledgeContentConverterTest}）。 */
 class KnowledgeTextExtractorTest {
