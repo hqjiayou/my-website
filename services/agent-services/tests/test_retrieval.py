@@ -954,9 +954,57 @@ async def test_retrieval_min_score_zero_keeps_low_vector_hits() -> None:
                 RetrievedChunk("kb:lo", 0, "unrelated", 0.2),
             ]
 
-    service = RetrievalService(FakeEmbedder(), TwoScoreStore(), min_score=0)
+    service = RetrievalService(FakeEmbedder(), TwoScoreStore(), min_score=0, score_ratio_floor=0)
     hits = await service.search(site_id="1", query="hi", top_k=4)
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:hi", 0.9), ("kb:lo", 0.2)]
+
+
+def test_apply_score_ratio_floor_pure() -> None:
+    from agent_services.retrieval.service import apply_score_ratio_floor
+
+    chunks = [
+        RetrievedChunk("kb:a", 0, "best", 0.6),
+        RetrievedChunk("kb:b", 0, "tail", 0.1),
+        RetrievedChunk("kb:c", 0, "close", 0.43),
+    ]
+    # 0.7 批量门槛 = 0.42：0.1 的尾巴丢弃，0.43 的近分保留
+    assert [c.source_id for c in apply_score_ratio_floor(chunks, 0.7)] == ["kb:a", "kb:c"]
+    # 关闭时原样返回；单条与空列表不裁剪；最高分 <= 0 不裁剪
+    assert apply_score_ratio_floor(chunks, 0) == chunks
+    assert apply_score_ratio_floor(chunks[:1], 0.7) == chunks[:1]
+    assert apply_score_ratio_floor([], 0.7) == []
+    zeros = [RetrievedChunk("kb:z", 0, "z", 0.0), RetrievedChunk("kb:y", 0, "y", 0.0)]
+    assert apply_score_ratio_floor(zeros, 0.7) == zeros
+
+
+async def test_retrieval_search_prunes_relative_tail() -> None:
+    """min_score 关闭时相对裁剪仍生效：0.60 的命中在，0.10 的同批尾巴被丢弃。"""
+
+    class TwoScoreStore(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            return [
+                RetrievedChunk("kb:hi", 0, "relevant", 0.6),
+                RetrievedChunk("kb:lo", 0, "unrelated", 0.1),
+            ]
+
+    service = RetrievalService(FakeEmbedder(), TwoScoreStore(), min_score=0)
+    hits = await service.search(site_id="1", query="hi", top_k=4)
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:hi", 0.6)]
+
+
+async def test_retrieval_search_keeps_close_scores_for_multi_doc() -> None:
+    """多文档问题的两条命中分数接近（0.433/0.430）时相对裁剪不误伤。"""
+
+    class TwoScoreStore(FakeStore):
+        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+            return [
+                RetrievedChunk("kb:a", 0, "spec", 0.433),
+                RetrievedChunk("kb:b", 0, "warranty", 0.430),
+            ]
+
+    service = RetrievalService(FakeEmbedder(), TwoScoreStore(), min_score=0)
+    hits = await service.search(site_id="1", query="hi", top_k=4)
+    assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.433), ("kb:b", 0.430)]
 
 
 def test_code_tokens_keep_model_numbers_whole() -> None:
@@ -1037,6 +1085,13 @@ async def test_same_chunk_score_is_max_of_cosine_and_code_coverage() -> None:
     assert [(hit.source_id, hit.score) for hit in cosine_hits] == [("kb:code", 0.92)]
 
 
+def test_retrieval_score_ratio_floor_rejects_out_of_range() -> None:
+    for value in (1.5, -0.01):
+        with pytest.raises(RuntimeError, match="RETRIEVAL_SCORE_RATIO_FLOOR"):
+            create_app(make_settings(retrieval_score_ratio_floor=value))
+    create_app(make_settings(retrieval_score_ratio_floor=0))
+
+
 def test_retrieval_min_score_rejects_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
     from pydantic import ValidationError
 
@@ -1062,7 +1117,7 @@ _CITATION_HITS = [
     RetrievedChunk("f", 0, "f", 0.15),
 ]
 
-# 默认门槛 0.35：0.4 留下，0.3 及以下不进 citations。
+# 默认门槛 0.35：0.4 留下，0.3 及以下不进 citations。此组用例关掉相对裁剪，只验绝对门槛与上限。
 _EXPECTED_CITATIONS = [
     {"sourceId": "s", "chunkIndex": 0, "score": 0.95},
     {"sourceId": "b", "chunkIndex": 1, "score": 0.5},
@@ -1095,7 +1150,9 @@ def _done_event_data(body: str) -> dict[str, object]:
 
 
 def test_chat_citations_follow_adopted_chunks_and_cap() -> None:
-    client = _live_retrieval_client(RetrievalService(FakeEmbedder(), _ManyHitStore()))
+    client = _live_retrieval_client(
+        RetrievalService(FakeEmbedder(), _ManyHitStore(), score_ratio_floor=0)
+    )
     response = client.post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
@@ -1137,7 +1194,9 @@ def test_chat_omits_citations_without_grounding() -> None:
 
 
 def test_stream_citations_follow_adopted_chunks_and_cap() -> None:
-    client = _live_retrieval_client(RetrievalService(FakeEmbedder(), _ManyHitStore()))
+    client = _live_retrieval_client(
+        RetrievalService(FakeEmbedder(), _ManyHitStore(), score_ratio_floor=0)
+    )
     with client.stream(
         "POST",
         "/internal/v1/chat/stream",
@@ -1348,6 +1407,7 @@ async def test_rerank_skips_model_when_candidates_fit_in_top_k() -> None:
         FakeEmbedder(),
         _RerankStore(),
         rerank_model=_order_model("[4, 3, 2, 1]", calls),
+        score_ratio_floor=0,
     )
     hits = await service.search(site_id="1", query="q", top_k=4)
     assert calls == []

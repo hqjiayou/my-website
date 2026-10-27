@@ -6,6 +6,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 余弦相似度门槛的默认值。0 关闭；低于此分的向量命中不返回，也不另取一批凑满 topK。
 RETRIEVAL_MIN_SCORE_DEFAULT = 0.35
+# 融合后相对分数裁剪的默认比例：融合最高分的此比例以下直接丢弃，不进 topK、不成引用。
+# 绝对门槛管「够不够相关」，相对裁剪管「比最佳命中差太远的尾巴」。0 关闭。0.7 由 M11
+# eval 黄金集标定：多引案例的弱命中比例为 0.13/0.17/0.61，合法多文档命中比例为 0.99。
+RETRIEVAL_SCORE_RATIO_FLOOR_DEFAULT = 0.7
 # 每次向量查询在事务内设置的 hnsw.ef_search。维度超过 2000 时不建 HNSW，此值仍会写入。
 RETRIEVAL_HNSW_EF_SEARCH_DEFAULT = 40
 # 融合候选多于 topK 且能解析聊天模型时，截断前做 listwise 重排。失败则维持融合原序。
@@ -59,6 +63,10 @@ class Settings(BaseSettings):
     ai_embedding_dimensions: int = Field(default=1536, validation_alias="AI_EMBEDDING_DIMENSIONS")
     retrieval_min_score: float = Field(
         default=RETRIEVAL_MIN_SCORE_DEFAULT, validation_alias="RETRIEVAL_MIN_SCORE"
+    )
+    retrieval_score_ratio_floor: float = Field(
+        default=RETRIEVAL_SCORE_RATIO_FLOOR_DEFAULT,
+        validation_alias="RETRIEVAL_SCORE_RATIO_FLOOR",
     )
     retrieval_hnsw_ef_search: int = Field(
         default=RETRIEVAL_HNSW_EF_SEARCH_DEFAULT, validation_alias="RETRIEVAL_HNSW_EF_SEARCH"
@@ -151,6 +159,18 @@ def assert_retrieval_min_score(value: float) -> None:
         raise RuntimeError("RETRIEVAL_MIN_SCORE must be a number from 0 to 1. 0 disables the threshold.")
     if not math.isfinite(value) or value < 0 or value > 1:
         raise RuntimeError("RETRIEVAL_MIN_SCORE must be a number from 0 to 1. 0 disables the threshold.")
+
+
+def assert_retrieval_score_ratio_floor(value: float) -> None:
+    """启动期校验：相对裁剪比例必须落在 0 到 1。0 表示关闭。非法值 fail-fast。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise RuntimeError(
+            "RETRIEVAL_SCORE_RATIO_FLOOR must be a number from 0 to 1. 0 disables pruning."
+        )
+    if not math.isfinite(value) or value < 0 or value > 1:
+        raise RuntimeError(
+            "RETRIEVAL_SCORE_RATIO_FLOOR must be a number from 0 to 1. 0 disables pruning."
+        )
 
 
 def assert_skills_max_instruction_chars(value: int) -> None:
