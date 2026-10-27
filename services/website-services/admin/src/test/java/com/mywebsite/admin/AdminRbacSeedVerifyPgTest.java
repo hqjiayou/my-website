@@ -89,7 +89,7 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-model:read",
             "admin:ai-model:update");
 
-    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 30;
+    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 31;
     private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 55;
 
     @Autowired
@@ -183,6 +183,19 @@ class AdminRbacSeedVerifyPgTest {
                 """,
                 Long.class);
         assertThat(superAdminBindings).isZero();
+    }
+
+    @Test
+    void knowledgeBaseTableCarriesDeletedAtColumn() {
+        // V29 漏建 deleted_at 时 H2 schema（按实体抄写）测不出来，只有真 PG 能抓：
+        // 实体 AdminAiKnowledgeBaseEntity 继承 AbstractAuditableEntity，该列必须存在。
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_name = 'site_ai_knowledge_base' AND column_name = 'deleted_at'
+                """,
+                Integer.class);
+        assertThat(count).isEqualTo(1);
     }
 
     @Test
