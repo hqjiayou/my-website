@@ -515,8 +515,10 @@ export default {
         title: 'This run',
         skillsApplied: 'Skills applied',
         skillsMissing: 'Skills not found: {{ids}}',
+        thinking: 'Thinking',
         tools: 'Tool calls',
         noTools: 'No tools called in this run',
+        searchDetail: 'Searched "{{query}}" · {{count}} hits',
         toolState: {
           running: 'Running',
           ok: 'OK',
