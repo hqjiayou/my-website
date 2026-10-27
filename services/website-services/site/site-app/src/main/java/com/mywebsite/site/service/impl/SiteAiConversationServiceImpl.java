@@ -29,9 +29,11 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -49,6 +51,7 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
 
     /** 文字为空且图片已超出重播上限时的占位，避免送出空 content。 */
     private static final String DROPPED_IMAGE_PLACEHOLDER = "[图片]";
+    private static final String DROPPED_DOCUMENT_PLACEHOLDER = "[文件]";
 
     /** 与 {@link SiteAiConversationRenameRequestDto#TITLE_MAX_LENGTH} 同一上限：生成标题截断，重命名由 DTO 拒绝更长值。 */
     private static final int TITLE_MAX_LENGTH = SiteAiConversationRenameRequestDto.TITLE_MAX_LENGTH;
@@ -207,15 +210,19 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         List<SiteAiMessageEntity> chronological = latest.stream()
                 .sorted(Comparator.comparing(SiteAiMessageEntity::getId))
                 .toList();
-        Map<Long, List<AgentAttachmentDto>> replay = replayAttachments(chronological);
+        HistoryReplay replay = replayAttachments(chronological);
         return chronological.stream().map(message -> toHistoryMessage(message, replay)).toList();
     }
 
+    private record HistoryReplay(Map<Long, List<AgentAttachmentDto>> attachments, Set<Long> documentTurns) {}
+
     /**
      * 全历史最多保留最近 {@link #HISTORY_IMAGE_LIMIT} 张。同一条消息放不下时保留列表前缀，其余丢掉。
+     * 文档描述符不回放，只记下轮次 id，供无文字的文档轮在历史里用文件占位符保轮。
      */
-    private Map<Long, List<AgentAttachmentDto>> replayAttachments(List<SiteAiMessageEntity> chronological) {
+    private HistoryReplay replayAttachments(List<SiteAiMessageEntity> chronological) {
         Map<Long, List<AgentAttachmentDto>> replay = new HashMap<>();
+        Set<Long> documentTurns = new HashSet<>();
         int remaining = HISTORY_IMAGE_LIMIT;
         for (int i = chronological.size() - 1; i >= 0; i--) {
             SiteAiMessageEntity message = chronological.get(i);
@@ -225,6 +232,9 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             StoredAttachments stored = readStoredAttachments(message);
             if (!stored.present()) {
                 continue;
+            }
+            if (stored.hasDocuments()) {
+                documentTurns.add(message.getId());
             }
             if (stored.items().isEmpty() || remaining <= 0) {
                 replay.put(message.getId(), List.of());
@@ -238,19 +248,21 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                 remaining = 0;
             }
         }
-        return replay;
+        return new HistoryReplay(replay, documentTurns);
     }
 
-    private AgentChatHistoryMessage toHistoryMessage(
-            SiteAiMessageEntity message, Map<Long, List<AgentAttachmentDto>> replay) {
+    private AgentChatHistoryMessage toHistoryMessage(SiteAiMessageEntity message, HistoryReplay replay) {
         String content = message.getContent() == null ? "" : message.getContent();
-        if (!SiteAiMessageEntity.ROLE_USER.equals(message.getRole()) || !replay.containsKey(message.getId())) {
+        if (!SiteAiMessageEntity.ROLE_USER.equals(message.getRole())
+                || !replay.attachments().containsKey(message.getId())) {
             return new AgentChatHistoryMessage(message.getRole(), content);
         }
-        List<AgentAttachmentDto> kept = replay.get(message.getId());
+        List<AgentAttachmentDto> kept = replay.attachments().get(message.getId());
         if (kept.isEmpty()) {
             if (!StringUtils.hasText(content)) {
-                content = DROPPED_IMAGE_PLACEHOLDER;
+                content = replay.documentTurns().contains(message.getId())
+                        ? DROPPED_DOCUMENT_PLACEHOLDER
+                        : DROPPED_IMAGE_PLACEHOLDER;
             }
             return new AgentChatHistoryMessage(message.getRole(), content);
         }
@@ -265,17 +277,25 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         try {
             AgentAttachmentDto[] parsed = objectMapper.readValue(raw, AgentAttachmentDto[].class);
             List<AgentAttachmentDto> items = new ArrayList<>();
+            boolean hasDocuments = false;
             if (parsed != null) {
                 for (AgentAttachmentDto item : parsed) {
-                    if (item != null && StringUtils.hasText(item.mediaType()) && StringUtils.hasText(item.data())) {
+                    if (item == null) {
+                        continue;
+                    }
+                    if (AgentAttachmentDto.KIND_DOCUMENT.equals(item.kind())) {
+                        hasDocuments = true;
+                        continue;
+                    }
+                    if (StringUtils.hasText(item.mediaType()) && StringUtils.hasText(item.data())) {
                         items.add(item);
                     }
                 }
             }
-            return new StoredAttachments(true, List.copyOf(items));
+            return new StoredAttachments(true, List.copyOf(items), hasDocuments);
         } catch (JsonProcessingException ex) {
             log.warn("site ai message {} has malformed attachments, ignored", message.getId(), ex);
-            return new StoredAttachments(true, List.of());
+            return new StoredAttachments(true, List.of(), false);
         }
     }
 
@@ -479,9 +499,10 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         messageMapper.insert(message);
     }
 
-    private record StoredAttachments(boolean present, List<AgentAttachmentDto> items) {
+    /** items 只含可回放的图片；hasDocuments 标记该轮带过文档描述符（文档本身不回放）。 */
+    private record StoredAttachments(boolean present, List<AgentAttachmentDto> items, boolean hasDocuments) {
         private static StoredAttachments none() {
-            return new StoredAttachments(false, List.of());
+            return new StoredAttachments(false, List.of(), false);
         }
     }
 
