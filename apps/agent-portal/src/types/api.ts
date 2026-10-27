@@ -53,6 +53,16 @@ export interface SiteAiConversation {
 
 export interface SiteAiAttachment {
   mediaType: string
+  /** 文件項（kind=DOCUMENT）只有描述、無原文，data 為 null。 */
+  data: string | null
+  fileName?: string | null
+  kind?: string | null
+}
+
+/** 本輪上傳文件（原文 base64）。站點層抽取文本後才給模型，原文不落庫。 */
+export interface SiteAiDocument {
+  fileName: string
+  mediaType: string
   data: string
 }
 
@@ -78,6 +88,7 @@ export interface SiteAiChatRequest {
   message: string
   conversationId?: string
   attachments?: SiteAiAttachment[]
+  documents?: SiteAiDocument[]
 }
 
 /** 本輪實際採用的知識庫引用。歷史訊息的 ASSISTANT 項也帶回這個欄位。 */

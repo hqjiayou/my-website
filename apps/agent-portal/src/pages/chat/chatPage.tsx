@@ -7,7 +7,7 @@ import { useSidebarExtra } from '@/components/sidebarExtra'
 import { resolvePortalSiteId } from '@/config/env'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
-import type { SiteAiCitation, SiteAiConversation, SiteAiMessage } from '@/types/api'
+import type { SiteAiCitation, SiteAiConversation, SiteAiDocument, SiteAiMessage } from '@/types/api'
 import { formatSimilarityPercent } from '@/utils/formatSimilarity'
 import { errorMessage } from '@/utils/http/apiError'
 
@@ -19,6 +19,9 @@ const MAX_MESSAGE_CHARS = 16_000
 const MAX_IMAGES = 3
 const MAX_IMAGE_EDGE = 1600
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
+const MAX_DOCUMENTS = 3
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+const DOCUMENT_EXTENSIONS = ['pdf', 'docx', 'xlsx', 'pptx', 'txt', 'md']
 
 interface ChatImage {
   mediaType: string
@@ -27,6 +30,16 @@ interface ChatImage {
 
 interface PendingImage extends ChatImage {
   id: string
+}
+
+interface PendingDocument extends SiteAiDocument {
+  id: string
+  sizeBytes: number
+}
+
+/** 訊息裡的文件引用（只有檔名，用於芯片顯示；原文不回傳）。 */
+interface ChatDocumentRef {
+  fileName: string
 }
 
 const SUGGESTIONS = ['這個站點提供哪些服務？', '幫我整理預約需要的資訊', '知識庫裡有什麼相關內容？']
@@ -42,6 +55,7 @@ interface ChatTurn {
   role: string
   content: string
   images?: ChatImage[]
+  documents?: ChatDocumentRef[]
   pending?: boolean
   providerStatus?: string
   citations?: SiteAiCitation[]
@@ -95,12 +109,19 @@ function toStoredTurns(
   const turns: ChatTurn[] = items.map((item, index) => {
     if (item.role === 'ASSISTANT') lastAssistant = index
     const storedSteps = item.role === 'ASSISTANT' ? storedProcessSteps(String(item.id), item.process) : []
+    const imageAttachments = item.attachments?.filter(
+      (attachment) => attachment.kind !== 'DOCUMENT' && attachment.data,
+    )
+    const documentAttachments = item.attachments?.filter((attachment) => attachment.kind === 'DOCUMENT')
     return {
       id: String(item.id),
       role: item.role,
       content: item.content,
-      images: item.attachments?.length
-        ? item.attachments.map((attachment) => ({ mediaType: attachment.mediaType, data: attachment.data }))
+      images: imageAttachments?.length
+        ? imageAttachments.map((attachment) => ({ mediaType: attachment.mediaType, data: attachment.data ?? '' }))
+        : undefined,
+      documents: documentAttachments?.length
+        ? documentAttachments.map((attachment) => ({ fileName: attachment.fileName ?? '文件' }))
         : undefined,
       citations: item.role === 'ASSISTANT' && item.citations?.length ? item.citations : undefined,
       process: storedSteps.length ? storedSteps : undefined,
@@ -127,6 +148,7 @@ interface SendFailure {
   message: string
   retryText: string
   retryImages: ChatImage[]
+  retryDocuments: SiteAiDocument[]
   userId: string
   assistantId: string
 }
@@ -149,6 +171,7 @@ export function ChatPage() {
   const [historyError, setHistoryError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [pending, setPending] = useState<PendingImage[]>([])
+  const [pendingDocs, setPendingDocs] = useState<PendingDocument[]>([])
   const [attachError, setAttachError] = useState<string | null>(null)
   const [compressing, setCompressing] = useState(false)
   const [sending, setSending] = useState(false)
@@ -159,6 +182,7 @@ export function ChatPage() {
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const draftRef = useRef<HTMLTextAreaElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
+  const docFileRef = useRef<HTMLInputElement | null>(null)
   const compressingRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const generation = useRef(0)
@@ -361,21 +385,71 @@ export function ChatPage() {
     if (error) setAttachError(error)
   }
 
-  async function send(text: string, images: ChatImage[] = [], replace?: { userId: string; assistantId: string }) {
+  async function onPickDocuments(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (files.length === 0 || sendingRef.current) return
+    if (pendingDocs.length >= MAX_DOCUMENTS) {
+      setAttachError('最多附加 3 份文件')
+      return
+    }
+    setAttachError(null)
+    const room = MAX_DOCUMENTS - pendingDocs.length
+    const added: PendingDocument[] = []
+    let error: string | null = null
+    for (const file of files) {
+      if (added.length >= room) {
+        error = '最多附加 3 份文件'
+        break
+      }
+      const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+      if (!DOCUMENT_EXTENSIONS.includes(extension)) {
+        if (!error) error = '只支援 PDF、Word、Excel、PPT、txt、md 文件'
+        continue
+      }
+      if (file.size > MAX_DOCUMENT_BYTES) {
+        if (!error) error = '文件超過 10MB，無法附加'
+        continue
+      }
+      try {
+        const data = await blobToBase64(file)
+        added.push({
+          id: crypto.randomUUID(),
+          fileName: file.name,
+          mediaType: file.type || 'application/octet-stream',
+          data,
+          sizeBytes: file.size,
+        })
+      } catch {
+        if (!error) error = '無法讀取這份文件'
+      }
+    }
+    if (added.length > 0) setPendingDocs((current) => [...current, ...added].slice(0, MAX_DOCUMENTS))
+    if (error) setAttachError(error)
+  }
+
+  async function send(
+    text: string,
+    images: ChatImage[] = [],
+    documents: SiteAiDocument[] = [],
+    replace?: { userId: string; assistantId: string },
+  ) {
     if (!site.ok || sendingRef.current || historyLoading || compressingRef.current) return
     const trimmed = text.trim()
-    if (!trimmed && images.length === 0) return
+    if (!trimmed && images.length === 0 && documents.length === 0) return
     if (trimmed.length > MAX_MESSAGE_CHARS) {
       setFailure({
         message: `訊息超過 ${MAX_MESSAGE_CHARS} 字`,
         retryText: trimmed,
         retryImages: images,
+        retryDocuments: documents,
         userId: replace?.userId ?? '',
         assistantId: replace?.assistantId ?? '',
       })
       return
     }
     if (images.length > 0) setPending([])
+    if (documents.length > 0) setPendingDocs([])
     setAttachError(null)
 
     const gen = generation.current
@@ -398,7 +472,13 @@ export function ChatPage() {
         : []
       return [
         ...base,
-        { id: userId, role: 'USER', content: trimmed, images: images.length ? images : undefined },
+        {
+          id: userId,
+          role: 'USER',
+          content: trimmed,
+          images: images.length ? images : undefined,
+          documents: documents.length ? documents.map((doc) => ({ fileName: doc.fileName })) : undefined,
+        },
         { id: assistantId, role: 'ASSISTANT', content: '', pending: true },
       ]
     })
@@ -414,7 +494,7 @@ export function ChatPage() {
     }
 
     const markFailed = (message: string) => {
-      setFailure({ message, retryText: trimmed, retryImages: images, userId, assistantId })
+      setFailure({ message, retryText: trimmed, retryImages: images, retryDocuments: documents, userId, assistantId })
       setMessages((current) => current.map((item) => (item.id === assistantId ? { ...item, pending: false } : item)))
     }
 
@@ -437,6 +517,15 @@ export function ChatPage() {
           ...(conversationId ? { conversationId } : {}),
           ...(images.length
             ? { attachments: images.map((image) => ({ mediaType: image.mediaType, data: image.data })) }
+            : {}),
+          ...(documents.length
+            ? {
+                documents: documents.map((doc) => ({
+                  fileName: doc.fileName,
+                  mediaType: doc.mediaType,
+                  data: doc.data,
+                })),
+              }
             : {}),
         },
         (event) => {
@@ -545,7 +634,7 @@ export function ChatPage() {
       stopGenerating()
       return
     }
-    void send(draft, pending)
+    void send(draft, pending, pendingDocs)
   }
 
   async function renameConversation(id: string, title: string) {
@@ -667,6 +756,7 @@ export function ChatPage() {
               const hasCitations =
                 !message.pending && message.role === 'ASSISTANT' && (message.citations?.length ?? 0) > 0
               const hasImages = (message.images?.length ?? 0) > 0
+              const hasDocuments = (message.documents?.length ?? 0) > 0
               const hasProcess = message.role === 'ASSISTANT' && (message.process?.length ?? 0) > 0
               const visible =
                 Boolean(message.content) ||
@@ -674,6 +764,7 @@ export function ChatPage() {
                 message.providerStatus !== undefined ||
                 hasCitations ||
                 hasImages ||
+                hasDocuments ||
                 hasProcess
               if (!visible) return null
               const isUser = message.role === 'USER'
@@ -694,6 +785,19 @@ export function ChatPage() {
                           />
                         ))}
                       </div>
+                    ) : null}
+                    {hasDocuments ? (
+                      <ul className={message.content ? 'mb-2 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
+                        {message.documents?.map((doc, index) => (
+                          <li
+                            key={`${message.id}-doc-${index}`}
+                            className="flex max-w-full items-center gap-1.5 rounded-full bg-gpt-sidebar px-2.5 py-1 text-xs text-gpt-muted"
+                          >
+                            <DocIcon />
+                            <span className="truncate">{doc.fileName}</span>
+                          </li>
+                        ))}
+                      </ul>
                     ) : null}
                     {message.content || message.pending ? (
                       isUser ? (
@@ -750,7 +854,7 @@ export function ChatPage() {
               <button
                 type="button"
                 onClick={() =>
-                  void send(failure.retryText, failure.retryImages, {
+                  void send(failure.retryText, failure.retryImages, failure.retryDocuments, {
                     userId: failure.userId,
                     assistantId: failure.assistantId,
                   })
@@ -790,6 +894,32 @@ export function ChatPage() {
               ))}
             </ul>
           ) : null}
+          {pendingDocs.length > 0 ? (
+            <ul className="mb-2 flex flex-wrap gap-2">
+              {pendingDocs.map((doc) => (
+                <li
+                  key={doc.id}
+                  className="relative flex max-w-full items-center gap-1.5 rounded-full border border-gpt-line px-3 py-1.5 pr-7 text-xs text-gpt-muted"
+                >
+                  <DocIcon />
+                  <span className="truncate">{doc.fileName}</span>
+                  <span className="shrink-0">{formatFileSize(doc.sizeBytes)}</span>
+                  <button
+                    type="button"
+                    aria-label="移除文件"
+                    disabled={sending}
+                    onClick={() => {
+                      setPendingDocs((current) => current.filter((item) => item.id !== doc.id))
+                      setAttachError(null)
+                    }}
+                    className="absolute right-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-gpt-ink text-[10px] text-gpt-canvas disabled:opacity-30"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         <div className="flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer">
           <input
             ref={fileRef}
@@ -809,6 +939,24 @@ export function ChatPage() {
           >
             <PaperclipIcon />
           </button>
+          <input
+            ref={docFileRef}
+            type="file"
+            accept=".pdf,.docx,.xlsx,.pptx,.txt,.md"
+            multiple
+            className="sr-only"
+            disabled={sending}
+            onChange={(event) => void onPickDocuments(event)}
+          />
+          <button
+            type="button"
+            aria-label="附加文件"
+            disabled={sending}
+            onClick={() => docFileRef.current?.click()}
+            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gpt-muted hover:bg-gpt-hover disabled:opacity-30"
+          >
+            <DocIcon />
+          </button>
           <label className="sr-only" htmlFor="chat-draft">
             訊息
           </label>
@@ -823,7 +971,7 @@ export function ChatPage() {
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
-                if (!sending && !compressing) void send(draft, pending)
+                if (!sending && !compressing) void send(draft, pending, pendingDocs)
               }
             }}
             className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-base outline-none"
@@ -833,7 +981,7 @@ export function ChatPage() {
             disabled={
               compressing ||
               (historyLoading && !freshChat) ||
-              (!sending && !draft.trim() && pending.length === 0)
+              (!sending && !draft.trim() && pending.length === 0 && pendingDocs.length === 0)
             }
             aria-label={sending ? '停止生成' : '傳送'}
             className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas disabled:opacity-30"
@@ -903,6 +1051,27 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 function imageSrc(image: ChatImage): string {
   return `data:${image.mediaType};base64,${image.data}`
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function DocIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" className="shrink-0">
+      <path
+        d="M4 1.5h5.5L12 4v10.5H4z M9.5 1.5V4H12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path d="M5.8 8h4.4M5.8 10.8h4.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  )
 }
 
 function PaperclipIcon() {
