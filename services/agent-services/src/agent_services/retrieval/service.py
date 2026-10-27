@@ -14,6 +14,7 @@ from agent_services.config import (
     RETRIEVAL_RERANK_ENABLED_DEFAULT,
     RETRIEVAL_RERANK_MAX_CANDIDATES_DEFAULT,
     RETRIEVAL_RERANK_TIMEOUT_SECONDS_DEFAULT,
+    RETRIEVAL_SCORE_RATIO_FLOOR_DEFAULT,
     Settings,
 )
 from agent_services.retrieval.chunking import split_text
@@ -45,6 +46,7 @@ class ReembedPrepared:
 
 DEFAULT_TOP_K = 4
 DEFAULT_MIN_SCORE = RETRIEVAL_MIN_SCORE_DEFAULT
+DEFAULT_SCORE_RATIO_FLOOR = RETRIEVAL_SCORE_RATIO_FLOOR_DEFAULT
 MAX_UPSERT_CHUNKS = 256
 # 与检索 topK 上限一致：词法通道在向量窗口之外另取候选，再和向量结果一起截到 top_k。
 LEXICAL_CANDIDATE_LIMIT = 20
@@ -81,6 +83,25 @@ def apply_min_score(chunks: list[RetrievedChunk], min_score: float) -> list[Retr
     if min_score <= 0:
         return list(chunks)
     return [chunk for chunk in chunks if chunk.score >= min_score]
+
+
+def apply_score_ratio_floor(
+    chunks: list[RetrievedChunk], ratio_floor: float
+) -> list[RetrievedChunk]:
+    """融合后相对裁剪：丢掉分数低于「本批最高分 × ratio_floor」的命中。
+
+    绝对门槛（apply_min_score）挡不住「最高分 0.60、尾巴 0.10」这种同批内的弱命中——
+    它们照样进 topK 并成为引用（M11 eval citation_precision 0.75 的成因）。相对裁剪按
+    本批最高分定标，不依赖嵌入模型的绝对分数分布；合法的多文档命中分数通常接近最高分，
+    不受影响。ratio_floor <= 0 或最高分 <= 0 时原样返回；最高分本身永远保留。
+    """
+    if ratio_floor <= 0 or len(chunks) < 2:
+        return list(chunks)
+    top = max(chunk.score for chunk in chunks)
+    if top <= 0:
+        return list(chunks)
+    cutoff = top * ratio_floor
+    return [chunk for chunk in chunks if chunk.score >= cutoff]
 
 
 def code_tokens(query: str) -> list[str]:
@@ -234,6 +255,7 @@ class RetrievalService:
         store: RetrievalStore,
         *,
         min_score: float = DEFAULT_MIN_SCORE,
+        score_ratio_floor: float = DEFAULT_SCORE_RATIO_FLOOR,
         settings: Settings | None = None,
         rerank_model: Model | None = None,
         rerank_enabled: bool | None = None,
@@ -243,6 +265,7 @@ class RetrievalService:
         self._embedder = embedder
         self._store = store
         self._min_score = min_score
+        self._score_ratio_floor = score_ratio_floor
         self._settings = settings
         self._rerank_model = rerank_model
         self._rerank_enabled = (
@@ -408,7 +431,9 @@ class RetrievalService:
                 tokens=terms,
                 limit=LEXICAL_CANDIDATE_LIMIT,
             )
-        fused = _ranked_hits(vector_hits, lexical_hits, terms)
+        fused = apply_score_ratio_floor(
+            _ranked_hits(vector_hits, lexical_hits, terms), self._score_ratio_floor
+        )
         ordered = fused
         if self._rerank_enabled and self._rerank_max_candidates > 0 and len(fused) > top_k:
             model = self._resolve_rerank_model(model_selection)
@@ -489,6 +514,12 @@ def create_retrieval_service(settings: Settings) -> tuple[RetrievalService | Non
     )
     # 进程没配嵌入模型时仍保留库连接：请求可以带模型入口的 embedding spec 和 key。
     return (
-        RetrievalService(embedder, store, min_score=settings.retrieval_min_score, settings=settings),
+        RetrievalService(
+            embedder,
+            store,
+            min_score=settings.retrieval_min_score,
+            score_ratio_floor=settings.retrieval_score_ratio_floor,
+            settings=settings,
+        ),
         None if embedder is not None else blocked_reason,
     )
