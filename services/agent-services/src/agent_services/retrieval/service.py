@@ -11,6 +11,7 @@ from pydantic_ai.models import Model
 from agent_services.agent.model_factory import create_model, create_model_for_entry
 from agent_services.config import (
     RETRIEVAL_MIN_SCORE_DEFAULT,
+    RETRIEVAL_RERANK_CUTOFF_DEFAULT,
     RETRIEVAL_RERANK_ENABLED_DEFAULT,
     RETRIEVAL_RERANK_MAX_CANDIDATES_DEFAULT,
     RETRIEVAL_RERANK_TIMEOUT_SECONDS_DEFAULT,
@@ -66,6 +67,13 @@ _JSON_INT_ARRAY = re.compile(r"\[\s*(?:\d+\s*(?:,\s*\d+\s*)*)?\]")
 _RERANK_INSTRUCTIONS = (
     "You reorder search snippets by relevance to the question. "
     "Reply with only a JSON array of candidate numbers, most relevant first. "
+    "Do not add any other text."
+)
+
+_RERANK_CUTOFF_INSTRUCTIONS = (
+    "You select search snippets that are relevant to the question. "
+    "Reply with only a JSON array of the candidate numbers that are relevant, "
+    "most relevant first. Omit candidates that do not help answer the question. "
     "Do not add any other text."
 )
 
@@ -240,11 +248,38 @@ def parse_rerank_indices(text: str, count: int) -> list[int] | None:
     return chosen
 
 
-def _rerank_prompt(query: str, candidates: list[RetrievedChunk]) -> str:
+def parse_rerank_selection(text: str, count: int) -> list[int] | None:
+    """裁门模式的严格解析：只认第一个 JSON 整数数组，被省略的编号就是被丢弃的候选。
+
+    与重排模式不同，这里不扫描散文里的数字、不补位；空数组或无数组一律返回 None，
+    由调用方回退到融合原序——模型一次含糊的回答不能把结果清零。
+    """
+    if count < 1:
+        return None
+    array_match = _JSON_INT_ARRAY.search(text)
+    if array_match is None:
+        return None
+    chosen: list[int] = []
+    seen: set[int] = set()
+    for raw in re.findall(r"\d+", array_match.group(0)):
+        number = int(raw)
+        if number < 1 or number > count or number in seen:
+            continue
+        seen.add(number)
+        chosen.append(number - 1)
+    if not chosen:
+        return None
+    return chosen
+
+
+def _rerank_prompt(query: str, candidates: list[RetrievedChunk], *, cutoff: bool = False) -> str:
     lines = [f"Question: {query}", "Candidates:"]
     for number, chunk in enumerate(candidates, start=1):
         lines.append(f"[{number}] {chunk.content[:RERANK_SNIPPET_CHARS]}")
-    lines.append("Return a JSON array of the candidate numbers ordered by relevance.")
+    if cutoff:
+        lines.append("Return a JSON array of the relevant candidate numbers, most relevant first.")
+    else:
+        lines.append("Return a JSON array of the candidate numbers ordered by relevance.")
     return "\n".join(lines)
 
 
@@ -261,6 +296,7 @@ class RetrievalService:
         rerank_enabled: bool | None = None,
         rerank_timeout_seconds: float | None = None,
         rerank_max_candidates: int | None = None,
+        rerank_cutoff: bool | None = None,
     ) -> None:
         self._embedder = embedder
         self._store = store
@@ -288,6 +324,13 @@ class RetrievalService:
             else settings.retrieval_rerank_max_candidates
             if settings is not None
             else RETRIEVAL_RERANK_MAX_CANDIDATES_DEFAULT
+        )
+        self._rerank_cutoff = (
+            rerank_cutoff
+            if rerank_cutoff is not None
+            else settings.retrieval_rerank_cutoff
+            if settings is not None
+            else RETRIEVAL_RERANK_CUTOFF_DEFAULT
         )
         self._degraded = False
         self._last_error: str | None = None
@@ -394,15 +437,31 @@ class RetrievalService:
         return handle.model
 
     async def _rerank(
-        self, model: Model, query: str, candidates: list[RetrievedChunk]
+        self,
+        model: Model,
+        query: str,
+        window: list[RetrievedChunk],
+        tail: list[RetrievedChunk],
     ) -> list[RetrievedChunk]:
+        """裁门模式只返回模型选中的窗口候选（尾巴不回填）；重排模式维持窗口重排＋尾巴拼接。
+
+        两种模式解析失败都抛 ValueError，由 search 回退融合原序。
+        """
+        if self._rerank_cutoff:
+            agent = Agent(model, system_prompt=_RERANK_CUTOFF_INSTRUCTIONS)
+            with anyio.fail_after(self._rerank_timeout_seconds):
+                result = await agent.run(_rerank_prompt(query, window, cutoff=True))
+            selection = parse_rerank_selection(str(result.output), len(window))
+            if selection is None:
+                raise ValueError("unusable rerank selection")
+            return [window[index] for index in selection]
         agent = Agent(model, system_prompt=_RERANK_INSTRUCTIONS)
         with anyio.fail_after(self._rerank_timeout_seconds):
-            result = await agent.run(_rerank_prompt(query, candidates))
-        order = parse_rerank_indices(str(result.output), len(candidates))
+            result = await agent.run(_rerank_prompt(query, window))
+        order = parse_rerank_indices(str(result.output), len(window))
         if order is None:
             raise ValueError("unusable rerank order")
-        return [candidates[index] for index in order]
+        return [window[index] for index in order] + tail
 
     async def search(
         self,
@@ -435,12 +494,15 @@ class RetrievalService:
             _ranked_hits(vector_hits, lexical_hits, terms), self._score_ratio_floor
         )
         ordered = fused
-        if self._rerank_enabled and self._rerank_max_candidates > 0 and len(fused) > top_k:
+        # 重排模式维持旧触发（候选多于 topK 才值得重排）；裁门模式候选 ≥2 即触发，
+        # 否则小知识库里融合后的 2~3 条近失命中永远等不到语义把关（对抗探针实测）。
+        rerank_worthwhile = len(fused) > top_k or (self._rerank_cutoff and len(fused) >= 2)
+        if self._rerank_enabled and self._rerank_max_candidates > 0 and rerank_worthwhile:
             model = self._resolve_rerank_model(model_selection)
             if model is not None:
                 window = fused[: self._rerank_max_candidates]
                 try:
-                    ordered = await self._rerank(model, query, window) + fused[len(window) :]
+                    ordered = await self._rerank(model, query, window, fused[len(window) :])
                     self._rerank_applied = True
                 except TimeoutError:
                     logger.warning("retrieval rerank timed out; keeping fused order")
