@@ -17,6 +17,10 @@ MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024
 MAX_ATTACHMENTS_TOTAL_BYTES = 5 * 1024 * 1024
 MAX_MEMORIES = 20
 MAX_MEMORY_CHARS = 500
+# 本轮文档上下文（Java 站点层已抽取文本后传入；Python 只做纵深防御上限）。
+MAX_DOCUMENTS = 3
+MAX_DOCUMENT_NAME_CHARS = 200
+MAX_DOCUMENT_TEXT_CHARS = 60_000
 
 ImageMediaType = Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
 
@@ -101,6 +105,18 @@ class ChatHistoryMessage(BaseModel):
         return limit_attachment_list(value)
 
 
+class ChatDocument(BaseModel):
+    """本轮上传文件的已抽取文本（抽取在 Java 站点层完成，原文不入 Python）。
+
+    仅作用于本轮：不进历史回放、不落库。text 超上限由 Java 先行截断并标 truncated，
+    这里再以字段上限兜底，防止 internal 调用方失误撑爆上下文。
+    """
+
+    name: str = Field(min_length=1, max_length=MAX_DOCUMENT_NAME_CHARS)
+    text: str = Field(max_length=MAX_DOCUMENT_TEXT_CHARS)
+    truncated: bool = False
+
+
 class ModelSelection(BaseModel):
     """Java 模型入口带入的本次凭证。缺失时回退进程 AI_MODEL。"""
 
@@ -116,6 +132,7 @@ class ChatRequest(BaseModel):
     site_id: str = Field(alias="siteId")
     message: str = Field(max_length=MAX_MESSAGE_CHARS)
     attachments: list[ChatAttachment] | None = Field(default=None, max_length=MAX_ATTACHMENTS)
+    documents: list[ChatDocument] | None = Field(default=None, max_length=MAX_DOCUMENTS)
     locale: str | None = None
     conversation_id: str | None = Field(default=None, alias="conversationId")
     prompt_profile: PromptProfile | None = Field(default=None, alias="promptProfile")

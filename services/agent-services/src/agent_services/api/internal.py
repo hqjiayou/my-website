@@ -309,7 +309,7 @@ async def mcp_ready(request: Request) -> JSONResponse:
 async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object]:
     site_id = body.site_id.strip()
     message = body.message.strip()
-    if not site_id or (not message and not body.attachments):
+    if not site_id or (not message and not body.attachments and not body.documents):
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
@@ -334,6 +334,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         site_id=site_id,
         message=message,
         attachments=body.attachments,
+        documents=body.documents,
         prompt_profile=body.prompt_profile,
         history=body.history,
         retrieval_context=_java_knowledge_hints(request, body),
@@ -388,7 +389,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
 async def internal_chat_stream(request: Request, body: ChatRequest) -> StreamingResponse:
     site_id = body.site_id.strip()
     message = body.message.strip()
-    if not site_id or (not message and not body.attachments):
+    if not site_id or (not message and not body.attachments and not body.documents):
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
@@ -414,6 +415,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             site_id=site_id,
             message=message,
             attachments=body.attachments,
+            documents=body.documents,
             prompt_profile=body.prompt_profile,
             history=body.history,
             retrieval_context=_java_knowledge_hints(request, body),

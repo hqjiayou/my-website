@@ -29,7 +29,10 @@ from agent_services.agent.stream_runtime import stream_chat_events
 from agent_services.schemas.chat import (
     MAX_ATTACHMENT_BYTES,
     MAX_ATTACHMENTS,
+    MAX_DOCUMENT_TEXT_CHARS,
+    MAX_DOCUMENTS,
     ChatAttachment,
+    ChatDocument,
     ChatHistoryMessage,
     ChatRequest,
     PromptProfile,
@@ -265,6 +268,39 @@ def test_attachment_schema_rejects_too_many() -> None:
 def test_build_user_prompt_text_only_stays_string() -> None:
     assert build_user_prompt("hello", None) == "hello"
     assert build_user_prompt("hello", []) == "hello"
+
+
+def test_document_schema_rejects_too_many_and_oversized_text() -> None:
+    with pytest.raises(ValidationError):
+        ChatRequest(
+            siteId="1",
+            message="hi",
+            documents=[ChatDocument(name="a.txt", text="x") for _ in range(MAX_DOCUMENTS + 1)],
+        )
+    with pytest.raises(ValidationError):
+        ChatDocument(name="a.txt", text="x" * (MAX_DOCUMENT_TEXT_CHARS + 1))
+
+
+def test_build_user_prompt_appends_document_sections() -> None:
+    prompt = build_user_prompt(
+        "总结一下",
+        None,
+        [
+            ChatDocument(name="合同.pdf", text="第一条 内容"),
+            ChatDocument(name="长文.docx", text="开头", truncated=True),
+        ],
+    )
+    assert isinstance(prompt, list)
+    assert prompt[0] == "总结一下"
+    assert "合同.pdf" in prompt[1] and "第一条 内容" in prompt[1]
+    assert "后段已省略" in prompt[2]
+
+
+def test_build_user_prompt_document_only_turn_has_no_empty_text_part() -> None:
+    prompt = build_user_prompt("", None, [ChatDocument(name="a.txt", text="正文")])
+    assert isinstance(prompt, list)
+    assert len(prompt) == 1
+    assert "正文" in prompt[0]
 
 
 async def test_run_chat_sends_image_bytes_for_current_turn_and_history() -> None:
