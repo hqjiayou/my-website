@@ -45,6 +45,7 @@ from agent_services.api.errors import external_failure_message
 from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.chat import (
     ChatAttachment,
+    ChatDocument,
     ChatHistoryMessage,
     PromptProfile,
 )
@@ -74,6 +75,7 @@ async def stream_chat_events(
     site_id: str,
     message: str,
     attachments: list[ChatAttachment] | None = None,
+    documents: list[ChatDocument] | None = None,
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
@@ -118,7 +120,7 @@ async def stream_chat_events(
         memories=memories,
     )
     system_prompt = harness.system_prompt
-    user_prompt = build_user_prompt(harness.user_message, attachments)
+    user_prompt = build_user_prompt(harness.user_message, attachments, documents)
     start_data: dict[str, object] = {"siteId": site_id}
     if skills_applied:
         start_data["skillsApplied"] = list(skills_applied)

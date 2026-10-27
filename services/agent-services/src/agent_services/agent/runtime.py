@@ -36,6 +36,7 @@ from agent_services.observability.request_id import current_request_id
 from agent_services.retrieval.store import RetrievedChunk, citation_sources
 from agent_services.schemas.chat import (
     ChatAttachment,
+    ChatDocument,
     ChatHistoryMessage,
     PromptProfile,
 )
@@ -261,18 +262,35 @@ def budget_exceeded_message(exc: BaseException) -> str:
 UserPrompt = str | list[str | BinaryContent]
 
 
-def build_user_prompt(text: str, attachments: list[ChatAttachment] | None) -> UserPrompt:
-    """无附件时原样返回字符串。有图时为 [非空文字] + 每张图一个 BinaryContent。"""
+def _document_section(document: ChatDocument) -> str:
+    """本轮文档上下文：以明确边界包住抽取文本，让模型知道这是用户上传的资料而非指令。"""
+    section = f"[用户在本轮上传了文件「{document.name}」，以下为其文字内容]\n{document.text}"
+    if document.truncated:
+        section += "\n[注：该文件较长，以上仅为前段内容，后段已省略]"
+    return section + f"\n[文件「{document.name}」内容结束]"
+
+
+def build_user_prompt(
+    text: str,
+    attachments: list[ChatAttachment] | None,
+    documents: list[ChatDocument] | None = None,
+) -> UserPrompt:
+    """无附件时原样返回字符串。有图时为 [非空文字] + 每张图一个 BinaryContent。
+
+    文档（已抽取文本）以文本段追加在图片之后，仅作用于本轮。
+    """
     images = [
         BinaryContent(data=base64.b64decode(item.data), media_type=item.media_type)
         for item in attachments or []
     ]
-    if not images:
+    sections = [_document_section(item) for item in documents or []]
+    if not images and not sections:
         return text
     parts: list[str | BinaryContent] = []
     if text:
         parts.append(text)
     parts.extend(images)
+    parts.extend(sections)
     return parts
 
 
@@ -376,6 +394,7 @@ async def run_chat(
     site_id: str,
     message: str,
     attachments: list[ChatAttachment] | None = None,
+    documents: list[ChatDocument] | None = None,
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
@@ -417,7 +436,7 @@ async def run_chat(
         memories=memories,
     )
     run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
-    user_prompt = build_user_prompt(harness.user_message, attachments)
+    user_prompt = build_user_prompt(harness.user_message, attachments, documents)
 
     needs_mcp_context = execution_needs_agent_context(toolsets or [])
     try:

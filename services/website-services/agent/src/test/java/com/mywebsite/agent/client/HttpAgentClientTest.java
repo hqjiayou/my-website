@@ -526,4 +526,17 @@ class HttpAgentClientTest {
         String withoutChain = mapper.writeValueAsString(new AgentChatRequest("10", "hello"));
         assertThat(withoutChain).doesNotContain("fallbackModels");
     }
+
+    @Test
+    void chatRequestSerializesDocumentsOnlyWhenPresent() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        AgentChatRequest withDocuments = new AgentChatRequest(
+                "10", "hello", null, null, null, null, null, null, null, null, null, null, null, null, null,
+                java.util.List.of(new com.mywebsite.agent.dto.AgentDocumentContext("a.txt", "正文", true)));
+        String json = mapper.writeValueAsString(withDocuments);
+        assertThat(json).contains("\"documents\":[{\"name\":\"a.txt\",\"text\":\"正文\",\"truncated\":true}]");
+
+        String withoutDocuments = mapper.writeValueAsString(new AgentChatRequest("10", "hello"));
+        assertThat(withoutDocuments).doesNotContain("documents");
+    }
 }

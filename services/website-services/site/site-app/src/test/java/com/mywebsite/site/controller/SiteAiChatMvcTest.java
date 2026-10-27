@@ -200,6 +200,92 @@ class SiteAiChatMvcTest extends AbstractSiteSpringBootTest {
     }
 
     @Test
+    void chatForwardsExtractedDocumentTextToAgent() throws Exception {
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+        String data = Base64.getEncoder()
+                .encodeToString("营业时间 9:00-18:00".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(chatJsonWithDocuments("总结一下", List.of(document("说明.txt", "text/plain", data)))))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()));
+
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        verify(agentClient).chat(captor.capture());
+        assertEquals(1, captor.getValue().documents().size());
+        assertEquals("说明.txt", captor.getValue().documents().get(0).name());
+        assertEquals("营业时间 9:00-18:00", captor.getValue().documents().get(0).text());
+        assertEquals(false, captor.getValue().documents().get(0).truncated());
+    }
+
+    @Test
+    void chatPersistsDocumentDescriptorWithoutContent() throws Exception {
+        doReturn(new AgentChatResponse("summary", null, "LIVE", List.of(), AgentRunMeta.EMPTY, List.of()))
+                .when(agentClient)
+                .chat(any());
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+        String data = Base64.getEncoder()
+                .encodeToString("合同正文".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        String body = mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(chatJsonWithDocuments("", List.of(document("合同.txt", "text/plain", data)))))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        long conversationId = Long.parseLong(
+                new ObjectMapper().readTree(body).path("data").path("conversationId").asText());
+
+        var listed = conversationService.listMessages(10L, 200L, conversationId);
+        assertEquals(2, listed.size());
+        assertEquals(1, listed.get(0).attachments().size());
+        var descriptor = listed.get(0).attachments().get(0);
+        assertEquals("DOCUMENT", descriptor.kind());
+        assertEquals("合同.txt", descriptor.fileName());
+        assertEquals(null, descriptor.data());
+    }
+
+    @Test
+    void chatRejectsUnsupportedDocumentExtension() throws Exception {
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+
+        mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(chatJsonWithDocuments(
+                                "hi", List.of(document("evil.exe", "application/octet-stream", "YQ==")))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()));
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
+    void chatRejectsPdfWithoutTextLayer() throws Exception {
+        String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
+        byte[] blankPdf;
+        try (org.apache.pdfbox.pdmodel.PDDocument doc = new org.apache.pdfbox.pdmodel.PDDocument()) {
+            doc.addPage(new org.apache.pdfbox.pdmodel.PDPage());
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            doc.save(out);
+            blankPdf = out.toByteArray();
+        }
+        String data = Base64.getEncoder().encodeToString(blankPdf);
+
+        mockMvc.perform(post("/api/site/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(chatJsonWithDocuments(
+                                "总结", List.of(document("scan.pdf", "application/pdf", data)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCode.BAD_REQUEST.getCode()));
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
     void chatRejectsMismatchedSiteId() throws Exception {
         String token = SiteTestJwtSigner.signSiteAccess(privateKey, "test-issuer", "SITE", 200L, 10L);
 
@@ -309,6 +395,22 @@ class SiteAiChatMvcTest extends AbstractSiteSpringBootTest {
         if (attachments != null) {
             body.put("attachments", attachments);
         }
+        return new ObjectMapper().writeValueAsString(body);
+    }
+
+    private static Map<String, String> document(String fileName, String mediaType, String data) {
+        Map<String, String> document = new LinkedHashMap<>();
+        document.put("fileName", fileName);
+        document.put("mediaType", mediaType);
+        document.put("data", data);
+        return document;
+    }
+
+    private static String chatJsonWithDocuments(String message, List<Map<String, String>> documents)
+            throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("message", message);
+        body.put("documents", documents);
         return new ObjectMapper().writeValueAsString(body);
     }
 }
