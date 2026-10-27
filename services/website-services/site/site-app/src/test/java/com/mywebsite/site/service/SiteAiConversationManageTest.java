@@ -21,7 +21,8 @@ import com.mywebsite.site.entity.SiteAiConversationEntity;
 import com.mywebsite.site.entity.SiteAiConversationShareEntity;
 import com.mywebsite.site.entity.SiteAiMessageEntity;
 import com.mywebsite.site.mapper.SiteAiConversationShareMapper;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import com.mywebsite.site.mapper.SiteAiConversationMapper;
 import com.mywebsite.site.mapper.SiteAiMessageMapper;
@@ -112,7 +113,7 @@ class SiteAiConversationManageTest {
     @Test
     void truncateOwnConversationDeletesFromMessageAndRefreshesMeta() {
         SiteAiConversationEntity conversation = owned(1L, 10L, 200L, "t");
-        conversation.setCreatedAt(LocalDateTime.of(2026, 1, 1, 10, 0));
+        conversation.setCreatedAt(OffsetDateTime.of(2026, 1, 1, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
         conversation.setAgentTodos("[{\"text\":\"x\"}]");
         SiteAiMessageEntity target = new SiteAiMessageEntity();
         target.setId(50L);
@@ -120,7 +121,7 @@ class SiteAiConversationManageTest {
         SiteAiMessageEntity remaining = new SiteAiMessageEntity();
         remaining.setId(40L);
         remaining.setConversationId(1L);
-        remaining.setCreatedAt(LocalDateTime.of(2026, 1, 2, 10, 0));
+        remaining.setCreatedAt(OffsetDateTime.of(2026, 1, 2, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
         when(conversationMapper.selectById(1L)).thenReturn(conversation);
         when(messageMapper.selectById(50L)).thenReturn(target);
         when(messageMapper.deleteFromMessage(1L, 50L)).thenReturn(2);
@@ -129,7 +130,7 @@ class SiteAiConversationManageTest {
         service.truncateMessages(10L, 200L, 1L, 50L);
 
         verify(messageMapper).deleteFromMessage(1L, 50L);
-        assertThat(conversation.getLastMessageAt()).isEqualTo(LocalDateTime.of(2026, 1, 2, 10, 0));
+        assertThat(conversation.getLastMessageAt()).isEqualTo(OffsetDateTime.of(2026, 1, 2, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
         assertThat(conversation.getAgentTodos()).isNull();
         verify(conversationMapper).updateById(conversation);
     }
@@ -137,7 +138,7 @@ class SiteAiConversationManageTest {
     @Test
     void truncateAllMessagesFallsBackToConversationCreatedAt() {
         SiteAiConversationEntity conversation = owned(1L, 10L, 200L, "t");
-        conversation.setCreatedAt(LocalDateTime.of(2026, 1, 1, 10, 0));
+        conversation.setCreatedAt(OffsetDateTime.of(2026, 1, 1, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
         SiteAiMessageEntity target = new SiteAiMessageEntity();
         target.setId(10L);
         target.setConversationId(1L);
@@ -148,7 +149,7 @@ class SiteAiConversationManageTest {
 
         service.truncateMessages(10L, 200L, 1L, 10L);
 
-        assertThat(conversation.getLastMessageAt()).isEqualTo(LocalDateTime.of(2026, 1, 1, 10, 0));
+        assertThat(conversation.getLastMessageAt()).isEqualTo(OffsetDateTime.of(2026, 1, 1, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
     }
 
     @Test
