@@ -32,9 +32,33 @@ const SiteWorkspaceLayout = lazyNamed(
   () => import('@/pages/apps/sites/siteWorkspaceLayout'),
   'SiteWorkspaceLayout',
 )
-const SiteOverviewPage = lazyNamed(
-  () => import('@/pages/apps/sites/siteOverviewPage'),
-  'SiteOverviewPage',
+const RedirectToSiteAgent = lazyNamed(
+  () => import('@/pages/apps/sites/siteAgentRedirect'),
+  'RedirectToSiteAgent',
+)
+const SiteAgentOverviewPage = lazyNamed(
+  () => import('@/pages/apps/sites/siteAgentOverviewPage'),
+  'SiteAgentOverviewPage',
+)
+const SiteAgentPromptPage = lazyNamed(
+  () => import('@/pages/apps/sites/siteAgentPages'),
+  'SiteAgentPromptPage',
+)
+const SiteAgentKnowledgePage = lazyNamed(
+  () => import('@/pages/apps/sites/siteAgentPages'),
+  'SiteAgentKnowledgePage',
+)
+const SiteAgentConversationsPage = lazyNamed(
+  () => import('@/pages/apps/sites/siteAgentPages'),
+  'SiteAgentConversationsPage',
+)
+const SiteAgentPreviewPage = lazyNamed(
+  () => import('@/pages/apps/sites/siteAgentPages'),
+  'SiteAgentPreviewPage',
+)
+const SiteAgentRuntimePage = lazyNamed(
+  () => import('@/pages/apps/sites/siteAgentPages'),
+  'SiteAgentRuntimePage',
 )
 const SiteBasicPage = lazyNamed(() => import('@/pages/apps/sites/siteBasicPage'), 'SiteBasicPage')
 const SiteThemePage = lazyNamed(() => import('@/pages/apps/sites/siteThemePage'), 'SiteThemePage')
@@ -43,7 +67,6 @@ const SiteContentsPage = lazyNamed(
   () => import('@/pages/apps/sites/siteContentsPage'),
   'SiteContentsPage',
 )
-const SiteAiPage = lazyNamed(() => import('@/pages/apps/sites/siteAiPage'), 'SiteAiPage')
 const SiteFilesPage = lazyNamed(() => import('@/pages/apps/sites/siteFilesPage'), 'SiteFilesPage')
 
 const StyleSettingsPage = lazyNamed(
@@ -103,13 +126,19 @@ export const adminRoutes = (
     <Route path={ROUTES.apps.sites} element={<SitesPage />} />
     <Route path={ROUTES.apps.siteCreate} element={<SiteCreatePage />} />
     <Route path={ROUTES.apps.siteDetailPattern} element={<SiteWorkspaceLayout />}>
-      <Route index element={<Navigate to="overview" replace />} />
-      <Route path="overview" element={<SiteOverviewPage />} />
+      <Route index element={<Navigate to="agent" replace />} />
+      <Route path="overview" element={<RedirectToSiteAgent />} />
       <Route path="basic" element={<SiteBasicPage />} />
       <Route path="theme" element={<SiteThemePage />} />
       <Route path="domain" element={<SiteDomainPage />} />
       <Route path="contents" element={<SiteContentsPage />} />
-      <Route path="ai" element={<SiteAiPage />} />
+      <Route path="ai" element={<RedirectToSiteAgent />} />
+      <Route path="agent" element={<SiteAgentOverviewPage />} />
+      <Route path="agent/prompt" element={<SiteAgentPromptPage />} />
+      <Route path="agent/knowledge" element={<SiteAgentKnowledgePage />} />
+      <Route path="agent/conversations" element={<SiteAgentConversationsPage />} />
+      <Route path="agent/preview" element={<SiteAgentPreviewPage />} />
+      <Route path="agent/runtime" element={<SiteAgentRuntimePage />} />
       <Route path="files" element={<SiteFilesPage />} />
     </Route>
     <Route path={ROUTES.apps.style} element={<StyleSettingsPage />} />

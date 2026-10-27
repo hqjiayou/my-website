@@ -62,7 +62,7 @@ export function SiteCreatePage() {
     onSuccess: async (createdSite) => {
       await queryClient.invalidateQueries({ queryKey: ['sites'] })
       toast.success(t('create.messages.createdSuccess'))
-      navigate(ROUTES.apps.siteOverview(createdSite.id))
+      navigate(ROUTES.apps.siteAgent(createdSite.id))
     },
     onError: (error: Error) => toast.error(error.message),
   })
