@@ -10,6 +10,7 @@ from pydantic_ai.models import Model
 
 from agent_services.agent.model_factory import create_model, create_model_for_entry
 from agent_services.config import (
+    RETRIEVAL_MAX_CHUNKS_PER_SOURCE_DEFAULT,
     RETRIEVAL_MIN_SCORE_DEFAULT,
     RETRIEVAL_RERANK_CUTOFF_DEFAULT,
     RETRIEVAL_RERANK_ENABLED_DEFAULT,
@@ -110,6 +111,28 @@ def apply_score_ratio_floor(
         return list(chunks)
     cutoff = top * ratio_floor
     return [chunk for chunk in chunks if chunk.score >= cutoff]
+
+
+def apply_per_source_cap(
+    chunks: list[RetrievedChunk], max_per_source: int
+) -> list[RetrievedChunk]:
+    """同源多样性上限：按融合序保留每 source_id 的前 max_per_source 块，其余丢弃。
+
+    长文档的相邻块分数接近、会整排占满 topK，让其他文档的相关块进不来
+    （真嵌入探针：保养单题 top4 全是同一指南的块）。裁剪在 rerank 之前，
+    让重排窗口本身就是多样化的；max_per_source <= 0 时原样返回。
+    """
+    if max_per_source <= 0:
+        return list(chunks)
+    kept: list[RetrievedChunk] = []
+    counts: dict[str, int] = {}
+    for chunk in chunks:
+        seen = counts.get(chunk.source_id, 0)
+        if seen >= max_per_source:
+            continue
+        counts[chunk.source_id] = seen + 1
+        kept.append(chunk)
+    return kept
 
 
 def code_tokens(query: str) -> list[str]:
@@ -297,6 +320,7 @@ class RetrievalService:
         rerank_timeout_seconds: float | None = None,
         rerank_max_candidates: int | None = None,
         rerank_cutoff: bool | None = None,
+        max_chunks_per_source: int | None = None,
     ) -> None:
         self._embedder = embedder
         self._store = store
@@ -331,6 +355,13 @@ class RetrievalService:
             else settings.retrieval_rerank_cutoff
             if settings is not None
             else RETRIEVAL_RERANK_CUTOFF_DEFAULT
+        )
+        self._max_chunks_per_source = (
+            max_chunks_per_source
+            if max_chunks_per_source is not None
+            else settings.retrieval_max_chunks_per_source
+            if settings is not None
+            else RETRIEVAL_MAX_CHUNKS_PER_SOURCE_DEFAULT
         )
         self._degraded = False
         self._last_error: str | None = None
@@ -490,8 +521,11 @@ class RetrievalService:
                 tokens=terms,
                 limit=LEXICAL_CANDIDATE_LIMIT,
             )
-        fused = apply_score_ratio_floor(
-            _ranked_hits(vector_hits, lexical_hits, terms), self._score_ratio_floor
+        fused = apply_per_source_cap(
+            apply_score_ratio_floor(
+                _ranked_hits(vector_hits, lexical_hits, terms), self._score_ratio_floor
+            ),
+            self._max_chunks_per_source,
         )
         ordered = fused
         # 重排模式维持旧触发（候选多于 topK 才值得重排）；裁门模式候选 ≥2 即触发，
@@ -581,6 +615,7 @@ def create_retrieval_service(settings: Settings) -> tuple[RetrievalService | Non
             store,
             min_score=settings.retrieval_min_score,
             score_ratio_floor=settings.retrieval_score_ratio_floor,
+            max_chunks_per_source=settings.retrieval_max_chunks_per_source,
             settings=settings,
         ),
         None if embedder is not None else blocked_reason,
