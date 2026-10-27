@@ -3,7 +3,10 @@
 from conftest import make_settings
 
 from agent_services.agent.harness import assemble_harness
-from agent_services.agent.knowledge_tools import build_knowledge_toolset
+from agent_services.agent.knowledge_tools import (
+    KnowledgeSearchCollector,
+    build_knowledge_toolset,
+)
 from agent_services.agent.prompt_builder import build_prompt_parts
 from agent_services.agent.todo_tools import TodoStore
 from agent_services.agent.toolset_factory import build_execution_toolsets
@@ -15,11 +18,13 @@ _GUIDANCE_MARKER = "search_site_knowledge tool first"
 class _FakeRetrieval:
     def __init__(self, *, degraded: bool = False, fail: bool = False) -> None:
         self.calls: list[tuple[str, str]] = []
+        self.kwargs: list[dict[str, object]] = []
         self.degraded = degraded
         self._fail = fail
 
-    async def retrieve_chunks(self, *, site_id: str, query: str, **_kwargs: object) -> list[RetrievedChunk]:
+    async def retrieve_chunks(self, *, site_id: str, query: str, **kwargs: object) -> list[RetrievedChunk]:
         self.calls.append((site_id, query))
+        self.kwargs.append(dict(kwargs))
         if self._fail:
             raise RuntimeError("boom")
         return [RetrievedChunk(source_id="kb:1", chunk_index=2, content="KB-FACT", score=0.9)]
@@ -92,6 +97,44 @@ def test_prompt_parts_mention_knowledge_tool_only_when_available() -> None:
     assert "search_site_knowledge" in with_tool
     assert "documents or facts" in with_tool
     assert "search_site_knowledge" not in without_tool
+
+
+async def test_knowledge_tool_records_hits_in_collector() -> None:
+    collector = KnowledgeSearchCollector()
+    toolset = build_knowledge_toolset("42", _FakeRetrieval(), collector=collector)  # type: ignore[arg-type]
+    await _call_search(toolset, "hours")
+    await _call_search(toolset, "hours again")
+    # 同一 (source, chunk) 去重；逐次摘要保留每次调用的命中情况。
+    assert [(c.source_id, c.chunk_index) for c in collector.chunks] == [("kb:1", 2)]
+    assert collector.degraded is False
+    first = collector.summary_for(1)
+    assert first is not None
+    assert first["query"] == "hours"
+    assert first["hitCount"] == 1
+    assert collector.summary_for(3) is None
+
+
+async def test_knowledge_tool_marks_collector_degraded_on_failure() -> None:
+    collector = KnowledgeSearchCollector()
+    toolset = build_knowledge_toolset("42", _FakeRetrieval(fail=True), collector=collector)  # type: ignore[arg-type]
+    assert await _call_search(toolset, "hours") == "Site knowledge search failed."
+    assert collector.degraded is True
+    assert collector.chunks == []
+
+
+async def test_knowledge_tool_passes_request_embedder_and_selection() -> None:
+    retrieval = _FakeRetrieval()
+    embedder = object()
+    selection = object()
+    toolset = build_knowledge_toolset(
+        "42",
+        retrieval,  # type: ignore[arg-type]
+        embedder=embedder,  # type: ignore[arg-type]
+        model_selection=selection,  # type: ignore[arg-type]
+    )
+    await _call_search(toolset, "hours")
+    assert retrieval.kwargs[0]["embedder"] is embedder
+    assert retrieval.kwargs[0]["model_selection"] is selection
 
 
 def test_harness_adds_knowledge_guidance_only_when_tool_registered(tmp_path) -> None:

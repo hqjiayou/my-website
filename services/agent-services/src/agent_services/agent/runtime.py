@@ -27,6 +27,7 @@ from pydantic_ai.toolsets.wrapper import WrapperToolset
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from agent_services.agent.harness import assemble_harness
+from agent_services.agent.knowledge_tools import KnowledgeSearchCollector
 from agent_services.agent.memory import extract_memories
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.api.errors import external_failure_message
@@ -204,6 +205,26 @@ def grounding_citations(
     return citations or None
 
 
+def reply_citations(
+    retrieval_context: list[str] | None,
+    retrieval_chunks: list[RetrievedChunk] | None,
+    tool_chunks: list[RetrievedChunk] | None,
+) -> list[dict[str, object]] | None:
+    """本轮引用 = 预取注入的片段 ∪ agent 经知识搜索工具实际命中的片段。
+
+    工具命中的片段经工具返回进入模型上下文，grounding 天然成立，不再要求
+    retrieval_context 非空；两路都没有时返回 None（不拼假引用）。
+    """
+    merged: list[RetrievedChunk] = []
+    if retrieval_context and retrieval_chunks:
+        merged.extend(retrieval_chunks)
+    if tool_chunks:
+        merged.extend(tool_chunks)
+    if not merged:
+        return None
+    return citation_sources(merged) or None
+
+
 @dataclass(frozen=True)
 class ChatReply:
     reply: str
@@ -371,6 +392,7 @@ async def run_chat(
     memories: list[str] | None = None,
     memory_enabled: bool = False,
     memory_extraction_enabled: bool = True,
+    knowledge_collector: KnowledgeSearchCollector | None = None,
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
     history_summary = await prepare_history_summary(
@@ -442,6 +464,10 @@ async def run_chat(
         reply=text,
         usage=usage_to_api(result.usage),
         tools=tool_trace_from_messages(result.new_messages()),
-        citations=grounding_citations(retrieval_context, retrieval_chunks),
+        citations=reply_citations(
+            retrieval_context,
+            retrieval_chunks,
+            knowledge_collector.chunks if knowledge_collector is not None else None,
+        ),
         extracted_memories=extracted,
     )

@@ -4,7 +4,14 @@ import json
 from datetime import UTC, datetime
 
 from conftest import make_settings
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from agent_services.evals.run_answer_eval import (
@@ -217,18 +224,20 @@ async def test_golden_retrieval_hits_expected_sources_only() -> None:
 
 
 def _smoke_respond(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-    parts: list[str] = []
+    """模拟真实模型的工具路径：先调 search_site_knowledge，再据工具返回作答。"""
+    question = ""
     for message in messages:
-        parts.append(repr(message))
         for part in getattr(message, "parts", []):
-            content = getattr(part, "content", None)
-            if isinstance(content, str):
-                parts.append(content)
-    blob = "\n".join(parts)
-    marker = "Relevant site knowledge"
-    if marker not in blob:
-        return ModelResponse(parts=[TextPart("无法确认。没有相关信息。")])
-    return ModelResponse(parts=[TextPart(blob[blob.find(marker) :])])
+            if isinstance(part, ToolReturnPart) and part.tool_name == "search_site_knowledge":
+                content = part.content if isinstance(part.content, str) else ""
+                if not content or content.startswith("No matching"):
+                    return ModelResponse(parts=[TextPart("无法确认。没有相关信息。")])
+                return ModelResponse(parts=[TextPart(content)])
+            if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                question = part.content
+    return ModelResponse(
+        parts=[ToolCallPart("search_site_knowledge", {"query": question})]
+    )
 
 
 async def test_pipeline_smoke_scores_three_mini_cases(tmp_path) -> None:
