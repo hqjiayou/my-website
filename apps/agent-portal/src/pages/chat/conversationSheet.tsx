@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Pencil, RefreshCw, SquarePen, Trash, X } from 'lucide-react'
+import { Pencil, RefreshCw, Search, SquarePen, Trash, X } from 'lucide-react'
 
 import type { SiteAiConversation } from '@/types/api'
 import { errorMessage } from '@/utils/http/apiError'
@@ -43,6 +43,7 @@ export function ConversationSheet({
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [query, setQuery] = useState('')
   const pendingRef = useRef(false)
 
   if (!open) return null
@@ -90,6 +91,10 @@ export function ConversationSheet({
         setPending(false)
       })
   }
+
+  const visibleItems = query.trim()
+    ? items.filter((item) => (item.title ?? '').toLowerCase().includes(query.trim().toLowerCase()))
+    : items
 
   function submitDelete(id: string) {
     if (pendingRef.current) return
@@ -141,6 +146,31 @@ export function ConversationSheet({
           <RefreshCw size={16} />
         </button>
       </div>
+      <div className="px-3 pb-2">
+        <div className="relative">
+          <Search
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gpt-muted"
+          />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜尋對話"
+            aria-label="搜尋對話"
+            className="w-full rounded-lg border border-gpt-line bg-gpt-canvas py-2 pl-9 pr-8 text-sm outline-none placeholder:text-gpt-muted focus:border-gpt-muted"
+          />
+          {query ? (
+            <button
+              type="button"
+              aria-label="清除搜尋"
+              onClick={() => setQuery('')}
+              className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink"
+            >
+              <X size={13} />
+            </button>
+          ) : null}
+        </div>
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {loading ? <p className="px-2 py-6 text-sm text-gpt-muted">正在載入對話…</p> : null}
         {error ? (
@@ -152,11 +182,14 @@ export function ConversationSheet({
           </div>
         ) : null}
         {deleteError ? <p className="px-2 py-2 text-sm text-danger">{deleteError}</p> : null}
+        {!loading && !error && items.length > 0 && visibleItems.length === 0 ? (
+          <p className="px-2 py-6 text-sm leading-6 text-gpt-muted">找不到符合「{query.trim()}」的對話。</p>
+        ) : null}
         {!loading && !error && items.length === 0 ? (
           <p className="px-2 py-6 text-sm leading-6 text-gpt-muted">還沒有對話。送出第一則訊息後會出現在這裡。</p>
         ) : null}
         <ul className="flex flex-col">
-          {items.map((item) => {
+          {visibleItems.map((item) => {
             const id = String(item.id)
             const selected = id === activeId
             const deleteLocked = deleteLockedId != null && id === deleteLockedId

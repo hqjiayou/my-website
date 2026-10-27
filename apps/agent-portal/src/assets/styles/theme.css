@@ -3,6 +3,7 @@
  * 色值以 RGB 通道留在 :root，Tailwind 工具類經 @theme 引用，頁面不再寫散落色值。
  */
 :root {
+  color-scheme: light;
   --background: 244 247 248;
   --foreground: 20 34 38;
   --surface: 255 255 255;
@@ -19,6 +20,31 @@
   --gpt-muted: 110 110 110;
   --gpt-line: 229 229 229;
   --gpt-user: 236 236 236;
+  /* 代碼塊專用：不隨深淺色語義翻轉，兩種模式都保持深底亮字。 */
+  --gpt-code-bg: 13 13 13;
+  --gpt-code-fg: 255 255 255;
+}
+
+/* 深色模式（GPT 配色）：<html class="dark"> 時整套變量覆寫，工具類不動。 */
+.dark {
+  color-scheme: dark;
+  --background: 33 33 33;
+  --foreground: 236 236 236;
+  --surface: 43 43 43;
+  --border: 64 64 64;
+  --muted-foreground: 163 163 163;
+  --primary: 45 130 132;
+  --primary-foreground: 244 251 251;
+  --danger: 224 122 122;
+
+  --gpt-canvas: 33 33 33;
+  --gpt-sidebar: 23 23 23;
+  --gpt-ink: 236 236 236;
+  --gpt-muted: 163 163 163;
+  --gpt-line: 64 64 64;
+  --gpt-user: 47 47 47;
+  --gpt-code-bg: 13 13 13;
+  --gpt-code-fg: 236 236 236;
 }
 
 @theme inline {
@@ -42,6 +68,8 @@
   --color-gpt-user: rgb(var(--gpt-user));
   --color-gpt-hover: rgb(var(--gpt-ink) / 0.06);
   --color-gpt-active: rgb(var(--gpt-ink) / 0.1);
+  --color-gpt-code: rgb(var(--gpt-code-bg));
+  --color-gpt-code-fg: rgb(var(--gpt-code-fg));
 
   --radius-control: 0.75rem;
   --radius-panel: 1rem;
