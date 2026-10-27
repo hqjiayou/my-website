@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { siteAiApi } from '@/api/siteAiApi'
-import { BottomNav } from '@/components/bottomNav'
 import { Screen } from '@/components/screen'
 import { resolvePortalSiteId } from '@/config/env'
 import { useAuthStore } from '@/stores/authStore'
@@ -71,22 +70,20 @@ export function MemoriesPage() {
   if (!site.ok) {
     return (
       <Screen>
-        <main className="safe-top safe-x with-bottom-nav flex flex-1 flex-col px-page py-6">
+        <main className="safe-x flex flex-1 flex-col overflow-y-auto px-page py-6">
           <h1 className="text-2xl font-semibold">我的記憶</h1>
           <p className="mt-6 text-sm leading-6 text-danger">{site.message}</p>
         </main>
-        <BottomNav />
       </Screen>
     )
   }
 
   return (
     <Screen>
-      <header className="safe-top safe-x shrink-0 px-page pt-4">
+      <main className="safe-x flex flex-1 flex-col overflow-y-auto px-page py-6">
         <h1 className="text-2xl font-semibold tracking-tight">我的記憶</h1>
         <p className="mt-2 text-sm leading-6 text-gpt-muted">最多保留 50 條，超出自動移除最舊的。</p>
-      </header>
-      <main className="safe-x with-bottom-nav mt-section flex flex-1 flex-col px-page">
+        <div className="mt-section flex flex-col">
         {items.length > 0 ? (
           <div className="mb-4">
             {confirmClear ? (
@@ -180,8 +177,8 @@ export function MemoriesPage() {
             })}
           </ul>
         ) : null}
+        </div>
       </main>
-      <BottomNav />
     </Screen>
   )
 }

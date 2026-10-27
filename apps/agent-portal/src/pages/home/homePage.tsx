@@ -2,14 +2,12 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { siteAiApi } from '@/api/siteAiApi'
-import { BottomNav } from '@/components/bottomNav'
 import { Card, CardTitle } from '@/components/card'
 import { Screen } from '@/components/screen'
 import { readAccessTokenSiteId, resolvePortalSiteId } from '@/config/env'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
 import type { SiteAiConversation, SiteKnowledgeDocumentListItem, SiteUserMemory } from '@/types/api'
-import { errorMessage } from '@/utils/http/apiError'
 
 const RECENT_CONVERSATIONS = 3
 const RECENT_DOCUMENTS = 2
@@ -31,11 +29,8 @@ export function HomePage() {
   const user = useAuthStore((state) => state.user)
   const sessionSite = useAuthStore((state) => state.site)
   const accessToken = useAuthStore((state) => state.accessToken)
-  const logout = useAuthStore((state) => state.logout)
   const site = resolvePortalSiteId(sessionSite?.siteId)
   const tokenSiteId = readAccessTokenSiteId(accessToken)
-  const [logoutError, setLogoutError] = useState<string | null>(null)
-  const [loggingOut, setLoggingOut] = useState(false)
 
   const [conversations, setConversations] = useState<SiteAiConversation[] | null>(null)
   const [documents, setDocuments] = useState<SiteKnowledgeDocumentListItem[] | null>(null)
@@ -65,18 +60,6 @@ export function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site.ok])
 
-  async function onLogout() {
-    setLoggingOut(true)
-    setLogoutError(null)
-    try {
-      await logout()
-      navigate(ROUTES.login, { replace: true })
-    } catch (error) {
-      setLogoutError(errorMessage(error))
-      setLoggingOut(false)
-    }
-  }
-
   const displayName = user?.displayName || user?.username || '已登入'
   const siteMismatch = site.ok && tokenSiteId !== null && tokenSiteId !== site.siteId
   const siteIdFromSession = sessionSite != null && site.ok && String(sessionSite.siteId) === site.siteId
@@ -84,19 +67,7 @@ export function HomePage() {
 
   return (
     <Screen>
-      <header className="safe-top safe-x flex items-center justify-between px-page pt-4">
-        <p className="text-sm text-gpt-muted">{displayName}</p>
-        <button
-          type="button"
-          onClick={() => void onLogout()}
-          disabled={loggingOut}
-          className="h-10 rounded-lg px-3 text-sm text-gpt-ink hover:bg-gpt-hover disabled:opacity-60"
-        >
-          {loggingOut ? '正在登出…' : '登出'}
-        </button>
-      </header>
-
-      <main className="safe-x with-bottom-nav flex flex-1 flex-col px-page pt-6">
+      <main className="safe-x flex flex-1 flex-col overflow-y-auto px-page py-6">
         <h1 className="text-3xl font-semibold tracking-tight">{siteName}</h1>
         <p className="mt-2 text-sm leading-6 text-gpt-muted">問 AI、查知識庫，或接續之前的對話。</p>
 
@@ -273,13 +244,7 @@ export function HomePage() {
           ) : null}
         </Card>
 
-        {logoutError ? (
-          <p className="mt-4 rounded-control bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
-            {logoutError}
-          </p>
-        ) : null}
       </main>
-      <BottomNav />
     </Screen>
   )
 }

@@ -1,5 +1,5 @@
 import { apiUrl } from '@/config/env'
-import type { SiteAiChatRequest, SiteAiCitation } from '@/types/api'
+import type { SiteAiChatRequest, SiteAiCitation, SiteSearchSummary } from '@/types/api'
 import { getAccessToken } from '@/utils/token'
 
 import { ApiError } from './apiError'
@@ -10,6 +10,15 @@ const STREAM_TIMEOUT_MS = 130_000
 export type SiteSseEvent =
   | { event: 'START' }
   | { event: 'TEXT_DELTA'; delta: string }
+  | { event: 'THINKING'; delta: string }
+  | { event: 'TOOL_START'; toolName: string; toolCallId: string }
+  | {
+      event: 'TOOL_RESULT'
+      toolName: string
+      toolCallId: string
+      ok: boolean
+      summary?: SiteSearchSummary
+    }
   | { event: 'DONE'; reply: string; providerStatus: string; citations?: SiteAiCitation[] }
   | { event: 'CONVERSATION'; conversationId: string }
   | { event: 'ERROR'; errorCode: string }
@@ -137,6 +146,22 @@ function toSiteEvent(eventName: string, data: unknown): SiteSseEvent | null {
       return { event: 'START' }
     case 'TEXT_DELTA':
       return { event: 'TEXT_DELTA', delta: readDelta(record) }
+    case 'THINKING':
+      return { event: 'THINKING', delta: readDelta(record) }
+    case 'TOOL_START':
+      return {
+        event: 'TOOL_START',
+        toolName: readString(record, 'toolName'),
+        toolCallId: readString(record, 'toolCallId'),
+      }
+    case 'TOOL_RESULT':
+      return {
+        event: 'TOOL_RESULT',
+        toolName: readString(record, 'toolName'),
+        toolCallId: readString(record, 'toolCallId'),
+        ok: record.ok === true,
+        summary: readSearchSummary(record),
+      }
     case 'DONE':
       return {
         event: 'DONE',
@@ -173,6 +198,24 @@ function readConversationId(record: Record<string, unknown>): string {
 function readString(record: Record<string, unknown>, key: string): string {
   const value = record[key]
   return typeof value === 'string' ? value : ''
+}
+
+/** 知识搜索摘要：字段缺失或格式不对时整段丢弃，不让事件解析失败。 */
+function readSearchSummary(record: Record<string, unknown>): SiteSearchSummary | undefined {
+  const raw = record.summary
+  if (!isRecord(raw)) return undefined
+  const sources: SiteAiCitation[] = []
+  if (Array.isArray(raw.sources)) {
+    for (const item of raw.sources) {
+      const citation = readCitation(item)
+      if (citation) sources.push(citation)
+    }
+  }
+  return {
+    query: typeof raw.query === 'string' ? raw.query : '',
+    hitCount: typeof raw.hitCount === 'number' ? raw.hitCount : sources.length,
+    sources,
+  }
 }
 
 /**

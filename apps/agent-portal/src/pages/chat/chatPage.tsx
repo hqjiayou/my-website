@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
 import { MarkdownText } from '@/components/markdown'
+import { useSidebarExtra } from '@/components/sidebarExtra'
 import { resolvePortalSiteId } from '@/config/env'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
@@ -11,6 +12,7 @@ import { formatSimilarityPercent } from '@/utils/formatSimilarity'
 import { errorMessage } from '@/utils/http/apiError'
 
 import { ConversationSheet } from './conversationSheet'
+import { ProcessTimeline, type ProcessStep } from './processTimeline'
 import { useKeyboardInset } from './useKeyboardInset'
 
 const MAX_MESSAGE_CHARS = 16_000
@@ -43,12 +45,15 @@ interface ChatTurn {
   pending?: boolean
   providerStatus?: string
   citations?: SiteAiCitation[]
+  /** 本轮的过程步骤（思考/工具）。只在当次会话内保留，刷新后服务端不回传。 */
+  process?: ProcessStep[]
 }
 
 interface StoredLoadOptions {
   silent?: boolean
   citations?: SiteAiCitation[]
   providerStatus?: string
+  process?: ProcessStep[]
 }
 
 function conversationPath(id: string) {
@@ -61,7 +66,10 @@ function readRouteConversationId(value: string | undefined): string | null {
   return value
 }
 
-function toStoredTurns(items: SiteAiMessage[], extra?: Pick<StoredLoadOptions, 'citations' | 'providerStatus'>): ChatTurn[] {
+function toStoredTurns(
+  items: SiteAiMessage[],
+  extra?: Pick<StoredLoadOptions, 'citations' | 'providerStatus' | 'process'>,
+): ChatTurn[] {
   let lastAssistant = -1
   const turns: ChatTurn[] = items.map((item, index) => {
     if (item.role === 'ASSISTANT') lastAssistant = index
@@ -76,11 +84,17 @@ function toStoredTurns(items: SiteAiMessage[], extra?: Pick<StoredLoadOptions, '
     }
   })
   // 即時輪的 extra 只覆蓋最後一條 ASSISTANT；沒有 extra citations 時保留該條已存的引用。
-  if (lastAssistant >= 0 && extra && (extra.citations?.length || extra.providerStatus !== undefined)) {
+  // process 只存在即時輪：靜默重載回存檔訊息時把它接回去，免得時間線在 DONE 後消失。
+  if (
+    lastAssistant >= 0 &&
+    extra &&
+    (extra.citations?.length || extra.providerStatus !== undefined || extra.process?.length)
+  ) {
     turns[lastAssistant] = {
       ...turns[lastAssistant],
       citations: extra.citations?.length ? extra.citations : turns[lastAssistant].citations,
       providerStatus: extra.providerStatus,
+      process: extra.process?.length ? extra.process : turns[lastAssistant].process,
     }
   }
   return turns
@@ -100,13 +114,12 @@ export function ChatPage() {
   const routeId = readRouteConversationId(routeConversationId)
   const site = useMemo(() => resolvePortalSiteId(useAuthStore.getState().site?.siteId), [])
   const displayName = useAuthStore((state) => state.user?.displayName || state.user?.username || '')
-  const logout = useAuthStore((state) => state.logout)
+  const { setExtra, closeDrawer } = useSidebarExtra()
   useKeyboardInset()
 
   const [conversations, setConversations] = useState<SiteAiConversation[]>([])
   const [listLoading, setListLoading] = useState(site.ok)
   const [listError, setListError] = useState<string | null>(null)
-  const [navOpen, setNavOpen] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatTurn[]>([])
   const [historyLoading, setHistoryLoading] = useState(routeId != null)
@@ -119,8 +132,6 @@ export function ChatPage() {
   const [failure, setFailure] = useState<SendFailure | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [copyErrorId, setCopyErrorId] = useState<string | null>(null)
-  const [loggingOut, setLoggingOut] = useState(false)
-  const [logoutError, setLogoutError] = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const draftRef = useRef<HTMLTextAreaElement | null>(null)
@@ -249,18 +260,6 @@ export function ChatPage() {
     }
   }
 
-  async function onLogout() {
-    setLoggingOut(true)
-    setLogoutError(null)
-    try {
-      await logout()
-      navigate(ROUTES.login, { replace: true })
-    } catch (error) {
-      setLogoutError(errorMessage(error))
-      setLoggingOut(false)
-    }
-  }
-
   function stopGenerating() {
     abortRef.current?.abort()
   }
@@ -284,13 +283,13 @@ export function ChatPage() {
     setFailure(null)
     setPending([])
     setAttachError(null)
-    setNavOpen(false)
+    closeDrawer()
     if (routeId) navigate(ROUTES.chat)
   }
 
   function openConversation(conversationId: string) {
     if (!site.ok) return
-    setNavOpen(false)
+    closeDrawer()
     if (conversationId === routeId) return
     leaveStreaming()
     setFailure(null)
@@ -399,6 +398,14 @@ export function ChatPage() {
     let finished = false
     let liveCitations: SiteAiCitation[] | undefined
     let liveProviderStatus: string | undefined
+    // 过程步骤在闭包里同步累积，同时镜像进 assistant 轮渲染；DONE 后随静默重载带回。
+    const liveSteps: ProcessStep[] = []
+    const syncSteps = () => {
+      const snapshot = [...liveSteps]
+      setMessages((current) =>
+        current.map((item) => (item.id === assistantId ? { ...item, process: snapshot } : item)),
+      )
+    }
     try {
       await siteAiApi.streamChat(
         site.siteId,
@@ -417,6 +424,38 @@ export function ChatPage() {
                 item.id === assistantId ? { ...item, content: item.content + event.delta, pending: true } : item,
               ),
             )
+          } else if (event.event === 'THINKING') {
+            const last = liveSteps[liveSteps.length - 1]
+            if (last?.kind === 'thinking') {
+              liveSteps[liveSteps.length - 1] = { ...last, text: last.text + event.delta }
+            } else {
+              liveSteps.push({ kind: 'thinking', id: crypto.randomUUID(), text: event.delta })
+            }
+            syncSteps()
+          } else if (event.event === 'TOOL_START') {
+            liveSteps.push({
+              kind: 'tool',
+              id: crypto.randomUUID(),
+              callId: event.toolCallId,
+              name: event.toolName,
+              status: 'running',
+            })
+            syncSteps()
+          } else if (event.event === 'TOOL_RESULT') {
+            const index = liveSteps.findIndex(
+              (step) => step.kind === 'tool' && step.callId === event.toolCallId,
+            )
+            if (index >= 0) {
+              const step = liveSteps[index]
+              if (step.kind === 'tool') {
+                liveSteps[index] = {
+                  ...step,
+                  status: event.ok ? 'ok' : 'failed',
+                  summary: event.summary ?? step.summary,
+                }
+              }
+            }
+            syncSteps()
           } else if (event.event === 'DONE') {
             finished = true
             liveCitations = event.citations
@@ -458,6 +497,7 @@ export function ChatPage() {
           silent: true,
           citations: liveCitations,
           providerStatus: liveProviderStatus,
+          process: liveSteps.length ? [...liveSteps] : undefined,
         })
       }
     } catch (error) {
@@ -510,6 +550,33 @@ export function ChatPage() {
   const activeTitle =
     conversations.find((item) => String(item.id) === selectedId)?.title?.trim() || (selectedId ? '對話' : '新對話')
 
+  // 会话列表注入全站侧边栏（唯一的导航）；离开聊天页时清空。
+  useEffect(() => {
+    if (!site.ok) return
+    setExtra(
+      <ConversationSheet
+        open
+        items={conversations}
+        loading={listLoading}
+        error={listError}
+        activeId={selectedId}
+        deleteLockedId={sending ? selectedId : null}
+        onClose={closeDrawer}
+        onRefresh={() => void loadConversations(site.siteId)}
+        onCreate={startNewChat}
+        onOpen={(id) => void openConversation(id)}
+        onRename={renameConversation}
+        onDelete={removeConversation}
+      />,
+    )
+    // 回调每轮渲染都是新引用，只按数据依赖刷新注入内容
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setExtra, site, conversations, listLoading, listError, selectedId, sending])
+
+  useEffect(() => {
+    return () => setExtra(null)
+  }, [setExtra])
+
   if (!site.ok) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-gpt-canvas px-6 text-gpt-ink">
@@ -521,305 +588,242 @@ export function ChatPage() {
   const showEmpty = visibleMessages.length === 0 && !visibleHistoryError && !(historyLoading && !freshChat)
 
   return (
-    <div
-      className="flex w-full bg-gpt-canvas text-gpt-ink"
-      style={{ height: 'calc(100dvh - var(--keyboard-inset, 0px))' }}
+    <section
+      className="flex min-w-0 w-full flex-1 flex-col bg-gpt-canvas"
+      style={{ height: 'calc(100% - var(--keyboard-inset, 0px))' }}
     >
-      {navOpen ? (
-        <button
-          type="button"
-          aria-label="關閉選單"
-          className="fixed inset-0 z-20 bg-gpt-ink/30 md:hidden"
-          onClick={() => setNavOpen(false)}
-        />
-      ) : null}
+      <div className="flex h-11 shrink-0 items-center gap-2 px-4">
+        <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{activeTitle}</h1>
+        {selectedId ? <span className="text-xs text-gpt-muted">已儲存</span> : null}
+      </div>
 
-      <aside
-        className={
-          navOpen
-            ? 'fixed inset-y-0 left-0 z-30 flex h-full w-[260px] shrink-0 border-r border-gpt-line md:static'
-            : 'hidden h-full w-[260px] shrink-0 border-r border-gpt-line md:flex'
-        }
-      >
-        <div className="flex h-full min-h-0 w-full flex-col">
-          <div className="min-h-0 flex-1">
-            <ConversationSheet
-              open
-              items={conversations}
-              loading={listLoading}
-              error={listError}
-              activeId={selectedId}
-              deleteLockedId={sending ? selectedId : null}
-              onClose={() => setNavOpen(false)}
-              onRefresh={() => void loadConversations(site.siteId)}
-              onCreate={startNewChat}
-              onOpen={(id) => void openConversation(id)}
-              onRename={renameConversation}
-              onDelete={removeConversation}
-            />
-          </div>
-          <footer className="safe-bottom border-t border-gpt-line px-3 py-3">
-            <p className="truncate px-2 text-sm">{displayName || '已登入'}</p>
-            {logoutError ? <p className="px-2 pt-1 text-xs text-danger">{logoutError}</p> : null}
-            <div className="mt-2 flex gap-1">
-              <button
-                type="button"
-                onClick={() => void onLogout()}
-                disabled={loggingOut}
-                className="rounded-lg px-2 py-1.5 text-xs text-gpt-muted hover:bg-gpt-hover disabled:opacity-60"
-              >
-                {loggingOut ? '正在登出…' : '登出'}
-              </button>
-              <Link to={ROUTES.home} className="rounded-lg px-2 py-1.5 text-xs text-gpt-muted hover:bg-gpt-hover">
-                首頁
-              </Link>
-              <Link to={ROUTES.knowledge} className="rounded-lg px-2 py-1.5 text-xs text-gpt-muted hover:bg-gpt-hover">
-                知識庫
-              </Link>
-              <Link to={ROUTES.memories} className="rounded-lg px-2 py-1.5 text-xs text-gpt-muted hover:bg-gpt-hover">
-                我的記憶
-              </Link>
-            </div>
-          </footer>
-        </div>
-      </aside>
-
-      <section className="flex min-w-0 flex-1 flex-col">
-        <header className="safe-top flex h-12 shrink-0 items-center gap-2 border-b border-gpt-line px-2">
-          <button
-            type="button"
-            onClick={() => setNavOpen(true)}
-            className="h-10 rounded-lg px-3 text-sm hover:bg-gpt-hover md:hidden"
-          >
-            選單
-          </button>
-          <h1 className="min-w-0 flex-1 truncate px-2 text-sm font-medium">{activeTitle}</h1>
-          {selectedId ? <span className="pr-3 text-xs text-gpt-muted">已儲存</span> : null}
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
-          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-6">
-            {historyLoading && !freshChat ? <p className="text-sm text-gpt-muted">正在載入訊息…</p> : null}
-            {showEmpty ? (
-              <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                  {displayName ? `${displayName}，有什麼可以幫忙的？` : '有什麼可以幫忙的？'}
-                </h1>
-                <p className="mt-3 max-w-md text-sm leading-6 text-gpt-muted">
-                  回覆成功後，這段對話會存在這個帳號下。從左側打開，或刷新這個頁面，都會從伺服器讀回。
-                </p>
-                <div className="mt-8 grid w-full gap-2 sm:grid-cols-3">
-                  {SUGGESTIONS.map((prompt) => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      disabled={sending}
-                      onClick={() => void send(prompt)}
-                      className="rounded-2xl border border-gpt-line px-3 py-3 text-left text-sm leading-6 hover:bg-gpt-hover disabled:opacity-60"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {visibleHistoryError ? (
-              <div>
-                <p className="text-sm text-danger">{visibleHistoryError}</p>
-                {routeId ? (
+      <div className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-6">
+          {historyLoading && !freshChat ? <p className="text-sm text-gpt-muted">正在載入訊息…</p> : null}
+          {showEmpty ? (
+            <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {displayName ? `${displayName}，有什麼可以幫忙的？` : '有什麼可以幫忙的？'}
+              </h1>
+              <p className="mt-3 max-w-md text-sm leading-6 text-gpt-muted">
+                回覆成功後，這段對話會存在這個帳號下。從左側打開，或刷新這個頁面，都會從伺服器讀回。
+              </p>
+              <div className="mt-8 grid w-full gap-2 sm:grid-cols-3">
+                {SUGGESTIONS.map((prompt) => (
                   <button
+                    key={prompt}
                     type="button"
-                    onClick={() => {
-                      if (routeId) void loadStoredMessages(routeId)
-                    }}
-                    className="mt-3 h-9 rounded-lg border border-gpt-line px-3 text-sm"
+                    disabled={sending}
+                    onClick={() => void send(prompt)}
+                    className="rounded-2xl border border-gpt-line px-3 py-3 text-left text-sm leading-6 hover:bg-gpt-hover disabled:opacity-60"
                   >
-                    重試
+                    {prompt}
                   </button>
-                ) : null}
+                ))}
               </div>
-            ) : null}
-            <ul className="flex flex-col gap-6">
-              {visibleMessages.map((message) => {
-                const hasCitations =
-                  !message.pending && message.role === 'ASSISTANT' && (message.citations?.length ?? 0) > 0
-                const hasImages = (message.images?.length ?? 0) > 0
-                const visible =
-                  Boolean(message.content) ||
-                  message.pending ||
-                  message.providerStatus !== undefined ||
-                  hasCitations ||
-                  hasImages
-                if (!visible) return null
-                const isUser = message.role === 'USER'
-                return (
-                  <li key={message.id} className={isUser ? 'flex justify-end' : 'flex justify-start'}>
-                    <div className={isUser ? 'max-w-[85%] rounded-3xl bg-gpt-user px-4 py-2.5' : 'max-w-full'}>
-                      {hasImages ? (
-                        <div className={message.content ? 'mb-2 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
-                          {message.images?.map((image, index) => (
-                            <img
-                              key={`${message.id}-${index}`}
-                              src={imageSrc(image)}
-                              alt="附件圖片"
-                              className="max-h-48 max-w-full rounded-xl"
-                            />
-                          ))}
-                        </div>
-                      ) : null}
-                      {message.content || message.pending ? (
-                        isUser ? (
-                          <p className="whitespace-pre-wrap break-words text-[15px] leading-7">
-                            {message.content}
-                          </p>
-                        ) : (
-                          <div>
-                            <MarkdownText>{message.content}</MarkdownText>
-                            {message.pending ? (
-                              <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-gpt-ink align-middle" />
-                            ) : null}
-                          </div>
-                        )
-                      ) : null}
-                      {hasCitations ? (
-                        <ul className="mt-3 flex flex-wrap gap-1.5">
-                          {message.citations?.map((citation, index) => (
-                            <li
-                              key={`${citation.sourceId}-${citation.chunkIndex}-${index}`}
-                              title={citation.sourceId}
-                              className="max-w-full rounded-full bg-gpt-sidebar px-2.5 py-1 text-xs text-gpt-muted"
-                            >
-                              來源 {index + 1} · {formatSimilarityPercent(citation.score)}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      {!isUser && !message.pending && message.content ? (
-                        <button
-                          type="button"
-                          onClick={() => void copyReply(message.id, message.content)}
-                          className="mt-2 h-8 rounded-lg px-2 text-xs text-gpt-muted hover:bg-gpt-hover"
-                        >
-                          {copiedId === message.id ? '已複製' : copyErrorId === message.id ? '無法複製' : '複製'}
-                        </button>
-                      ) : null}
-                      {message.providerStatus !== undefined && message.providerStatus !== 'LIVE' ? (
-                        <p className="mt-2 text-xs text-danger">
-                          {message.providerStatus
-                            ? (PROVIDER_STATUS_TEXT[message.providerStatus] ??
-                              `AI 服務狀態：${message.providerStatus}`)
-                            : '尚未回傳 AI 服務狀態'}
-                        </p>
-                      ) : null}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-            {failure ? (
-              <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-gpt-line px-3 py-2" role="alert">
-                <p className="text-sm text-danger">{failure.message}</p>
+            </div>
+          ) : null}
+          {visibleHistoryError ? (
+            <div>
+              <p className="text-sm text-danger">{visibleHistoryError}</p>
+              {routeId ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    void send(failure.retryText, failure.retryImages, {
-                      userId: failure.userId,
-                      assistantId: failure.assistantId,
-                    })
-                  }
-                  disabled={sending}
-                  className="h-9 shrink-0 rounded-full border border-gpt-line px-3 text-sm disabled:opacity-60"
+                  onClick={() => {
+                    if (routeId) void loadStoredMessages(routeId)
+                  }}
+                  className="mt-3 h-9 rounded-lg border border-gpt-line px-3 text-sm"
                 >
                   重試
                 </button>
-              </div>
-            ) : null}
-            <div ref={bottomRef} />
-          </div>
-        </div>
-
-        <form onSubmit={onSubmit} className="safe-x shrink-0 px-4 pb-4">
-          <div className="mx-auto w-full max-w-3xl">
-            {attachError ? <p className="mb-2 text-center text-xs text-danger">{attachError}</p> : null}
-            {pending.length > 0 ? (
-              <ul className="mb-2 flex flex-wrap gap-2">
-                {pending.map((image) => (
-                  <li key={image.id} className="relative">
-                    <img src={imageSrc(image)} alt="" className="h-16 w-16 rounded-xl object-cover" />
-                    <button
-                      type="button"
-                      aria-label="移除圖片"
-                      disabled={sending}
-                      onClick={() => {
-                        setPending((current) => current.filter((item) => item.id !== image.id))
-                        setAttachError(null)
-                      }}
-                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gpt-ink text-[10px] text-gpt-canvas disabled:opacity-30"
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          <div className="flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="sr-only"
-              disabled={sending || compressing}
-              onChange={(event) => void onPickFiles(event)}
-            />
-            <button
-              type="button"
-              aria-label="附加圖片"
-              disabled={sending || compressing}
-              onClick={() => fileRef.current?.click()}
-              className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gpt-muted hover:bg-gpt-hover disabled:opacity-30"
-            >
-              <PaperclipIcon />
-            </button>
-            <label className="sr-only" htmlFor="chat-draft">
-              訊息
-            </label>
-            <textarea
-              id="chat-draft"
-              ref={draftRef}
-              rows={1}
-              value={draft}
-              enterKeyHint="send"
-              placeholder="傳訊息給 Agent Portal"
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault()
-                  if (!sending && !compressing) void send(draft, pending)
+              ) : null}
+            </div>
+          ) : null}
+          <ul className="flex flex-col gap-6">
+            {visibleMessages.map((message) => {
+              const hasCitations =
+                !message.pending && message.role === 'ASSISTANT' && (message.citations?.length ?? 0) > 0
+              const hasImages = (message.images?.length ?? 0) > 0
+              const hasProcess = message.role === 'ASSISTANT' && (message.process?.length ?? 0) > 0
+              const visible =
+                Boolean(message.content) ||
+                message.pending ||
+                message.providerStatus !== undefined ||
+                hasCitations ||
+                hasImages ||
+                hasProcess
+              if (!visible) return null
+              const isUser = message.role === 'USER'
+              return (
+                <li key={message.id} className={isUser ? 'flex justify-end' : 'flex justify-start'}>
+                  <div className={isUser ? 'max-w-[85%] rounded-3xl bg-gpt-user px-4 py-2.5' : 'max-w-full'}>
+                    {hasProcess ? (
+                      <ProcessTimeline steps={message.process ?? []} live={!!message.pending} />
+                    ) : null}
+                    {hasImages ? (
+                      <div className={message.content ? 'mb-2 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
+                        {message.images?.map((image, index) => (
+                          <img
+                            key={`${message.id}-${index}`}
+                            src={imageSrc(image)}
+                            alt="附件圖片"
+                            className="max-h-48 max-w-full rounded-xl"
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                    {message.content || message.pending ? (
+                      isUser ? (
+                        <p className="whitespace-pre-wrap break-words text-[15px] leading-7">
+                          {message.content}
+                        </p>
+                      ) : (
+                        <div>
+                          <MarkdownText>{message.content}</MarkdownText>
+                          {message.pending ? (
+                            <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-gpt-ink align-middle" />
+                          ) : null}
+                        </div>
+                      )
+                    ) : null}
+                    {hasCitations ? (
+                      <ul className="mt-3 flex flex-wrap gap-1.5">
+                        {message.citations?.map((citation, index) => (
+                          <li
+                            key={`${citation.sourceId}-${citation.chunkIndex}-${index}`}
+                            title={citation.sourceId}
+                            className="max-w-full rounded-full bg-gpt-sidebar px-2.5 py-1 text-xs text-gpt-muted"
+                          >
+                            來源 {index + 1} · {formatSimilarityPercent(citation.score)}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {!isUser && !message.pending && message.content ? (
+                      <button
+                        type="button"
+                        onClick={() => void copyReply(message.id, message.content)}
+                        className="mt-2 h-8 rounded-lg px-2 text-xs text-gpt-muted hover:bg-gpt-hover"
+                      >
+                        {copiedId === message.id ? '已複製' : copyErrorId === message.id ? '無法複製' : '複製'}
+                      </button>
+                    ) : null}
+                    {message.providerStatus !== undefined && message.providerStatus !== 'LIVE' ? (
+                      <p className="mt-2 text-xs text-danger">
+                        {message.providerStatus
+                          ? (PROVIDER_STATUS_TEXT[message.providerStatus] ??
+                            `AI 服務狀態：${message.providerStatus}`)
+                          : '尚未回傳 AI 服務狀態'}
+                      </p>
+                    ) : null}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          {failure ? (
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-gpt-line px-3 py-2" role="alert">
+              <p className="text-sm text-danger">{failure.message}</p>
+              <button
+                type="button"
+                onClick={() =>
+                  void send(failure.retryText, failure.retryImages, {
+                    userId: failure.userId,
+                    assistantId: failure.assistantId,
+                  })
                 }
-              }}
-              className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-base outline-none"
-            />
-            <button
-              type="submit"
-              disabled={
-                compressing ||
-                (historyLoading && !freshChat) ||
-                (!sending && !draft.trim() && pending.length === 0)
+                disabled={sending}
+                className="h-9 shrink-0 rounded-full border border-gpt-line px-3 text-sm disabled:opacity-60"
+              >
+                重試
+              </button>
+            </div>
+          ) : null}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+
+      <form onSubmit={onSubmit} className="safe-x shrink-0 px-4 pb-4">
+        <div className="mx-auto w-full max-w-3xl">
+          {attachError ? <p className="mb-2 text-center text-xs text-danger">{attachError}</p> : null}
+          {pending.length > 0 ? (
+            <ul className="mb-2 flex flex-wrap gap-2">
+              {pending.map((image) => (
+                <li key={image.id} className="relative">
+                  <img src={imageSrc(image)} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                  <button
+                    type="button"
+                    aria-label="移除圖片"
+                    disabled={sending}
+                    onClick={() => {
+                      setPending((current) => current.filter((item) => item.id !== image.id))
+                      setAttachError(null)
+                    }}
+                    className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gpt-ink text-[10px] text-gpt-canvas disabled:opacity-30"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        <div className="flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="sr-only"
+            disabled={sending || compressing}
+            onChange={(event) => void onPickFiles(event)}
+          />
+          <button
+            type="button"
+            aria-label="附加圖片"
+            disabled={sending || compressing}
+            onClick={() => fileRef.current?.click()}
+            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gpt-muted hover:bg-gpt-hover disabled:opacity-30"
+          >
+            <PaperclipIcon />
+          </button>
+          <label className="sr-only" htmlFor="chat-draft">
+            訊息
+          </label>
+          <textarea
+            id="chat-draft"
+            ref={draftRef}
+            rows={1}
+            value={draft}
+            enterKeyHint="send"
+            placeholder="傳訊息給 Agent Portal"
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                if (!sending && !compressing) void send(draft, pending)
               }
-              aria-label={sending ? '停止生成' : '傳送'}
-              className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas disabled:opacity-30"
-            >
-              {sending ? <StopIcon /> : <SendIcon />}
-            </button>
-          </div>
-          </div>
-          <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-gpt-muted">
-            回覆成功後寫入這個帳號。內容由 AI 產生，請自行確認。
-          </p>
-        </form>
-      </section>
-    </div>
+            }}
+            className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-base outline-none"
+          />
+          <button
+            type="submit"
+            disabled={
+              compressing ||
+              (historyLoading && !freshChat) ||
+              (!sending && !draft.trim() && pending.length === 0)
+            }
+            aria-label={sending ? '停止生成' : '傳送'}
+            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas disabled:opacity-30"
+          >
+            {sending ? <StopIcon /> : <SendIcon />}
+          </button>
+        </div>
+        </div>
+        <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-gpt-muted">
+          回覆成功後寫入這個帳號。內容由 AI 產生，請自行確認。
+        </p>
+      </form>
+    </section>
   )
 }
 
