@@ -31,3 +31,49 @@ body {
 #root {
   min-height: 100dvh;
 }
+
+/* GPT 式細節：細滾動條、選區色、鍵盤焦點環、消息進場動畫。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--gpt-ink) / 0.22) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--gpt-ink) / 0.22);
+  border-radius: 999px;
+}
+
+::selection {
+  background: rgb(var(--primary) / 0.18);
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--primary) / 0.55);
+  outline-offset: 1px;
+}
+
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.msg-in {
+  animation: msg-in 0.18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-in {
+    animation: none;
+  }
+}

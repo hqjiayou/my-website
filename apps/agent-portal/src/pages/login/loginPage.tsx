@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { Sparkles } from 'lucide-react'
 
 import { authApi } from '@/api/authApi'
 import { ROUTES } from '@/router/config/routePaths'
@@ -51,10 +52,17 @@ export function LoginPage() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-background text-gpt-ink">
-      <main className="safe-top safe-x safe-bottom flex flex-1 flex-col justify-center px-5 py-8">
-        <p className="text-xs font-medium tracking-widest text-gpt-muted">SITE</p>
-        <h1 className="mt-2 text-2xl font-semibold">Agent Portal</h1>
-        <p className="mt-2 text-sm leading-6 text-gpt-muted">使用站點帳號登入。站點編碼是登入 API 的 siteCode，不是數字站點 ID。</p>
+      <main className="safe-top safe-x safe-bottom mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-5 py-8">
+        <div className="flex flex-col items-center text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gpt-ink text-gpt-canvas">
+            <Sparkles size={22} />
+          </span>
+          <p className="mt-4 text-xs font-medium tracking-widest text-gpt-muted">SITE</p>
+          <h1 className="mt-2 text-2xl font-semibold">Agent Portal</h1>
+          <p className="mt-2 max-w-xs text-sm leading-6 text-gpt-muted">
+            使用站點帳號登入。站點編碼是登入 API 的 siteCode，不是數字站點 ID。
+          </p>
+        </div>
 
         <form className="mt-8 flex flex-col gap-4" onSubmit={onSubmit} noValidate>
           <Field label="站點編碼" id="site-code">
@@ -130,4 +138,4 @@ function safeNextPath(state: unknown): string {
 }
 
 const inputClass =
-  'h-12 w-full rounded-xl border border-gpt-line bg-gpt-canvas px-3 text-base font-normal text-gpt-ink outline-none focus:border-gpt-ink'
+  'h-12 w-full rounded-xl border border-gpt-line bg-gpt-canvas px-3 text-base font-normal text-gpt-ink outline-none transition focus:border-gpt-muted'

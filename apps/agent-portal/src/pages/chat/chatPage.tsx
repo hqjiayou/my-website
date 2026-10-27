@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, Copy, FileText, ImagePlus, Pencil, Plus, RotateCcw, Square } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, Ellipsis, FileText, ImagePlus, Pencil, Plus, RotateCcw, Square, SquarePen, Trash } from 'lucide-react'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
 import { MarkdownText } from '@/components/markdown'
@@ -182,6 +182,9 @@ export function ChatPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [attachMenuOpen, setAttachMenuOpen] = useState(false)
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
+  const [headerConfirm, setHeaderConfirm] = useState(false)
+  const [headerNotice, setHeaderNotice] = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -737,6 +740,18 @@ export function ChatPage() {
     if (id === selectedId) startNewChat()
   }
 
+  async function deleteFromHeader() {
+    if (!selectedId) return
+    setHeaderMenuOpen(false)
+    setHeaderConfirm(false)
+    try {
+      await removeConversation(selectedId)
+    } catch (error) {
+      setHeaderNotice(errorMessage(error))
+      window.setTimeout(() => setHeaderNotice(null), 3000)
+    }
+  }
+
   const freshChat = !routeId && !sending
   const visibleMessages = freshChat ? [] : messages
   const visibleHistoryError = freshChat ? null : historyError
@@ -822,7 +837,7 @@ export function ChatPage() {
             ))}
           </ul>
         ) : null}
-      <div className="relative flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer">
+      <div className="relative flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer transition focus-within:border-gpt-muted">
         <input
           ref={fileRef}
           type="file"
@@ -919,7 +934,7 @@ export function ChatPage() {
             (!sending && !draft.trim() && pending.length === 0 && pendingDocs.length === 0)
           }
           aria-label={sending ? '停止生成' : '傳送'}
-          className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas disabled:opacity-30"
+          className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas transition active:scale-95 disabled:opacity-30"
         >
           {sending ? <Square size={12} fill="currentColor" /> : <ArrowUp size={18} strokeWidth={2.4} />}
         </button>
@@ -952,9 +967,81 @@ export function ChatPage() {
       className="flex min-w-0 w-full flex-1 flex-col bg-gpt-canvas"
       style={{ height: 'calc(100% - var(--keyboard-inset, 0px))' }}
     >
-      <div className="flex h-11 shrink-0 items-center gap-2 bg-gpt-canvas/80 px-4 backdrop-blur-sm">
+      <div className="relative flex h-11 shrink-0 items-center gap-1 bg-gpt-canvas/80 px-4 backdrop-blur-sm">
         <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{activeTitle}</h1>
-        {selectedId ? <span className="text-xs text-gpt-muted">已儲存</span> : null}
+        {headerNotice ? (
+          <span className="shrink-0 text-xs text-danger">{headerNotice}</span>
+        ) : selectedId ? (
+          <span className="shrink-0 text-xs text-gpt-muted">已儲存</span>
+        ) : null}
+        <button
+          type="button"
+          onClick={startNewChat}
+          aria-label="新對話"
+          title="新對話"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gpt-muted transition hover:bg-gpt-hover hover:text-gpt-ink active:scale-95"
+        >
+          <SquarePen size={17} />
+        </button>
+        {selectedId ? (
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              aria-label="對話操作"
+              aria-expanded={headerMenuOpen}
+              onClick={() => {
+                setHeaderMenuOpen((open) => !open)
+                setHeaderConfirm(false)
+              }}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-gpt-muted transition hover:bg-gpt-hover hover:text-gpt-ink active:scale-95"
+            >
+              <Ellipsis size={18} />
+            </button>
+            {headerMenuOpen ? (
+              <>
+                <button
+                  type="button"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  className="fixed inset-0 z-10 cursor-default"
+                  onClick={() => setHeaderMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-2xl border border-gpt-line bg-gpt-canvas p-1.5 shadow-xl">
+                  {headerConfirm ? (
+                    <div className="px-2 py-1.5">
+                      <p className="text-sm">確定刪除此對話？</p>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void deleteFromHeader()}
+                          className="h-8 rounded-full bg-danger px-3 text-xs font-medium text-white"
+                        >
+                          刪除
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHeaderConfirm(false)}
+                          className="h-8 rounded-full px-3 text-xs hover:bg-gpt-hover"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setHeaderConfirm(true)}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm text-danger hover:bg-gpt-hover"
+                    >
+                      <Trash size={15} />
+                      刪除此對話
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -1059,7 +1146,7 @@ export function ChatPage() {
               return (
                 <li
                   key={message.id}
-                  className={isUser ? 'group flex flex-col items-end' : 'group flex flex-col items-start'}
+                  className={isUser ? 'msg-in group flex flex-col items-end' : 'msg-in group flex flex-col items-start'}
                 >
                   <div className={isUser ? 'max-w-[85%] rounded-3xl bg-gpt-user px-4 py-2.5' : 'max-w-full'}>
                     {hasProcess ? (
@@ -1099,7 +1186,7 @@ export function ChatPage() {
                         <div>
                           <MarkdownText>{message.content}</MarkdownText>
                           {message.pending ? (
-                            <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-gpt-ink align-middle" />
+                            <span className="ml-1 inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-gpt-ink align-middle" />
                           ) : null}
                         </div>
                       )
