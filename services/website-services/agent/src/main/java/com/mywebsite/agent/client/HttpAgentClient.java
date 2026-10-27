@@ -304,11 +304,12 @@ public class HttpAgentClient implements AgentClient {
     public AgentOcrPdfResult ocrPdf(AgentOcrPdfRequest request) {
         ensureTokenConfigured();
         JsonNode body = exchangeWithRetry("POST", "/internal/v1/ocr/pdf", request);
-        JsonNode text = body.get("text");
+        JsonNode data = body.path("data");
+        JsonNode text = data.get("text");
         if (text == null || !text.isTextual()) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
-        JsonNode spec = body.get("modelSpec");
+        JsonNode spec = data.get("modelSpec");
         return new AgentOcrPdfResult(text.asText(), spec != null && spec.isTextual() ? spec.asText() : null);
     }
 
