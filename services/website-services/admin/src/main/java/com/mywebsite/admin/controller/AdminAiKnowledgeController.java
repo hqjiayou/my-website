@@ -49,6 +49,11 @@ public class AdminAiKnowledgeController {
 
     private static final String DOCUMENTS = "/api/admin/sites/{siteId}/ai/knowledge-documents";
     private static final int MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+    /** zip 批量导入上限：条目数与解压后总字节（防 zip 炸弹与整批拖垮请求）。 */
+    private static final int MAX_ARCHIVE_ENTRIES = 100;
+
+    private static final long MAX_ARCHIVE_TOTAL_BYTES = 50L * 1024 * 1024;
     /** 抽取文本上限（字符），与 agent-services 的 MAX_CONTENT_LENGTH 对齐。 */
     private static final int MAX_CONTENT_CHARS = 3_000_000;
     private static final int MAX_TITLE_LENGTH = 255;
@@ -204,6 +209,71 @@ public class AdminAiKnowledgeController {
                 adminAiKnowledgeService.createUploadedDocument(siteId, payload.request(), payload.meta())));
     }
 
+    @PostMapping(value = DOCUMENTS + "/upload-archive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
+    @Operation(summary = "上传 zip 批量导入 AI 知识库文档（逐条转换入库，部分失败不回滚）")
+    public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveResultDto>> uploadArchive(
+            @PathVariable long siteId,
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(value = "baseId", required = false) Long baseId) {
+        if (file == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_REQUIRED);
+        }
+        if (!"zip".equals(extensionOf(baseName(file.getOriginalFilename())))) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_TYPE);
+        }
+        byte[] zipBytes = readBytes(file);
+        java.util.List<AdminAiKnowledgeDetailDto> documents = new java.util.ArrayList<>();
+        java.util.List<AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveFailureDto> failures =
+                new java.util.ArrayList<>();
+        long totalBytes = 0;
+        int entries = 0;
+        try (java.util.zip.ZipInputStream zip =
+                new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zipBytes))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                String entryPath = entry.getName();
+                String entryName = baseName(entryPath);
+                // 系统垃圾（macOS 资源叉、缩略图缓存、隐藏文件）不算用户文档，静默跳过
+                if (entryName.isBlank()
+                        || entryName.startsWith(".")
+                        || entryPath.startsWith("__MACOSX")) {
+                    continue;
+                }
+                entries++;
+                if (entries > MAX_ARCHIVE_ENTRIES) {
+                    failures.add(new AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveFailureDto(
+                            entryName, AdminAiKnowledgeMessageKeys.FILE_SIZE));
+                    break;
+                }
+                byte[] entryBytes = zip.readAllBytes();
+                totalBytes += entryBytes.length;
+                if (totalBytes > MAX_ARCHIVE_TOTAL_BYTES) {
+                    failures.add(new AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveFailureDto(
+                            entryName, AdminAiKnowledgeMessageKeys.FILE_SIZE));
+                    break;
+                }
+                try {
+                    UploadPayload payload = toUploadPayload(siteId, entryName, entryBytes, null, baseId);
+                    documents.add(adminAiKnowledgeService.createUploadedDocument(
+                            siteId, payload.request(), payload.meta()));
+                } catch (BusinessException ex) {
+                    failures.add(new AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveFailureDto(
+                            entryName, ex.getMessageKey()));
+                }
+            }
+        } catch (java.io.IOException ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_ENCODING);
+        }
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS,
+                new AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveResultDto(
+                        documents.size(), documents, failures)));
+    }
+
     @GetMapping(DOCUMENTS + "/{id}/file")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "AI 知识库文档原档下载（短时 presigned URL）")
@@ -220,15 +290,18 @@ public class AdminAiKnowledgeController {
         if (file == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_REQUIRED);
         }
-        String filename = baseName(file.getOriginalFilename());
+        if (file.getSize() > MAX_UPLOAD_BYTES) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
+        }
+        return toUploadPayload(siteId, baseName(file.getOriginalFilename()), readBytes(file), titleOverride, baseId);
+    }
+
+    private UploadPayload toUploadPayload(
+            long siteId, String filename, byte[] bytes, String titleOverride, Long baseId) {
         String extension = extensionOf(filename);
         if (!SUPPORTED_EXTENSIONS.contains(extension)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_TYPE);
         }
-        if (file.getSize() > MAX_UPLOAD_BYTES) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
-        }
-        byte[] bytes = readBytes(file);
         if (bytes.length > MAX_UPLOAD_BYTES) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
         }

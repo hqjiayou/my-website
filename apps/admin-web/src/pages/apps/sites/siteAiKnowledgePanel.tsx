@@ -63,7 +63,8 @@ function formatFileSize(bytes: number) {
 
 function uploadFieldError(file: File): UploadDialogState['fieldError'] {
   const extension = knowledgeFileExtension(file.name)
-  if (!KB_UPLOAD_EXTENSIONS.includes(extension)) return 'extension'
+  // zip 是批量导入容器，走 upload-archive 端点，不在单文档格式集合内
+  if (extension !== 'zip' && !KB_UPLOAD_EXTENSIONS.includes(extension)) return 'extension'
   if (file.size > KB_UPLOAD_MAX_BYTES) return 'size'
   return null
 }
@@ -194,10 +195,20 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
             continue
           }
           try {
-            const detail = await aiApi.uploadKnowledgeDocument(siteId, file, undefined, writableBaseId)
-            if (detail.indexStatus === 'INDEXED') indexed++
-            else if (detail.indexStatus === 'FAILED') indexFailed++
-            else indexed++
+            if (knowledgeFileExtension(file.name) === 'zip') {
+              const result = await aiApi.uploadKnowledgeArchive(siteId, file, writableBaseId)
+              for (const detail of result.documents) {
+                if (detail.indexStatus === 'FAILED') indexFailed++
+                else indexed++
+              }
+              rejected += result.failures.length
+              if (result.createdCount === 0 && result.failures.length === 0) rejected++
+            } else {
+              const detail = await aiApi.uploadKnowledgeDocument(siteId, file, undefined, writableBaseId)
+              if (detail.indexStatus === 'INDEXED') indexed++
+              else if (detail.indexStatus === 'FAILED') indexFailed++
+              else indexed++
+            }
           } catch {
             rejected++
           }
@@ -240,6 +251,12 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
       return
     }
     const file = files[0]
+    // zip 不进单文件对话框（无标题可填）：直接走批量导入路径
+    if (knowledgeFileExtension(file.name) === 'zip' && !uploadFieldError(file)) {
+      setUploadDialog(null)
+      void uploadFilesBatch([file])
+      return
+    }
     setUploadDialog({
       file,
       title: titleFromFilename(file.name),
@@ -627,7 +644,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
             <input
               ref={uploadInputRef}
               type="file"
-              accept={KB_UPLOAD_ACCEPT}
+              accept={`${KB_UPLOAD_ACCEPT},.zip`}
               multiple
               className="hidden"
               onChange={onPickUploadFile}

@@ -103,6 +103,17 @@ export interface AiKnowledgeDetail extends AiKnowledgeListItem {
   content: string
 }
 
+export interface AiKnowledgeArchiveFailure {
+  fileName: string
+  reason: string
+}
+
+export interface AiKnowledgeArchiveResult {
+  createdCount: number
+  documents: AiKnowledgeDetail[]
+  failures: AiKnowledgeArchiveFailure[]
+}
+
 export interface AiKnowledgeListQuery {
   pageNum?: number
   pageSize?: number
