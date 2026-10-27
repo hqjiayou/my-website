@@ -36,6 +36,41 @@ public record AgentChatRequest(
             AgentModelSelection model,
             String businessApiBaseUrl,
             List<String> knowledgeContext,
+            List<AgentAttachmentDto> attachments,
+            List<String> memories,
+            Boolean memoryEnabled,
+            List<AgentModelSelection> fallbackModels) {
+        this(
+                siteId,
+                message,
+                locale,
+                conversationId,
+                promptProfile,
+                history,
+                skills,
+                todos,
+                model,
+                businessApiBaseUrl,
+                knowledgeContext,
+                attachments,
+                memories,
+                memoryEnabled,
+                fallbackModels,
+                null);
+    }
+
+    public AgentChatRequest(
+            String siteId,
+            String message,
+            String locale,
+            String conversationId,
+            AgentPromptProfile promptProfile,
+            List<AgentChatHistoryMessage> history,
+            List<String> skills,
+            List<AgentTodoItem> todos,
+            AgentModelSelection model,
+            String businessApiBaseUrl,
+            List<String> knowledgeContext,
             List<AgentAttachmentDto> attachments) {
         this(
                 siteId,
