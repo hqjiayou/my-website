@@ -1,4 +1,4 @@
-package com.mywebsite.admin.service;
+package com.mywebsite.infra.knowledge;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -19,12 +19,17 @@ import java.util.zip.ZipInputStream;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 
+import org.apache.poi.hslf.usermodel.HSLFShape;
+import org.apache.poi.hslf.usermodel.HSLFSlideShow;
+import org.apache.poi.hslf.usermodel.HSLFTextShape;
+import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
 import org.apache.poi.xslf.usermodel.XSLFShape;
 import org.apache.poi.xslf.usermodel.XSLFTable;
 import org.apache.poi.xslf.usermodel.XSLFTextShape;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
@@ -39,36 +44,47 @@ import org.w3c.dom.NodeList;
 
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter;
 
-import com.mywebsite.admin.service.AdminAiKnowledgeTextExtractor.ExtractionException;
+import com.mywebsite.infra.knowledge.KnowledgeTextExtractor.ExtractionException;
+
+
 
 /**
- * 知识库上传内容归一化：所有格式入库时统一转成 Markdown 标准形（PDF 文字层无结构、存纯文本段落）。
- * 文本类（txt/md/代码/数据）按 UTF-8→MS932→GB18030 回退解码，代码/数据类包代码围栏，CSV/TSV 转 Md 表格；
- * 二进制类（docx/xlsx/pptx/html/epub/odt/ods/odp/rtf）走各自转换器。转换失败抛 {@link ExtractionException}。
+ * 文档内容归一化（共享）：知识库上传（admin）与聊天文档附件（site）共用同一份实现，
+ * 避免两处格式覆盖与转换行为漂移。所有格式统一转成 Markdown 标准形（PDF 文字层无结构、存纯文本段落）。
+ * 文本类（txt/md/标记/代码/数据）按 UTF-8→MS932→GB18030 回退解码，代码/数据类包代码围栏，CSV/TSV 转 Md 表格；
+ * 二进制类（docx/docm/doc、xlsx/xlsm/xls、pptx/pptm/ppt、html/epub/odt/ods/odp/rtf）走各自转换器，
+ * 其中旧版二进制 doc/ppt 只有纯文本可抽、电子表格经 WorkbookFactory 统一处理新旧格式。
+ * 转换失败抛 {@link ExtractionException}。
  */
-public final class AdminAiKnowledgeContentConverter {
+public final class KnowledgeContentConverter {
 
     private static final int MAX_TABLE_ROWS = 1000;
     private static final int MAX_TABLE_COLS = 50;
     private static final Pattern HEADING_STYLE =
             Pattern.compile("(?i)(heading|标题|見出し)\\s*([1-6])");
 
-    private AdminAiKnowledgeContentConverter() {}
+    private KnowledgeContentConverter() {}
 
     public static String toStoredContent(String extension, byte[] bytes) {
         return switch (extension) {
-            case "txt", "md", "markdown" -> decodeText(bytes);
+            case "txt", "md", "markdown", "text", "rst", "adoc", "asciidoc", "org", "tex" ->
+                    decodeText(bytes);
             case "csv" -> toMarkdownTable(decodeText(bytes), ',');
             case "tsv" -> toMarkdownTable(decodeText(bytes), '\t');
             case "json", "xml", "yaml", "yml", "toml", "ini", "log",
+                    "jsonl", "ndjson", "properties", "conf", "cfg", "env", "diff", "patch",
                     "py", "java", "js", "ts", "tsx", "jsx", "css", "scss", "sql", "sh",
-                    "go", "rs", "c", "h", "cpp", "hpp", "cs", "rb", "php", "swift", "kt",
-                    "scala", "pl", "r", "lua", "vue" ->
+                    "bash", "zsh", "ps1", "mjs", "cjs",
+                    "go", "rs", "c", "h", "cpp", "hpp", "cs", "rb", "php", "swift", "kt", "kts",
+                    "scala", "pl", "r", "lua", "vue", "svelte", "dart", "groovy", "gradle",
+                    "hs", "ex", "exs", "tf", "proto" ->
                     fence(extension, decodeText(bytes));
-            case "pdf" -> AdminAiKnowledgeTextExtractor.extractText("pdf", bytes);
-            case "docx" -> docxToMarkdown(bytes);
-            case "xlsx" -> xlsxToMarkdown(bytes);
-            case "pptx" -> pptxToMarkdown(bytes);
+            case "pdf" -> KnowledgeTextExtractor.extractText("pdf", bytes);
+            case "docx", "docm" -> docxToMarkdown(bytes);
+            case "doc" -> docLegacyToText(bytes);
+            case "xlsx", "xlsm", "xls" -> workbookToMarkdown(bytes);
+            case "pptx", "pptm" -> pptxToMarkdown(bytes);
+            case "ppt" -> pptLegacyToText(bytes);
             case "html", "htm" -> htmlToMarkdown(bytes);
             case "epub" -> epubToMarkdown(bytes);
             case "odt", "ods", "odp" -> odfToMarkdown(bytes);
@@ -106,7 +122,8 @@ public final class AdminAiKnowledgeContentConverter {
     private static String fence(String extension, String text) {
         String lang = switch (extension) {
             case "yml" -> "yaml";
-            case "log", "ini" -> "";
+            case "jsonl", "ndjson" -> "json";
+            case "log", "ini", "properties", "conf", "cfg", "env" -> "";
             default -> extension;
         };
         return "```" + lang + "\n" + text.strip() + "\n```";
@@ -260,8 +277,9 @@ public final class AdminAiKnowledgeContentConverter {
 
     // ---------- XLSX → Md ----------
 
-    private static String xlsxToMarkdown(byte[] bytes) {
-        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+    private static String workbookToMarkdown(byte[] bytes) {
+        // WorkbookFactory 按魔数自动区分 OOXML（xlsx/xlsm）与旧版二进制（xls/HSSF）
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(bytes))) {
             DataFormatter formatter = new DataFormatter();
             StringBuilder out = new StringBuilder();
             for (var sheet : workbook) {
@@ -285,7 +303,37 @@ public final class AdminAiKnowledgeContentConverter {
             }
             return out.toString();
         } catch (IOException | RuntimeException ex) {
-            throw new ExtractionException("failed to convert XLSX", ex);
+            throw new ExtractionException("failed to convert spreadsheet", ex);
+        }
+    }
+
+    // ---------- 旧版 Office 二进制（doc/ppt）：抽取器给纯文本，无结构可转 ----------
+
+    private static String docLegacyToText(byte[] bytes) {
+        try (WordExtractor extractor = new WordExtractor(new ByteArrayInputStream(bytes))) {
+            String text = extractor.getText();
+            return text == null ? "" : text;
+        } catch (IOException | RuntimeException ex) {
+            throw new ExtractionException("failed to convert DOC", ex);
+        }
+    }
+
+    private static String pptLegacyToText(byte[] bytes) {
+        try (HSLFSlideShow slideshow = new HSLFSlideShow(new ByteArrayInputStream(bytes))) {
+            StringBuilder out = new StringBuilder();
+            for (var slide : slideshow.getSlides()) {
+                for (HSLFShape shape : slide.getShapes()) {
+                    if (shape instanceof HSLFTextShape textShape) {
+                        String value = textShape.getText();
+                        if (value != null && !value.isBlank()) {
+                            out.append(value.trim()).append("\n\n");
+                        }
+                    }
+                }
+            }
+            return out.toString();
+        } catch (IOException | RuntimeException ex) {
+            throw new ExtractionException("failed to convert PPT", ex);
         }
     }
 
