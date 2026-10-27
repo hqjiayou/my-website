@@ -225,7 +225,7 @@ class SiteAiConversationManageTest {
 
         assertThat(dto.token()).isEqualTo("tok123");
         verify(shareMapper).updateById(existing);
-        verify(shareMapper, never()).insert(any());
+        verify(shareMapper, never()).insert(any(SiteAiConversationShareEntity.class));
     }
 
     @Test
