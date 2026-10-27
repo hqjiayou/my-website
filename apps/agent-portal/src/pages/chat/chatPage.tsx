@@ -376,9 +376,22 @@ export function ChatPage() {
 
   /** 編輯重發：截斷該條及其後的所有訊息，以新文字重新送出（圖片沿用原附件；
    *  文件只有檔名存檔、原文不回傳，無法重傳，編輯框下有提示）。 */
-  function submitEdit(turn: ChatTurn) {
+  /** 已落庫的輪次先在後端真截斷（從該 USER 輪起刪），成功才本地截斷＋重送；失敗中止並提示。本地輪次直接回 true。 */
+  async function truncateStoredTurn(userTurn: ChatTurn): Promise<boolean> {
+    if (!site.ok || !selectedId || !/^\d+$/.test(userTurn.id)) return true
+    try {
+      await siteAiApi.truncateConversation(site.siteId, selectedId, userTurn.id)
+      return true
+    } catch {
+      setAttachError('刪除舊訊息失敗，請重試')
+      return false
+    }
+  }
+
+  async function submitEdit(turn: ChatTurn) {
     const text = editDraft.trim()
     if (!text || sendingRef.current) return
+    if (!(await truncateStoredTurn(turn))) return
     const images = turn.images ?? []
     setEditingId(null)
     setEditDraft('')
@@ -390,7 +403,7 @@ export function ChatPage() {
   }
 
   /** 重新生成：以該回覆前最近的一條用戶訊息重發，視覺上替換這一問一答（同失敗重試機制）。 */
-  function regenerate(assistantTurn: ChatTurn) {
+  async function regenerate(assistantTurn: ChatTurn) {
     if (sendingRef.current) return
     const index = messages.findIndex((item) => item.id === assistantTurn.id)
     if (index < 0) return
@@ -402,6 +415,7 @@ export function ChatPage() {
       }
     }
     if (!userTurn) return
+    if (!(await truncateStoredTurn(userTurn))) return
     setFailure(null)
     void send(userTurn.content, userTurn.images ?? [], [], {
       userId: userTurn.id,
@@ -1171,7 +1185,7 @@ export function ChatPage() {
                         <button
                           type="button"
                           disabled={!editDraft.trim() || sending}
-                          onClick={() => submitEdit(message)}
+                          onClick={() => void submitEdit(message)}
                           className="h-9 rounded-full bg-gpt-ink px-3.5 text-sm text-gpt-canvas disabled:opacity-40"
                         >
                           重新傳送
@@ -1290,7 +1304,7 @@ export function ChatPage() {
                       {!isUser && message.id === lastAssistantId ? (
                         <button
                           type="button"
-                          onClick={() => regenerate(message)}
+                          onClick={() => void regenerate(message)}
                           disabled={sending}
                           aria-label="重新生成回覆"
                           title="重新生成"

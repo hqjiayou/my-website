@@ -48,6 +48,19 @@ export const siteAiApi = {
       })
   },
 
+  /** 真截斷：硬刪該消息及其之後全部消息（編輯/重新生成的後端對齊）。成功体同 deleteConversation。 */
+  truncateConversation(siteId: string, conversationId: string, fromMessageId: string) {
+    return httpClient
+      .delete<HttpMessageBody<null>>(
+        `/api/site/${siteId}/ai/conversations/${conversationId}/messages/${fromMessageId}`,
+      )
+      .then((body) => {
+        if (body.code != null && body.code !== 0) {
+          throw new ApiError(body.message || '請求失敗', { code: body.code })
+        }
+      })
+  },
+
   listMemories(siteId: string) {
     return httpClient
       .get<HttpMessageBody<SiteUserMemory[]>>(`/api/site/${siteId}/ai/memories`)

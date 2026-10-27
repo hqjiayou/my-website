@@ -2,6 +2,7 @@ package com.mywebsite.site.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -15,6 +16,9 @@ import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.site.dto.SiteAiConversationDto;
 import com.mywebsite.site.entity.SiteAiConversationEntity;
+import com.mywebsite.site.entity.SiteAiMessageEntity;
+import java.time.LocalDateTime;
+import java.util.List;
 import com.mywebsite.site.mapper.SiteAiConversationMapper;
 import com.mywebsite.site.mapper.SiteAiMessageMapper;
 import com.mywebsite.site.mapper.SiteAiPromptProfileMapper;
@@ -96,6 +100,74 @@ class SiteAiConversationManageTest {
         verifyNoInteractions(messageMapper);
         verify(conversationMapper).selectById(1L);
         verifyNoMoreInteractions(conversationMapper);
+    }
+
+    @Test
+    void truncateOwnConversationDeletesFromMessageAndRefreshesMeta() {
+        SiteAiConversationEntity conversation = owned(1L, 10L, 200L, "t");
+        conversation.setCreatedAt(LocalDateTime.of(2026, 1, 1, 10, 0));
+        conversation.setAgentTodos("[{\"text\":\"x\"}]");
+        SiteAiMessageEntity target = new SiteAiMessageEntity();
+        target.setId(50L);
+        target.setConversationId(1L);
+        SiteAiMessageEntity remaining = new SiteAiMessageEntity();
+        remaining.setId(40L);
+        remaining.setConversationId(1L);
+        remaining.setCreatedAt(LocalDateTime.of(2026, 1, 2, 10, 0));
+        when(conversationMapper.selectById(1L)).thenReturn(conversation);
+        when(messageMapper.selectById(50L)).thenReturn(target);
+        when(messageMapper.deleteFromMessage(1L, 50L)).thenReturn(2);
+        when(messageMapper.selectList(any())).thenReturn(List.of(remaining));
+
+        service.truncateMessages(10L, 200L, 1L, 50L);
+
+        verify(messageMapper).deleteFromMessage(1L, 50L);
+        assertThat(conversation.getLastMessageAt()).isEqualTo(LocalDateTime.of(2026, 1, 2, 10, 0));
+        assertThat(conversation.getAgentTodos()).isNull();
+        verify(conversationMapper).updateById(conversation);
+    }
+
+    @Test
+    void truncateAllMessagesFallsBackToConversationCreatedAt() {
+        SiteAiConversationEntity conversation = owned(1L, 10L, 200L, "t");
+        conversation.setCreatedAt(LocalDateTime.of(2026, 1, 1, 10, 0));
+        SiteAiMessageEntity target = new SiteAiMessageEntity();
+        target.setId(10L);
+        target.setConversationId(1L);
+        when(conversationMapper.selectById(1L)).thenReturn(conversation);
+        when(messageMapper.selectById(10L)).thenReturn(target);
+        when(messageMapper.deleteFromMessage(1L, 10L)).thenReturn(4);
+        when(messageMapper.selectList(any())).thenReturn(List.of());
+
+        service.truncateMessages(10L, 200L, 1L, 10L);
+
+        assertThat(conversation.getLastMessageAt()).isEqualTo(LocalDateTime.of(2026, 1, 1, 10, 0));
+    }
+
+    @Test
+    void truncateOtherUsersConversationIsNotFoundAndDoesNotDelete() {
+        when(conversationMapper.selectById(1L)).thenReturn(owned(1L, 10L, 200L, "t"));
+
+        assertThatThrownBy(() -> service.truncateMessages(10L, 999L, 1L, 50L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.NOT_FOUND.getCode());
+        verifyNoInteractions(messageMapper);
+    }
+
+    @Test
+    void truncateMessageFromAnotherConversationIsNotFound() {
+        when(conversationMapper.selectById(1L)).thenReturn(owned(1L, 10L, 200L, "t"));
+        SiteAiMessageEntity foreign = new SiteAiMessageEntity();
+        foreign.setId(50L);
+        foreign.setConversationId(2L);
+        when(messageMapper.selectById(50L)).thenReturn(foreign);
+
+        assertThatThrownBy(() -> service.truncateMessages(10L, 200L, 1L, 50L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.NOT_FOUND.getCode());
+        verify(messageMapper, never()).deleteFromMessage(anyLong(), anyLong());
     }
 
     private static SiteAiConversationEntity owned(long id, long siteId, long siteUserId, String title) {

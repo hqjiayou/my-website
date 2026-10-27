@@ -190,6 +190,29 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         conversationMapper.deleteByIdPhysical(conversationId);
     }
 
+    @Override
+    @Transactional
+    public void truncateMessages(long siteId, long siteUserId, long conversationId, long fromMessageId) {
+        SiteAiConversationEntity conversation = requireOwnConversation(siteId, siteUserId, conversationId);
+        SiteAiMessageEntity target = messageMapper.selectById(fromMessageId);
+        if (target == null || !Objects.equals(target.getConversationId(), conversationId)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        int deleted = messageMapper.deleteFromMessage(conversationId, fromMessageId);
+        if (deleted <= 0) {
+            return;
+        }
+        List<SiteAiMessageEntity> latest = messageMapper.selectList(
+                new LambdaQueryWrapper<SiteAiMessageEntity>()
+                        .eq(SiteAiMessageEntity::getConversationId, conversationId)
+                        .orderByDesc(SiteAiMessageEntity::getId)
+                        .last("LIMIT 1"));
+        conversation.setLastMessageAt(
+                latest.isEmpty() ? conversation.getCreatedAt() : latest.get(0).getCreatedAt());
+        conversation.setAgentTodos(null);
+        conversationMapper.updateById(conversation);
+    }
+
     private SiteAiConversationEntity requireOwnConversation(long siteId, long siteUserId, long conversationId) {
         SiteAiConversationEntity conversation = conversationMapper.selectById(conversationId);
         // 跨站/跨用户统一 404，不泄露归属

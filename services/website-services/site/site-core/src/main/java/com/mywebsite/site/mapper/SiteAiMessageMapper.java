@@ -15,4 +15,12 @@ public interface SiteAiMessageMapper extends BaseMapper<SiteAiMessageEntity> {
      */
     @Delete("DELETE FROM site_ai_message WHERE conversation_id = #{conversationId}")
     int deleteByConversationId(@Param("conversationId") long conversationId);
+
+    /**
+     * 物理删除该会话中 id 不小于 {@code fromMessageId} 的全部消息（编辑/重答的后端截断）。
+     * 同样须显式 DELETE 绕开 {@code @TableLogic} 软删。
+     */
+    @Delete("DELETE FROM site_ai_message WHERE conversation_id = #{conversationId} AND id >= #{fromMessageId}")
+    int deleteFromMessage(
+            @Param("conversationId") long conversationId, @Param("fromMessageId") long fromMessageId);
 }
