@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic_ai.models import Model
 
 from agent_services.agent.harness import harness_component_flags
+from agent_services.agent.knowledge_tools import KnowledgeSearchCollector
 from agent_services.agent.mcp_tools import mcp_config_snapshot, probe_mcp_ready
 from agent_services.agent.model_factory import (
     EntryFallback,
@@ -41,13 +42,11 @@ from agent_services.retrieval.service import (
     RetrievalChunkLimitExceeded,
     RetrievalService,
 )
-from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.chat import (
     ChatCitation,
     ChatRequest,
     ChatSuccessData,
     ChatUsage,
-    ModelSelection,
     ToolTraceItem,
 )
 from agent_services.schemas.health import (
@@ -131,47 +130,16 @@ def _request_embedder(
     return client
 
 
-async def _retrieval_context(
-    request: Request,
-    site_id: str,
-    message: str,
-    embedder: EmbeddingClient | None = None,
-    model_selection: ModelSelection | None = None,
-) -> tuple[list[str] | None, bool, list[RetrievedChunk] | None]:
-    service = _retrieval_service_or_none(request)
-    if service is None:
-        return None, False, None
-    chunks = await service.retrieve_chunks(
-        site_id=site_id,
-        query=message,
-        embedder=embedder,
-        model_selection=model_selection,
-    )
-    # 降级或没有命中时不把 chunks 交给 runtime，避免拼出假 citations。
-    if service.degraded or not chunks:
-        return None, service.degraded, None
-    return [chunk.content for chunk in chunks], False, chunks
+def _java_knowledge_hints(request: Request, body: ChatRequest) -> list[str] | None:
+    """Java 侧文本命中的知识片段，仅作兜底注入。
 
-
-async def _grounding(
-    request: Request, body: ChatRequest, site_id: str, message: str
-) -> tuple[list[str] | None, bool, list[RetrievedChunk] | None]:
-    """向量命中优先。没有向量片段时，用 Java 从知识库原文查出的片段。"""
-    selection = body.model_selection
-    embedder = (
-        _request_embedder(request, selection.embedding_spec, selection.api_key, selection.base_url)
-        if selection is not None
-        else None
-    )
-    context, degraded, chunks = await _retrieval_context(
-        request, site_id, message, embedder, model_selection=selection
-    )
-    if chunks:
-        return context, degraded, chunks
+    向量检索可用时（有检索服务）知识检索由 agent 经搜索工具执行，
+    这里不再预取；只有检索服务缺失、agent 无从搜索时，才注入 Java 片段。
+    """
+    if _retrieval_service_or_none(request) is not None:
+        return None
     hints = list(body.knowledge_context or [])
-    if hints:
-        return hints, False, None
-    return context, degraded, chunks
+    return hints or None
 
 
 def _business_settings(settings: Settings, override: str | None) -> Settings:
@@ -226,14 +194,24 @@ def _prepare_execution(request: Request, body: ChatRequest, site_id: str, model:
             message=f"Unknown skill ids: {', '.join(resolution.missing_ids)}",
         )
     todo_store = todo_store_from_request(body.todos)
+    selection = body.model_selection
+    embedder = (
+        _request_embedder(request, selection.embedding_spec, selection.api_key, selection.base_url)
+        if selection is not None
+        else None
+    )
+    collector = KnowledgeSearchCollector()
     toolsets = build_execution_toolsets(
         _business_settings(settings, body.business_api_base_url),
         site_id,
         todo_store=todo_store,
         model=model,
         retrieval=_retrieval_service_or_none(request),
+        retrieval_embedder=embedder,
+        retrieval_model_selection=selection,
+        knowledge_collector=collector,
     )
-    return resolution, todo_store, toolsets
+    return resolution, todo_store, toolsets, collector
 
 
 def _blocked_to_error(outcome: ChatBlocked) -> InternalApiError:
@@ -346,11 +324,10 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
             provider_status="BLOCKED",
         )
 
-    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id, handle.model)
-
-    retrieval_context, retrieval_degraded, retrieval_chunks = await _grounding(
-        request, body, site_id, message
+    skill_resolution, todo_store, toolsets, collector = _prepare_execution(
+        request, body, site_id, handle.model
     )
+
     outcome = await run_chat(
         handle.model,  # type: ignore[arg-type]  # live 已保证非 None
         site_id=site_id,
@@ -358,8 +335,8 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         attachments=body.attachments,
         prompt_profile=body.prompt_profile,
         history=body.history,
-        retrieval_context=retrieval_context,
-        retrieval_chunks=retrieval_chunks,
+        retrieval_context=_java_knowledge_hints(request, body),
+        retrieval_chunks=None,
         skill_instructions=skill_resolution.instructions,
         initial_todos=body.todos,
         toolsets=toolsets,
@@ -372,6 +349,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         memories=body.memories,
         memory_enabled=body.memory_enabled,
         memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
+        knowledge_collector=collector,
     )
 
     if isinstance(outcome, ChatBlocked):
@@ -387,7 +365,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         skills_applied=list(skill_resolution.applied_ids),
         skills_missing=list(skill_resolution.missing_ids) or None,
         todos=todo_snapshot.items or None,
-        retrieval_degraded=retrieval_degraded,
+        retrieval_degraded=collector.degraded,
         citations=[ChatCitation.model_validate(item) for item in outcome.citations]
         if outcome.citations
         else None,
@@ -422,10 +400,9 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             provider_status="BLOCKED",
         )
 
-    retrieval_context, retrieval_degraded, retrieval_chunks = await _grounding(
-        request, body, site_id, message
+    skill_resolution, todo_store, toolsets, collector = _prepare_execution(
+        request, body, site_id, handle.model
     )
-    skill_resolution, todo_store, toolsets = _prepare_execution(request, body, site_id, handle.model)
 
     async def event_generator():
         async for event in stream_chat_events(
@@ -435,9 +412,9 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             attachments=body.attachments,
             prompt_profile=body.prompt_profile,
             history=body.history,
-            retrieval_context=retrieval_context,
-            retrieval_chunks=retrieval_chunks,
-            retrieval_degraded=retrieval_degraded,
+            retrieval_context=_java_knowledge_hints(request, body),
+            retrieval_chunks=None,
+            retrieval_degraded=False,
             skill_instructions=skill_resolution.instructions,
             initial_todos=body.todos,
             toolsets=toolsets,
@@ -452,6 +429,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             memories=body.memories,
             memory_enabled=body.memory_enabled,
             memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
+            knowledge_collector=collector,
         ):
             yield event.to_sse()
 
