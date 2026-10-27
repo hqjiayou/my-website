@@ -131,7 +131,7 @@ export function ConversationSheet({
         <button
           type="button"
           onClick={onCreate}
-          className="flex h-10 flex-1 items-center gap-2.5 rounded-lg px-3 text-left text-sm hover:bg-gpt-hover"
+          className="flex h-10 flex-1 items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors hover:bg-gpt-hover"
         >
           <SquarePen size={17} className="shrink-0 text-gpt-muted" />
           新對話

@@ -1020,7 +1020,7 @@ export function ChatPage() {
               if (!sending && !compressing) void send(draft, pending, pendingDocs)
             }
           }}
-          className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-base outline-none"
+          className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-base outline-none placeholder:text-gpt-muted"
         />
         {speech.supported ? (
           <button

@@ -135,7 +135,7 @@ export function KnowledgePage() {
                       type="button"
                       onClick={() => void toggleDocument(document)}
                       aria-expanded={open}
-                      className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-3 text-left hover:bg-gpt-hover"
+                      className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-gpt-hover"
                     >
                       <span className="min-w-0 truncate text-sm font-medium">{document.title}</span>
                       <ChevronDown

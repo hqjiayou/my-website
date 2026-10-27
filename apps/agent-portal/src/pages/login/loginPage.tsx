@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Sparkles } from 'lucide-react'
+import { Eye, EyeOff, Sparkles } from 'lucide-react'
 
 import { authApi } from '@/api/authApi'
 import { ROUTES } from '@/router/config/routePaths'
@@ -18,6 +18,7 @@ export function LoginPage() {
   const [siteCode, setSiteCode] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -52,7 +53,7 @@ export function LoginPage() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-background text-gpt-ink">
-      <main className="safe-top safe-x safe-bottom mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-5 py-8">
+      <main className="safe-top safe-x safe-bottom msg-in mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-5 py-8">
         <div className="flex flex-col items-center text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gpt-ink text-gpt-canvas">
             <Sparkles size={22} />
@@ -88,16 +89,27 @@ export function LoginPage() {
             />
           </Field>
           <Field label="密碼" id="password">
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              maxLength={PASSWORD_MAX}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className={inputClass}
-            />
+            <span className="relative block">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                maxLength={PASSWORD_MAX}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className={`${inputClass} pr-11`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                aria-label={showPassword ? '隱藏密碼' : '顯示密碼'}
+                title={showPassword ? '隱藏密碼' : '顯示密碼'}
+                className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-gpt-muted transition-colors hover:bg-gpt-hover hover:text-gpt-ink"
+              >
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </span>
           </Field>
 
           {formError ? (
@@ -109,7 +121,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="mt-2 h-12 rounded-full bg-gpt-ink text-base font-medium text-gpt-canvas disabled:opacity-30"
+            className="mt-2 h-12 rounded-full bg-gpt-ink text-base font-medium text-gpt-canvas transition hover:opacity-90 active:scale-[0.99] disabled:opacity-30"
           >
             {submitting ? '正在登入…' : '登入'}
           </button>

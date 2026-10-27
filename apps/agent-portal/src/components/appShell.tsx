@@ -98,7 +98,7 @@ export function AppShell() {
           aria-label="收起側邊欄"
           title="收起側邊欄"
           onClick={() => setCollapsed(true)}
-          className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink md:flex"
+          className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gpt-muted transition-colors hover:bg-gpt-hover hover:text-gpt-ink md:flex"
         >
           <PanelLeftClose size={19} strokeWidth={1.8} />
         </button>
@@ -106,7 +106,7 @@ export function AppShell() {
           type="button"
           aria-label="關閉選單"
           onClick={() => setDrawerOpen(false)}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink md:hidden"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gpt-muted transition-colors hover:bg-gpt-hover hover:text-gpt-ink md:hidden"
         >
           <X size={19} strokeWidth={1.8} />
         </button>
@@ -121,8 +121,8 @@ export function AppShell() {
                 onClick={() => setDrawerOpen(false)}
                 className={({ isActive }) =>
                   isActive
-                    ? 'flex items-center gap-3 rounded-lg bg-gpt-active px-3 py-2 text-sm font-medium text-gpt-ink'
-                    : 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gpt-ink hover:bg-gpt-hover'
+                    ? 'flex items-center gap-3 rounded-lg bg-gpt-active px-3 py-2 text-sm font-medium text-gpt-ink transition-colors'
+                    : 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gpt-ink transition-colors hover:bg-gpt-hover'
                 }
               >
                 <item.Icon size={18} strokeWidth={1.8} className="shrink-0 text-gpt-muted" />
@@ -147,7 +147,7 @@ export function AppShell() {
             onClick={toggleTheme}
             aria-label={dark ? '切換淺色模式' : '切換深色模式'}
             title={dark ? '淺色模式' : '深色模式'}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gpt-muted transition-colors hover:bg-gpt-hover hover:text-gpt-ink"
           >
             {dark ? <Sun size={17} strokeWidth={1.8} /> : <Moon size={17} strokeWidth={1.8} />}
           </button>
@@ -157,7 +157,7 @@ export function AppShell() {
             disabled={loggingOut}
             aria-label="登出"
             title="登出"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink disabled:opacity-60"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gpt-muted transition-colors hover:bg-gpt-hover hover:text-gpt-ink disabled:opacity-60"
           >
             <LogOut size={17} strokeWidth={1.8} />
           </button>
@@ -171,21 +171,23 @@ export function AppShell() {
   return (
     <SidebarExtraContext.Provider value={contextValue}>
       <div className="flex h-dvh w-full bg-background text-gpt-ink">
-        {drawerOpen ? (
-          <button
-            type="button"
-            aria-label="關閉選單"
-            className="fixed inset-0 z-30 bg-black/40 md:hidden"
-            onClick={() => setDrawerOpen(false)}
-          />
-        ) : null}
-        <aside
+        <button
+          type="button"
+          aria-label="關閉選單"
+          aria-hidden={!drawerOpen}
+          tabIndex={drawerOpen ? 0 : -1}
           className={
             drawerOpen
-              ? 'fixed inset-y-0 left-0 z-40 flex w-[268px] shrink-0 border-r border-gpt-line md:static md:z-auto'
-              : collapsed
-                ? 'hidden w-[268px] shrink-0 border-r border-gpt-line'
-                : 'hidden w-[268px] shrink-0 border-r border-gpt-line md:flex'
+              ? 'fixed inset-0 z-30 bg-black/40 transition-opacity duration-200 md:hidden'
+              : 'pointer-events-none fixed inset-0 z-30 bg-black/40 opacity-0 transition-opacity duration-200 md:hidden'
+          }
+          onClick={() => setDrawerOpen(false)}
+        />
+        <aside
+          className={
+            'fixed inset-y-0 left-0 z-40 flex w-[268px] shrink-0 border-r border-gpt-line motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out md:static md:z-auto ' +
+            (drawerOpen ? 'translate-x-0' : '-translate-x-full') +
+            (collapsed ? ' md:hidden' : ' md:flex md:translate-x-0')
           }
         >
           {sidebar}
@@ -209,7 +211,7 @@ export function AppShell() {
                   setDrawerOpen(true)
                 }
               }}
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink"
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-gpt-muted transition-colors hover:bg-gpt-hover hover:text-gpt-ink"
             >
               <PanelLeftOpen size={20} strokeWidth={1.8} />
             </button>
