@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -319,7 +320,8 @@ class AdminAiKnowledgeServiceImplTest {
         AgentModelSelection fallback = new AgentModelSelection("google:gemini-b", "k2", null);
         byte[] pdf = "%PDF-fixture".getBytes(StandardCharsets.UTF_8);
         when(modelEntryService.selectionChain(7L)).thenReturn(List.of(primary, fallback));
-        when(agentClient.ocrPdf(any())).thenReturn(new AgentOcrPdfResult("  转写文本  ", "google:gemini"));
+        // doReturn 式打桩不计入 verify 的调用次数（when 式会计入，导致 captor 校验误报 2 次调用）。
+        doReturn(new AgentOcrPdfResult("  转写文本  ", "google:gemini")).when(agentClient).ocrPdf(any());
 
         assertThat(service.transcribeScannedPdf(7L, pdf)).isEqualTo("转写文本");
 
