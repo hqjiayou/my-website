@@ -28,8 +28,15 @@ class ChatDocumentTextExtractorTest {
 
     @Test
     void decodesGb18030Fallback() {
-        byte[] bytes = "中文内容".getBytes(Charset.forName("GB18030"));
-        assertThat(ChatDocumentTextExtractor.extractText("md", bytes)).isEqualTo("中文内容");
+        // 「中国」的 GB18030 字节在 UTF-8 与 MS932 严格解码下都会失败，才会落到 GB18030。
+        byte[] bytes = "中国".getBytes(Charset.forName("GB18030"));
+        assertThat(ChatDocumentTextExtractor.extractText("md", bytes)).isEqualTo("中国");
+    }
+
+    @Test
+    void decodesMs932Fallback() {
+        byte[] bytes = "こんにちは".getBytes(Charset.forName("MS932"));
+        assertThat(ChatDocumentTextExtractor.extractText("txt", bytes)).isEqualTo("こんにちは");
     }
 
     @Test
