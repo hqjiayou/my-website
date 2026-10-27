@@ -79,6 +79,13 @@ export interface SiteAiCitation {
   score: number
 }
 
+/** 知识搜索工具的安全摘要（TOOL_RESULT 事件携带）：只有查询词、命中数与来源标识，不含片段正文。 */
+export interface SiteSearchSummary {
+  query: string
+  hitCount: number
+  sources: SiteAiCitation[]
+}
+
 export interface SiteKnowledgeHit {
   sourceId: string
   chunkIndex: number

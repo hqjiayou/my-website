@@ -2,7 +2,6 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { authApi } from '@/api/authApi'
-import { Screen } from '@/components/screen'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
 import { errorMessage } from '@/utils/http/apiError'
@@ -51,7 +50,7 @@ export function LoginPage() {
   }
 
   return (
-    <Screen>
+    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-background text-gpt-ink">
       <main className="safe-top safe-x safe-bottom flex flex-1 flex-col justify-center px-5 py-8">
         <p className="text-xs font-medium tracking-widest text-gpt-muted">SITE</p>
         <h1 className="mt-2 text-2xl font-semibold">Agent Portal</h1>
@@ -108,7 +107,7 @@ export function LoginPage() {
           </button>
         </form>
       </main>
-    </Screen>
+    </div>
   )
 }
 
