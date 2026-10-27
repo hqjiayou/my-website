@@ -25,7 +25,7 @@ supersedes:
 
 | 域 | 状态 | 说明 |
 |----|------|------|
-| **Admin Web** | PARTIAL（主域 + 运营聚合 + 站点 AI 管理 FORCE REAL；概览指标由 REAL API 推导；占位页） | 见 [`../admin-web/CURRENT_STATE.md`](../admin-web/CURRENT_STATE.md) |
+| **Admin Web** | PARTIAL（主域 + 运营聚合 + 站点 AI 管理 FORCE REAL；工作台以 Agent 为中心、发布检查由 REAL API 推导；占位页） | 见 [`../admin-web/CURRENT_STATE.md`](../admin-web/CURRENT_STATE.md) |
 | **Site Web** | v1 IN_TREE（公开只读）/ NOT_IMPLEMENTED（auth） | `apps/site-web` 按 siteCode 渲染公开内容（仅 PUBLISHED）；Site Auth 前端未接（登录在 `apps/agent-portal`） |
 | **Backend (website-services)** | PARTIAL（主业务 COMPLETE_V1；安全门 PARTIALLY_RESOLVED） | 见 [`../website-services/CURRENT_STATE.md`](../website-services/CURRENT_STATE.md) |
 | **Database** | COMPLETE_V1（Flyway 以 `infra/.../db/migration` 为准，当前至 V21） | 以代码为准 |

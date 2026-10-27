@@ -27,6 +27,7 @@ from pydantic_ai.toolsets.wrapper import WrapperToolset
 from pydantic_ai.usage import RunUsage, UsageLimits
 
 from agent_services.agent.harness import assemble_harness
+from agent_services.agent.knowledge_tools import KnowledgeSearchCollector
 from agent_services.agent.memory import extract_memories
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.api.errors import external_failure_message
@@ -35,6 +36,7 @@ from agent_services.observability.request_id import current_request_id
 from agent_services.retrieval.store import RetrievedChunk, citation_sources
 from agent_services.schemas.chat import (
     ChatAttachment,
+    ChatDocument,
     ChatHistoryMessage,
     PromptProfile,
 )
@@ -204,6 +206,26 @@ def grounding_citations(
     return citations or None
 
 
+def reply_citations(
+    retrieval_context: list[str] | None,
+    retrieval_chunks: list[RetrievedChunk] | None,
+    tool_chunks: list[RetrievedChunk] | None,
+) -> list[dict[str, object]] | None:
+    """本轮引用 = 预取注入的片段 ∪ agent 经知识搜索工具实际命中的片段。
+
+    工具命中的片段经工具返回进入模型上下文，grounding 天然成立，不再要求
+    retrieval_context 非空；两路都没有时返回 None（不拼假引用）。
+    """
+    merged: list[RetrievedChunk] = []
+    if retrieval_context and retrieval_chunks:
+        merged.extend(retrieval_chunks)
+    if tool_chunks:
+        merged.extend(tool_chunks)
+    if not merged:
+        return None
+    return citation_sources(merged) or None
+
+
 @dataclass(frozen=True)
 class ChatReply:
     reply: str
@@ -240,18 +262,35 @@ def budget_exceeded_message(exc: BaseException) -> str:
 UserPrompt = str | list[str | BinaryContent]
 
 
-def build_user_prompt(text: str, attachments: list[ChatAttachment] | None) -> UserPrompt:
-    """无附件时原样返回字符串。有图时为 [非空文字] + 每张图一个 BinaryContent。"""
+def _document_section(document: ChatDocument) -> str:
+    """本轮文档上下文：以明确边界包住抽取文本，让模型知道这是用户上传的资料而非指令。"""
+    section = f"[用户在本轮上传了文件「{document.name}」，以下为其文字内容]\n{document.text}"
+    if document.truncated:
+        section += "\n[注：该文件较长，以上仅为前段内容，后段已省略]"
+    return section + f"\n[文件「{document.name}」内容结束]"
+
+
+def build_user_prompt(
+    text: str,
+    attachments: list[ChatAttachment] | None,
+    documents: list[ChatDocument] | None = None,
+) -> UserPrompt:
+    """无附件时原样返回字符串。有图时为 [非空文字] + 每张图一个 BinaryContent。
+
+    文档（已抽取文本）以文本段追加在图片之后，仅作用于本轮。
+    """
     images = [
         BinaryContent(data=base64.b64decode(item.data), media_type=item.media_type)
         for item in attachments or []
     ]
-    if not images:
+    sections = [_document_section(item) for item in documents or []]
+    if not images and not sections:
         return text
     parts: list[str | BinaryContent] = []
     if text:
         parts.append(text)
     parts.extend(images)
+    parts.extend(sections)
     return parts
 
 
@@ -355,6 +394,7 @@ async def run_chat(
     site_id: str,
     message: str,
     attachments: list[ChatAttachment] | None = None,
+    documents: list[ChatDocument] | None = None,
     prompt_profile: PromptProfile | None = None,
     history: list[ChatHistoryMessage] | None = None,
     retrieval_context: list[str] | None = None,
@@ -371,6 +411,7 @@ async def run_chat(
     memories: list[str] | None = None,
     memory_enabled: bool = False,
     memory_extraction_enabled: bool = True,
+    knowledge_collector: KnowledgeSearchCollector | None = None,
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
     history_summary = await prepare_history_summary(
@@ -395,7 +436,7 @@ async def run_chat(
         memories=memories,
     )
     run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
-    user_prompt = build_user_prompt(harness.user_message, attachments)
+    user_prompt = build_user_prompt(harness.user_message, attachments, documents)
 
     needs_mcp_context = execution_needs_agent_context(toolsets or [])
     try:
@@ -442,6 +483,10 @@ async def run_chat(
         reply=text,
         usage=usage_to_api(result.usage),
         tools=tool_trace_from_messages(result.new_messages()),
-        citations=grounding_citations(retrieval_context, retrieval_chunks),
+        citations=reply_citations(
+            retrieval_context,
+            retrieval_chunks,
+            knowledge_collector.chunks if knowledge_collector is not None else None,
+        ),
         extracted_memories=extracted,
     )

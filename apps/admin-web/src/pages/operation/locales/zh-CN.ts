@@ -24,29 +24,6 @@ export default {
       manage: '进入站点管理',
     },
   },
-  reservations: {
-    title: '预约管理',
-    description: '跨站点查看预约记录与处理状态。',
-    aggregateNotice: '数据来自各站点 REAL API 聚合；处理请进入对应站点工作台。',
-    empty: '暂无跨站预约记录',
-    columns: {
-      site: '站点',
-      customer: '客户',
-      serviceType: '服务类型',
-      reservedAt: '预约时间',
-      status: '状态',
-      actions: '操作',
-    },
-    filters: {
-      status: '状态',
-      allStatuses: '全部状态',
-      search: '筛选',
-      reset: '重置',
-    },
-    actions: {
-      manage: '进入站点管理',
-    },
-  },
   files: {
     title: '文件管理',
     description: '跨站点查看媒体素材与上传状态。',

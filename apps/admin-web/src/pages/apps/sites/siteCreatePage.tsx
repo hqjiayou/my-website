@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
@@ -15,13 +15,11 @@ import {
   SITE_TYPE_PRESETS,
   createDefaultAppearanceConfig,
   siteApi,
-  templateApi,
   type AppearanceConfigV1,
   type ButtonStyle,
   type HeroLayout,
   type SiteFontStyle,
   type SiteType,
-  type TemplateListItem,
 } from '@/api'
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
@@ -30,7 +28,7 @@ import { PERMISSION_CODES } from '@/types/rbac'
 import { PermissionGate } from '@/router/permission'
 import { SiteAppearancePreview } from '@/pages/apps/style/siteAppearancePreview'
 
-const CREATE_SITE_STEPS = ['basicInfo', 'selectTemplate', 'configureAppearance', 'confirm'] as const
+const CREATE_SITE_STEPS = ['basicInfo', 'configureAppearance', 'confirm'] as const
 type CreateSiteStep = (typeof CREATE_SITE_STEPS)[number]
 
 interface SiteCreateFormState {
@@ -39,13 +37,7 @@ interface SiteCreateFormState {
   siteType: SiteType
   defaultDomain: string
   description: string
-  templateId: number | null
   appearance: AppearanceConfigV1
-}
-
-function normalizePrimaryColor(value: string | null | undefined): string {
-  if (value && PRIMARY_COLOR_PATTERN.test(value)) return value
-  return '#2563EB'
 }
 
 export function SiteCreatePage() {
@@ -54,44 +46,23 @@ export function SiteCreatePage() {
   const queryClient = useQueryClient()
   const [step, setStep] = useState<CreateSiteStep>('basicInfo')
   const [customType, setCustomType] = useState(false)
-  const [noTemplate, setNoTemplate] = useState(false)
   const [form, setForm] = useState<SiteCreateFormState>({
     siteName: '',
     siteCode: '',
     siteType: SITE_TYPE_PRESETS[0],
     defaultDomain: '',
     description: '',
-    templateId: null,
     appearance: createDefaultAppearanceConfig(),
   })
 
   const currentStepIndex = CREATE_SITE_STEPS.indexOf(step)
-
-  // 模板已与站点用途标签解耦：列出全部启用模板，不再按类型过滤。
-  const templateFilters = {
-    pageNum: 1,
-    pageSize: 100,
-    status: 'ENABLED' as const,
-  }
-
-  const templatesQuery = useQuery({
-    queryKey: ['templates', templateFilters],
-    queryFn: () => templateApi.listTemplates(templateFilters),
-    enabled: step === 'selectTemplate' || step === 'configureAppearance' || step === 'confirm',
-  })
-
-  const templates = useMemo(() => templatesQuery.data?.records ?? [], [templatesQuery.data?.records])
-  const selectedTemplate = useMemo(
-    () => templates.find((item) => item.id === form.templateId) ?? null,
-    [form.templateId, templates],
-  )
 
   const createMutation = useMutation({
     mutationFn: siteApi.createSite,
     onSuccess: async (createdSite) => {
       await queryClient.invalidateQueries({ queryKey: ['sites'] })
       toast.success(t('create.messages.createdSuccess'))
-      navigate(ROUTES.apps.siteOverview(createdSite.id))
+      navigate(ROUTES.apps.siteAgent(createdSite.id))
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -123,14 +94,6 @@ export function SiteCreatePage() {
     return true
   }
 
-  function validateTemplate() {
-    if (!noTemplate && form.templateId == null) {
-      toast.warning(t('create.messages.selectTemplateFirst'))
-      return false
-    }
-    return true
-  }
-
   function validateAppearance() {
     if (!PRIMARY_COLOR_PATTERN.test(form.appearance.primaryColor)) {
       toast.warning(t('create.messages.invalidPrimaryColor'))
@@ -139,32 +102,10 @@ export function SiteCreatePage() {
     return true
   }
 
-  function selectTemplate(template: TemplateListItem) {
-    setNoTemplate(false)
-    setForm((prev) => ({
-      ...prev,
-      templateId: template.id,
-      appearance: {
-        ...prev.appearance,
-        primaryColor: normalizePrimaryColor(template.defaultPrimaryColor),
-      },
-    }))
-  }
-
-  function selectNoTemplate() {
-    setNoTemplate(true)
-    setForm((prev) => ({ ...prev, templateId: null }))
-  }
-
   function goToNextStep() {
     if (step === 'basicInfo') {
       if (!validateBasicInfo()) return
-      setStep('selectTemplate')
-      return
-    }
-    if (step === 'selectTemplate') {
-      if (!validateTemplate()) return
-      setStep(noTemplate ? 'confirm' : 'configureAppearance')
+      setStep('configureAppearance')
       return
     }
     if (step === 'configureAppearance') {
@@ -174,13 +115,11 @@ export function SiteCreatePage() {
   }
 
   function goToPrevStep() {
-    if (step === 'selectTemplate') setStep('basicInfo')
-    else if (step === 'configureAppearance') setStep('selectTemplate')
-    else if (step === 'confirm') setStep(noTemplate ? 'selectTemplate' : 'configureAppearance')
+    if (step === 'configureAppearance') setStep('basicInfo')
+    else if (step === 'confirm') setStep('configureAppearance')
   }
 
   function handleSiteTypeChange(siteType: SiteType) {
-    // 标签与模板已解耦：改标签不再重置已选模板与外观。
     setForm((prev) => ({ ...prev, siteType }))
   }
 
@@ -199,16 +138,11 @@ export function SiteCreatePage() {
       setStep('basicInfo')
       return
     }
-    if (!validateTemplate()) {
-      setStep('selectTemplate')
-      return
-    }
-    if (!noTemplate && !validateAppearance()) {
+    if (!validateAppearance()) {
       setStep('configureAppearance')
       return
     }
     if (createMutation.isPending) return
-    if (!noTemplate && form.templateId == null) return
 
     createMutation.mutate({
       siteCode: form.siteCode.trim(),
@@ -216,8 +150,7 @@ export function SiteCreatePage() {
       siteType: form.siteType.trim(),
       defaultDomain: form.defaultDomain.trim() || undefined,
       description: form.description.trim() || undefined,
-      templateId: noTemplate ? undefined : (form.templateId ?? undefined),
-      appearance: noTemplate ? undefined : { ...form.appearance },
+      appearance: { ...form.appearance },
     })
   }
 
@@ -234,7 +167,7 @@ export function SiteCreatePage() {
     <section>
       <PageHeader title={t('create.title')} description={t('create.description')} />
 
-      <ol className="mb-4 grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-4">
+      <ol className="mb-4 grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-3">
         {CREATE_SITE_STEPS.map((stepKey, index) => {
           const state = index < currentStepIndex ? 'completed' : index === currentStepIndex ? 'current' : 'upcoming'
           return (
@@ -338,92 +271,6 @@ export function SiteCreatePage() {
             </div>
           ) : null}
 
-          {step === 'selectTemplate' ? (
-            <div className="space-y-3">
-              {templatesQuery.isPending ? (
-                <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                  {t('create.templates.loading')}
-                </p>
-              ) : null}
-              {templatesQuery.isError ? (
-                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-700">
-                  <p>{templatesQuery.error instanceof Error ? templatesQuery.error.message : t('create.templates.empty')}</p>
-                  <button
-                    type="button"
-                    onClick={() => void templatesQuery.refetch()}
-                    className="mt-2 rounded-md border border-rose-200 bg-white px-2.5 py-1 text-xs font-medium"
-                  >
-                    {t('create.actions.retry')}
-                  </button>
-                </div>
-              ) : null}
-              {!templatesQuery.isPending && !templatesQuery.isError && templates.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                  {t('create.templates.empty')}
-                </p>
-              ) : null}
-              <div className="grid gap-3 md:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={selectNoTemplate}
-                  className={cn(
-                    'rounded-xl border p-4 text-left transition',
-                    noTemplate
-                      ? 'border-blue-300 bg-blue-50 shadow-sm'
-                      : 'border-dashed border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{t('create.templates.noTemplateOption')}</p>
-                      <p className="mt-1 text-xs text-slate-500">{t('create.templates.noTemplateHint')}</p>
-                    </div>
-                    {noTemplate ? (
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white">
-                        <Check className="h-3 w-3" />
-                      </span>
-                    ) : null}
-                  </div>
-                </button>
-                {templates.map((template) => {
-                  const selected = form.templateId === template.id
-                  return (
-                    <button
-                      key={template.id}
-                      type="button"
-                      onClick={() => selectTemplate(template)}
-                      className={cn(
-                        'rounded-xl border p-4 text-left transition',
-                        selected
-                          ? 'border-blue-300 bg-blue-50 shadow-sm'
-                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{template.name}</p>
-                          <p className="mt-1 text-xs text-slate-500">{template.code}</p>
-                        </div>
-                        {selected ? (
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white">
-                            <Check className="h-3 w-3" />
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-3 flex items-center gap-2 text-xs text-slate-600">
-                        <span
-                          className="inline-block h-4 w-4 rounded border border-slate-200"
-                          style={{ backgroundColor: normalizePrimaryColor(template.defaultPrimaryColor) }}
-                        />
-                        <span>{normalizePrimaryColor(template.defaultPrimaryColor)}</span>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ) : null}
-
           {step === 'configureAppearance' ? (
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-1.5 text-sm">
@@ -502,29 +349,19 @@ export function SiteCreatePage() {
                 )}
                 {renderConfirmationItem(t('create.fields.defaultDomain'), form.defaultDomain || '—')}
                 {renderConfirmationItem(t('create.fields.siteDescription'), form.description || '—')}
+                {renderConfirmationItem(t('create.fields.primaryColor'), form.appearance.primaryColor)}
                 {renderConfirmationItem(
-                  t('create.fields.template'),
-                  noTemplate
-                    ? t('create.templates.noTemplateOption')
-                    : (selectedTemplate?.name ?? (form.templateId != null ? `#${form.templateId}` : '—')),
+                  t('create.fields.fontStyle'),
+                  t(`create.options.fontStyle.${form.appearance.fontStyle}`),
                 )}
-                {!noTemplate ? (
-                  <>
-                    {renderConfirmationItem(t('create.fields.primaryColor'), form.appearance.primaryColor)}
-                    {renderConfirmationItem(
-                      t('create.fields.fontStyle'),
-                      t(`create.options.fontStyle.${form.appearance.fontStyle}`),
-                    )}
-                    {renderConfirmationItem(
-                      t('create.fields.buttonStyle'),
-                      t(`create.options.buttonStyle.${form.appearance.buttonStyle}`),
-                    )}
-                    {renderConfirmationItem(
-                      t('create.fields.heroLayout'),
-                      t(`create.options.heroLayout.${form.appearance.heroLayout}`),
-                    )}
-                  </>
-                ) : null}
+                {renderConfirmationItem(
+                  t('create.fields.buttonStyle'),
+                  t(`create.options.buttonStyle.${form.appearance.buttonStyle}`),
+                )}
+                {renderConfirmationItem(
+                  t('create.fields.heroLayout'),
+                  t(`create.options.heroLayout.${form.appearance.heroLayout}`),
+                )}
               </div>
             </div>
           ) : null}
@@ -579,12 +416,6 @@ export function SiteCreatePage() {
               <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                 <p className="text-xs text-slate-500">{t('create.fields.siteName')}</p>
                 <p className="mt-1 text-sm font-medium text-slate-900">{form.siteName || '—'}</p>
-              </div>
-              <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                <p className="text-xs text-slate-500">{t('create.fields.template')}</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  {selectedTemplate?.name ?? t('create.preview.noTemplate')}
-                </p>
               </div>
               {(step === 'configureAppearance' || step === 'confirm') && (
                 <div className="pt-2">

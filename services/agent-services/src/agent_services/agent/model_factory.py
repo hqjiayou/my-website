@@ -58,12 +58,26 @@ def _google_model_name(spec: str) -> str | None:
     return None
 
 
+def _google_thinking_settings(model_name: str) -> dict[str, object] | None:
+    """思考型 Gemini（2.5/3 系）开启 include_thoughts，思考片段才随流返回。
+
+    非思考型模型不带这个配置，避免 API 直接拒绝请求；provider 不返回
+    思考片段时流式层自然没有 THINKING 事件，不伪造。
+    """
+    if model_name.startswith(("gemini-3", "gemini-2.5")):
+        return {"google_thinking_config": {"include_thoughts": True}}
+    return None
+
+
 def _build_google_model(model_name: str, *, api_key: str | None, base_url: str | None) -> Model:
     """延迟导入，避免其它 provider 路径在模块加载时依赖 google.genai。"""
     from pydantic_ai.models.google import GoogleModel
     from pydantic_ai.providers.google import GoogleProvider
 
     provider = GoogleProvider(api_key=api_key or None, base_url=base_url or None)
+    settings = _google_thinking_settings(model_name)
+    if settings is not None:
+        return GoogleModel(model_name, provider=provider, settings=settings)  # type: ignore[arg-type]
     return GoogleModel(model_name, provider=provider)
 
 

@@ -468,6 +468,28 @@ class HttpAgentClientTest {
         assertThat(hits.get()).isEqualTo(1);
     }
 
+    @Test
+    void ocrPdfParsesEnvelopeData() throws IOException {
+        server.createContext("/internal/v1/ocr/pdf", exchange -> {
+            String token = exchange.getRequestHeaders().getFirst("X-Internal-Service-Token");
+            if (!"secret-token".equals(token)) {
+                write(exchange, 401, "{\"ok\":false,\"errorCode\":\"UNAUTHORIZED\"}");
+                return;
+            }
+            write(
+                    exchange,
+                    200,
+                    "{\"ok\":true,\"data\":{\"text\":\"转写文本\",\"modelSpec\":\"google:gemini\"}}");
+        });
+
+        var result = client.ocrPdf(
+                new com.mywebsite.agent.dto.AgentOcrPdfRequest(
+                        new AgentModelSelection("google:gemini", "k", null), java.util.List.of(), "JVBERi0="));
+
+        assertThat(result.text()).isEqualTo("转写文本");
+        assertThat(result.modelSpec()).isEqualTo("google:gemini");
+    }
+
     private static void write(com.sun.net.httpserver.HttpExchange exchange, int status, String body)
             throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
@@ -503,5 +525,18 @@ class HttpAgentClientTest {
 
         String withoutChain = mapper.writeValueAsString(new AgentChatRequest("10", "hello"));
         assertThat(withoutChain).doesNotContain("fallbackModels");
+    }
+
+    @Test
+    void chatRequestSerializesDocumentsOnlyWhenPresent() throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        AgentChatRequest withDocuments = new AgentChatRequest(
+                "10", "hello", null, null, null, null, null, null, null, null, null, null, null, null, null,
+                java.util.List.of(new com.mywebsite.agent.dto.AgentDocumentContext("a.txt", "正文", true)));
+        String json = mapper.writeValueAsString(withDocuments);
+        assertThat(json).contains("\"documents\":[{\"name\":\"a.txt\",\"text\":\"正文\",\"truncated\":true}]");
+
+        String withoutDocuments = mapper.writeValueAsString(new AgentChatRequest("10", "hello"));
+        assertThat(withoutDocuments).doesNotContain("documents");
     }
 }

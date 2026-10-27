@@ -283,11 +283,18 @@ export interface AiPreviewChatInput {
   todos?: AiPreviewTodoItem[]
 }
 
+/** 知识搜索工具的安全摘要：查询词与命中数（片段正文不进预览事件）。 */
+export interface AiSearchSummary {
+  query: string
+  hitCount: number
+}
+
 /** 预览 SSE 中与 Agent 行为相关的事件（文本增量由 assistant-ui 消息承载）。 */
 export type AiPreviewAgentEvent =
   | { type: 'start'; skillsApplied: string[]; skillsMissing: string[] }
+  | { type: 'thinking'; delta: string }
   | { type: 'toolStart'; toolCallId: string; toolName: string }
-  | { type: 'toolResult'; toolCallId: string; toolName: string; ok: boolean }
+  | { type: 'toolResult'; toolCallId: string; toolName: string; ok: boolean; summary?: AiSearchSummary }
   | { type: 'done'; todos: AiPreviewTodoItem[]; usage: AiRunUsage | null }
   /** message：Java 推流前失败时为本地化文案；推流中为 agent-services 原始诊断（仅后台可见） */
   | { type: 'error'; errorCode: string; message?: string }

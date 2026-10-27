@@ -8,7 +8,6 @@ import { toast } from 'sonner'
 import {
   siteApi,
   SITE_STATUS,
-  SITE_TYPE_LEGACY,
   SITE_TYPE_PRESETS,
   type SiteListItem,
   type SiteListQuery,
@@ -125,7 +124,7 @@ export function SitesPage() {
         cell: (site) => (
           <div className="flex flex-wrap gap-2">
             <Link
-              to={ROUTES.apps.siteOverview(site.id)}
+              to={ROUTES.apps.siteAgent(site.id)}
               className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
             >
               {t('list.actions.openWorkspace')}
@@ -206,7 +205,7 @@ export function SitesPage() {
             onChange={(event) => setDraft((prev) => ({ ...prev, siteType: event.target.value || undefined }))}
           >
             <option value="">{t('list.filters.allSiteType')}</option>
-            {[...SITE_TYPE_PRESETS, ...SITE_TYPE_LEGACY].map((value) => (
+            {SITE_TYPE_PRESETS.map((value) => (
               <option key={value} value={value}>
                 {t(`siteType.${value}`, { defaultValue: value })}
               </option>

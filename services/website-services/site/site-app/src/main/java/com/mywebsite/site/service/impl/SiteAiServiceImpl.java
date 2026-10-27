@@ -3,10 +3,12 @@ package com.mywebsite.site.service.impl;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentAttachmentDto;
 import com.mywebsite.agent.dto.AgentChatRequest;
+import com.mywebsite.agent.dto.AgentDocumentContext;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
@@ -30,6 +32,8 @@ import com.mywebsite.site.entity.SiteAiModelEntryEntity;
 import com.mywebsite.site.mapper.SiteAiKnowledgeDocumentMapper;
 import com.mywebsite.site.mapper.SiteAiModelEntryMapper;
 import com.mywebsite.site.dto.SiteAiChatResponseDto;
+import com.mywebsite.site.dto.SiteAiDocumentDto;
+import com.mywebsite.site.service.ChatDocumentTextExtractor;
 import com.mywebsite.site.dto.SiteKnowledgeSearchRequestDto;
 import com.mywebsite.site.dto.SiteKnowledgeSearchResponseDto;
 import com.mywebsite.site.service.SiteAiConversationService;
@@ -41,6 +45,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -67,6 +73,20 @@ public class SiteAiServiceImpl implements SiteAiService {
     private static final int MAX_ATTACHMENTS_TOTAL_BYTES = 5 * 1024 * 1024;
     private static final Set<String> ATTACHMENT_MEDIA_TYPES =
             Set.of("image/jpeg", "image/png", "image/webp", "image/gif");
+    /** 文档附件：与 Python ChatDocument 上限一致（份数/文本），字节上限与知识库上传一致。 */
+    private static final int MAX_DOCUMENTS = 3;
+    private static final int MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+    private static final int MAX_DOCUMENT_TEXT_CHARS = 60_000;
+    private static final int MAX_DOCUMENT_NAME_CHARS = 200;
+    private static final Map<String, String> DOCUMENT_MEDIA_TYPES =
+            Map.of(
+                    "pdf", "application/pdf",
+                    "docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    "txt", "text/plain",
+                    "md", "text/markdown",
+                    "markdown", "text/markdown");
     private static final int KNOWLEDGE_NEEDLE_CHARS = 80;
     private static final int KNOWLEDGE_SNIPPET_CHARS = 800;
     private static final int KNOWLEDGE_SNIPPET_LIMIT = 4;
@@ -118,14 +138,14 @@ public class SiteAiServiceImpl implements SiteAiService {
         ChatPreparation preparation =
                 conversationService.prepare(siteId, siteUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(siteId, siteUserId);
-        AgentChatResponse response =
-                agentClient.chat(buildAgentRequest(siteId, message, attachments, preparation, memories));
+        AgentChatResponse response = agentClient.chat(
+                buildAgentRequest(siteId, message, attachments, validated.documents(), preparation, memories));
         persistTurn(
                 siteId,
                 siteUserId,
                 preparation,
                 message,
-                attachments,
+                storedAttachments(attachments, validated),
                 response.reply(),
                 response.todos(),
                 response.runMeta(),
@@ -244,18 +264,31 @@ public class SiteAiServiceImpl implements SiteAiService {
                 conversationService.prepare(siteId, siteUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(siteId, siteUserId);
         AgentChatRequest agentRequest =
-                buildAgentRequest(siteId, message, attachments, preparation, memories);
+                buildAgentRequest(siteId, message, attachments, validated.documents(), preparation, memories);
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
+        List<AgentAttachmentDto> stored = storedAttachments(attachments, validated);
         siteAiStreamExecutor.execute(
-                () -> forwardStream(siteId, siteUserId, preparation, message, attachments, agentRequest, emitter));
+                () -> forwardStream(siteId, siteUserId, preparation, message, stored, agentRequest, emitter));
         return emitter;
+    }
+
+    /** 落库附件 = 图片本体 + 文档描述符（描述符无 data，历史回放自动跳过、公开 DTO 渲染为文件芯片）。 */
+    private static List<AgentAttachmentDto> storedAttachments(
+            List<AgentAttachmentDto> imageAttachments, ValidatedChat validated) {
+        if (validated.documentDescriptors().isEmpty()) {
+            return imageAttachments;
+        }
+        List<AgentAttachmentDto> stored = new ArrayList<>(imageAttachments);
+        stored.addAll(validated.documentDescriptors());
+        return List.copyOf(stored);
     }
 
     private AgentChatRequest buildAgentRequest(
             long siteId,
             String message,
             List<AgentAttachmentDto> attachments,
+            List<AgentDocumentContext> documents,
             ChatPreparation preparation,
             List<String> memories) {
         Long conversationId = preparation.conversation().getId();
@@ -276,7 +309,8 @@ public class SiteAiServiceImpl implements SiteAiService {
                 attachments.isEmpty() ? null : attachments,
                 memories == null || memories.isEmpty() ? null : memories,
                 Boolean.TRUE,
-                chain.size() > 1 ? List.copyOf(chain.subList(1, chain.size())) : null);
+                chain.size() > 1 ? List.copyOf(chain.subList(1, chain.size())) : null,
+                documents == null || documents.isEmpty() ? null : documents);
     }
 
     private void persistTurn(
@@ -472,7 +506,10 @@ public class SiteAiServiceImpl implements SiteAiService {
         }
         String message = request.message() == null ? "" : request.message().trim();
         List<SiteAiAttachmentDto> attachments = validateAttachments(request.attachments());
-        if (!StringUtils.hasText(message) && attachments.isEmpty()) {
+        List<AgentDocumentContext> documents = new ArrayList<>();
+        List<AgentAttachmentDto> documentDescriptors = new ArrayList<>();
+        validateDocuments(request.documents(), documents, documentDescriptors);
+        if (!StringUtils.hasText(message) && attachments.isEmpty() && documents.isEmpty()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         if (message.length() > MAX_MESSAGE_CHARS) {
@@ -481,7 +518,69 @@ public class SiteAiServiceImpl implements SiteAiService {
         if (!rateLimitService.tryAcquire(siteId, user.subject())) {
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS);
         }
-        return new ValidatedChat(user, message, attachments);
+        return new ValidatedChat(user, message, attachments, List.copyOf(documents), List.copyOf(documentDescriptors));
+    }
+
+    /**
+     * 文档附件校验与文本抽取：格式/大小/份数任一不合、抽取失败或抽不出文本（扫描版 PDF 等）
+     * 一律 BAD_REQUEST 诚实拒绝，不把空内容送给模型。抽取文本超上限时截断并标 truncated，
+     * 由 Python 在提示中注明后段已省略。原文不落库，落库的只有描述符（文件名＋类型）。
+     */
+    private static void validateDocuments(
+            List<SiteAiDocumentDto> documents,
+            List<AgentDocumentContext> extracted,
+            List<AgentAttachmentDto> descriptors) {
+        if (documents == null || documents.isEmpty()) {
+            return;
+        }
+        if (documents.size() > MAX_DOCUMENTS) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        for (SiteAiDocumentDto document : documents) {
+            if (document == null
+                    || !StringUtils.hasText(document.fileName())
+                    || document.fileName().trim().length() > MAX_DOCUMENT_NAME_CHARS
+                    || !StringUtils.hasText(document.data())) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            String fileName = document.fileName().trim();
+            String extension = documentExtension(fileName);
+            String mediaType = DOCUMENT_MEDIA_TYPES.get(extension);
+            if (mediaType == null) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            byte[] decoded;
+            try {
+                decoded = Base64.getDecoder().decode(document.data());
+            } catch (IllegalArgumentException ex) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            if (decoded.length == 0 || decoded.length > MAX_DOCUMENT_BYTES) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            String text;
+            try {
+                text = ChatDocumentTextExtractor.extractText(extension, decoded);
+            } catch (ChatDocumentTextExtractor.ExtractionException ex) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            if (!StringUtils.hasText(text)) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+            boolean truncated = text.length() > MAX_DOCUMENT_TEXT_CHARS;
+            extracted.add(
+                    new AgentDocumentContext(
+                            fileName, truncated ? text.substring(0, MAX_DOCUMENT_TEXT_CHARS) : text, truncated));
+            descriptors.add(AgentAttachmentDto.documentDescriptor(mediaType, fileName));
+        }
+    }
+
+    private static String documentExtension(String fileName) {
+        int dot = fileName.lastIndexOf('.');
+        if (dot < 0 || dot == fileName.length() - 1) {
+            return "";
+        }
+        return fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
     private static List<SiteAiAttachmentDto> validateAttachments(List<SiteAiAttachmentDto> attachments) {
@@ -624,13 +723,37 @@ public class SiteAiServiceImpl implements SiteAiService {
     }
 
     /**
-     * 终端用户只看到回复文本、citations 与错误码（§22.8）：工具轨迹 / 用量 / skills / todos / 原始错误信息
-     * 仅供后台观测（admin 预览原样透传）。返回 null = 不下发；未知事件默认不下发，防 Python 新增字段自动外泄。
+     * 终端用户可见：回复文本、citations、错误码，以及过程事件（THINKING 思考增量、
+     * TOOL_START / TOOL_RESULT 的工具名与状态、知识搜索的安全摘要）。仍不下发：
+     * 工具返回正文、用量、skills、todos 与原始错误信息（仅后台观测，admin 预览原样透传）。
+     * 白名单逐字段重写，返回 null = 不下发；未知事件默认不下发，防 Python 新增字段自动外泄。
      * DONE 在这里重写，不是透传 Python payload。
      */
     private String toClientEventData(String event, JsonNode data, String rawJson) {
         return switch (event) {
             case "TEXT_DELTA" -> rawJson;
+            case "THINKING" -> {
+                ObjectNode thinking = objectMapper.createObjectNode();
+                thinking.put("delta", data.path("delta").asText(""));
+                yield thinking.toString();
+            }
+            case "TOOL_START" -> {
+                ObjectNode tool = objectMapper.createObjectNode();
+                tool.put("toolName", data.path("toolName").asText(""));
+                tool.put("toolCallId", data.path("toolCallId").asText(""));
+                yield tool.toString();
+            }
+            case "TOOL_RESULT" -> {
+                ObjectNode tool = objectMapper.createObjectNode();
+                tool.put("toolName", data.path("toolName").asText(""));
+                tool.put("toolCallId", data.path("toolCallId").asText(""));
+                tool.put("ok", data.path("ok").asBoolean(false));
+                JsonNode summary = data.get("summary");
+                if (summary != null && summary.isObject()) {
+                    tool.set("summary", clientSearchSummary(summary));
+                }
+                yield tool.toString();
+            }
             case "START" -> "{}";
             case "DONE" -> {
                 ObjectNode done = objectMapper.createObjectNode();
@@ -647,6 +770,22 @@ public class SiteAiServiceImpl implements SiteAiService {
             }
             default -> null;
         };
+    }
+
+    /** 知识搜索摘要白名单：查询词、命中数与来源标识；不带片段正文。 */
+    private ObjectNode clientSearchSummary(JsonNode summary) {
+        ObjectNode safe = objectMapper.createObjectNode();
+        safe.put("query", summary.path("query").asText(""));
+        safe.put("hitCount", summary.path("hitCount").asInt(0));
+        ArrayNode sources = safe.putArray("sources");
+        for (JsonNode source : summary.path("sources")) {
+            ObjectNode item = objectMapper.createObjectNode();
+            item.put("sourceId", source.path("sourceId").asText(""));
+            item.put("chunkIndex", source.path("chunkIndex").asInt(0));
+            item.put("score", source.path("score").asDouble(0));
+            sources.add(item);
+        }
+        return safe;
     }
 
     private JsonNode readJson(String dataJson) {
@@ -739,7 +878,12 @@ public class SiteAiServiceImpl implements SiteAiService {
         }
     }
 
-    private record ValidatedChat(AuthenticatedUser user, String message, List<SiteAiAttachmentDto> attachments) {}
+    private record ValidatedChat(
+            AuthenticatedUser user,
+            String message,
+            List<SiteAiAttachmentDto> attachments,
+            List<AgentDocumentContext> documents,
+            List<AgentAttachmentDto> documentDescriptors) {}
 
     private static final class ClientDisconnectedException extends RuntimeException {
         private ClientDisconnectedException(Throwable cause) {

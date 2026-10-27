@@ -29,9 +29,11 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -49,6 +51,7 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
 
     /** 文字为空且图片已超出重播上限时的占位，避免送出空 content。 */
     private static final String DROPPED_IMAGE_PLACEHOLDER = "[图片]";
+    private static final String DROPPED_DOCUMENT_PLACEHOLDER = "[文件]";
 
     /** 与 {@link SiteAiConversationRenameRequestDto#TITLE_MAX_LENGTH} 同一上限：生成标题截断，重命名由 DTO 拒绝更长值。 */
     private static final int TITLE_MAX_LENGTH = SiteAiConversationRenameRequestDto.TITLE_MAX_LENGTH;
@@ -165,7 +168,8 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                         m.getContent(),
                         m.getCreatedAt(),
                         readPublicAttachments(m),
-                        readCitations(m)))
+                        readCitations(m),
+                        readProcess(m)))
                 .toList();
     }
 
@@ -206,15 +210,19 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         List<SiteAiMessageEntity> chronological = latest.stream()
                 .sorted(Comparator.comparing(SiteAiMessageEntity::getId))
                 .toList();
-        Map<Long, List<AgentAttachmentDto>> replay = replayAttachments(chronological);
+        HistoryReplay replay = replayAttachments(chronological);
         return chronological.stream().map(message -> toHistoryMessage(message, replay)).toList();
     }
 
+    private record HistoryReplay(Map<Long, List<AgentAttachmentDto>> attachments, Set<Long> documentTurns) {}
+
     /**
      * 全历史最多保留最近 {@link #HISTORY_IMAGE_LIMIT} 张。同一条消息放不下时保留列表前缀，其余丢掉。
+     * 文档描述符不回放，只记下轮次 id，供无文字的文档轮在历史里用文件占位符保轮。
      */
-    private Map<Long, List<AgentAttachmentDto>> replayAttachments(List<SiteAiMessageEntity> chronological) {
+    private HistoryReplay replayAttachments(List<SiteAiMessageEntity> chronological) {
         Map<Long, List<AgentAttachmentDto>> replay = new HashMap<>();
+        Set<Long> documentTurns = new HashSet<>();
         int remaining = HISTORY_IMAGE_LIMIT;
         for (int i = chronological.size() - 1; i >= 0; i--) {
             SiteAiMessageEntity message = chronological.get(i);
@@ -224,6 +232,9 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             StoredAttachments stored = readStoredAttachments(message);
             if (!stored.present()) {
                 continue;
+            }
+            if (stored.hasDocuments()) {
+                documentTurns.add(message.getId());
             }
             if (stored.items().isEmpty() || remaining <= 0) {
                 replay.put(message.getId(), List.of());
@@ -237,19 +248,21 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                 remaining = 0;
             }
         }
-        return replay;
+        return new HistoryReplay(replay, documentTurns);
     }
 
-    private AgentChatHistoryMessage toHistoryMessage(
-            SiteAiMessageEntity message, Map<Long, List<AgentAttachmentDto>> replay) {
+    private AgentChatHistoryMessage toHistoryMessage(SiteAiMessageEntity message, HistoryReplay replay) {
         String content = message.getContent() == null ? "" : message.getContent();
-        if (!SiteAiMessageEntity.ROLE_USER.equals(message.getRole()) || !replay.containsKey(message.getId())) {
+        if (!SiteAiMessageEntity.ROLE_USER.equals(message.getRole())
+                || !replay.attachments().containsKey(message.getId())) {
             return new AgentChatHistoryMessage(message.getRole(), content);
         }
-        List<AgentAttachmentDto> kept = replay.get(message.getId());
+        List<AgentAttachmentDto> kept = replay.attachments().get(message.getId());
         if (kept.isEmpty()) {
             if (!StringUtils.hasText(content)) {
-                content = DROPPED_IMAGE_PLACEHOLDER;
+                content = replay.documentTurns().contains(message.getId())
+                        ? DROPPED_DOCUMENT_PLACEHOLDER
+                        : DROPPED_IMAGE_PLACEHOLDER;
             }
             return new AgentChatHistoryMessage(message.getRole(), content);
         }
@@ -264,17 +277,25 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         try {
             AgentAttachmentDto[] parsed = objectMapper.readValue(raw, AgentAttachmentDto[].class);
             List<AgentAttachmentDto> items = new ArrayList<>();
+            boolean hasDocuments = false;
             if (parsed != null) {
                 for (AgentAttachmentDto item : parsed) {
-                    if (item != null && StringUtils.hasText(item.mediaType()) && StringUtils.hasText(item.data())) {
+                    if (item == null) {
+                        continue;
+                    }
+                    if (AgentAttachmentDto.KIND_DOCUMENT.equals(item.kind())) {
+                        hasDocuments = true;
+                        continue;
+                    }
+                    if (StringUtils.hasText(item.mediaType()) && StringUtils.hasText(item.data())) {
                         items.add(item);
                     }
                 }
             }
-            return new StoredAttachments(true, List.copyOf(items));
+            return new StoredAttachments(true, List.copyOf(items), hasDocuments);
         } catch (JsonProcessingException ex) {
             log.warn("site ai message {} has malformed attachments, ignored", message.getId(), ex);
-            return new StoredAttachments(true, List.of());
+            return new StoredAttachments(true, List.of(), false);
         }
     }
 
@@ -405,6 +426,50 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         }
     }
 
+    /**
+     * 过程摘要回放：读 agent_meta 顶层的 tools / searches（与实时事件同一白名单，
+     * 只有工具名与成败、查询词与命中数）。两者皆空、缺失或损坏时返回 null，不让消息列表失败。
+     * 旧消息没有 searches 时只回放 tools。
+     */
+    private SiteAiMessageDto.Process readProcess(SiteAiMessageEntity message) {
+        if (!StringUtils.hasText(message.getAgentMeta())) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(message.getAgentMeta());
+            if (root == null || !root.isObject()) {
+                return null;
+            }
+            List<SiteAiMessageDto.Process.Tool> tools = new ArrayList<>();
+            JsonNode toolsNode = root.get("tools");
+            if (toolsNode != null && toolsNode.isArray()) {
+                for (JsonNode item : toolsNode) {
+                    if (item != null && item.isObject() && item.hasNonNull("name")) {
+                        tools.add(new SiteAiMessageDto.Process.Tool(
+                                item.path("name").asText(""), item.path("ok").asBoolean(false)));
+                    }
+                }
+            }
+            List<SiteAiMessageDto.Process.Search> searches = new ArrayList<>();
+            JsonNode searchesNode = root.get("searches");
+            if (searchesNode != null && searchesNode.isArray()) {
+                for (JsonNode item : searchesNode) {
+                    if (item != null && item.isObject()) {
+                        searches.add(new SiteAiMessageDto.Process.Search(
+                                item.path("query").asText(""), item.path("hitCount").asInt(0)));
+                    }
+                }
+            }
+            if (tools.isEmpty() && searches.isEmpty()) {
+                return null;
+            }
+            return new SiteAiMessageDto.Process(List.copyOf(tools), List.copyOf(searches));
+        } catch (Exception ex) {
+            log.warn("site ai message {} has malformed agent_meta process, ignored", message.getId(), ex);
+            return null;
+        }
+    }
+
     /** 观测数据序列化失败不得让已成功的一轮回滚：记日志后存 NULL。 */
     private String writeRunMeta(AgentRunMeta runMeta) {
         if (runMeta == null || runMeta.equals(AgentRunMeta.EMPTY)) {
@@ -434,9 +499,10 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         messageMapper.insert(message);
     }
 
-    private record StoredAttachments(boolean present, List<AgentAttachmentDto> items) {
+    /** items 只含可回放的图片；hasDocuments 标记该轮带过文档描述符（文档本身不回放）。 */
+    private record StoredAttachments(boolean present, List<AgentAttachmentDto> items, boolean hasDocuments) {
         private static StoredAttachments none() {
-            return new StoredAttachments(false, List.of());
+            return new StoredAttachments(false, List.of(), false);
         }
     }
 

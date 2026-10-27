@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 class AgentStreamEventType(StrEnum):
     START = "START"
     TEXT_DELTA = "TEXT_DELTA"
+    THINKING = "THINKING"
     TOOL_START = "TOOL_START"
     TOOL_RESULT = "TOOL_RESULT"
     DONE = "DONE"

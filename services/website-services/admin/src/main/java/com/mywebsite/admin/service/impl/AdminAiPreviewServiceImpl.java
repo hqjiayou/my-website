@@ -98,7 +98,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 null,
                 null,
                 null,
-                chain.size() > 1 ? List.copyOf(chain.subList(1, chain.size())) : null);
+                chain.size() > 1 ? List.copyOf(chain.subList(1, chain.size())) : null,
+                null);
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter));
         return emitter;

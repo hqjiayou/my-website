@@ -10,6 +10,8 @@ import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.dto.AgentOcrPdfRequest;
+import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentReembedPrepareRequest;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
@@ -296,6 +298,19 @@ public class HttpAgentClient implements AgentClient {
         JsonNode column = body.get("columnDimensions");
         Integer columnDimensions = column != null && column.isNumber() ? column.asInt() : null;
         return new AgentReembedPrepareResult(dimensions.asInt(), columnDimensions, body.get("recreated").asBoolean());
+    }
+
+    @Override
+    public AgentOcrPdfResult ocrPdf(AgentOcrPdfRequest request) {
+        ensureTokenConfigured();
+        JsonNode body = exchangeWithRetry("POST", "/internal/v1/ocr/pdf", request);
+        JsonNode data = body.path("data");
+        JsonNode text = data.get("text");
+        if (text == null || !text.isTextual()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+        JsonNode spec = data.get("modelSpec");
+        return new AgentOcrPdfResult(text.asText(), spec != null && spec.isTextual() ? spec.asText() : null);
     }
 
     @Override

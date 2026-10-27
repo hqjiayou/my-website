@@ -1,14 +1,30 @@
 import { useQuery } from '@tanstack/react-query'
+import {
+  Activity,
+  BookOpen,
+  Bot,
+  Braces,
+  ExternalLink,
+  FileText,
+  FolderOpen,
+  Globe,
+  MessageSquare,
+  MessagesSquare,
+  Palette,
+  SlidersHorizontal,
+  type LucideIcon,
+} from 'lucide-react'
 import { Suspense, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, Outlet, useParams } from 'react-router-dom'
 
 import { siteApi, SITE_STATUS, type Site, type SiteStatus } from '@/api'
+import { RouteFallback } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
-import { RouteFallback } from '@/components/page'
 import { PERMISSION_CODES } from '@/types/rbac'
+import { siteWebUrl } from '@/utils/siteWebUrl'
 
 export interface SiteWorkspaceOutletContext {
   site: Site
@@ -20,17 +36,28 @@ function statusClassName(status: string) {
     : 'border-slate-200 bg-slate-50 text-slate-600'
 }
 
+interface WorkspaceNavItem {
+  key: string
+  path: string
+  icon: LucideIcon
+  end?: boolean
+}
+
+interface WorkspaceNavGroup {
+  key: string
+  items: WorkspaceNavItem[]
+}
+
 export function SiteWorkspaceLayout() {
   const { t } = useTranslation('sites')
   const { siteId } = useParams()
   const parsedId = Number(siteId)
   const canListContent = useHasPermission(PERMISSION_CODES.contentList)
-  const canListReservation = useHasPermission(PERMISSION_CODES.reservationList)
   const canListMedia = useHasPermission(PERMISSION_CODES.mediaList)
-  const canReadPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
-  const canListKb = useHasPermission(PERMISSION_CODES.aiKbList)
-  const canListConversation = useHasPermission(PERMISSION_CODES.aiConversationList)
-  const canAi = canReadPrompt || canListKb || canListConversation
+  const canPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
+  const canKnowledge = useHasPermission(PERMISSION_CODES.aiKbList)
+  const canConversations = useHasPermission(PERMISSION_CODES.aiConversationList)
+  const canAi = canPrompt || canKnowledge || canConversations
 
   const { data: site, isPending, isError, error } = useQuery({
     queryKey: ['sites', parsedId],
@@ -38,20 +65,57 @@ export function SiteWorkspaceLayout() {
     enabled: Number.isFinite(parsedId),
   })
 
-  const navItems = useMemo(() => {
-    if (!site) return [] as Array<{ key: string; path: string }>
-    const items: Array<{ key: string; path: string }> = [
-      { key: 'overview', path: ROUTES.apps.siteOverview(site.id) },
-      { key: 'basic', path: ROUTES.apps.siteBasic(site.id) },
-      { key: 'theme', path: ROUTES.apps.siteTheme(site.id) },
-      { key: 'domain', path: ROUTES.apps.siteDomain(site.id) },
-    ]
-    if (canListContent) items.push({ key: 'contents', path: ROUTES.apps.siteContents(site.id) })
-    if (canListReservation) items.push({ key: 'reservations', path: ROUTES.apps.siteReservations(site.id) })
-    if (canAi) items.push({ key: 'ai', path: ROUTES.apps.siteAi(site.id) })
-    if (canListMedia) items.push({ key: 'files', path: ROUTES.apps.siteFiles(site.id) })
-    return items
-  }, [canAi, canListContent, canListMedia, canListReservation, site])
+  const navGroups = useMemo<WorkspaceNavGroup[]>(() => {
+    if (!site) return []
+    const groups: WorkspaceNavGroup[] = []
+
+    if (canAi) {
+      const agentItems: WorkspaceNavItem[] = [
+        { key: 'agentOverview', path: ROUTES.apps.siteAgent(site.id), icon: Bot, end: true },
+      ]
+      if (canPrompt) {
+        agentItems.push(
+          { key: 'agentPreview', path: ROUTES.apps.siteAgentPreview(site.id), icon: MessageSquare },
+          { key: 'agentPrompt', path: ROUTES.apps.siteAgentPrompt(site.id), icon: Braces },
+        )
+      }
+      if (canKnowledge) {
+        agentItems.push({ key: 'agentKnowledge', path: ROUTES.apps.siteAgentKnowledge(site.id), icon: BookOpen })
+      }
+      if (canConversations) {
+        agentItems.push({
+          key: 'agentConversations',
+          path: ROUTES.apps.siteAgentConversations(site.id),
+          icon: MessagesSquare,
+        })
+      }
+      if (canPrompt) {
+        agentItems.push({ key: 'agentRuntime', path: ROUTES.apps.siteAgentRuntime(site.id), icon: Activity })
+      }
+      groups.push({ key: 'agent', items: agentItems })
+    }
+
+    const materialItems: WorkspaceNavItem[] = []
+    if (canListContent) {
+      materialItems.push({ key: 'contents', path: ROUTES.apps.siteContents(site.id), icon: FileText })
+    }
+    if (canListMedia) {
+      materialItems.push({ key: 'files', path: ROUTES.apps.siteFiles(site.id), icon: FolderOpen })
+    }
+    if (materialItems.length > 0) {
+      groups.push({ key: 'materials', items: materialItems })
+    }
+
+    groups.push({
+      key: 'settings',
+      items: [
+        { key: 'basic', path: ROUTES.apps.siteBasic(site.id), icon: SlidersHorizontal },
+        { key: 'theme', path: ROUTES.apps.siteTheme(site.id), icon: Palette },
+        { key: 'domain', path: ROUTES.apps.siteDomain(site.id), icon: Globe },
+      ],
+    })
+    return groups
+  }, [canAi, canConversations, canKnowledge, canListContent, canListMedia, canPrompt, site])
 
   if (!Number.isFinite(parsedId)) {
     return (
@@ -93,71 +157,84 @@ export function SiteWorkspaceLayout() {
     )
   }
 
+  const visitUrl = siteWebUrl(site.siteCode)
+
   return (
     <section className="space-y-4">
-      <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">{site.siteName}</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {t('workspace.title')} · {site.siteCode}
-            </p>
-          </div>
-          <Link
-            to={ROUTES.apps.sites}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            {t('workspace.backToList')}
-          </Link>
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">{t('detail.labels.siteType')}</p>
-            <p className="mt-1 text-sm font-medium text-slate-900">
-              {t(`siteType.${site.siteType}`, { defaultValue: site.siteType })}
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">{t('detail.labels.domain')}</p>
-            <p className="mt-1 text-sm font-medium text-slate-900">{site.defaultDomain || '—'}</p>
-          </div>
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-            <p className="text-xs text-slate-500">{t('detail.labels.status')}</p>
+      <article className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="text-xl font-semibold text-slate-900">{site.siteName}</h1>
             <span
               className={cn(
-                'mt-1 inline-flex rounded-md border px-2 py-1 text-xs font-medium',
+                'inline-flex rounded-md border px-2 py-0.5 text-xs font-medium',
                 statusClassName(site.status as SiteStatus),
               )}
             >
               {t(`status.${site.status}`, { defaultValue: site.status })}
             </span>
+            <p className="text-sm text-slate-500">
+              {site.siteCode} · {t(`siteType.${site.siteType}`, { defaultValue: site.siteType })}
+              {site.defaultDomain ? ` · ${site.defaultDomain}` : ''}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {visitUrl ? (
+              <a
+                href={visitUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800"
+              >
+                <ExternalLink className="h-4 w-4" />
+                {t('workspace.visitSite')}
+              </a>
+            ) : null}
+            <Link
+              to={ROUTES.apps.sites}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              {t('workspace.backToList')}
+            </Link>
           </div>
         </div>
       </article>
 
-      <nav className="flex flex-wrap gap-2">
-        {navItems.map(({ key, path }) => (
-          <NavLink
-            key={key}
-            to={path}
-            className={({ isActive }) =>
-              cn(
-                'rounded-lg border px-3 py-1.5 text-sm font-medium transition',
-                isActive
-                  ? 'border-slate-900 bg-slate-900 text-white'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-              )
-            }
-          >
-            {t(`workspace.nav.${key}`)}
-          </NavLink>
-        ))}
-      </nav>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <aside className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-4 lg:w-60 lg:shrink-0">
+          {navGroups.map((group) => (
+            <div key={group.key} className="mb-4 last:mb-0">
+              <p className="px-2 pb-1.5 text-xs font-semibold tracking-wide text-slate-400">
+                {t(`workspace.groups.${group.key}`)}
+              </p>
+              <nav className="flex flex-wrap gap-1 lg:flex-col lg:flex-nowrap">
+                {group.items.map((item) => (
+                  <NavLink
+                    key={item.key}
+                    to={item.path}
+                    end={item.end}
+                    className={({ isActive }) =>
+                      cn(
+                        'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition',
+                        isActive ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-50',
+                      )
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    {t(`workspace.nav.${item.key}`)}
+                  </NavLink>
+                ))}
+              </nav>
+            </div>
+          ))}
+        </aside>
 
-      <Suspense fallback={<RouteFallback />}>
-        <Outlet context={{ site } satisfies SiteWorkspaceOutletContext} />
-      </Suspense>
+        <div className="min-w-0 flex-1">
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet context={{ site } satisfies SiteWorkspaceOutletContext} />
+          </Suspense>
+        </div>
+      </div>
     </section>
   )
 }

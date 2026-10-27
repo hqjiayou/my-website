@@ -1,18 +1,12 @@
 package com.mywebsite.site.controller;
 
 import com.mywebsite.common.api.ApiResponse;
-import com.mywebsite.site.dto.SiteInternalDtos.InternalReservationCreateRequest;
-import com.mywebsite.site.dto.SiteInternalDtos.InternalReservationDto;
 import com.mywebsite.site.dto.SiteInternalDtos.SiteContentListDto;
 import com.mywebsite.site.dto.SiteInternalDtos.SiteSummaryDto;
 import com.mywebsite.site.service.SiteInternalService;
 import io.swagger.v3.oas.annotations.Hidden;
-import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -43,13 +37,5 @@ public class SiteInternalController {
             @RequestParam(value = "type", required = false) String type,
             @RequestParam(value = "limit", required = false, defaultValue = "20") int limit) {
         return ApiResponse.success(siteInternalService.listPublishedContents(siteId, type, limit));
-    }
-
-    @PostMapping("/reservations")
-    public ApiResponse<InternalReservationDto> createReservation(
-            @PathVariable("siteId") long siteId,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @Valid @RequestBody InternalReservationCreateRequest request) {
-        return ApiResponse.success(siteInternalService.createReservation(siteId, request, idempotencyKey));
     }
 }

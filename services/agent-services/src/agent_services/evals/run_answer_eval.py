@@ -24,6 +24,10 @@ from pathlib import Path
 
 from pydantic_ai.models import Model
 
+from agent_services.agent.knowledge_tools import (
+    KnowledgeSearchCollector,
+    build_knowledge_toolset,
+)
 from agent_services.agent.model_factory import create_model
 from agent_services.agent.runtime import ChatBlocked, ChatReply, run_chat
 from agent_services.config import RETRIEVAL_MIN_SCORE_DEFAULT, Settings
@@ -352,23 +356,20 @@ def _observed_sources(
 async def _run_case(
     service: RetrievalService, model: Model, case: GoldenCase, *, site_id: str
 ) -> dict[str, object]:
-    # 与 internal chat 的向量 grounding 相同：降级或没有命中时不把 chunks 交给 runtime。
-    chunks = await service.retrieve_chunks(site_id=site_id, query=case.question)
-    degraded = service.degraded
-    if degraded or not chunks:
-        context: list[str] | None = None
-        used: list[RetrievedChunk] | None = None
-    else:
-        context = [chunk.content for chunk in chunks]
-        used = list(chunks)
+    # 与生产路径一致：知识检索由 agent 经 search_site_knowledge 工具执行，
+    # 命中片段经 collector 回流生成 citations；评测量的就是这条链。
+    collector = KnowledgeSearchCollector()
+    toolset = build_knowledge_toolset(site_id, service, collector=collector)
     outcome = await run_chat(
         model,
         site_id=site_id,
         message=case.question,
-        retrieval_context=context,
-        retrieval_chunks=used,
+        toolsets=[toolset],
+        knowledge_collector=collector,
         memory_extraction_enabled=False,
     )
+    chunks = collector.chunks
+    degraded = collector.degraded
     if isinstance(outcome, ChatReply):
         answer = outcome.reply
         citations = outcome.citations
