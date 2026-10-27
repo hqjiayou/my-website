@@ -33,12 +33,21 @@ def build_prompt_parts(
         "If no tool data covers something, say it is not available instead of guessing."
     )
     if knowledge_available:
-        # 只在本轮确实注册了 search_site_knowledge 时才写，避免提示与工具不一致
+        # 只在本轮确实注册了 search_site_knowledge 时才写，避免提示与工具不一致。
+        # 覆盖面刻意写宽：实测中「VPN 的远程网关是什么」这类问题被模型当成通识
+        # 问题绕过工具、凭参数知识作答，而站点手册里其实有站点专属值——凡是可能
+        # 被知识库覆盖的事实（含配置值与术语）都必须先查，站点值优先于通识。
         system = (
             f"{system}\n\n"
-            "When the user asks about this site's documents or facts, use the "
-            "search_site_knowledge tool first and answer from the returned passages; "
-            "if the search returns nothing relevant, say you could not find it."
+            "When the user asks about this site's documents or facts — or anything "
+            "the knowledge base might cover, such as procedures, configuration "
+            "values (hosts, gateways, addresses, versions, prices, hours), or "
+            "terminology in the site's subject area — use the search_site_knowledge "
+            "tool first and answer from the returned passages, even if you think "
+            "you already know the answer: a site-specific value in the documents "
+            "takes precedence over general knowledge. If the search returns nothing "
+            "relevant, say you could not find it in the site's documents instead of "
+            "answering from general knowledge."
         )
     if skill_instructions:
         text = skill_instructions

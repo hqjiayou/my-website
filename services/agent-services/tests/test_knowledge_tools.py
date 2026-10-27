@@ -96,6 +96,8 @@ def test_prompt_parts_mention_knowledge_tool_only_when_available() -> None:
     without_tool, _ = build_prompt_parts("1", "hi")
     assert "search_site_knowledge" in with_tool
     assert "documents or facts" in with_tool
+    # 站点专属值优先于通识：看似通识的问题也必须先查（防凭参数知识绕过工具）
+    assert "takes precedence over general knowledge" in with_tool
     assert "search_site_knowledge" not in without_tool
 
 
