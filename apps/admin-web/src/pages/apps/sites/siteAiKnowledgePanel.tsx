@@ -16,6 +16,7 @@ const KB_UPLOAD_EXTENSIONS = [
   'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt',
   'scala', 'pl', 'r', 'lua', 'vue',
   'pdf', 'docx', 'html', 'htm', 'xlsx', 'pptx', 'epub', 'odt', 'ods', 'odp', 'rtf',
+  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp',
 ]
 const KB_UPLOAD_ACCEPT = KB_UPLOAD_EXTENSIONS.map((ext) => `.${ext}`).join(',')
 
