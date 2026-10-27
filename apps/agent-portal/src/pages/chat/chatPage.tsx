@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowUp, Check, Copy, FileText, ImagePlus, Pencil, Plus, RotateCcw, Square } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, FileText, ImagePlus, Pencil, Plus, RotateCcw, Square } from 'lucide-react'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
 import { MarkdownText } from '@/components/markdown'
@@ -184,6 +184,9 @@ export function ChatPage() {
   const [attachMenuOpen, setAttachMenuOpen] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const nearBottomRef = useRef(true)
+  const [showScrollDown, setShowScrollDown] = useState(false)
   const draftRef = useRef<HTMLTextAreaElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const docFileRef = useRef<HTMLInputElement | null>(null)
@@ -286,9 +289,26 @@ export function ChatPage() {
     }
   }, [])
 
+  // 只有視口貼著底部時才自動跟隨新訊息；用戶上翻看舊內容時不硬拽回去（GPT 行為）。
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' })
+    if (nearBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [messages, sending, failure])
+
+  function onScrollArea() {
+    const el = scrollRef.current
+    if (!el) return
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+    nearBottomRef.current = distance < 160
+    setShowScrollDown(distance > 320)
+  }
+
+  function scrollToBottom() {
+    const el = scrollRef.current
+    if (!el) return
+    nearBottomRef.current = true
+    setShowScrollDown(false)
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }
 
   useEffect(() => {
     if (!attachMenuOpen) return
@@ -751,6 +771,166 @@ export function ChatPage() {
     return () => setExtra(null)
   }, [setExtra])
 
+  const composer = (
+    <form onSubmit={onSubmit} className='w-full'>
+      <div className="mx-auto w-full max-w-3xl">
+        {attachError ? <p className="mb-2 text-center text-xs text-danger">{attachError}</p> : null}
+        {pending.length > 0 ? (
+          <ul className="mb-2 flex flex-wrap gap-2">
+            {pending.map((image) => (
+              <li key={image.id} className="relative">
+                <img src={imageSrc(image)} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                <button
+                  type="button"
+                  aria-label="移除圖片"
+                  disabled={sending}
+                  onClick={() => {
+                    setPending((current) => current.filter((item) => item.id !== image.id))
+                    setAttachError(null)
+                  }}
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gpt-ink text-[10px] text-gpt-canvas disabled:opacity-30"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {pendingDocs.length > 0 ? (
+          <ul className="mb-2 flex flex-wrap gap-2">
+            {pendingDocs.map((doc) => (
+              <li
+                key={doc.id}
+                className="relative flex max-w-full items-center gap-1.5 rounded-full border border-gpt-line px-3 py-1.5 pr-7 text-xs text-gpt-muted"
+              >
+                <FileText size={14} className="shrink-0" />
+                <span className="truncate">{doc.fileName}</span>
+                <span className="shrink-0">{formatFileSize(doc.sizeBytes)}</span>
+                <button
+                  type="button"
+                  aria-label="移除文件"
+                  disabled={sending}
+                  onClick={() => {
+                    setPendingDocs((current) => current.filter((item) => item.id !== doc.id))
+                    setAttachError(null)
+                  }}
+                  className="absolute right-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-gpt-ink text-[10px] text-gpt-canvas disabled:opacity-30"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      <div className="relative flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="sr-only"
+          disabled={sending || compressing}
+          onChange={(event) => void onPickFiles(event)}
+        />
+        <input
+          ref={docFileRef}
+          type="file"
+          accept=".pdf,.docx,.xlsx,.pptx,.txt,.md"
+          multiple
+          className="sr-only"
+          disabled={sending}
+          onChange={(event) => void onPickDocuments(event)}
+        />
+        {attachMenuOpen ? (
+          <button
+            type="button"
+            aria-hidden="true"
+            tabIndex={-1}
+            className="fixed inset-0 z-10 cursor-default"
+            onClick={() => setAttachMenuOpen(false)}
+          />
+        ) : null}
+        <div className="relative z-20 mb-0.5 shrink-0">
+          <button
+            type="button"
+            aria-label="附加內容"
+            aria-expanded={attachMenuOpen}
+            disabled={sending || compressing}
+            onClick={() => setAttachMenuOpen((open) => !open)}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink disabled:opacity-30"
+          >
+            <Plus size={21} strokeWidth={1.9} />
+          </button>
+          {attachMenuOpen ? (
+            <div className="absolute bottom-full left-0 z-20 mb-2 w-60 rounded-2xl border border-gpt-line bg-gpt-canvas p-1.5 shadow-xl">
+              <button
+                type="button"
+                disabled={sending || compressing}
+                onClick={() => {
+                  setAttachMenuOpen(false)
+                  fileRef.current?.click()
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-gpt-hover disabled:opacity-40"
+              >
+                <ImagePlus size={18} className="shrink-0 text-gpt-muted" />
+                附加圖片
+                <span className="ml-auto text-xs text-gpt-muted">最多 3 張</span>
+              </button>
+              <button
+                type="button"
+                disabled={sending}
+                onClick={() => {
+                  setAttachMenuOpen(false)
+                  docFileRef.current?.click()
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-gpt-hover disabled:opacity-40"
+              >
+                <FileText size={18} className="shrink-0 text-gpt-muted" />
+                附加文件
+                <span className="ml-auto text-xs text-gpt-muted">PDF、Word 等</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <label className="sr-only" htmlFor="chat-draft">
+          訊息
+        </label>
+        <textarea
+          id="chat-draft"
+          ref={draftRef}
+          rows={1}
+          value={draft}
+          enterKeyHint="send"
+          placeholder="傳訊息給 Agent Portal"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              if (!sending && !compressing) void send(draft, pending, pendingDocs)
+            }
+          }}
+          className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-base outline-none"
+        />
+        <button
+          type="submit"
+          disabled={
+            compressing ||
+            (historyLoading && !freshChat) ||
+            (!sending && !draft.trim() && pending.length === 0 && pendingDocs.length === 0)
+          }
+          aria-label={sending ? '停止生成' : '傳送'}
+          className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas disabled:opacity-30"
+        >
+          {sending ? <Square size={12} fill="currentColor" /> : <ArrowUp size={18} strokeWidth={2.4} />}
+        </button>
+      </div>
+      </div>
+      <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-gpt-muted">
+        回覆成功後寫入這個帳號。內容由 AI 產生，請自行確認。
+      </p>
+    </form>
+  )
+
   if (!site.ok) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-gpt-canvas px-6 text-gpt-ink">
@@ -772,30 +952,29 @@ export function ChatPage() {
       className="flex min-w-0 w-full flex-1 flex-col bg-gpt-canvas"
       style={{ height: 'calc(100% - var(--keyboard-inset, 0px))' }}
     >
-      <div className="flex h-11 shrink-0 items-center gap-2 px-4">
+      <div className="flex h-11 shrink-0 items-center gap-2 bg-gpt-canvas/80 px-4 backdrop-blur-sm">
         <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{activeTitle}</h1>
         {selectedId ? <span className="text-xs text-gpt-muted">已儲存</span> : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={scrollRef} onScroll={onScrollArea} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-6">
           {historyLoading && !freshChat ? <p className="text-sm text-gpt-muted">正在載入訊息…</p> : null}
           {showEmpty ? (
-            <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-              <h1 className="text-[26px] font-semibold leading-snug tracking-tight md:text-[32px]">
+            <div className="flex flex-1 flex-col items-center justify-center py-10">
+              <h1 className="text-center text-[26px] font-semibold leading-snug tracking-tight md:text-[32px]">
                 {displayName ? `${displayName}，有什麼可以幫忙的？` : '有什麼可以幫忙的？'}
               </h1>
-              <p className="mt-3 max-w-md text-sm leading-6 text-gpt-muted">
-                回覆成功後，這段對話會存在這個帳號下。從左側打開，或刷新這個頁面，都會從伺服器讀回。
-              </p>
-              <div className="mt-8 grid w-full gap-2 sm:grid-cols-3">
+              <div className="mt-9 w-full">{composer}</div>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
                 {SUGGESTIONS.map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
                     disabled={sending}
                     onClick={() => void send(prompt)}
-                    className="rounded-2xl border border-gpt-line px-3 py-3 text-left text-sm leading-6 hover:bg-gpt-hover disabled:opacity-60"
+                    className="rounded-full border border-gpt-line px-4 py-2 text-sm text-gpt-muted transition hover:bg-gpt-hover hover:text-gpt-ink disabled:opacity-60"
                   >
                     {prompt}
                   </button>
@@ -913,7 +1092,7 @@ export function ChatPage() {
                     ) : null}
                     {message.content || message.pending ? (
                       isUser ? (
-                        <p className="whitespace-pre-wrap break-words text-[15px] leading-7">
+                        <p className="whitespace-pre-wrap break-words text-base leading-7">
                           {message.content}
                         </p>
                       ) : (
@@ -1009,164 +1188,20 @@ export function ChatPage() {
           <div ref={bottomRef} />
         </div>
       </div>
+      {showScrollDown && !showEmpty ? (
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          aria-label="回到底部"
+          title="回到底部"
+          className="absolute bottom-4 left-1/2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-gpt-line bg-gpt-canvas text-gpt-muted shadow-md transition hover:text-gpt-ink"
+        >
+          <ArrowDown size={17} />
+        </button>
+      ) : null}
+      </div>
 
-      <form onSubmit={onSubmit} className="safe-x shrink-0 px-4 pb-4">
-        <div className="mx-auto w-full max-w-3xl">
-          {attachError ? <p className="mb-2 text-center text-xs text-danger">{attachError}</p> : null}
-          {pending.length > 0 ? (
-            <ul className="mb-2 flex flex-wrap gap-2">
-              {pending.map((image) => (
-                <li key={image.id} className="relative">
-                  <img src={imageSrc(image)} alt="" className="h-16 w-16 rounded-xl object-cover" />
-                  <button
-                    type="button"
-                    aria-label="移除圖片"
-                    disabled={sending}
-                    onClick={() => {
-                      setPending((current) => current.filter((item) => item.id !== image.id))
-                      setAttachError(null)
-                    }}
-                    className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gpt-ink text-[10px] text-gpt-canvas disabled:opacity-30"
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {pendingDocs.length > 0 ? (
-            <ul className="mb-2 flex flex-wrap gap-2">
-              {pendingDocs.map((doc) => (
-                <li
-                  key={doc.id}
-                  className="relative flex max-w-full items-center gap-1.5 rounded-full border border-gpt-line px-3 py-1.5 pr-7 text-xs text-gpt-muted"
-                >
-                  <FileText size={14} className="shrink-0" />
-                  <span className="truncate">{doc.fileName}</span>
-                  <span className="shrink-0">{formatFileSize(doc.sizeBytes)}</span>
-                  <button
-                    type="button"
-                    aria-label="移除文件"
-                    disabled={sending}
-                    onClick={() => {
-                      setPendingDocs((current) => current.filter((item) => item.id !== doc.id))
-                      setAttachError(null)
-                    }}
-                    className="absolute right-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-gpt-ink text-[10px] text-gpt-canvas disabled:opacity-30"
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        <div className="relative flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="sr-only"
-            disabled={sending || compressing}
-            onChange={(event) => void onPickFiles(event)}
-          />
-          <input
-            ref={docFileRef}
-            type="file"
-            accept=".pdf,.docx,.xlsx,.pptx,.txt,.md"
-            multiple
-            className="sr-only"
-            disabled={sending}
-            onChange={(event) => void onPickDocuments(event)}
-          />
-          {attachMenuOpen ? (
-            <button
-              type="button"
-              aria-hidden="true"
-              tabIndex={-1}
-              className="fixed inset-0 z-10 cursor-default"
-              onClick={() => setAttachMenuOpen(false)}
-            />
-          ) : null}
-          <div className="relative z-20 mb-0.5 shrink-0">
-            <button
-              type="button"
-              aria-label="附加內容"
-              aria-expanded={attachMenuOpen}
-              disabled={sending || compressing}
-              onClick={() => setAttachMenuOpen((open) => !open)}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink disabled:opacity-30"
-            >
-              <Plus size={21} strokeWidth={1.9} />
-            </button>
-            {attachMenuOpen ? (
-              <div className="absolute bottom-full left-0 z-20 mb-2 w-60 rounded-2xl border border-gpt-line bg-gpt-canvas p-1.5 shadow-xl">
-                <button
-                  type="button"
-                  disabled={sending || compressing}
-                  onClick={() => {
-                    setAttachMenuOpen(false)
-                    fileRef.current?.click()
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-gpt-hover disabled:opacity-40"
-                >
-                  <ImagePlus size={18} className="shrink-0 text-gpt-muted" />
-                  附加圖片
-                  <span className="ml-auto text-xs text-gpt-muted">最多 3 張</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={sending}
-                  onClick={() => {
-                    setAttachMenuOpen(false)
-                    docFileRef.current?.click()
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-gpt-hover disabled:opacity-40"
-                >
-                  <FileText size={18} className="shrink-0 text-gpt-muted" />
-                  附加文件
-                  <span className="ml-auto text-xs text-gpt-muted">PDF、Word 等</span>
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <label className="sr-only" htmlFor="chat-draft">
-            訊息
-          </label>
-          <textarea
-            id="chat-draft"
-            ref={draftRef}
-            rows={1}
-            value={draft}
-            enterKeyHint="send"
-            placeholder="傳訊息給 Agent Portal"
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                if (!sending && !compressing) void send(draft, pending, pendingDocs)
-              }
-            }}
-            className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-base outline-none"
-          />
-          <button
-            type="submit"
-            disabled={
-              compressing ||
-              (historyLoading && !freshChat) ||
-              (!sending && !draft.trim() && pending.length === 0 && pendingDocs.length === 0)
-            }
-            aria-label={sending ? '停止生成' : '傳送'}
-            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas disabled:opacity-30"
-          >
-            {sending ? <Square size={12} fill="currentColor" /> : <ArrowUp size={18} strokeWidth={2.4} />}
-          </button>
-        </div>
-        </div>
-        <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-gpt-muted">
-          回覆成功後寫入這個帳號。內容由 AI 產生，請自行確認。
-        </p>
-      </form>
+      {!showEmpty ? <div className="safe-x shrink-0 px-4 pb-4">{composer}</div> : null}
     </section>
   )
 }
