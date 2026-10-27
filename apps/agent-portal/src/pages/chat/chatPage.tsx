@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, Copy, Ellipsis, FileText, ImagePlus, Pencil, Plus, RotateCcw, Square, SquarePen, Trash, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, Ellipsis, FileText, ImagePlus, Mic, Pencil, Plus, RotateCcw, Square, SquarePen, Trash, X } from 'lucide-react'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
 import { MarkdownText } from '@/components/markdown'
@@ -15,6 +15,7 @@ import { errorMessage } from '@/utils/http/apiError'
 import { ConversationSheet } from './conversationSheet'
 import { ProcessTimeline, type ProcessStep } from './processTimeline'
 import { useKeyboardInset } from './useKeyboardInset'
+import { useSpeechInput } from './useSpeechInput'
 
 const MAX_MESSAGE_CHARS = 16_000
 const MAX_IMAGES = 3
@@ -162,6 +163,23 @@ export function ChatPage() {
   const displayName = useAuthStore((state) => state.user?.displayName || state.user?.username || '')
   const { setExtra, closeDrawer } = useSidebarExtra()
   useKeyboardInset()
+
+  const voiceBaseRef = useRef('')
+  const speech = useSpeechInput({
+    onSessionText: (text) => setDraft(voiceBaseRef.current + text),
+    onError: (message) => setAttachError(message),
+  })
+
+  function toggleVoice() {
+    if (speech.listening) {
+      speech.stop()
+      return
+    }
+    const current = draftRef.current?.value ?? draft
+    voiceBaseRef.current = current && !/\s$/.test(current) ? `${current} ` : current
+    setAttachError(null)
+    speech.start()
+  }
 
   const [conversations, setConversations] = useState<SiteAiConversation[]>([])
   const [listLoading, setListLoading] = useState(site.ok)
@@ -537,6 +555,7 @@ export function ChatPage() {
     if (images.length > 0) setPending([])
     if (documents.length > 0) setPendingDocs([])
     setAttachError(null)
+    speech.stop()
 
     const gen = generation.current
     const conversationId = conversationRef.current
@@ -929,6 +948,22 @@ export function ChatPage() {
           }}
           className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-base outline-none"
         />
+        {speech.supported ? (
+          <button
+            type="button"
+            onClick={toggleVoice}
+            disabled={sending}
+            aria-label={speech.listening ? '停止語音輸入' : '語音輸入'}
+            title={speech.listening ? '停止語音輸入' : '語音輸入'}
+            className={
+              speech.listening
+                ? 'mb-0.5 flex h-9 w-9 shrink-0 animate-pulse items-center justify-center rounded-full bg-danger-soft text-danger disabled:opacity-30'
+                : 'mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gpt-muted transition hover:bg-gpt-hover hover:text-gpt-ink active:scale-95 disabled:opacity-30'
+            }
+          >
+            <Mic size={18} />
+          </button>
+        ) : null}
         <button
           type="submit"
           disabled={
