@@ -19,7 +19,9 @@ import java.util.zip.ZipInputStream;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 
-import org.apache.poi.hslf.extractor.PowerPointExtractor;
+import org.apache.poi.hslf.usermodel.HSLFShape;
+import org.apache.poi.hslf.usermodel.HSLFSlideShow;
+import org.apache.poi.hslf.usermodel.HSLFTextShape;
 import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -41,6 +43,8 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter;
+
+import com.mywebsite.infra.knowledge.KnowledgeTextExtractor.ExtractionException;
 
 
 
@@ -315,9 +319,19 @@ public final class KnowledgeContentConverter {
     }
 
     private static String pptLegacyToText(byte[] bytes) {
-        try (PowerPointExtractor extractor = new PowerPointExtractor(new ByteArrayInputStream(bytes))) {
-            String text = extractor.getText();
-            return text == null ? "" : text;
+        try (HSLFSlideShow slideshow = new HSLFSlideShow(new ByteArrayInputStream(bytes))) {
+            StringBuilder out = new StringBuilder();
+            for (var slide : slideshow.getSlides()) {
+                for (HSLFShape shape : slide.getShapes()) {
+                    if (shape instanceof HSLFTextShape textShape) {
+                        String value = textShape.getText();
+                        if (value != null && !value.isBlank()) {
+                            out.append(value.trim()).append("\n\n");
+                        }
+                    }
+                }
+            }
+            return out.toString();
         } catch (IOException | RuntimeException ex) {
             throw new ExtractionException("failed to convert PPT", ex);
         }
