@@ -105,6 +105,66 @@ def test_ocr_rejects_non_pdf_bytes() -> None:
     assert response.json()["errorCode"] == "INVALID_PDF"
 
 
+_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"fake-png-payload"
+_PNG_B64 = base64.b64encode(_PNG_BYTES).decode()
+
+
+def test_ocr_image_blocked_without_model() -> None:
+    response = TestClient(create_app(make_settings())).post(
+        "/internal/v1/ocr/image",
+        headers=TOKEN_HEADER,
+        json={"contentBase64": _PNG_B64, "mediaType": "image/png"},
+    )
+    assert response.status_code == 503
+    assert response.json()["errorCode"] == "EXTERNAL_DEPENDENCY_BLOCKED"
+
+
+def test_ocr_image_transcribes_via_binary_input() -> None:
+    seen: list[object] = []
+
+    def respond(messages, _info: AgentInfo) -> ModelResponse:
+        seen.extend(messages)
+        return ModelResponse(parts=[TextPart("图片中的文字")])
+
+    response = _client(FunctionModel(respond)).post(
+        "/internal/v1/ocr/image",
+        headers=TOKEN_HEADER,
+        json={"contentBase64": _PNG_B64, "mediaType": "image/png"},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["text"] == "图片中的文字"
+    assert data["modelSpec"] == "test:model"
+    binary_parts = [
+        item
+        for message in seen
+        for part in getattr(message, "parts", [])
+        for item in (part.content if isinstance(part.content, list) else [part.content])
+        if isinstance(item, BinaryContent)
+    ]
+    assert len(binary_parts) == 1
+    assert binary_parts[0].media_type == "image/png"
+    assert binary_parts[0].data == _PNG_BYTES
+
+
+def test_ocr_image_rejects_magic_mismatch_and_bad_type() -> None:
+    client = _client(TestModel())
+    mismatch = client.post(
+        "/internal/v1/ocr/image",
+        headers=TOKEN_HEADER,
+        json={"contentBase64": _PDF_B64, "mediaType": "image/png"},
+    )
+    assert mismatch.status_code == 400
+    assert mismatch.json()["errorCode"] == "INVALID_IMAGE"
+    bad_type = client.post(
+        "/internal/v1/ocr/image",
+        headers=TOKEN_HEADER,
+        json={"contentBase64": _PNG_B64, "mediaType": "image/tiff"},
+    )
+    assert bad_type.status_code == 400
+    assert bad_type.json()["errorCode"] == "INVALID_IMAGE"
+
+
 def test_ocr_model_failure_maps_to_blocked() -> None:
     def boom(_messages, _info: AgentInfo) -> ModelResponse:
         raise ModelAPIError("fake", "provider down")

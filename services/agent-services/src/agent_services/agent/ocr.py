@@ -37,3 +37,26 @@ async def transcribe_pdf(model: Model, pdf_bytes: bytes) -> str:
     if not text:
         logger.warning("ocr produced empty text (model=%s)", model)
     return text
+
+
+OCR_IMAGE_INSTRUCTION = (
+    "Transcribe all text visible in the attached image into Markdown text. "
+    "Reproduce the text faithfully in its original language, preserving headings, "
+    "paragraphs, lists and tables where the image has them. Output only the "
+    "transcribed text, with no commentary and no code fences. If the image "
+    "contains no text, output nothing."
+)
+
+
+async def transcribe_image(model: Model, image_bytes: bytes, media_type: str) -> str:
+    agent = Agent(model)
+    try:
+        result = await agent.run(
+            [OCR_IMAGE_INSTRUCTION, BinaryContent(data=image_bytes, media_type=media_type)]
+        )
+    except ModelAPIError as exc:
+        raise OcrUnavailable(f"model chain failed for image transcription: {exc}") from exc
+    text = str(result.output).strip()
+    if not text:
+        logger.warning("image ocr produced empty text (model=%s)", model)
+    return text

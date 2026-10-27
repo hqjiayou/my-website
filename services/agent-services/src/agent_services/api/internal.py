@@ -17,7 +17,7 @@ from agent_services.agent.model_factory import (
     create_model_for_entry,
     public_model_spec,
 )
-from agent_services.agent.ocr import OcrUnavailable, transcribe_pdf
+from agent_services.agent.ocr import OcrUnavailable, transcribe_image, transcribe_pdf
 from agent_services.agent.runtime import (
     BUDGET_EXCEEDED,
     ChatBlocked,
@@ -61,7 +61,13 @@ from agent_services.schemas.health import (
     McpServerHealth,
     RuntimeLimits,
 )
-from agent_services.schemas.ocr import OcrPdfRequest, OcrPdfResponse
+from agent_services.schemas.ocr import (
+    OCR_IMAGE_MEDIA_TYPES,
+    OcrImageRequest,
+    OcrImageResponse,
+    OcrPdfRequest,
+    OcrPdfResponse,
+)
 from agent_services.schemas.retrieval import (
     ReembedPrepareRequest,
     ReembedPrepareResponse,
@@ -425,6 +431,64 @@ async def internal_ocr_pdf(request: Request, body: OcrPdfRequest) -> dict[str, o
             provider_status="BLOCKED",
         ) from exc
     payload = OcrPdfResponse(text=text, model_spec=handle.spec)
+    return {"ok": True, "data": payload.model_dump(by_alias=True)}
+
+
+def _image_magic_matches(media_type: str, data: bytes) -> bool:
+    if media_type == "image/png":
+        return data.startswith(b"\x89PNG\r\n\x1a\n")
+    if media_type == "image/jpeg":
+        return data.startswith(b"\xff\xd8\xff")
+    if media_type == "image/gif":
+        return data.startswith((b"GIF87a", b"GIF89a"))
+    if media_type == "image/webp":
+        return len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+    if media_type == "image/bmp":
+        return data.startswith(b"BM")
+    return False
+
+
+@router.post("/ocr/image")
+async def internal_ocr_image(request: Request, body: OcrImageRequest) -> dict[str, object]:
+    """图片转写（知识库图片上传）：与 /ocr/pdf 同形状，输入换成图片字节＋媒体类型。"""
+    handle = _execution_handle(request, body)  # type: ignore[arg-type]
+    if not handle.live:
+        raise InternalApiError(
+            status_code=503,
+            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
+            message=handle.blocked_reason or "AI provider is not configured.",
+            provider_status="BLOCKED",
+        )
+    if body.media_type not in OCR_IMAGE_MEDIA_TYPES:
+        raise InternalApiError(
+            status_code=400,
+            error_code="INVALID_IMAGE",
+            message=f"unsupported media type: {body.media_type}",
+        )
+    try:
+        image_bytes = base64.b64decode(body.content_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise InternalApiError(
+            status_code=400,
+            error_code="INVALID_IMAGE",
+            message="contentBase64 is not valid base64.",
+        ) from exc
+    if not _image_magic_matches(body.media_type, image_bytes):
+        raise InternalApiError(
+            status_code=400,
+            error_code="INVALID_IMAGE",
+            message="content does not match the declared media type.",
+        )
+    try:
+        text = await transcribe_image(handle.model, image_bytes, body.media_type)  # type: ignore[arg-type]
+    except OcrUnavailable as exc:
+        raise InternalApiError(
+            status_code=503,
+            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
+            message=str(exc),
+            provider_status="BLOCKED",
+        ) from exc
+    payload = OcrImageResponse(text=text, model_spec=handle.spec)
     return {"ok": True, "data": payload.model_dump(by_alias=True)}
 
 

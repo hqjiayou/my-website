@@ -57,7 +57,11 @@ public class AdminAiKnowledgeController {
             "py", "java", "js", "ts", "tsx", "jsx", "css", "scss", "sql", "sh",
             "go", "rs", "c", "h", "cpp", "hpp", "cs", "rb", "php", "swift", "kt",
             "scala", "pl", "r", "lua", "vue",
-            "pdf", "docx", "html", "htm", "xlsx", "pptx", "epub", "odt", "ods", "odp", "rtf");
+            "pdf", "docx", "html", "htm", "xlsx", "pptx", "epub", "odt", "ods", "odp", "rtf",
+            "png", "jpg", "jpeg", "webp", "gif", "bmp");
+
+    /** 图片扩展名：不走文本转换器，内容来自视觉转写（见 toUploadPayload）。 */
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of("png", "jpg", "jpeg", "webp", "gif", "bmp");
 
     private static final java.util.Map<String, String> CONTENT_TYPES = java.util.Map.ofEntries(
             java.util.Map.entry("pdf", "application/pdf"),
@@ -73,7 +77,13 @@ public class AdminAiKnowledgeController {
             java.util.Map.entry("rtf", "application/rtf"),
             java.util.Map.entry("json", "application/json"),
             java.util.Map.entry("csv", "text/csv"),
-            java.util.Map.entry("md", "text/markdown"));
+            java.util.Map.entry("md", "text/markdown"),
+            java.util.Map.entry("png", "image/png"),
+            java.util.Map.entry("jpg", "image/jpeg"),
+            java.util.Map.entry("jpeg", "image/jpeg"),
+            java.util.Map.entry("webp", "image/webp"),
+            java.util.Map.entry("gif", "image/gif"),
+            java.util.Map.entry("bmp", "image/bmp"));
 
     private final AdminAiKnowledgeService adminAiKnowledgeService;
 
@@ -211,10 +221,18 @@ public class AdminAiKnowledgeController {
         if (bytes.length > MAX_UPLOAD_BYTES) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
         }
-        String content = convertContent(extension, bytes);
-        if (!StringUtils.hasText(content) && "pdf".equals(extension)) {
-            // 扫描版 PDF 无文本层：经站点生效模型链转写；仍为空才按 FILE_EMPTY 拒绝。
-            content = adminAiKnowledgeService.transcribeScannedPdf(siteId, bytes);
+        String content;
+        if (IMAGE_EXTENSIONS.contains(extension)) {
+            // 图片没有文本层可抽：直接经站点生效模型链视觉转写；为空按 FILE_EMPTY 拒绝。
+            content =
+                    adminAiKnowledgeService.transcribeImage(
+                            siteId, bytes, CONTENT_TYPES.getOrDefault(extension, "application/octet-stream"));
+        } else {
+            content = convertContent(extension, bytes);
+            if (!StringUtils.hasText(content) && "pdf".equals(extension)) {
+                // 扫描版 PDF 无文本层：经站点生效模型链转写；仍为空才按 FILE_EMPTY 拒绝。
+                content = adminAiKnowledgeService.transcribeScannedPdf(siteId, bytes);
+            }
         }
         if (!StringUtils.hasText(content)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_EMPTY);
