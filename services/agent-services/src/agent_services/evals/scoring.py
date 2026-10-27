@@ -6,6 +6,10 @@ from collections.abc import Mapping, Sequence
 
 # 产品 harness 要求不编造站点事实。这里收的是回答里会真的出现的拒答措辞，
 # 不是「相关信息」这类正常作答也会带的片段。
+# 2026-10-27 真跑分（gemini-3.5-flash）实锤补充：模型实际拒答措辞
+# （未查到／暂无相关／没有相关的…／not available）此前不在表内，
+# 4 题实质正确拒答全被记 refusal_correct=False。新增条目以实测原文为准，
+# 仍保持具体性（如只收「暂无法提供」，不收正常作答也会出现的「无法提供」）。
 REFUSAL_CUES: tuple[str, ...] = (
     "无法确认",
     "無法確認",
@@ -14,14 +18,27 @@ REFUSAL_CUES: tuple[str, ...] = (
     "沒有相關資訊",
     "没有相关资料",
     "沒有相關資料",
+    "没有相关的",
+    "沒有相關的",
+    "未查到",
+    "未找到相关",
+    "未找到相關",
+    "暂无法提供",
+    "暫無法提供",
+    "暂无相关",
+    "暫無相關",
     "わかりません",
     "分かりません",
     "確認できません",
     "确认できません",
     "情報はありません",
+    "情報がありません",
     "cannot confirm",
     "can't confirm",
     "no relevant information",
+    "no information available",
+    "not available",
+    "unable to find",
     "i don't know",
     "i do not know",
 )

@@ -89,6 +89,43 @@ def test_refusal_correct_positive_and_negative() -> None:
     assert refusal_correct(category="hours", answer="无法确认。", citation_source_ids=None) is None
 
 
+def test_refusal_correct_matches_attested_live_replies() -> None:
+    """2026-10-27 真跑分（gemini-3.5-flash）4 题不可答的实际回复原文。
+
+    模型实质拒答、零捏造，但旧词表一条未命中、refusal_correct 全记 False。
+    这组原文是回归锚点：词表再改也不许把它们漏掉。
+    """
+    attested = (
+        "关于访客无线网络登录口令写在哪张卡片的信息，目前系统和工具数据中未查到相关说明，暂无法提供。",
+        "Information about the Zephyr satellite's orbital period is not available.",
+        "暂无相关数据或信息包含人工降雪机的夜间票价。",
+        "抱歉，目前没有相关的工具数据或上下文信息可以确认青洲码头末班渡轮的停靠状态。建议查阅官方渡轮实时航讯或联系码头工作人员进行核实。",
+    )
+    for answer in attested:
+        assert (
+            refusal_correct(category="unanswerable", answer=answer, citation_source_ids=None)
+            is True
+        ), answer
+    # 具体性反例：片段相近但属于正常作答，不许误判为拒答。
+    assert (
+        refusal_correct(category="unanswerable", answer="本店无法提供发票。", citation_source_ids=None)
+        is False
+    )
+    assert (
+        refusal_correct(category="unanswerable", answer="暂无库存，补货中。", citation_source_ids=None)
+        is False
+    )
+    # 带 citations 时即使有拒答措辞也不算拒答（既有闸门）。
+    assert (
+        refusal_correct(
+            category="unanswerable",
+            answer=attested[1],
+            citation_source_ids=["cafe-hours"],
+        )
+        is False
+    )
+
+
 def test_case_passed_follows_the_written_rule() -> None:
     assert (
         case_passed("hours", retrieval_hit=True, keyword_coverage=0.5, refusal_correct=None) is True
