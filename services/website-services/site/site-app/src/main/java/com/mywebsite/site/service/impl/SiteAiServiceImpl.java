@@ -3,6 +3,7 @@ package com.mywebsite.site.service.impl;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentAttachmentDto;
@@ -624,13 +625,37 @@ public class SiteAiServiceImpl implements SiteAiService {
     }
 
     /**
-     * 终端用户只看到回复文本、citations 与错误码（§22.8）：工具轨迹 / 用量 / skills / todos / 原始错误信息
-     * 仅供后台观测（admin 预览原样透传）。返回 null = 不下发；未知事件默认不下发，防 Python 新增字段自动外泄。
+     * 终端用户可见：回复文本、citations、错误码，以及过程事件（THINKING 思考增量、
+     * TOOL_START / TOOL_RESULT 的工具名与状态、知识搜索的安全摘要）。仍不下发：
+     * 工具返回正文、用量、skills、todos 与原始错误信息（仅后台观测，admin 预览原样透传）。
+     * 白名单逐字段重写，返回 null = 不下发；未知事件默认不下发，防 Python 新增字段自动外泄。
      * DONE 在这里重写，不是透传 Python payload。
      */
     private String toClientEventData(String event, JsonNode data, String rawJson) {
         return switch (event) {
             case "TEXT_DELTA" -> rawJson;
+            case "THINKING" -> {
+                ObjectNode thinking = objectMapper.createObjectNode();
+                thinking.put("delta", data.path("delta").asText(""));
+                yield thinking.toString();
+            }
+            case "TOOL_START" -> {
+                ObjectNode tool = objectMapper.createObjectNode();
+                tool.put("toolName", data.path("toolName").asText(""));
+                tool.put("toolCallId", data.path("toolCallId").asText(""));
+                yield tool.toString();
+            }
+            case "TOOL_RESULT" -> {
+                ObjectNode tool = objectMapper.createObjectNode();
+                tool.put("toolName", data.path("toolName").asText(""));
+                tool.put("toolCallId", data.path("toolCallId").asText(""));
+                tool.put("ok", data.path("ok").asBoolean(false));
+                JsonNode summary = data.get("summary");
+                if (summary != null && summary.isObject()) {
+                    tool.set("summary", clientSearchSummary(summary));
+                }
+                yield tool.toString();
+            }
             case "START" -> "{}";
             case "DONE" -> {
                 ObjectNode done = objectMapper.createObjectNode();
@@ -647,6 +672,22 @@ public class SiteAiServiceImpl implements SiteAiService {
             }
             default -> null;
         };
+    }
+
+    /** 知识搜索摘要白名单：查询词、命中数与来源标识；不带片段正文。 */
+    private ObjectNode clientSearchSummary(JsonNode summary) {
+        ObjectNode safe = objectMapper.createObjectNode();
+        safe.put("query", summary.path("query").asText(""));
+        safe.put("hitCount", summary.path("hitCount").asInt(0));
+        ArrayNode sources = safe.putArray("sources");
+        for (JsonNode source : summary.path("sources")) {
+            ObjectNode item = objectMapper.createObjectNode();
+            item.put("sourceId", source.path("sourceId").asText(""));
+            item.put("chunkIndex", source.path("chunkIndex").asInt(0));
+            item.put("score", source.path("score").asDouble(0));
+            sources.add(item);
+        }
+        return safe;
     }
 
     private JsonNode readJson(String dataJson) {

@@ -30,7 +30,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-/** §23.1：站点 SSE 只向终端用户下发回复文本与错误码，运行轨迹 / 原始错误信息不外泄。 */
+/** 站点 SSE 向终端用户下发回复文本、错误码与过程事件（思考/工具/检索摘要白名单）；工具返回正文、运行轨迹明细与原始错误信息不外泄。 */
 @AutoConfigureMockMvc
 class SiteAiChatStreamMvcTest extends AbstractSiteSpringBootTest {
 
@@ -54,19 +54,24 @@ class SiteAiChatStreamMvcTest extends AbstractSiteSpringBootTest {
     }
 
     @Test
-    void streamStripsRunTraceFromEndUserEvents() throws Exception {
+    void streamForwardsProcessEventsWithWhitelistedFieldsOnly() throws Exception {
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
                     listener.onEvent("START", "{\"siteId\":\"10\",\"skillsApplied\":[\"orchestration\"]}");
-                    listener.onEvent("TOOL_START", "{\"toolCallId\":\"c1\",\"toolName\":\"internal__lookup\"}");
+                    listener.onEvent("THINKING", "{\"delta\":\"let me check\"}");
+                    listener.onEvent("TOOL_START", "{\"toolCallId\":\"c1\",\"toolName\":\"search_site_knowledge\"}");
                     listener.onEvent("TEXT_DELTA", "{\"delta\":\"hi\"}");
                     listener.onEvent(
-                            "TOOL_RESULT", "{\"toolCallId\":\"c1\",\"toolName\":\"internal__lookup\",\"ok\":true}");
+                            "TOOL_RESULT",
+                            "{\"toolCallId\":\"c1\",\"toolName\":\"search_site_knowledge\",\"ok\":true,"
+                                    + "\"summary\":{\"query\":\"hours\",\"hitCount\":1,"
+                                    + "\"sources\":[{\"sourceId\":\"kb:1\",\"chunkIndex\":2,\"score\":0.9}],"
+                                    + "\"content\":\"SECRET-CONTENT\"}}");
                     listener.onEvent("FUTURE_EVENT", "{\"secret\":\"x\"}");
                     listener.onEvent(
                             "DONE",
                             "{\"reply\":\"hi\",\"providerStatus\":\"LIVE\",\"skillsApplied\":[\"orchestration\"],"
-                                    + "\"usage\":{\"requests\":1},\"tools\":[{\"name\":\"internal__lookup\",\"ok\":true}],"
+                                    + "\"usage\":{\"requests\":1},\"tools\":[{\"name\":\"search_site_knowledge\",\"ok\":true}],"
                                     + "\"todos\":[]}");
                     return null;
                 })
@@ -75,8 +80,21 @@ class SiteAiChatStreamMvcTest extends AbstractSiteSpringBootTest {
 
         String body = streamBody();
 
-        assertThat(body).contains("event:TEXT_DELTA", "event:DONE", "\"reply\":\"hi\"", "event:CONVERSATION");
-        assertThat(body).doesNotContain("TOOL_", "internal__lookup", "orchestration", "usage", "FUTURE_EVENT");
+        assertThat(body)
+                .contains(
+                        "event:THINKING",
+                        "\"delta\":\"let me check\"",
+                        "event:TOOL_START",
+                        "event:TOOL_RESULT",
+                        "\"toolName\":\"search_site_knowledge\"",
+                        "\"hitCount\":1",
+                        "\"sourceId\":\"kb:1\"",
+                        "event:TEXT_DELTA",
+                        "event:DONE",
+                        "\"reply\":\"hi\"",
+                        "event:CONVERSATION");
+        // 工具返回正文、DONE 的用量/轨迹、未知事件与 START 的 skills 仍不下发。
+        assertThat(body).doesNotContain("SECRET-CONTENT", "orchestration", "usage", "FUTURE_EVENT", "\"tools\"");
     }
 
     @Test
