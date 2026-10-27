@@ -10,13 +10,20 @@ import { PermissionGate } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
 const KB_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+// 与后端 AdminAiKnowledgeController.SUPPORTED_EXTENSIONS 保持一致（增删格式时三处同改：
+// 控制器集合、AdminAiKnowledgeContentConverter 的 switch、本列表）
 const KB_UPLOAD_EXTENSIONS = [
-  'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'log',
+  'txt', 'md', 'markdown', 'text', 'rst', 'adoc', 'asciidoc', 'org', 'tex',
+  'csv', 'tsv', 'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'log',
+  'jsonl', 'ndjson', 'properties', 'conf', 'cfg', 'env', 'diff', 'patch',
   'py', 'java', 'js', 'ts', 'tsx', 'jsx', 'css', 'scss', 'sql', 'sh',
-  'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt',
-  'scala', 'pl', 'r', 'lua', 'vue',
-  'pdf', 'docx', 'html', 'htm', 'xlsx', 'pptx', 'epub', 'odt', 'ods', 'odp', 'rtf',
-  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp',
+  'bash', 'zsh', 'ps1', 'mjs', 'cjs',
+  'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt', 'kts',
+  'scala', 'pl', 'r', 'lua', 'vue', 'svelte', 'dart', 'groovy', 'gradle',
+  'hs', 'ex', 'exs', 'tf', 'proto',
+  'pdf', 'docx', 'docm', 'doc', 'html', 'htm', 'xlsx', 'xlsm', 'xls',
+  'pptx', 'pptm', 'ppt', 'epub', 'odt', 'ods', 'odp', 'rtf',
+  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'heic', 'heif',
 ]
 const KB_UPLOAD_ACCEPT = KB_UPLOAD_EXTENSIONS.map((ext) => `.${ext}`).join(',')
 

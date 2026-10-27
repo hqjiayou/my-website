@@ -165,6 +165,32 @@ def test_ocr_image_rejects_magic_mismatch_and_bad_type() -> None:
     assert bad_type.json()["errorCode"] == "INVALID_IMAGE"
 
 
+def test_ocr_image_accepts_heic_ftyp_magic() -> None:
+    heic_bytes = b"\x00\x00\x00\x18ftypheic" + b"fake-heic-payload"
+    response = _client(TestModel(custom_output_text="heic text")).post(
+        "/internal/v1/ocr/image",
+        headers=TOKEN_HEADER,
+        json={
+            "contentBase64": base64.b64encode(heic_bytes).decode(),
+            "mediaType": "image/heic",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["text"] == "heic text"
+    # 品牌不对（mp42）要按伪装拒绝
+    fake = b"\x00\x00\x00\x18ftypmp42" + b"payload"
+    rejected = _client(TestModel()).post(
+        "/internal/v1/ocr/image",
+        headers=TOKEN_HEADER,
+        json={
+            "contentBase64": base64.b64encode(fake).decode(),
+            "mediaType": "image/heic",
+        },
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["errorCode"] == "INVALID_IMAGE"
+
+
 def test_ocr_model_failure_maps_to_blocked() -> None:
     def boom(_messages, _info: AgentInfo) -> ModelResponse:
         raise ModelAPIError("fake", "provider down")

@@ -10,9 +10,9 @@ import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListQuery;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedConflictResponse;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedResultDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUpdateRequest;
-import com.mywebsite.admin.service.AdminAiKnowledgeContentConverter;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
-import com.mywebsite.admin.service.AdminAiKnowledgeTextExtractor;
+import com.mywebsite.infra.knowledge.KnowledgeContentConverter;
+import com.mywebsite.infra.knowledge.KnowledgeTextExtractor;
 import com.mywebsite.admin.service.AdminAiKnowledgeService.ReembedConflictException;
 import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.api.ResponseMessages;
@@ -53,15 +53,21 @@ public class AdminAiKnowledgeController {
     private static final int MAX_CONTENT_CHARS = 3_000_000;
     private static final int MAX_TITLE_LENGTH = 255;
     private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
-            "txt", "md", "markdown", "csv", "tsv", "json", "xml", "yaml", "yml", "toml", "ini", "log",
+            "txt", "md", "markdown", "text", "rst", "adoc", "asciidoc", "org", "tex",
+            "csv", "tsv", "json", "xml", "yaml", "yml", "toml", "ini", "log",
+            "jsonl", "ndjson", "properties", "conf", "cfg", "env", "diff", "patch",
             "py", "java", "js", "ts", "tsx", "jsx", "css", "scss", "sql", "sh",
-            "go", "rs", "c", "h", "cpp", "hpp", "cs", "rb", "php", "swift", "kt",
-            "scala", "pl", "r", "lua", "vue",
-            "pdf", "docx", "html", "htm", "xlsx", "pptx", "epub", "odt", "ods", "odp", "rtf",
-            "png", "jpg", "jpeg", "webp", "gif", "bmp");
+            "bash", "zsh", "ps1", "mjs", "cjs",
+            "go", "rs", "c", "h", "cpp", "hpp", "cs", "rb", "php", "swift", "kt", "kts",
+            "scala", "pl", "r", "lua", "vue", "svelte", "dart", "groovy", "gradle",
+            "hs", "ex", "exs", "tf", "proto",
+            "pdf", "docx", "docm", "doc", "html", "htm", "xlsx", "xlsm", "xls",
+            "pptx", "pptm", "ppt", "epub", "odt", "ods", "odp", "rtf",
+            "png", "jpg", "jpeg", "webp", "gif", "bmp", "heic", "heif");
 
     /** 图片扩展名：不走文本转换器，内容来自视觉转写（见 toUploadPayload）。 */
-    private static final Set<String> IMAGE_EXTENSIONS = Set.of("png", "jpg", "jpeg", "webp", "gif", "bmp");
+    private static final Set<String> IMAGE_EXTENSIONS =
+            Set.of("png", "jpg", "jpeg", "webp", "gif", "bmp", "heic", "heif");
 
     private static final java.util.Map<String, String> CONTENT_TYPES = java.util.Map.ofEntries(
             java.util.Map.entry("pdf", "application/pdf"),
@@ -83,7 +89,12 @@ public class AdminAiKnowledgeController {
             java.util.Map.entry("jpeg", "image/jpeg"),
             java.util.Map.entry("webp", "image/webp"),
             java.util.Map.entry("gif", "image/gif"),
-            java.util.Map.entry("bmp", "image/bmp"));
+            java.util.Map.entry("bmp", "image/bmp"),
+            java.util.Map.entry("heic", "image/heic"),
+            java.util.Map.entry("heif", "image/heif"),
+            java.util.Map.entry("doc", "application/msword"),
+            java.util.Map.entry("xls", "application/vnd.ms-excel"),
+            java.util.Map.entry("ppt", "application/vnd.ms-powerpoint"));
 
     private final AdminAiKnowledgeService adminAiKnowledgeService;
 
@@ -256,8 +267,8 @@ public class AdminAiKnowledgeController {
 
     private static String convertContent(String extension, byte[] bytes) {
         try {
-            return AdminAiKnowledgeContentConverter.toStoredContent(extension, bytes);
-        } catch (AdminAiKnowledgeTextExtractor.ExtractionException ex) {
+            return KnowledgeContentConverter.toStoredContent(extension, bytes);
+        } catch (KnowledgeTextExtractor.ExtractionException ex) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_ENCODING);
         }
     }

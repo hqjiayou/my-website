@@ -445,6 +445,10 @@ def _image_magic_matches(media_type: str, data: bytes) -> bool:
         return len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
     if media_type == "image/bmp":
         return data.startswith(b"BM")
+    if media_type in ("image/heic", "image/heif"):
+        # ISO BMFF：ftyp 盒 + heif 家族品牌
+        brands = (b"heic", b"heix", b"hevc", b"heim", b"heis", b"hevm", b"mif1", b"mif2", b"msf1")
+        return len(data) >= 12 and data[4:8] == b"ftyp" and data[8:12] in brands
     return False
 
 
