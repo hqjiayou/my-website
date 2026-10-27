@@ -10,7 +10,13 @@ import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { aiApi } from '@/api/apps/aiApi'
-import type { AiPreviewAgentEvent, AiPreviewTodoItem, AiPreviewTodoStatus, AiRunUsage } from '@/types/ai'
+import type {
+  AiPreviewAgentEvent,
+  AiPreviewTodoItem,
+  AiPreviewTodoStatus,
+  AiRunUsage,
+  AiSearchSummary,
+} from '@/types/ai'
 
 import { createJavaPreviewAdapter } from './siteAiPreviewAdapter'
 import { AiRunUsageLine } from './siteAiRunMeta'
@@ -19,16 +25,18 @@ interface ToolCallTrace {
   toolCallId: string
   toolName: string
   state: 'running' | 'ok' | 'failed'
+  summary?: AiSearchSummary
 }
 
 interface RunTrace {
   skillsApplied: string[]
   skillsMissing: string[]
+  thinking: string
   tools: ToolCallTrace[]
   usage: AiRunUsage | null
 }
 
-const EMPTY_TRACE: RunTrace = { skillsApplied: [], skillsMissing: [], tools: [], usage: null }
+const EMPTY_TRACE: RunTrace = { skillsApplied: [], skillsMissing: [], thinking: '', tools: [], usage: null }
 
 type RunError = { errorCode: string; message?: string }
 
@@ -72,7 +80,15 @@ function createPreviewSelection() {
 function applyAgentEvent(trace: RunTrace, event: AiPreviewAgentEvent): RunTrace {
   switch (event.type) {
     case 'start':
-      return { skillsApplied: event.skillsApplied, skillsMissing: event.skillsMissing, tools: [], usage: null }
+      return {
+        skillsApplied: event.skillsApplied,
+        skillsMissing: event.skillsMissing,
+        thinking: '',
+        tools: [],
+        usage: null,
+      }
+    case 'thinking':
+      return { ...trace, thinking: trace.thinking + event.delta }
     case 'done':
       return { ...trace, usage: event.usage }
     case 'toolStart':
@@ -86,8 +102,15 @@ function applyAgentEvent(trace: RunTrace, event: AiPreviewAgentEvent): RunTrace 
       return {
         ...trace,
         tools: known
-          ? trace.tools.map((tool) => (tool.toolCallId === event.toolCallId ? { ...tool, state } : tool))
-          : [...trace.tools, { toolCallId: event.toolCallId, toolName: event.toolName, state }],
+          ? trace.tools.map((tool) =>
+              tool.toolCallId === event.toolCallId
+                ? { ...tool, state, summary: event.summary ?? tool.summary }
+                : tool,
+            )
+          : [
+              ...trace.tools,
+              { toolCallId: event.toolCallId, toolName: event.toolName, state, summary: event.summary },
+            ],
       }
     }
     default:
@@ -233,17 +256,35 @@ export function SiteAiPreviewChat({ siteId }: { siteId: number }) {
                 {t('aiWorkspace.preview.run.skillsMissing', { ids: trace.skillsMissing.join(', ') })}
               </p>
             ) : null}
+            {trace.thinking ? (
+              <>
+                <p className="text-xs text-slate-500">{t('aiWorkspace.preview.run.thinking')}</p>
+                <div className="mb-2 mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600">
+                  {trace.thinking}
+                </div>
+              </>
+            ) : null}
             <p className="text-xs text-slate-500">{t('aiWorkspace.preview.run.tools')}</p>
             {trace.tools.length === 0 ? (
               <p className="text-xs text-slate-400">{t('aiWorkspace.preview.run.noTools')}</p>
             ) : (
               <ul className="space-y-1">
                 {trace.tools.map((tool) => (
-                  <li key={tool.toolCallId || tool.toolName} className="flex justify-between gap-2 text-xs">
-                    <span className="truncate font-mono text-slate-800">{tool.toolName}</span>
-                    <span className={TOOL_STATE_CLASS[tool.state]}>
-                      {t(`aiWorkspace.preview.run.toolState.${tool.state}`)}
-                    </span>
+                  <li key={tool.toolCallId || tool.toolName} className="text-xs">
+                    <div className="flex justify-between gap-2">
+                      <span className="truncate font-mono text-slate-800">{tool.toolName}</span>
+                      <span className={TOOL_STATE_CLASS[tool.state]}>
+                        {t(`aiWorkspace.preview.run.toolState.${tool.state}`)}
+                      </span>
+                    </div>
+                    {tool.summary ? (
+                      <p className="mt-0.5 truncate text-slate-500">
+                        {t('aiWorkspace.preview.run.searchDetail', {
+                          query: tool.summary.query,
+                          count: tool.summary.hitCount,
+                        })}
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>

@@ -511,8 +511,10 @@ export default {
         title: '本轮执行',
         skillsApplied: '已应用 skills',
         skillsMissing: '未找到的 skill：{{ids}}',
+        thinking: '思考过程',
         tools: '工具调用',
         noTools: '本轮未调用工具',
+        searchDetail: '检索「{{query}}」· 命中 {{count}} 条',
         toolState: {
           running: '执行中',
           ok: '成功',

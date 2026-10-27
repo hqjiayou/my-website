@@ -515,8 +515,10 @@ export default {
         title: '今回の実行',
         skillsApplied: '適用された skills',
         skillsMissing: '見つからない skill：{{ids}}',
+        thinking: '思考プロセス',
         tools: 'ツール呼び出し',
         noTools: '今回はツールを呼び出していません',
+        searchDetail: '「{{query}}」を検索 · {{count}} 件ヒット',
         toolState: {
           running: '実行中',
           ok: '成功',

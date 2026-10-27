@@ -6,6 +6,7 @@ import type {
   AiPreviewHistoryMessage,
   AiPreviewTodoItem,
   AiRunUsage,
+  AiSearchSummary,
 } from '@/types/ai'
 
 function textOf(message: {
@@ -56,6 +57,15 @@ function toUsage(value: unknown): AiRunUsage | null {
   }
 }
 
+function toSearchSummary(value: unknown): AiSearchSummary | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  return {
+    query: typeof raw.query === 'string' ? raw.query : '',
+    hitCount: typeof raw.hitCount === 'number' ? raw.hitCount : 0,
+  }
+}
+
 function toAgentEvent(event: string, payload: Record<string, unknown>): AiPreviewAgentEvent | null {
   switch (event) {
     case 'START':
@@ -76,6 +86,7 @@ function toAgentEvent(event: string, payload: Record<string, unknown>): AiPrevie
         toolCallId: String(payload.toolCallId ?? ''),
         toolName: String(payload.toolName ?? ''),
         ok: payload.ok !== false,
+        summary: toSearchSummary(payload.summary),
       }
     case 'DONE':
       // agent-services 只在非空时输出 todos：缺省即「本轮结束后无 todo」
@@ -167,6 +178,11 @@ export function createJavaPreviewAdapter(
             if (typeof delta === 'string') {
               text += delta
               yield { content: [{ type: 'text' as const, text }] }
+            }
+          } else if (parsed.event === 'THINKING') {
+            const delta = payload?.delta
+            if (typeof delta === 'string' && delta) {
+              options.onAgentEvent({ type: 'thinking', delta })
             }
           } else if (parsed.event === 'ERROR') {
             const code = typeof payload?.errorCode === 'string' ? payload.errorCode : 'SYSTEM_ERROR'
