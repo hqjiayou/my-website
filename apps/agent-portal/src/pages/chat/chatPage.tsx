@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, Copy, Ellipsis, FileText, ImagePlus, Mic, Pencil, Plus, RotateCcw, Square, SquarePen, Trash, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, Ellipsis, FileText, ImagePlus, Mic, Pencil, Plus, RotateCcw, Share2, Square, SquarePen, Trash, Unlink, X } from 'lucide-react'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
 import { MarkdownText } from '@/components/markdown'
@@ -201,6 +201,7 @@ export function ChatPage() {
   const [editDraft, setEditDraft] = useState('')
   const [attachMenuOpen, setAttachMenuOpen] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const [share, setShare] = useState<{ conversationId: string; token: string } | null>(null)
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
   const [headerConfirm, setHeaderConfirm] = useState(false)
   const [headerNotice, setHeaderNotice] = useState<string | null>(null)
@@ -216,6 +217,11 @@ export function ChatPage() {
   const abortRef = useRef<AbortController | null>(null)
   const generation = useRef(0)
   const sendingRef = useRef(false)
+
+  const freshChat = !routeId && !sending
+  const visibleMessages = freshChat ? [] : messages
+  const visibleHistoryError = freshChat ? null : historyError
+  const selectedId = freshChat ? null : (routeId ?? activeId)
   const conversationRef = useRef<string | null>(null)
   const loadToken = useRef(0)
 
@@ -774,6 +780,64 @@ export function ChatPage() {
     if (id === selectedId) startNewChat()
   }
 
+  const shareToken = share && selectedId && share.conversationId === selectedId ? share.token : null
+
+  useEffect(() => {
+    if (!site.ok || !selectedId) return
+    let cancelled = false
+    siteAiApi
+      .getShare(site.siteId, selectedId)
+      .then((result) => {
+        if (!cancelled) {
+          setShare(result ? { conversationId: selectedId, token: result.token } : null)
+        }
+      })
+      .catch(() => {
+        // 查詢失敗時不顯示分享狀態，使用者仍可從選單重新建立
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId, site])
+
+  async function shareConversation() {
+    if (!site.ok || !selectedId) return
+    setHeaderMenuOpen(false)
+    try {
+      const created = await siteAiApi.createShare(site.siteId, selectedId)
+      setShare({ conversationId: selectedId, token: created.token })
+      let copied = true
+      try {
+        await navigator.clipboard.writeText(`${window.location.origin}${ROUTES.share}/${created.token}`)
+      } catch {
+        copied = false
+      }
+      setHeaderNotice(
+        copied
+          ? shareToken
+            ? '分享快照已更新，連結已複製'
+            : '分享連結已複製'
+          : '分享已建立，但複製失敗，請再試一次',
+      )
+    } catch (error) {
+      setHeaderNotice(errorMessage(error))
+    }
+    window.setTimeout(() => setHeaderNotice(null), 3000)
+  }
+
+  async function revokeShareLink() {
+    if (!site.ok || !selectedId) return
+    setHeaderMenuOpen(false)
+    try {
+      await siteAiApi.revokeShare(site.siteId, selectedId)
+      setShare(null)
+      setHeaderNotice('分享已撤銷')
+    } catch (error) {
+      setHeaderNotice(errorMessage(error))
+    }
+    window.setTimeout(() => setHeaderNotice(null), 3000)
+  }
+
   async function deleteFromHeader() {
     if (!selectedId) return
     setHeaderMenuOpen(false)
@@ -786,10 +850,6 @@ export function ChatPage() {
     }
   }
 
-  const freshChat = !routeId && !sending
-  const visibleMessages = freshChat ? [] : messages
-  const visibleHistoryError = freshChat ? null : historyError
-  const selectedId = freshChat ? null : (routeId ?? activeId)
   const activeTitle =
     conversations.find((item) => String(item.id) === selectedId)?.title?.trim() || (selectedId ? '對話' : '新對話')
 
@@ -1080,14 +1140,36 @@ export function ChatPage() {
                       </div>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setHeaderConfirm(true)}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm text-danger hover:bg-gpt-hover"
-                    >
-                      <Trash size={15} />
-                      刪除此對話
-                    </button>
+                    <>
+                      {selectedId && messages.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => void shareConversation()}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm hover:bg-gpt-hover"
+                        >
+                          <Share2 size={15} />
+                          {shareToken ? '更新分享並複製連結' : '分享此對話'}
+                        </button>
+                      ) : null}
+                      {shareToken ? (
+                        <button
+                          type="button"
+                          onClick={() => void revokeShareLink()}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm hover:bg-gpt-hover"
+                        >
+                          <Unlink size={15} />
+                          撤銷分享
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setHeaderConfirm(true)}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm text-danger hover:bg-gpt-hover"
+                      >
+                        <Trash size={15} />
+                        刪除此對話
+                      </button>
+                    </>
                   )}
                 </div>
               </>

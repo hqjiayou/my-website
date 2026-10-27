@@ -11,6 +11,8 @@ import com.mywebsite.site.dto.SiteAiChatResponseDto;
 import com.mywebsite.site.dto.SiteAiConversationDto;
 import com.mywebsite.site.dto.SiteAiConversationRenameRequestDto;
 import com.mywebsite.site.dto.SiteAiMessageDto;
+import com.mywebsite.site.dto.SiteAiShareDto;
+import com.mywebsite.site.dto.SiteAiSharedConversationDto;
 import com.mywebsite.site.dto.SiteKnowledgeSearchRequestDto;
 import com.mywebsite.site.dto.SiteKnowledgeSearchResponseDto;
 import com.mywebsite.site.dto.SiteUserMemoryDto;
@@ -114,6 +116,33 @@ public class SiteAiController {
             @PathVariable("messageId") long messageId) {
         conversationService.truncateMessages(siteId, requireSiteUserId(siteId), conversationId, messageId);
         return ApiResponse.success();
+    }
+
+    @PostMapping("/{siteId}/ai/conversations/{conversationId}/share")
+    public ApiResponse<SiteAiShareDto> createOrRefreshShare(
+            @PathVariable("siteId") long siteId, @PathVariable("conversationId") long conversationId) {
+        return ApiResponse.success(
+                conversationService.createOrRefreshShare(siteId, requireSiteUserId(siteId), conversationId));
+    }
+
+    @GetMapping("/{siteId}/ai/conversations/{conversationId}/share")
+    public ApiResponse<SiteAiShareDto> getShare(
+            @PathVariable("siteId") long siteId, @PathVariable("conversationId") long conversationId) {
+        return ApiResponse.success(
+                conversationService.getShare(siteId, requireSiteUserId(siteId), conversationId));
+    }
+
+    @DeleteMapping("/{siteId}/ai/conversations/{conversationId}/share")
+    public ApiResponse<Void> revokeShare(
+            @PathVariable("siteId") long siteId, @PathVariable("conversationId") long conversationId) {
+        conversationService.revokeShare(siteId, requireSiteUserId(siteId), conversationId);
+        return ApiResponse.success();
+    }
+
+    /** 公開分享讀：/api/site/public/** 在 SiteSecurityConfig 已 permitAll（僅 GET），只憑 token，不走站點登入。 */
+    @GetMapping("/public/ai/shares/{token}")
+    public ApiResponse<SiteAiSharedConversationDto> getSharedConversation(@PathVariable("token") String token) {
+        return ApiResponse.success(conversationService.getSharedConversation(token));
     }
 
     @GetMapping("/{siteId}/ai/memories")

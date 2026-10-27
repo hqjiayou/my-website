@@ -15,8 +15,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.site.dto.SiteAiConversationDto;
+import com.mywebsite.site.dto.SiteAiShareDto;
+import com.mywebsite.site.dto.SiteAiSharedConversationDto;
 import com.mywebsite.site.entity.SiteAiConversationEntity;
+import com.mywebsite.site.entity.SiteAiConversationShareEntity;
 import com.mywebsite.site.entity.SiteAiMessageEntity;
+import com.mywebsite.site.mapper.SiteAiConversationShareMapper;
 import java.time.LocalDateTime;
 import java.util.List;
 import com.mywebsite.site.mapper.SiteAiConversationMapper;
@@ -43,12 +47,15 @@ class SiteAiConversationManageTest {
     @Mock
     private SiteAiPromptProfileMapper promptProfileMapper;
 
+    @Mock
+    private SiteAiConversationShareMapper shareMapper;
+
     private SiteAiConversationServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new SiteAiConversationServiceImpl(
-                conversationMapper, messageMapper, promptProfileMapper, new ObjectMapper());
+                conversationMapper, messageMapper, promptProfileMapper, shareMapper, new ObjectMapper());
     }
 
     @Test
@@ -168,6 +175,94 @@ class SiteAiConversationManageTest {
                 .extracting(ex -> ((BusinessException) ex).getCode())
                 .isEqualTo(ErrorCode.NOT_FOUND.getCode());
         verify(messageMapper, never()).deleteFromMessage(anyLong(), anyLong());
+    }
+
+    @Test
+    void createShareBuildsSnapshotWithoutImageData() {
+        when(conversationMapper.selectById(1L)).thenReturn(owned(1L, 10L, 200L, "標題"));
+        SiteAiMessageEntity user = new SiteAiMessageEntity();
+        user.setId(7L);
+        user.setConversationId(1L);
+        user.setRole(SiteAiMessageEntity.ROLE_USER);
+        user.setContent("問題");
+        user.setAttachments(
+                "[{\"mediaType\":\"image/png\",\"data\":\"SECRET\",\"kind\":\"IMAGE\"},"
+                        + "{\"mediaType\":\"application/pdf\",\"data\":null,\"fileName\":\"a.pdf\",\"kind\":\"DOCUMENT\"}]");
+        SiteAiMessageEntity assistant = new SiteAiMessageEntity();
+        assistant.setId(8L);
+        assistant.setConversationId(1L);
+        assistant.setRole(SiteAiMessageEntity.ROLE_ASSISTANT);
+        assistant.setContent("回答");
+        when(messageMapper.selectList(any())).thenReturn(List.of(user, assistant));
+        when(shareMapper.selectOne(any())).thenReturn(null);
+
+        SiteAiShareDto dto = service.createOrRefreshShare(10L, 200L, 1L);
+
+        assertThat(dto.token()).isNotBlank();
+        org.mockito.ArgumentCaptor<SiteAiConversationShareEntity> captor =
+                org.mockito.ArgumentCaptor.forClass(SiteAiConversationShareEntity.class);
+        verify(shareMapper).insert(captor.capture());
+        assertThat(captor.getValue().getSnapshot())
+                .contains("問題")
+                .contains("回答")
+                .contains("a.pdf")
+                .contains("\"imageCount\":1")
+                .doesNotContain("SECRET");
+    }
+
+    @Test
+    void refreshShareReusesTokenAndUpdatesSnapshot() {
+        when(conversationMapper.selectById(1L)).thenReturn(owned(1L, 10L, 200L, "t"));
+        when(messageMapper.selectList(any())).thenReturn(List.of());
+        SiteAiConversationShareEntity existing = new SiteAiConversationShareEntity();
+        existing.setId(3L);
+        existing.setConversationId(1L);
+        existing.setToken("tok123");
+        when(shareMapper.selectOne(any())).thenReturn(existing);
+
+        SiteAiShareDto dto = service.createOrRefreshShare(10L, 200L, 1L);
+
+        assertThat(dto.token()).isEqualTo("tok123");
+        verify(shareMapper).updateById(existing);
+        verify(shareMapper, never()).insert(any());
+    }
+
+    @Test
+    void revokeOtherUsersShareIsNotFoundAndDoesNotDelete() {
+        when(conversationMapper.selectById(1L)).thenReturn(owned(1L, 10L, 200L, "t"));
+
+        assertThatThrownBy(() -> service.revokeShare(10L, 999L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.NOT_FOUND.getCode());
+        verify(shareMapper, never()).deleteByConversationId(anyLong());
+    }
+
+    @Test
+    void sharedConversationReadsSnapshotByToken() {
+        SiteAiConversationShareEntity share = new SiteAiConversationShareEntity();
+        share.setId(3L);
+        share.setToken("tok123");
+        share.setSnapshot(
+                "{\"title\":\"t\",\"sharedAt\":\"2026-01-01T00:00:00+09:00\",\"messages\":"
+                        + "[{\"role\":\"USER\",\"content\":\"hi\",\"createdAt\":null,\"imageCount\":0,\"documentNames\":[]}]}");
+        when(shareMapper.selectOne(any())).thenReturn(share);
+
+        SiteAiSharedConversationDto dto = service.getSharedConversation("tok123");
+
+        assertThat(dto.title()).isEqualTo("t");
+        assertThat(dto.messages()).hasSize(1);
+        assertThat(dto.messages().get(0).content()).isEqualTo("hi");
+    }
+
+    @Test
+    void sharedConversationUnknownTokenIsNotFound() {
+        when(shareMapper.selectOne(any())).thenReturn(null);
+
+        assertThatThrownBy(() -> service.getSharedConversation("nope"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.NOT_FOUND.getCode());
     }
 
     private static SiteAiConversationEntity owned(long id, long siteId, long siteUserId, String title) {

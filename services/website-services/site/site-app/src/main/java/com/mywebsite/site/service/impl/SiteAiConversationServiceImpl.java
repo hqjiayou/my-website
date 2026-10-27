@@ -17,19 +17,26 @@ import com.mywebsite.site.dto.SiteAiAttachmentDto;
 import com.mywebsite.site.dto.SiteAiConversationDto;
 import com.mywebsite.site.dto.SiteAiConversationRenameRequestDto;
 import com.mywebsite.site.dto.SiteAiMessageDto;
+import com.mywebsite.site.dto.SiteAiShareDto;
+import com.mywebsite.site.dto.SiteAiSharedConversationDto;
 import com.mywebsite.site.entity.SiteAiConversationEntity;
+import com.mywebsite.site.entity.SiteAiConversationShareEntity;
 import com.mywebsite.site.entity.SiteAiMessageEntity;
 import com.mywebsite.site.entity.SiteAiPromptProfileEntity;
 import com.mywebsite.site.mapper.SiteAiConversationMapper;
+import com.mywebsite.site.mapper.SiteAiConversationShareMapper;
 import com.mywebsite.site.mapper.SiteAiMessageMapper;
 import com.mywebsite.site.mapper.SiteAiPromptProfileMapper;
 import com.mywebsite.site.service.SiteAiConversationService;
+import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -59,19 +66,24 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
 
     private static final Logger log = LoggerFactory.getLogger(SiteAiConversationServiceImpl.class);
 
+    private static final SecureRandom SHARE_TOKEN_RANDOM = new SecureRandom();
+
     private final SiteAiConversationMapper conversationMapper;
     private final SiteAiMessageMapper messageMapper;
     private final SiteAiPromptProfileMapper promptProfileMapper;
+    private final SiteAiConversationShareMapper shareMapper;
     private final ObjectMapper objectMapper;
 
     public SiteAiConversationServiceImpl(
             SiteAiConversationMapper conversationMapper,
             SiteAiMessageMapper messageMapper,
             SiteAiPromptProfileMapper promptProfileMapper,
+            SiteAiConversationShareMapper shareMapper,
             ObjectMapper objectMapper) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.promptProfileMapper = promptProfileMapper;
+        this.shareMapper = shareMapper;
         this.objectMapper = objectMapper;
     }
 
@@ -211,6 +223,115 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                 latest.isEmpty() ? conversation.getCreatedAt() : latest.get(0).getCreatedAt());
         conversation.setAgentTodos(null);
         conversationMapper.updateById(conversation);
+    }
+
+    @Override
+    @Transactional
+    public SiteAiShareDto createOrRefreshShare(long siteId, long siteUserId, long conversationId) {
+        SiteAiConversationEntity conversation = requireOwnConversation(siteId, siteUserId, conversationId);
+        String snapshot = buildShareSnapshot(conversation);
+        SiteAiConversationShareEntity existing = findShare(conversationId);
+        if (existing != null) {
+            existing.setSnapshot(snapshot);
+            shareMapper.updateById(existing);
+            return new SiteAiShareDto(existing.getToken());
+        }
+        SiteAiConversationShareEntity share = new SiteAiConversationShareEntity();
+        share.setConversationId(conversationId);
+        share.setSiteId(siteId);
+        share.setSiteUserId(siteUserId);
+        share.setToken(generateShareToken());
+        share.setSnapshot(snapshot);
+        shareMapper.insert(share);
+        return new SiteAiShareDto(share.getToken());
+    }
+
+    @Override
+    public SiteAiShareDto getShare(long siteId, long siteUserId, long conversationId) {
+        requireOwnConversation(siteId, siteUserId, conversationId);
+        SiteAiConversationShareEntity share = findShare(conversationId);
+        return share == null ? null : new SiteAiShareDto(share.getToken());
+    }
+
+    @Override
+    @Transactional
+    public void revokeShare(long siteId, long siteUserId, long conversationId) {
+        requireOwnConversation(siteId, siteUserId, conversationId);
+        shareMapper.deleteByConversationId(conversationId);
+    }
+
+    @Override
+    public SiteAiSharedConversationDto getSharedConversation(String token) {
+        if (!StringUtils.hasText(token)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        SiteAiConversationShareEntity share = shareMapper.selectOne(
+                new LambdaQueryWrapper<SiteAiConversationShareEntity>()
+                        .eq(SiteAiConversationShareEntity::getToken, token.trim())
+                        .last("LIMIT 1"));
+        if (share == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        try {
+            return objectMapper.readValue(share.getSnapshot(), SiteAiSharedConversationDto.class);
+        } catch (JsonProcessingException ex) {
+            log.warn("site ai conversation share {} has malformed snapshot, treated as gone", share.getId(), ex);
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+    }
+
+    private SiteAiConversationShareEntity findShare(long conversationId) {
+        return shareMapper.selectOne(
+                new LambdaQueryWrapper<SiteAiConversationShareEntity>()
+                        .eq(SiteAiConversationShareEntity::getConversationId, conversationId)
+                        .last("LIMIT 1"));
+    }
+
+    private static String generateShareToken() {
+        byte[] bytes = new byte[32];
+        SHARE_TOKEN_RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    /** 分享快照：只存正文与附件的计数/文件名——图片数据、引用与过程信息都不进分享。 */
+    private String buildShareSnapshot(SiteAiConversationEntity conversation) {
+        List<SiteAiMessageEntity> messages = messageMapper.selectList(
+                new LambdaQueryWrapper<SiteAiMessageEntity>()
+                        .eq(SiteAiMessageEntity::getConversationId, conversation.getId())
+                        .orderByAsc(SiteAiMessageEntity::getId));
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("title", conversation.getTitle());
+        root.put("sharedAt", OffsetDateTime.now().toString());
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (SiteAiMessageEntity message : messages) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("role", message.getRole());
+            item.put("content", message.getContent());
+            item.put("createdAt", message.getCreatedAt() == null ? null : message.getCreatedAt().toString());
+            int imageCount = 0;
+            List<String> documentNames = new ArrayList<>();
+            List<SiteAiAttachmentDto> attachments = readPublicAttachments(message);
+            if (attachments != null) {
+                for (SiteAiAttachmentDto attachment : attachments) {
+                    if ("DOCUMENT".equals(attachment.kind())) {
+                        if (attachment.fileName() != null) {
+                            documentNames.add(attachment.fileName());
+                        }
+                    } else {
+                        imageCount += 1;
+                    }
+                }
+            }
+            item.put("imageCount", imageCount);
+            item.put("documentNames", documentNames);
+            items.add(item);
+        }
+        root.put("messages", items);
+        try {
+            return objectMapper.writeValueAsString(root);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
     }
 
     private SiteAiConversationEntity requireOwnConversation(long siteId, long siteUserId, long conversationId) {
