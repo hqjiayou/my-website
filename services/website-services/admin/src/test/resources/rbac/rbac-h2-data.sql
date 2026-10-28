@@ -7,7 +7,7 @@ DELETE FROM site_reservation;
 DELETE FROM site_content;
 DELETE FROM media_file;
 DELETE FROM site_appearance;
-DELETE FROM site;
+DELETE FROM agent;
 
 INSERT INTO admin_user (id, username, display_name, status, deleted, created_at, updated_at, version)
 VALUES
@@ -53,12 +53,12 @@ VALUES
     (22, 'admin:menu:delete', 'Delete menu', 'ACTION', 'menu:delete', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (23, 'admin:menu:sort', 'Sort menus', 'ACTION', 'menu:sort', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (24, 'admin:menu:bind', 'Bind menu permissions', 'ACTION', 'menu:bind', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (25, 'admin:site:list', 'List sites', 'ACTION', 'site:list', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (26, 'admin:site:detail', 'Site detail', 'ACTION', 'site:detail', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (27, 'admin:site:create', 'Create site', 'ACTION', 'site:create', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (28, 'admin:site:update', 'Update site', 'ACTION', 'site:update', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (29, 'admin:site:delete', 'Delete site', 'ACTION', 'site:delete', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
-    (30, 'admin:site:status', 'Update site status', 'ACTION', 'site:status', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (25, 'admin:agent:list', 'List sites', 'ACTION', 'agent:list', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (26, 'admin:agent:detail', 'Site detail', 'ACTION', 'agent:detail', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (27, 'admin:agent:create', 'Create site', 'ACTION', 'agent:create', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (28, 'admin:agent:update', 'Update site', 'ACTION', 'agent:update', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (29, 'admin:agent:delete', 'Delete site', 'ACTION', 'agent:delete', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
+    (30, 'admin:agent:status', 'Update site status', 'ACTION', 'agent:status', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (31, 'admin:menu:apps', 'Apps menu', 'MENU', 'apps', 'ACTIVE', NULL, 20, NULL, 'appstore', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (32, 'admin:menu:apps.sites', 'Sites menu', 'MENU', 'apps.sites', 'ACTIVE', 31, 10, '/apps/sites', 'layers', FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
     (33, 'admin:user:detail', 'User detail', 'ACTION', 'user:detail', 'ACTIVE', NULL, 0, NULL, NULL, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0),
@@ -158,7 +158,7 @@ VALUES
 ALTER TABLE admin_user ALTER COLUMN id RESTART WITH 501;
 ALTER TABLE admin_role ALTER COLUMN id RESTART WITH 5;
 ALTER TABLE admin_permission ALTER COLUMN id RESTART WITH 64;
-ALTER TABLE site ALTER COLUMN id RESTART WITH 1;
+ALTER TABLE agent ALTER COLUMN id RESTART WITH 1;
 ALTER TABLE media_file ALTER COLUMN id RESTART WITH 1;
 ALTER TABLE site_content ALTER COLUMN id RESTART WITH 1;
 ALTER TABLE site_reservation ALTER COLUMN id RESTART WITH 1;

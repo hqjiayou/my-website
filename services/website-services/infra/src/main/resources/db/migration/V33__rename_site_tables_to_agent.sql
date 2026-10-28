@@ -16,7 +16,7 @@ ALTER TABLE site_ai_knowledge_base_link RENAME TO agent_ai_knowledge_base_link;
 ALTER TABLE site_ai_knowledge_document RENAME TO agent_ai_knowledge_document;
 ALTER TABLE ai_model_entry RENAME TO agent_model_entry;
 
--- 列改名（只作用于已改名的表）：site_id → agent_id、site_user_id → agent_user_id、agent.site_code → agent_code。
+-- 列改名（只作用于已改名的表）：site_id → agent_id、site_user_id → agent_user_id、agent.site_code → agent_code、agent.site_name → agent_name、agent.site_type → agent_type。
 DO $$
 DECLARE
     r RECORD;
@@ -30,7 +30,7 @@ BEGIN
                              'agent_ai_prompt_profile', 'agent_ai_knowledge_base',
                              'agent_ai_knowledge_base_link', 'agent_ai_knowledge_document',
                              'agent_model_entry')
-          AND column_name IN ('site_id', 'site_user_id', 'site_code')
+          AND column_name IN ('site_id', 'site_user_id', 'site_code', 'site_name', 'site_type')
     LOOP
         EXECUTE format('ALTER TABLE %I RENAME COLUMN %I TO %I',
                        r.table_name,
@@ -39,6 +39,8 @@ BEGIN
                            WHEN 'site_id' THEN 'agent_id'
                            WHEN 'site_user_id' THEN 'agent_user_id'
                            WHEN 'site_code' THEN 'agent_code'
+                           WHEN 'site_name' THEN 'agent_name'
+                           WHEN 'site_type' THEN 'agent_type'
                        END);
     END LOOP;
 END $$;

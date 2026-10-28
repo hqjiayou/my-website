@@ -1,6 +1,6 @@
 # Agent 指引（my-website）
 
-中央控制的网站集合 Monorepo。一个后台总控 `apps/admin-web`，一个 Java 服务 `services/website-services`（gateway / auth / admin / site / common / infra / agent），一个 Python AI `services/agent-services`（internal only，经 Java `HttpAgentClient` 调用），一个访客前台 `apps/site-web`（v1：按 siteCode 渲染公开内容，只读）。Site Auth 后端已完成；site-web 未接登录（登录在 `apps/agent-portal`）。
+以 Agent 为中心的 Monorepo。一个后台总控 `apps/admin-web`，一个 Java 服务 `services/website-services`（gateway / auth / admin / agent / common / infra），一个 Python AI `services/agent-services`（internal only，经 Java `HttpAgentClient` 调用），一个 Agent 用户端 `apps/agent-portal`。2026-10-28 起原 site 服务与 agent client 库合并为单一 `agent` 模块（agent-core＋agent-app），公开站前端 `apps/site-web` 已移除；登录在 `apps/agent-portal`（站点用户）与 `apps/admin-web`（管理员）。
 
 ## Source of Truth 顺序
 
@@ -30,8 +30,8 @@
 | gateway | 路由 / CORS / RequestId；不做业务与鉴权业务 |
 | auth | 登录 / 刷新 / JWT 签发 / JWKS |
 | admin | 后台 API、RBAC、Resource Server 验签；**AI 业务主数据**（Prompt/KB/Conversation） |
-| agent-app | 站点业务 API；站点 AI chat / internal tools |
-| agent | `HttpAgentClient` 与 Java↔Python 契约 DTO |
+| agent-app | 站点业务 API；AI chat / internal tools（原 site-app） |
+| agent-core | 业务实体/Mapper ＋ `HttpAgentClient` 与 Java↔Python 契约 DTO（原 site-core 与 agent 库合并） |
 | agent-services | Python AI Execution（internal only，经 Java 调用） |
 | common / infra | 横切契约与基础设施；不放单模块业务 |
 | admin-web | 管理后台 UI；经 gateway 调 `/api/**` |
