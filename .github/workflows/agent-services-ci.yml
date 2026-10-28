@@ -2,7 +2,7 @@ name: agent-services-ci
 
 # Python AI 执行服务 services/agent-services，以及 Java HttpAgentClient 契约。
 # - pull_request：按指向 dev / main 的整个 PR 改动触发，不只看最后一次 push。
-# - push：按本次 push 改到的路径触发（含尚未开 PR 的功能分支）。
+# - push：仅 dev / main 分支按本次 push 改到的路径触发（功能分支 push 不再触发，避免与 PR 重复跑）。
 # pytest 通过后，Java 契约 IT 与 Docker 镜像构建并行。
 
 on:
@@ -13,6 +13,7 @@ on:
       - 'services/website-services/agent/**'
       - '.github/workflows/agent-services-ci.yml'
   push:
+    branches: [dev, main]
     paths:
       - 'services/agent-services/**'
       - 'services/website-services/agent/**'
