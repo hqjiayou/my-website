@@ -26,6 +26,10 @@ Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之
 | PATCH | `/api/site/{siteId}/ai/conversations/{conversationId}` | 请求体 `title`（非空白，最长 60）；成功返回更新后的会话 |
 | DELETE | `/api/site/{siteId}/ai/conversations/{conversationId}` | 无请求体；成功时 `data` 为 null |
 | DELETE | `/api/site/{siteId}/ai/conversations/{conversationId}/messages/{messageId}` | 硬删该消息及其之后全部消息（编辑/重新生成的真截断）；会话或消息不存在/非本人为 NOT_FOUND；截断后 `lastMessageAt` 回退、Todo 快照清空；成功时 `data` 为 null |
+| POST | `/api/site/{siteId}/ai/conversations/{conversationId}/share` | 创建或刷新分享（每会话至多一条；已有则复用 token 并把快照更新为当前内容）；快照只含消息正文与附件计数/文件名，不含图片数据、引用与过程；返回 `token` |
+| GET | `/api/site/{siteId}/ai/conversations/{conversationId}/share` | 当前分享的 `token`；未分享时 `data` 为 null |
+| DELETE | `/api/site/{siteId}/ai/conversations/{conversationId}/share` | 撤销分享（物理删行，token 立即失效）；成功时 `data` 为 null |
+| GET | `/api/site/public/ai/shares/{token}` | **公开**（permitAll，仅 GET）：凭 token 读分享快照（`title`/`sharedAt`/`messages[]{role,content,createdAt,imageCount,documentNames}`）；token 不存在为 NOT_FOUND。会话硬删时分享行级联删除、链接失效 |
 
 ### Site AI 记忆
 

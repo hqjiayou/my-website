@@ -6,6 +6,7 @@ import { HomePage } from '@/pages/home/homePage'
 import { KnowledgePage } from '@/pages/knowledge/knowledgePage'
 import { LoginPage } from '@/pages/login/loginPage'
 import { MemoriesPage } from '@/pages/memories/memoriesPage'
+import { SharePage } from '@/pages/share/sharePage'
 
 import { ROUTES } from '../config/routePaths'
 import { AuthGuard } from '../guards/authGuard'
@@ -14,6 +15,7 @@ import { GuestGuard } from '../guards/guestGuard'
 export function AppRoutes() {
   return (
     <Routes>
+      <Route path={`${ROUTES.share}/:token`} element={<SharePage />} />
       <Route element={<GuestGuard />}>
         <Route path={ROUTES.login} element={<LoginPage />} />
       </Route>

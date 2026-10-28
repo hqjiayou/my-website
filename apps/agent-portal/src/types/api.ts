@@ -51,6 +51,25 @@ export interface SiteAiConversation {
   createdAt: string | null
 }
 
+export interface SiteAiShare {
+  token: string
+}
+
+export interface SharedConversationMessage {
+  role: 'USER' | 'ASSISTANT' | string
+  content: string | null
+  createdAt: string | null
+  imageCount: number
+  documentNames: string[]
+}
+
+/** 公開分享快照（分享時刻的內容，不隨原對話後續編輯變動）。 */
+export interface SharedConversation {
+  title: string | null
+  sharedAt: string | null
+  messages: SharedConversationMessage[]
+}
+
 export interface SiteAiAttachment {
   mediaType: string
   /** 文件項（kind=DOCUMENT）只有描述、無原文，data 為 null。 */

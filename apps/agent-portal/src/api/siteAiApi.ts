@@ -1,8 +1,10 @@
 import type {
   HttpMessageBody,
+  SharedConversation,
   SiteAiChatRequest,
   SiteAiConversation,
   SiteAiMessage,
+  SiteAiShare,
   SiteKnowledgeDocumentDetail,
   SiteKnowledgeDocumentListItem,
   SiteKnowledgeSearchResult,
@@ -46,6 +48,43 @@ export const siteAiApi = {
           throw new ApiError(body.message || '請求失敗', { code: body.code })
         }
       })
+  },
+
+  /** 創建或刷新分享快照，回傳 token；前端以 origin 拼 /share/{token}。 */
+  createShare(siteId: string, conversationId: string) {
+    return httpClient
+      .post<HttpMessageBody<SiteAiShare>>(`/api/site/${siteId}/ai/conversations/${conversationId}/share`, {})
+      .then(unwrapData)
+  },
+
+  /** 目前分享；未分享時 code 0 且 data 為 null，回 null。其他錯誤照拋。 */
+  getShare(siteId: string, conversationId: string) {
+    return httpClient
+      .get<HttpMessageBody<SiteAiShare | null>>(`/api/site/${siteId}/ai/conversations/${conversationId}/share`)
+      .then((body) => {
+        if (body.code != null && body.code !== 0) {
+          throw new ApiError(body.message || '請求失敗', { code: body.code })
+        }
+        return body.data ?? null
+      })
+  },
+
+  /** 撤銷分享。成功体 data 為 null，處理同 deleteConversation。 */
+  revokeShare(siteId: string, conversationId: string) {
+    return httpClient
+      .delete<HttpMessageBody<null>>(`/api/site/${siteId}/ai/conversations/${conversationId}/share`)
+      .then((body) => {
+        if (body.code != null && body.code !== 0) {
+          throw new ApiError(body.message || '請求失敗', { code: body.code })
+        }
+      })
+  },
+
+  /** 公開讀分享快照（不需要登入）。 */
+  getSharedConversation(token: string) {
+    return httpClient
+      .get<HttpMessageBody<SharedConversation>>(`/api/site/public/ai/shares/${token}`)
+      .then(unwrapData)
   },
 
   /** 真截斷：硬刪該消息及其之後全部消息（編輯/重新生成的後端對齊）。成功体同 deleteConversation。 */

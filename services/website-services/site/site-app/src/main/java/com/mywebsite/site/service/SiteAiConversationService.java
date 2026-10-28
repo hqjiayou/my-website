@@ -8,6 +8,8 @@ import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.site.dto.SiteAiConversationDto;
 import com.mywebsite.site.dto.SiteAiMessageDto;
+import com.mywebsite.site.dto.SiteAiShareDto;
+import com.mywebsite.site.dto.SiteAiSharedConversationDto;
 import com.mywebsite.site.entity.SiteAiConversationEntity;
 import java.util.List;
 
@@ -73,6 +75,21 @@ public interface SiteAiConversationService {
      * 并清空 Todo 快照（它属于被截断的较新轮次，下一轮会重写）。
      */
     void truncateMessages(long siteId, long siteUserId, long conversationId, long fromMessageId);
+
+    /**
+     * 创建或刷新该会话的分享：已有分享时复用 token 并把快照更新到当前内容，没有时新建（随机 token）。
+     * 会话不存在/非本人为 NOT_FOUND。
+     */
+    SiteAiShareDto createOrRefreshShare(long siteId, long siteUserId, long conversationId);
+
+    /** 该会话当前的分享，没有时返回 null。不存在/非本人为 NOT_FOUND。 */
+    SiteAiShareDto getShare(long siteId, long siteUserId, long conversationId);
+
+    /** 撤销该会话的分享（物理删行，token 立即失效）。不存在/非本人为 NOT_FOUND。 */
+    void revokeShare(long siteId, long siteUserId, long conversationId);
+
+    /** 公开读：凭 token 读分享快照。token 空白、不存在或快照损坏一律 NOT_FOUND，不泄露原因。 */
+    SiteAiSharedConversationDto getSharedConversation(String token);
 
     record ChatPreparation(
             SiteAiConversationEntity conversation,
