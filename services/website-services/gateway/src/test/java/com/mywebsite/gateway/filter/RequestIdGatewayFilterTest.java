@@ -27,8 +27,10 @@ class RequestIdGatewayFilterTest {
         AtomicReference<ServerWebExchange> chained = new AtomicReference<>();
         GatewayFilterChain chain = exchange -> {
             chained.set(exchange);
-            exchange.getResponse().setComplete();
-            return Mono.empty();
+            // 必须把 setComplete() 的 Mono 作为链的返回值被订阅，提交动作
+            // （含 beforeCommit 回调）才会真正执行；旧写法只是调用未订阅，
+            // 靠 doFinally 直接写可写 Mock 头才偶然通过。
+            return exchange.getResponse().setComplete();
         };
 
         StepVerifier.create(filter.filter(incoming, chain)).verifyComplete();
@@ -48,8 +50,10 @@ class RequestIdGatewayFilterTest {
         AtomicReference<ServerWebExchange> chained = new AtomicReference<>();
         GatewayFilterChain chain = exchange -> {
             chained.set(exchange);
-            exchange.getResponse().setComplete();
-            return Mono.empty();
+            // 必须把 setComplete() 的 Mono 作为链的返回值被订阅，提交动作
+            // （含 beforeCommit 回调）才会真正执行；旧写法只是调用未订阅，
+            // 靠 doFinally 直接写可写 Mock 头才偶然通过。
+            return exchange.getResponse().setComplete();
         };
 
         StepVerifier.create(filter.filter(incoming, chain)).verifyComplete();
