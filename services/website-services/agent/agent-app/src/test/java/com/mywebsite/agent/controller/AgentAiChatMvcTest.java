@@ -322,11 +322,11 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
                 new ObjectMapper().readTree(body).path("data").path("conversationId").asText());
 
         String assistantMeta = jdbcTemplate.queryForObject(
-                "SELECT agent_meta FROM site_ai_message WHERE conversation_id = ? AND role = 'ASSISTANT'",
+                "SELECT agent_meta FROM agent_ai_message WHERE conversation_id = ? AND role = 'ASSISTANT'",
                 String.class,
                 conversationId);
         String userMeta = jdbcTemplate.queryForObject(
-                "SELECT agent_meta FROM site_ai_message WHERE conversation_id = ? AND role = 'USER'",
+                "SELECT agent_meta FROM agent_ai_message WHERE conversation_id = ? AND role = 'USER'",
                 String.class,
                 conversationId);
         assertNull(userMeta);
@@ -359,7 +359,7 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
 
         assertEquals(
                 "renamed",
-                jdbcTemplate.queryForObject("SELECT title FROM site_ai_conversation WHERE id = ?", String.class, id));
+                jdbcTemplate.queryForObject("SELECT title FROM agent_ai_conversation WHERE id = ?", String.class, id));
     }
 
     @Test
@@ -375,9 +375,9 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
                 .andExpect(jsonPath("$.data").value(nullValue()));
 
         Number conversations = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM site_ai_conversation WHERE id = ?", Number.class, id);
+                "SELECT COUNT(*) FROM agent_ai_conversation WHERE id = ?", Number.class, id);
         Number messages = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM site_ai_message WHERE conversation_id = ?", Number.class, id);
+                "SELECT COUNT(*) FROM agent_ai_message WHERE conversation_id = ?", Number.class, id);
         assertEquals(0L, conversations.longValue());
         assertEquals(0L, messages.longValue());
     }

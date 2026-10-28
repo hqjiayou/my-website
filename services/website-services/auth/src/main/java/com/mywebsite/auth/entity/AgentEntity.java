@@ -6,7 +6,7 @@ import com.mywebsite.infra.entity.AbstractAuditableEntity;
 /**
  * auth 模块只读站点凭证视图（表 {@code agent}）。
  *
- * <p>不依赖 agent-core；仅用于 Agent 登录时按 {@code site_code} 解析站点状态。
+ * <p>不依赖 agent-core；仅用于 Agent 登录时按 {@code agent_code} 解析站点状态。
  */
 @TableName("agent")
 public class AgentEntity extends AbstractAuditableEntity {

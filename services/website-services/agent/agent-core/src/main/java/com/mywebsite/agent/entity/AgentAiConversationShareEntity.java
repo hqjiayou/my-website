@@ -6,7 +6,7 @@ import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import com.mywebsite.agent.mapper.JsonbStringTypeHandler;
 
 /** 对话分享（V32）：一个会话至多一条；snapshot 为分享时刻快照 JSON，公开读只凭 token。 */
-@TableName(value = "site_ai_conversation_share", autoResultMap = true)
+@TableName(value = "agent_ai_conversation_share", autoResultMap = true)
 public class AgentAiConversationShareEntity extends AbstractAuditableEntity {
 
     private Long conversationId;

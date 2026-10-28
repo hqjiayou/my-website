@@ -6,7 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.time.OffsetDateTime;
 
-@TableName("site_ai_conversation")
+@TableName("agent_ai_conversation")
 public class AgentAiConversationEntity extends AbstractAuditableEntity {
 
     private Long agentId;

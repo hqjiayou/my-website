@@ -54,7 +54,7 @@ public class AgentAuthMeServiceImpl implements AgentAuthMeService {
         if (entity == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), ErrorCode.NOT_FOUND.getMessageKey());
         }
-        // JWT site_id 必须与库中用户归属一致，防止跨站点上下文冒用
+        // JWT agent_id 必须与库中用户归属一致，防止跨站点上下文冒用
         if (!Objects.equals(jwtAgentId, entity.getAgentId())) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED.getCode(), ErrorCode.UNAUTHORIZED.getMessageKey());
         }

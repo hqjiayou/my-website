@@ -47,7 +47,7 @@ class AgentPersistenceVerifyPgTest {
     void site_insert_select_updated_at_trigger_moves_forward() throws InterruptedException {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         AgentEntity agent = new AgentEntity();
-        agent.setAgentCode("SITE_" + suffix);
+        agent.setAgentCode("AGENT_" + suffix);
         agent.setAgentName("Verify Agent");
         agent.setAgentType("CAR");
         agent.setStatus("ACTIVE");
@@ -70,7 +70,7 @@ class AgentPersistenceVerifyPgTest {
     }
 
     @Test
-    void site_user_foreign_key_and_query_by_site_id() {
+    void agent_user_foreign_key_and_query_by_agent_id() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         AgentEntity agent = new AgentEntity();
         agent.setAgentCode("FK_" + suffix);
@@ -93,7 +93,7 @@ class AgentPersistenceVerifyPgTest {
     }
 
     @Test
-    void site_user_invalid_site_id_rejected() {
+    void agent_user_invalid_agent_id_rejected() {
         AgentUserEntity bad = new AgentUserEntity();
         bad.setAgentId(9_999_999_999L);
         bad.setUsername("orphan");

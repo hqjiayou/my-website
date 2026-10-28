@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * 单轮 Agent 运行元数据（§22.8）：用量、工具轨迹（仅工具名与成败，不含参数/返回内容）、生效 skills，
  * 以及知识搜索的安全摘要（查询词与命中数，不含片段正文）。
- * agent 侧随 ASSISTANT 消息持久化到 {@code site_ai_message.agent_meta}（JSON），admin 只读展示；
+ * agent 侧随 ASSISTANT 消息持久化到 {@code agent_ai_message.agent_meta}（JSON），admin 只读展示；
  * 其中工具名/成败与搜索摘要会对站点用户以过程摘要形式回放（与实时事件同一白名单）。
  */
 public record AgentRunMeta(

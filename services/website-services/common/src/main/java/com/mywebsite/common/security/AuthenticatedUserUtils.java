@@ -22,12 +22,12 @@ public final class AuthenticatedUserUtils {
         Objects.requireNonNull(jwt.getSubject(), "jwt.sub missing");
         SubjectCodes.parseAgentUserId(jwt.getSubject())
                 .orElseThrow(() -> new IllegalStateException("jwt.sub is not a valid agent subject code"));
-        Long agentId = parsePositiveAgentIdClaim(jwt.getClaim(JwtClaimConstants.SITE_ID))
-                .orElseThrow(() -> new IllegalStateException("jwt.site_id missing or invalid"));
+        Long agentId = parsePositiveAgentIdClaim(jwt.getClaim(JwtClaimConstants.AGENT_ID))
+                .orElseThrow(() -> new IllegalStateException("jwt.agent_id missing or invalid"));
         return new AuthenticatedUser(TokenAudience.AGENT, jwt.getSubject(), null, agentId, Set.of());
     }
 
-    /** 解析 JWT {@code site_id} 声明为正向 Long；非法或缺失返回 empty。 */
+    /** 解析 JWT {@code agent_id} 声明为正向 Long；非法或缺失返回 empty。 */
     public static java.util.Optional<Long> parsePositiveAgentIdClaim(Object raw) {
         if (raw == null) {
             return java.util.Optional.empty();

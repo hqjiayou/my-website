@@ -3,8 +3,8 @@ package com.mywebsite.agent.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 
-/** 站点知识库原文（表 {@code site_ai_knowledge_document}）。站点侧只读，写入在 admin。 */
-@TableName("site_ai_knowledge_document")
+/** 站点知识库原文（表 {@code agent_ai_knowledge_document}）。站点侧只读，写入在 admin。 */
+@TableName("agent_ai_knowledge_document")
 public class AgentAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public static final String STATUS_ACTIVE = "ACTIVE";

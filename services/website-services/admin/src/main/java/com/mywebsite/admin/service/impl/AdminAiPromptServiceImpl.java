@@ -78,7 +78,7 @@ public class AdminAiPromptServiceImpl implements AdminAiPromptService {
 
     private void requireSite(long agentId) {
         if (adminAgentMapper.selectById(agentId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.SITE_NOT_FOUND);
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
         }
     }
 

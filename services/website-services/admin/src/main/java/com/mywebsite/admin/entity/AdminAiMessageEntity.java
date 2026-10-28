@@ -3,8 +3,8 @@ package com.mywebsite.admin.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 
-/** 站点 AI 消息（表 {@code site_ai_message}）。 */
-@TableName("site_ai_message")
+/** 站点 AI 消息（表 {@code agent_ai_message}）。 */
+@TableName("agent_ai_message")
 public class AdminAiMessageEntity extends AbstractAuditableEntity {
 
     public static final String ROLE_USER = "USER";

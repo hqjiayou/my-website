@@ -46,7 +46,7 @@ public final class AgentTestJwtSigner {
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(now.plusSeconds(3600)))
                 .claim(JwtClaimConstants.SUBJECT_TYPE, SubjectType.AGENT.name())
-                .claim(JwtClaimConstants.SITE_ID, agentId)
+                .claim(JwtClaimConstants.AGENT_ID, agentId)
                 .build();
         SignedJWT jwt = new SignedJWT(
                 new JWSHeader.Builder(JWSAlgorithm.RS256)

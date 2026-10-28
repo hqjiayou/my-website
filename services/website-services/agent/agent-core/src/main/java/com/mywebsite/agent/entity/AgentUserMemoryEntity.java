@@ -3,7 +3,7 @@ package com.mywebsite.agent.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 
-@TableName("site_user_memory")
+@TableName("agent_user_memory")
 public class AgentUserMemoryEntity extends AbstractAuditableEntity {
 
     private Long agentId;

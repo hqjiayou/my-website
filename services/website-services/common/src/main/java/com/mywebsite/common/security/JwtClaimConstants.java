@@ -9,7 +9,7 @@ public final class JwtClaimConstants {
     /**
      * AGENT Access JWT：所属站点主键（数值）。ADMIN 令牌不得写入此声明。
      */
-    public static final String SITE_ID = "site_id";
+    public static final String AGENT_ID = "agent_id";
 
     /** @deprecated 历史字段；新签发令牌不再写入，解析侧已不再依赖。 */
     @Deprecated

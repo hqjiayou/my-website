@@ -116,7 +116,7 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
 
     private void requireSite(long agentId) {
         if (adminAgentMapper.selectById(agentId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.SITE_NOT_FOUND);
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
         }
     }
 
@@ -150,7 +150,7 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
                     .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                     .readValue(entity.getAgentMeta());
         } catch (JsonProcessingException ex) {
-            log.warn("site_ai_message {} has malformed agent_meta, ignored", entity.getId(), ex);
+            log.warn("agent_ai_message {} has malformed agent_meta, ignored", entity.getId(), ex);
             return null;
         }
     }

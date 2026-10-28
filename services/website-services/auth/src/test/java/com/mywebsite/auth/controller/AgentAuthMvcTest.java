@@ -133,7 +133,7 @@ class AgentAuthMvcTest {
         assertThat(decoded.getAudience()).contains("AGENT");
         assertThat(decoded.getSubject()).isEqualTo(SubjectCodes.formatAgentUserSubject(200L));
         assertThat(decoded.getClaimAsString(JwtClaimConstants.SUBJECT_TYPE)).isEqualTo("AGENT");
-        assertThat(((Number) decoded.getClaim(JwtClaimConstants.SITE_ID)).longValue()).isEqualTo(10L);
+        assertThat(((Number) decoded.getClaim(JwtClaimConstants.AGENT_ID)).longValue()).isEqualTo(10L);
         assertNull(decoded.getClaim(JwtClaimConstants.TOKEN_TYPE));
 
         Cookie refreshCookie = loginResult.getResponse().getCookie(agentRefreshCookieService.refreshCookieName());
@@ -252,7 +252,7 @@ class AgentAuthMvcTest {
                 .path("accessToken")
                 .asText();
         Jwt decoded = jwtDecoder.decode(refreshedJwt);
-        assertThat(((Number) decoded.getClaim(JwtClaimConstants.SITE_ID)).longValue()).isEqualTo(10L);
+        assertThat(((Number) decoded.getClaim(JwtClaimConstants.AGENT_ID)).longValue()).isEqualTo(10L);
 
         Cookie rotated = refreshResult.getResponse().getCookie(agentRefreshCookieService.refreshCookieName());
         assertThat(rotated).isNotNull();

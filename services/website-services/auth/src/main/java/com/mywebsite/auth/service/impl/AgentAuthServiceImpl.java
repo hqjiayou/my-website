@@ -217,7 +217,7 @@ public class AgentAuthServiceImpl implements AgentAuthService {
         };
     }
 
-    /** Refresh 主体仍可用：site_user 与 agent 均为 ACTIVE。 */
+    /** Refresh 主体仍可用：agent_user 与 agent 均为 ACTIVE。 */
     private boolean isRefreshPrincipalActive(long agentUserId, long agentId) {
         AgentUserEntity user = agentUserMapper.selectById(agentUserId);
         if (user == null) {

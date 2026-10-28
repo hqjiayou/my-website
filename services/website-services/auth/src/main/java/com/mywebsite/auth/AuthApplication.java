@@ -15,7 +15,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 /**
  * 统一认证服务：Admin / Agent 登录 / Refresh / Logout、Access JWT 签发、Refresh 会话（Redis）。
  *
- * <p>与业务库共用 PostgreSQL 中的 {@code admin_user} / {@code agent} / {@code site_user} 表；Flyway 仅在 admin
+ * <p>与业务库共用 PostgreSQL 中的 {@code admin_user} / {@code agent} / {@code agent_user} 表；Flyway 仅在 admin
  * 执行，此处显式关闭以避免重复迁移。</p>
  */
 @SpringBootApplication(

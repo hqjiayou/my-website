@@ -89,7 +89,7 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-model:read",
             "admin:ai-model:update");
 
-    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 32;
+    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 33;
     private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 55;
 
     @Autowired
@@ -192,7 +192,7 @@ class AdminRbacSeedVerifyPgTest {
         Integer count = jdbcTemplate.queryForObject(
                 """
                 SELECT COUNT(*) FROM information_schema.columns
-                WHERE table_name = 'site_ai_knowledge_base' AND column_name = 'deleted_at'
+                WHERE table_name = 'agent_ai_knowledge_base' AND column_name = 'deleted_at'
                 """,
                 Integer.class);
         assertThat(count).isEqualTo(1);

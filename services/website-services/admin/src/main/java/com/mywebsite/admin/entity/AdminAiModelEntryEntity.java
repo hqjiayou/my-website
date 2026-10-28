@@ -5,8 +5,8 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 
-/** 平台模型入口（表 {@code ai_model_entry}）。{@code apiKey} 不得写入接口响应。 */
-@TableName("ai_model_entry")
+/** 平台模型入口（表 {@code agent_model_entry}）。{@code apiKey} 不得写入接口响应。 */
+@TableName("agent_model_entry")
 public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
 
     private String displayName;

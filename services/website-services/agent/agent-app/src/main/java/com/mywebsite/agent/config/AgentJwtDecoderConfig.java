@@ -18,7 +18,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 /**
  * Resource Server：JWKS 验签；校验 {@code iss} / {@code aud} / {@code subject_type=AGENT} /
- * 合法 {@code site_id}。
+ * 合法 {@code agent_id}。
  */
 @Configuration
 public class AgentJwtDecoderConfig {
@@ -36,7 +36,7 @@ public class AgentJwtDecoderConfig {
                 new JwtClaimValidator<>(
                         JwtClaimConstants.SUBJECT_TYPE, sub -> SubjectType.AGENT.name().equals(sub));
         OAuth2TokenValidator<Jwt> withAgentId = new JwtClaimValidator<>(
-                JwtClaimConstants.SITE_ID,
+                JwtClaimConstants.AGENT_ID,
                 agentId -> AuthenticatedUserUtils.parsePositiveAgentIdClaim(agentId).isPresent());
         OAuth2TokenValidator<Jwt> combined =
                 new DelegatingOAuth2TokenValidator<>(withIssuer, withAudience, subjectSite, withAgentId);

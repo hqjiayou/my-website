@@ -70,9 +70,9 @@ public class JwtTokenServiceImpl implements TokenService {
                 .id(jti)
                 .claim(JwtClaimConstants.SUBJECT_TYPE, subjectType.name());
 
-        // AGENT 必须写入 site_id；ADMIN 不得携带，避免跨受众冒充站点上下文。
+        // AGENT 必须写入 agent_id；ADMIN 不得携带，避免跨受众冒充站点上下文。
         if (issuance.audience() == TokenAudience.AGENT) {
-            claimsBuilder.claim(JwtClaimConstants.SITE_ID, issuance.agentIdOrNull());
+            claimsBuilder.claim(JwtClaimConstants.AGENT_ID, issuance.agentIdOrNull());
         }
 
         JwtClaimsSet claims = claimsBuilder.build();
@@ -110,11 +110,11 @@ public class JwtTokenServiceImpl implements TokenService {
         }
 
         if (expectedAudience == TokenAudience.AGENT
-                && AuthenticatedUserUtils.parsePositiveAgentIdClaim(jwt.getClaim(JwtClaimConstants.SITE_ID))
+                && AuthenticatedUserUtils.parsePositiveAgentIdClaim(jwt.getClaim(JwtClaimConstants.AGENT_ID))
                         .isEmpty()) {
             return Optional.empty();
         }
-        if (expectedAudience == TokenAudience.ADMIN && jwt.getClaim(JwtClaimConstants.SITE_ID) != null) {
+        if (expectedAudience == TokenAudience.ADMIN && jwt.getClaim(JwtClaimConstants.AGENT_ID) != null) {
             return Optional.empty();
         }
 

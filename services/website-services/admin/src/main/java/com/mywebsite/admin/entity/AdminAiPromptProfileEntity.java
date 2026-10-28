@@ -4,8 +4,8 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.math.BigDecimal;
 
-/** 站点 AI Prompt/参数配置（表 {@code site_ai_prompt_profile}）。 */
-@TableName("site_ai_prompt_profile")
+/** 站点 AI Prompt/参数配置（表 {@code agent_ai_prompt_profile}）。 */
+@TableName("agent_ai_prompt_profile")
 public class AdminAiPromptProfileEntity extends AbstractAuditableEntity {
 
     private Long agentId;

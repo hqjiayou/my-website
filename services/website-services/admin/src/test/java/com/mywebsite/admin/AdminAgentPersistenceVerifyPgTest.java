@@ -65,7 +65,7 @@ class AdminAgentPersistenceVerifyPgTest {
         assertThat(adminAgentMapper.selectById(agent.getId())).isNull();
 
         Integer deletedRows = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM agent WHERE site_code = ? AND deleted = TRUE", Integer.class, agentCode);
+                "SELECT COUNT(*) FROM agent WHERE agent_code = ? AND deleted = TRUE", Integer.class, agentCode);
         assertThat(deletedRows).isEqualTo(1);
 
         AdminAgentEntity reused = new AdminAgentEntity();
@@ -109,7 +109,7 @@ class AdminAgentPersistenceVerifyPgTest {
             String m = cur.getMessage();
             if (m != null
                     && (m.contains("duplicate key")
-                            || m.contains("uq_site_site_code_active")
+                            || m.contains("uq_agent_agent_code_active")
                             || m.contains("violates unique constraint"))) {
                 return;
             }

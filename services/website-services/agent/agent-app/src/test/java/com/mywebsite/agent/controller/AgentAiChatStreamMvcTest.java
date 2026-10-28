@@ -151,7 +151,7 @@ class AgentAiChatStreamMvcTest extends AbstractAgentSpringBootTest {
         long conversationId = Long.parseLong(matcher.group(1));
 
         String assistantMeta = jdbcTemplate.queryForObject(
-                "SELECT agent_meta FROM site_ai_message WHERE conversation_id = ? AND role = 'ASSISTANT'",
+                "SELECT agent_meta FROM agent_ai_message WHERE conversation_id = ? AND role = 'ASSISTANT'",
                 String.class,
                 conversationId);
         assertThat(assistantMeta).contains("\"citations\"", "kb:4", "\"chunkIndex\":1");

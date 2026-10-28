@@ -236,7 +236,7 @@ public class AdminMediaServiceImpl implements AdminMediaService {
     private AdminAgentEntity requireSite(long agentId) {
         AdminAgentEntity agent = adminAgentMapper.selectById(agentId);
         if (agent == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.SITE_NOT_FOUND);
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
         }
         return agent;
     }

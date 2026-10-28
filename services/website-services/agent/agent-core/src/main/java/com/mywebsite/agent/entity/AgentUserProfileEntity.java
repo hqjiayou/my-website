@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.time.LocalDate;
 
-@TableName("site_user_profile")
+@TableName("agent_user_profile")
 public class AgentUserProfileEntity extends AbstractAuditableEntity {
 
     private Long agentId;

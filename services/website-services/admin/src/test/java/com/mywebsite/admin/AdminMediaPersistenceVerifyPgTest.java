@@ -74,7 +74,7 @@ class AdminMediaPersistenceVerifyPgTest {
                 FROM media_file WHERE id = ?
                 """,
                 media.getId());
-        assertThat(row.get("site_id")).isEqualTo(agent.getId());
+        assertThat(row.get("agent_id")).isEqualTo(agent.getId());
         assertThat(row.get("object_key")).isEqualTo(objectKey);
         assertThat(row.get("content_type")).isEqualTo("image/jpeg");
         assertThat(row.get("status")).isEqualTo("READY");

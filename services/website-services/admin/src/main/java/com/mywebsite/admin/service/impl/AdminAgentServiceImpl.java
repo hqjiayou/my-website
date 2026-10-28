@@ -96,8 +96,8 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     @Override
     @Transactional
     public AdminAgentDetailDto createSite(AdminAgentCreateRequest request) {
-        if (!request.agentCode().matches(AdminAgentConstants.SITE_CODE_PATTERN)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAgentMessageKeys.SITE_CODE_INVALID);
+        if (!request.agentCode().matches(AdminAgentConstants.AGENT_CODE_PATTERN)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAgentMessageKeys.AGENT_CODE_INVALID);
         }
         requireAgentType(request.agentType());
         boolean hasAppearance = request.appearance() != null;
@@ -105,7 +105,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
             adminAppearanceService.requireValidConfigV1(request.appearance());
         }
         if (findByAgentCode(request.agentCode()) != null) {
-            throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAgentMessageKeys.SITE_CODE_DUPLICATE);
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAgentMessageKeys.AGENT_CODE_DUPLICATE);
         }
 
         AdminAgentEntity entity = new AdminAgentEntity();
@@ -118,7 +118,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         try {
             adminAgentMapper.insert(entity);
         } catch (DuplicateKeyException ex) {
-            throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAgentMessageKeys.SITE_CODE_DUPLICATE);
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAgentMessageKeys.AGENT_CODE_DUPLICATE);
         }
         if (hasAppearance) {
             adminAppearanceService.insertForSite(entity.getId(), request.appearance());
@@ -139,7 +139,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         agent.setVersion(request.version());
         int updated = adminAgentMapper.updateById(agent);
         if (updated == 0) {
-            throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAgentMessageKeys.SITE_VERSION_CONFLICT);
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAgentMessageKeys.AGENT_VERSION_CONFLICT);
         }
         return toDetail(requireSite(id));
     }
@@ -158,7 +158,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         adminAgentMapper.updateById(agent);
         int deleted = adminAgentMapper.deleteById(id);
         if (deleted == 0) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.SITE_NOT_FOUND);
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
         }
     }
 
@@ -170,7 +170,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         agent.setVersion(request.version());
         int updated = adminAgentMapper.updateById(agent);
         if (updated == 0) {
-            throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAgentMessageKeys.SITE_VERSION_CONFLICT);
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAgentMessageKeys.AGENT_VERSION_CONFLICT);
         }
         return toDetail(requireSite(id));
     }
@@ -178,12 +178,12 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     private AdminAgentEntity requireSite(long id) {
         AdminAgentEntity agent = adminAgentMapper.selectById(id);
         if (agent == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.SITE_NOT_FOUND);
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
         }
         return agent;
     }
 
-    /** 按 site_code 查未逻辑删除行（{@code @TableLogic}）；不按 ACTIVE 过滤，用于唯一性校验。 */
+    /** 按 agent_code 查未逻辑删除行（{@code @TableLogic}）；不按 ACTIVE 过滤，用于唯一性校验。 */
     private AdminAgentEntity findByAgentCode(String agentCode) {
         return adminAgentMapper.selectOne(
                 new LambdaQueryWrapper<AdminAgentEntity>().eq(AdminAgentEntity::getAgentCode, agentCode));
@@ -191,14 +191,14 @@ public class AdminAgentServiceImpl implements AdminAgentService {
 
     /** 用途标签校验：非空且符合标签模式（预设标签与自订标签同等对待），不再受旧行业闭集约束。 */
     private static void requireAgentType(String agentType) {
-        if (!StringUtils.hasText(agentType) || !agentType.trim().matches(AdminAgentConstants.SITE_TAG_PATTERN)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAgentMessageKeys.SITE_TYPE_INVALID);
+        if (!StringUtils.hasText(agentType) || !agentType.trim().matches(AdminAgentConstants.AGENT_TAG_PATTERN)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAgentMessageKeys.AGENT_TYPE_INVALID);
         }
     }
 
     private static void requireStatus(String status) {
         if (!AdminAgentConstants.ALLOWED_STATUSES.contains(status)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAgentMessageKeys.SITE_STATUS_INVALID);
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAgentMessageKeys.AGENT_STATUS_INVALID);
         }
     }
 

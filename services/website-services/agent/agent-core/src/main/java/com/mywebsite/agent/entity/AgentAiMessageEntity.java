@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import com.mywebsite.agent.mapper.JsonbStringTypeHandler;
 
-@TableName(value = "site_ai_message", autoResultMap = true)
+@TableName(value = "agent_ai_message", autoResultMap = true)
 public class AgentAiMessageEntity extends AbstractAuditableEntity {
 
     public static final String ROLE_USER = "USER";

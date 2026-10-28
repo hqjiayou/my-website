@@ -69,7 +69,7 @@ class JwtTokenServiceImplTest {
         Jwt decoded = jwtDecoder.decode(jwt);
         assertThat(decoded.getSubject()).isEqualTo(SubjectCodes.formatAdminSubject(42L));
         assertThat(decoded.getClaimAsString(JwtClaimConstants.SUBJECT_TYPE)).isEqualTo("ADMIN");
-        assertNull(decoded.getClaim(JwtClaimConstants.SITE_ID));
+        assertNull(decoded.getClaim(JwtClaimConstants.AGENT_ID));
         assertNull(decoded.getClaim(JwtClaimConstants.TOKEN_TYPE));
         assertNull(decoded.getClaim(JwtClaimConstants.ADMIN_USER_ID));
         assertNull(decoded.getClaim(JwtClaimConstants.USERNAME));
@@ -85,7 +85,7 @@ class JwtTokenServiceImplTest {
         assertThat(decoded.getSubject()).isEqualTo(SubjectCodes.formatAgentUserSubject(200L));
         assertThat(decoded.getAudience()).contains("AGENT");
         assertThat(decoded.getClaimAsString(JwtClaimConstants.SUBJECT_TYPE)).isEqualTo("AGENT");
-        assertThat(((Number) decoded.getClaim(JwtClaimConstants.SITE_ID)).longValue()).isEqualTo(10L);
+        assertThat(((Number) decoded.getClaim(JwtClaimConstants.AGENT_ID)).longValue()).isEqualTo(10L);
 
         assertThat(tokenService.parseToken(jwt, TokenAudience.AGENT)).isPresent();
         assertThat(tokenService.parseToken(jwt, TokenAudience.ADMIN)).isEmpty();

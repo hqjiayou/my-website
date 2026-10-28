@@ -65,7 +65,7 @@ public interface AgentAiConversationService {
 
     /**
      * 硬删本人会话。不存在或非本人为 NOT_FOUND，且不删除任何行。
-     * {@code site_ai_message.conversation_id} 为 ON DELETE RESTRICT，须先删消息再删会话。
+     * {@code agent_ai_message.conversation_id} 为 ON DELETE RESTRICT，须先删消息再删会话。
      */
     void deleteConversation(long agentId, long agentUserId, long conversationId);
 

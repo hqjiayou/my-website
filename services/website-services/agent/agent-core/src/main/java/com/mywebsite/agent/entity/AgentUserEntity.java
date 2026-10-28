@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.time.OffsetDateTime;
 
-@TableName("site_user")
+@TableName("agent_user")
 public class AgentUserEntity extends AbstractAuditableEntity {
 
     private Long agentId;

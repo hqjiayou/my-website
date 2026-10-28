@@ -31,7 +31,7 @@ class AgentAiKnowledgeBrowseMvcTest extends AbstractAgentSpringBootTest {
     @BeforeEach
     void setUp() throws Exception {
         privateKey = AgentTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
-        jdbcTemplate.update("DELETE FROM site_ai_knowledge_document");
+        jdbcTemplate.update("DELETE FROM agent_ai_knowledge_document");
         activeDocId = insertDocument(10L, "公开手册", "# 手册正文", "ACTIVE");
         insertDocument(10L, "已停用文档", "不应可见", "DISABLED");
         insertDocument(11L, "他站文档", "不应可见", "ACTIVE");
@@ -39,13 +39,13 @@ class AgentAiKnowledgeBrowseMvcTest extends AbstractAgentSpringBootTest {
 
     private long insertDocument(long agentId, String title, String content, String status) {
         jdbcTemplate.update(
-                "INSERT INTO site_ai_knowledge_document (site_id, title, content, status) VALUES (?, ?, ?, ?)",
+                "INSERT INTO agent_ai_knowledge_document (agent_id, title, content, status) VALUES (?, ?, ?, ?)",
                 agentId,
                 title,
                 content,
                 status);
         return jdbcTemplate.queryForObject(
-                "SELECT id FROM site_ai_knowledge_document WHERE title = ?", Long.class, title);
+                "SELECT id FROM agent_ai_knowledge_document WHERE title = ?", Long.class, title);
     }
 
     private String token() throws Exception {
@@ -74,9 +74,9 @@ class AgentAiKnowledgeBrowseMvcTest extends AbstractAgentSpringBootTest {
     @Test
     void detailOfDisabledOrForeignDocumentIsNotFound() throws Exception {
         Long disabledId = jdbcTemplate.queryForObject(
-                "SELECT id FROM site_ai_knowledge_document WHERE title = '已停用文档'", Long.class);
+                "SELECT id FROM agent_ai_knowledge_document WHERE title = '已停用文档'", Long.class);
         Long foreignId = jdbcTemplate.queryForObject(
-                "SELECT id FROM site_ai_knowledge_document WHERE title = '他站文档'", Long.class);
+                "SELECT id FROM agent_ai_knowledge_document WHERE title = '他站文档'", Long.class);
         mockMvc.perform(get("/api/agent/10/ai/knowledge-documents/" + disabledId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token()))
                 .andExpect(status().isNotFound());

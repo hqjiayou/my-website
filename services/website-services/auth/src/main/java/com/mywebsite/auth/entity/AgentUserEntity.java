@@ -5,11 +5,11 @@ import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.time.OffsetDateTime;
 
 /**
- * auth 模块只读前台用户凭证视图（表 {@code site_user}）。
+ * auth 模块只读前台用户凭证视图（表 {@code agent_user}）。
  *
  * <p>不依赖 agent-core；仅用于 Agent 登录校验密码与状态。
  */
-@TableName("site_user")
+@TableName("agent_user")
 public class AgentUserEntity extends AbstractAuditableEntity {
 
     private Long agentId;

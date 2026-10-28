@@ -10,6 +10,6 @@ import org.apache.ibatis.annotations.Param;
 public interface AgentAiConversationMapper extends BaseMapper<AgentAiConversationEntity> {
 
     /** 物理删除会话行，绕过 {@code @TableLogic}。调用前须已删除其消息（外键 RESTRICT）。 */
-    @Delete("DELETE FROM site_ai_conversation WHERE id = #{id}")
+    @Delete("DELETE FROM agent_ai_conversation WHERE id = #{id}")
     int deleteByIdPhysical(@Param("id") long id);
 }
