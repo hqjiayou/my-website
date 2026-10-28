@@ -3,6 +3,7 @@ import type {
   SharedConversation,
   AgentAiChatRequest,
   AgentAiConversation,
+  AgentAiModelModes,
   AgentAiMessage,
   AgentAiSearchHit,
   AgentAiShare,
@@ -150,6 +151,13 @@ export const agentAiApi = {
       .get<HttpMessageBody<AgentKnowledgeDocumentDetail>>(
         `/api/agent/${agentId}/ai/knowledge-documents/${documentId}`,
       )
+      .then(unwrapData)
+  },
+
+  /** 雙模式可用性：每模式一項（available + 主用模型名 label）。 */
+  getModelModes(agentId: string) {
+    return httpClient
+      .get<HttpMessageBody<AgentAiModelModes>>(`/api/agent/${agentId}/ai/model-modes`)
       .then(unwrapData)
   },
 

@@ -29,6 +29,8 @@ export interface AiModelEntry {
   defaultEntry: boolean
   version: number
   updatedAt: string | null
+  /** 双模式归属：KEY 直连 / CLI 代理池。旧数据后端缺省 KEY。 */
+  mode: string
 }
 
 export interface AiModelEntryWriteInput {
@@ -41,6 +43,7 @@ export interface AiModelEntryWriteInput {
   enabled: boolean
   defaultEntry: boolean
   version?: number | null
+  mode?: string
 }
 
 export const AI_KB_STATUS = {

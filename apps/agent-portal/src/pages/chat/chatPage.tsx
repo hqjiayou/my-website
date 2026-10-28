@@ -8,7 +8,7 @@ import { useSidebarExtra } from '@/components/sidebarExtra'
 import { resolvePortalAgentId } from '@/config/env'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
-import type { AgentAiCitation, AgentAiConversation, AgentAiDocument, AgentAiMessage } from '@/types/api'
+import type { AgentAiCitation, AgentAiConversation, AgentAiDocument, AgentAiMessage, AgentAiModelModes } from '@/types/api'
 import { formatSimilarityPercent } from '@/utils/formatSimilarity'
 import { errorMessage } from '@/utils/http/apiError'
 
@@ -206,6 +206,42 @@ export function ChatPage() {
   const routeConversationId = useParams().conversationId
   const routeId = readRouteConversationId(routeConversationId)
   const site = useMemo(() => resolvePortalAgentId(useAuthStore.getState().site?.agentId), [])
+
+  // 雙模式（Key 直連 / CLI 代理池）：記住上次選擇；可用性由服務端 model-modes 決定，
+  // 選中的模式未配置時自動退到另一可用模式（不改使用者的保存偏好）。
+  const [mode, setMode] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem('portal-ai-mode') || 'KEY'
+    } catch {
+      return 'KEY'
+    }
+  })
+  const [modelModes, setModelModes] = useState<AgentAiModelModes | null>(null)
+  useEffect(() => {
+    if (!site.ok) return
+    let cancelled = false
+    agentAiApi
+      .getModelModes(site.agentId)
+      .then((data) => {
+        if (!cancelled) setModelModes(data)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [site])
+  const modeOption = (value: string) => modelModes?.modes.find((item) => item.mode === value)
+  const otherMode = mode === 'KEY' ? 'CLI' : 'KEY'
+  const effectiveMode =
+    modeOption(mode)?.available === false && modeOption(otherMode)?.available ? otherMode : mode
+  const selectMode = (value: string) => {
+    setMode(value)
+    try {
+      window.localStorage.setItem('portal-ai-mode', value)
+    } catch {
+      // 存儲不可用時僅本次會話生效
+    }
+  }
   const displayName = useAuthStore((state) => state.user?.displayName || state.user?.username || '')
   const { setExtra, closeDrawer } = useSidebarExtra()
   useKeyboardInset()
@@ -728,6 +764,7 @@ export function ChatPage() {
         site.agentId,
         {
           message: trimmed,
+          mode: effectiveMode,
           ...(conversationId ? { conversationId } : {}),
           ...(images.length
             ? { attachments: images.map((image) => ({ mediaType: image.mediaType, data: image.data })) }
@@ -1087,6 +1124,28 @@ export function ChatPage() {
             ))}
           </ul>
         ) : null}
+      <div className="mb-2 flex items-center justify-end">
+        <div className="flex rounded-full border border-gpt-line bg-gpt-canvas p-0.5 text-xs" role="group" aria-label="模型模式">
+          {(['KEY', 'CLI'] as const).map((value) => {
+            const opt = modeOption(value)
+            const unavailable = opt ? !opt.available : false
+            const active = effectiveMode === value
+            return (
+              <button
+                key={value}
+                type="button"
+                disabled={unavailable}
+                title={unavailable ? '此模式尚未配置' : (opt?.label ?? undefined)}
+                onClick={() => selectMode(value)}
+                className={`rounded-full px-3 py-1 transition ${active ? 'bg-gpt-ink text-gpt-canvas' : 'text-gpt-muted'} ${unavailable ? 'cursor-not-allowed opacity-40' : ''}`}
+              >
+                {value === 'KEY' ? 'Key' : 'CLI'}
+                {active && opt?.label ? <span className="ml-1 opacity-70">{opt.label}</span> : null}
+              </button>
+            )
+          })}
+        </div>
+      </div>
       <div className="relative flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer transition focus-within:border-gpt-muted">
         <input
           ref={fileRef}

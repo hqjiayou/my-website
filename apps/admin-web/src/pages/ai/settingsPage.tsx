@@ -20,6 +20,7 @@ type Draft = {
   embeddingSpec: string
   enabled: boolean
   defaultEntry: boolean
+  mode: string
   version: number | null
   apiKeyHint: string | null
 }
@@ -35,6 +36,7 @@ function emptyDraft(makeDefault: boolean): Draft {
     embeddingSpec: '',
     enabled: true,
     defaultEntry: makeDefault,
+    mode: 'KEY',
     version: null,
     apiKeyHint: null,
   }
@@ -71,6 +73,7 @@ function draftFromEntry(entry: AiModelEntry): Draft {
     embeddingSpec: entry.embeddingSpec ?? '',
     enabled: entry.enabled,
     defaultEntry: entry.defaultEntry,
+    mode: entry.mode ?? 'KEY',
     version: entry.version,
     apiKeyHint: entry.apiKeyHint,
   }
@@ -115,6 +118,7 @@ export function AiSettingsPage() {
         embeddingSpec: entry.embeddingSpec,
         enabled: true,
         defaultEntry: true,
+        mode: entry.mode ?? 'KEY',
         version: entry.version,
       }),
     onSuccess: () => {
@@ -166,6 +170,7 @@ export function AiSettingsPage() {
       embeddingSpec: draft.embeddingSpec.trim() || null,
       enabled: draft.enabled,
       defaultEntry: draft.defaultEntry,
+      mode: draft.mode,
       version: draft.version,
     }
     if (draft.apiKey.trim()) body.apiKey = draft.apiKey.trim()
@@ -193,6 +198,7 @@ export function AiSettingsPage() {
                   </span>
                   <span className="text-xs text-slate-500">
                     {entry.defaultEntry ? t('settings.defaultBadge') : null}
+                    {` ${entry.mode === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}`}
                     {!entry.enabled ? ` ${t('settings.disabledBadge')}` : null}
                     {entry.apiKeyConfigured ? ` ${entry.apiKeyHint}` : null}
                   </span>
@@ -323,6 +329,19 @@ export function AiSettingsPage() {
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-800">{t('settings.mode')}</span>
+              <select
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={draft.mode}
+                disabled={!canUpdate}
+                onChange={(event) => setDraft({ ...draft, mode: event.target.value })}
+              >
+                <option value="KEY">{t('settings.modeKey')}</option>
+                <option value="CLI">{t('settings.modeCli')}</option>
+              </select>
+              <span className="mt-1 block text-xs text-slate-500">{t('settings.modeHint')}</span>
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-800">{t('settings.embeddingSpec')}</span>
