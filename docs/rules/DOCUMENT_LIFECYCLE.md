@@ -46,12 +46,12 @@ source_of_truth: <path or "code">
 | 已确认事实 | CURRENT_STATE / SPEC / CONTRACT |
 | 长期技术决策 | ADR（`docs/decisions/`） |
 | 尚未解决 | GitHub Issue |
-| 分析过程本身 | analysis/archive |
+| 分析过程本身 | 不再入仓归档（原 `analysis/` 已于 2026-10-29 移除）；结论按上行入仓，过程留 git 历史 |
 
 Analysis **不得**充当 TODO tracker、当前架构规范或 Issue tracker。
 
 ## Instruction 规则
 
-- 一次性 Agent 指令 → `implementation-history/` 或 `workflows/instructions/archive/`
+- 一次性 Agent 指令 → `workflows/instructions/archive/`（原 `implementation-history/` 已于 2026-10-29 移除）
 - 可复用方法 → `workflows/instructions/templates/`（去掉过时文件名/完成度/Issue）
 - Instruction **不得拥有**产品事实权威（枚举、API、完成度）

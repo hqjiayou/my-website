@@ -4,7 +4,7 @@
 artifact_type: REFERENCE
 status: CURRENT
 owner: docs-governance
-last_verified: 2026-10-28
+last_verified: 2026-10-29
 ```
 
 代码、Flyway、测试优先于文档。未完成的工作只记在 GitHub Issues。
@@ -33,9 +33,9 @@ last_verified: 2026-10-28
 | 站点用户端做到哪 | 全栈 [`overview/CURRENT_STATE.md`](./overview/CURRENT_STATE.md) 的 AI／Admin Web 行（`apps/agent-portal` 无独立 CURRENT_STATE 分册） |
 | Java 后端做到哪 | [`website-services/CURRENT_STATE.md`](./website-services/CURRENT_STATE.md) |
 
-后端域摘要是这格的分册，不另起完成度：[`AUTH.md`](./website-services/AUTH.md)、[`RBAC.md`](./website-services/RBAC.md)、[`AGENT.md`](./website-services/AGENT.md)、[`MEDIA.md`](./website-services/MEDIA.md)、[`CONTENT.md`](./website-services/CONTENT.md)（Reservation 已于 2026-10-27 删除，其规格已归档至 [`archive/website-services/RESERVATION.md`](./archive/website-services/RESERVATION.md)）、[`PERSISTENCE.md`](./website-services/PERSISTENCE.md)。
+后端域摘要是这格的分册，不另起完成度：[`AUTH.md`](./website-services/AUTH.md)、[`RBAC.md`](./website-services/RBAC.md)、[`AGENT.md`](./website-services/AGENT.md)、[`MEDIA.md`](./website-services/MEDIA.md)、[`CONTENT.md`](./website-services/CONTENT.md)（Reservation 已于 2026-10-27 删除，其规格文档已于 2026-10-29 随历史文档一并移除，见 git 历史）、[`PERSISTENCE.md`](./website-services/PERSISTENCE.md)。
 
-不要从这些文件读「现在」：`总览/当前功能完成度总览.md`、`总览/后端开发路线图与阶段状态.md`、`总览/后端整体架构总览.md`、`设计文档/基础架构/整体架构说明.md`、`audit/`、`implementation-history/`、`archive/`。它们只跳转或保留当时文字。
+原 `总览/`、`设计文档/`、`audit/`、`implementation-history/`、`archive/`、`analysis/` 等历史文档已于 2026-10-29 整体移除（见本页「历史」节）；需要查当时文字看 git 历史，不要从旧总览/旧设计读「现在」。
 
 ---
 
@@ -47,10 +47,9 @@ last_verified: 2026-10-28
 
 | 功能 | 正文 | 说明 |
 |------|------|------|
-| Maven 谁依赖谁 | [`website-services/总览/模块职责与依赖边界.md`](./website-services/总览/模块职责与依赖边界.md) | 依赖表以这份为准 |
-| 各 Java 模块做什么 | [`website-services/设计文档/基础架构/架构设计.md`](./website-services/设计文档/基础架构/架构设计.md) | 长文；完成度仍回「现在」 |
-| 单模块目录与文件名 | [`website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md`](./website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md) | Java 新文件先看这篇 |
-| 包名 | [`website-services/设计文档/基础架构/后端包结构与命名规范V1.md`](./website-services/设计文档/基础架构/后端包结构与命名规范V1.md) | |
+| Maven 谁依赖谁 | [`services/website-services/README.md`](../services/website-services/README.md) | 模块树与依赖图以该 README 与各 `pom.xml` 为准；原《模块职责与依赖边界》已于 2026-10-29 移除，见 git 历史 |
+| 各 Java 模块做什么 | [`website-services/ARCHITECTURE.md`](./website-services/ARCHITECTURE.md) | 原《架构设计》长文已于 2026-10-29 移除，见 git 历史；完成度仍回「现在」 |
+| 单模块目录、文件名与包名 | [`.cursor/rules/backend-structure.mdc`](../.cursor/rules/backend-structure.mdc) | Java 新文件先看这条规则；原《单模块文件结构与AI开发约束规则 V1》《后端包结构与命名规范 V1》已于 2026-10-29 移除，见 git 历史与现行代码包结构 |
 | 管理端目录、路由、样式 | [`admin-web/开发规范.md`](./admin-web/开发规范.md) | 栈摘要在 [`admin-web/ARCHITECTURE.md`](./admin-web/ARCHITECTURE.md) |
 
 ### 认证、权限、数据、AI
@@ -63,15 +62,14 @@ last_verified: 2026-10-28
 | 状态枚举 | [`contracts/STATUS_ENUMS.md`](./contracts/STATUS_ENUMS.md) |
 | 错误体 | [`contracts/ERROR_CONTRACT.md`](./contracts/ERROR_CONTRACT.md) |
 | 分页 | [`contracts/PAGINATION_CONTRACT.md`](./contracts/PAGINATION_CONTRACT.md) |
-| 角色与菜单规则 | [`website-services/设计文档/权限与后台管理/阶段5A-Admin-RBAC权限体系详细设计.md`](./website-services/设计文档/权限与后台管理/阶段5A-Admin-RBAC权限体系详细设计.md)、[`阶段5E-菜单权限与导航说明.md`](./website-services/设计文档/权限与后台管理/阶段5E-菜单权限与导航说明.md)。菜单写仍延期 |
+| 角色与菜单规则 | [`website-services/RBAC.md`](./website-services/RBAC.md) | 菜单写仍延期；原阶段 5A/5E 长文已于 2026-10-29 移除，见 git 历史 |
 | 表结构字典 | [`website-services/数据字典/`](./website-services/数据字典/)。与 Flyway 冲突时以 Flyway 为准。`docs/数据字典/README.md` 只是跳转 |
-| 持久层写法与现行表 | [`website-services/设计文档/数据与持久层/Java持久层设计V1.md`](./website-services/设计文档/数据与持久层/Java持久层设计V1.md)。表以 Flyway 为准；《数据库模型设计 V1》文首「现行模型」是对照结论，第 4.4 节以后的旧表名不要当现表 |
-| 接口消息语言 | [`website-services/设计文档/认证与安全/后端多语言支持策略设计V1.md`](./website-services/设计文档/认证与安全/后端多语言支持策略设计V1.md) |
-| AI 执行（Python 不持有业务真相） | [`ADR-0004`](./decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](./decisions/ADR-0005-java-business-truth-python-ai-execution.md)、[`Agent服务技术选型与架构设计V1.md`](./website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md) |
+| 持久层写法与现行表 | [`website-services/PERSISTENCE.md`](./website-services/PERSISTENCE.md)、[`website-services/数据字典/`](./website-services/数据字典/) | 表以 Flyway 为准；原《Java持久层设计 V1》《数据库模型设计 V1》已于 2026-10-29 移除，见 git 历史 |
+| AI 执行（Python 不持有业务真相） | [`ADR-0004`](./decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](./decisions/ADR-0005-java-business-truth-python-ai-execution.md) | 原《Agent 服务技术选型与架构设计 V1》已于 2026-10-29 移除，见 git 历史 |
 | 核心域禁止 mock 回退 | [`ADR-0001`](./decisions/ADR-0001-core-domains-force-real-api.md)、[`rules/MOCK_POLICY.md`](./rules/MOCK_POLICY.md) |
 | 媒体 object key | [`ADR-0003`](./decisions/ADR-0003-media-server-generated-object-key.md) |
 
-`设计文档/认证与安全/阶段4*.md`、`设计文档/权限与后台管理/阶段5B–5D*.md` 是落地记录。约束已经收进上面的契约、ADR 和 5A/5E 时，不要再把阶段文当成第二份现状。
+原 `设计文档/` 的阶段 4/5 落地记录已于 2026-10-29 移除；约束以契约、ADR 与各域摘要为准，不要再把 git 历史里的阶段文当成第二份现状。
 
 ### 怎么跑、怎么改文档
 
@@ -81,7 +79,7 @@ last_verified: 2026-10-28
 | 环境变量 | [`operations/ENVIRONMENT_VARIABLES.md`](./operations/ENVIRONMENT_VARIABLES.md) |
 | 部署 | [`operations/DEPLOYMENT.md`](./operations/DEPLOYMENT.md) |
 | 安全边界 | [`operations/SECURITY.md`](./operations/SECURITY.md) |
-| WSL / Docker 只谈基础设施 | [`website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](./website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。启动命令以本地开发那篇为准 |
+| WSL / Docker 基础设施 | [`operations/LOCAL_DEVELOPMENT.md`](./operations/LOCAL_DEVELOPMENT.md) | 原 WSL/Docker 专项文档已于 2026-10-29 移除；启动命令以本地开发那篇为准 |
 | 测试策略 | [`testing/TEST_STRATEGY.md`](./testing/TEST_STRATEGY.md)。浏览器 E2E 已落地（PR #111），细则见 [`testing/E2E_GOLDEN_PATHS.md`](./testing/E2E_GOLDEN_PATHS.md) |
 | 文档状态词、事实优先级、废弃 | [`rules/DOCUMENT_LIFECYCLE.md`](./rules/DOCUMENT_LIFECYCLE.md)、[`rules/SOURCE_OF_TRUTH.md`](./rules/SOURCE_OF_TRUTH.md)、[`rules/DEPRECATION_POLICY.md`](./rules/DEPRECATION_POLICY.md)、[`rules/API_CHANGE_POLICY.md`](./rules/API_CHANGE_POLICY.md) |
 | 可复用任务模板 | [`workflows/instructions/templates/`](./workflows/instructions/templates/) |
@@ -92,16 +90,13 @@ last_verified: 2026-10-28
 
 ## 历史
 
-只保留当时的文字，不改结论，也不用来判断现在。
+原历史目录已于 **2026-10-29 整体移除**：`implementation-history/`（2026-08 全功能实施包）、`audit/`（知识治理快照）、`archive/`（含 RESERVATION 规格与联调/审查记录）、`analysis/`（仓库调查）、`website-services/` 下的 `设计文档/`、`总览/`、`数据文档/`、`规则/`、`归档/`。共 63 个文件。需要查当时文字，用 git 历史（本 PR 之前的提交）。
+
+只剩一处仍在仓内的历史目录：
 
 | 目录 | 里面是什么 |
 |------|------------|
-| [`implementation-history/2026-08-full-function-implementation/`](./implementation-history/2026-08-full-function-implementation/) | 2026-08 那次全功能实施的指令、执行、验收 |
-| [`audit/`](./audit/) | 2026-08-09 知识治理快照。见 [`audit/README.md`](./audit/README.md) |
-| [`archive/`](./archive/) | 已替换的前台设计、后端联调与审查 |
-| [`analysis/archive/`](./analysis/archive/) | 旧的仓库调查 |
 | [`workflows/instructions/archive/`](./workflows/instructions/archive/) | 用过的一次性指令 |
-| [`website-services/归档/`](./website-services/归档/) | 后端树内归档说明 |
 
 ---
 
@@ -112,19 +107,12 @@ last_verified: 2026-10-28
 | admin-web | `apps/admin-web` | `admin-web/CURRENT_STATE.md` | `admin-web/开发规范.md` |
 | agent-portal | `apps/agent-portal`（站点用户端；`apps/site-web` 已于 2026-10-28 移除） | 全栈 `overview/CURRENT_STATE.md` | `contracts/AGENT_API_CONTRACT.md`、`contracts/AUTH_CONTRACT.md` |
 | website-services | `services/website-services` | `website-services/CURRENT_STATE.md` | 上表「平台与模块边界」+ `contracts/` |
-| agent-services | `services/agent-services` | 全栈 `CURRENT_STATE` 的 AI 行 | ADR-0004、ADR-0005、Agent 设计 V1 |
+| agent-services | `services/agent-services` | 全栈 `CURRENT_STATE` 的 AI 行 | ADR-0004、ADR-0005 |
 
 没有 `docs/agent-services/`。不要再为它单开一层目录。
 
-## 还停在阶段原文里的设计
+## 已移除的阶段原文与历史设计
 
-这些文件保持当时的文字，现行结论在各自文首或域摘要里，不要从中间的「待开始 / 占位 / 下一阶段」读现状：
-
-| 文件 | 现行结论写在 |
-|------|----------------|
-| `设计文档/认证与安全/阶段4A` 至 `4H` | 文首或 [`website-services/AUTH.md`](./website-services/AUTH.md) |
-| `设计文档/权限与后台管理/阶段5B`–`5D` | [`website-services/RBAC.md`](./website-services/RBAC.md) 与 5A 文首 |
-| `设计文档/AI/` 第 1、4、5、11 节 | 该文第 0 节 |
-| `audit/`、`archive/`、`implementation-history/` | 历史，不改 |
+原「还停在阶段原文里的设计」（`设计文档/` 阶段 4/5 原文、AI 设计长文等）已于 2026-10-29 随历史文档整体移除。现行结论一律以本页「现在」「规格」两格与各域摘要（[`website-services/AUTH.md`](./website-services/AUTH.md)、[`website-services/RBAC.md`](./website-services/RBAC.md) 等）为准；查原文看 git 历史。
 
 `rules/` 是写文档和改 API 的规矩，不是系统事实，这次没有改条文。

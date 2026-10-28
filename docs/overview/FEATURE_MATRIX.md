@@ -21,7 +21,7 @@ last_verified: 2026-10-28
 | Appearance get/put | ✅ | ✅ | ✅ | FORCE REAL | — | ✅+PG | ❌ | COMPLETE_V1 |
 | Media | ✅ | ✅ | ✅ | FORCE REAL | — | ✅ | ✅*（路径 03） | COMPLETE_V1 |
 | Content | ✅ | ✅ | ✅ | FORCE REAL | — | ✅ | ✅*（路径 03） | COMPLETE_V1 |
-| ~~Reservation admin~~ | ❌ | ❌ | ❌ | ❌ | — | — | ❌ | REMOVED（2026-10-27 整包删除；规格归档 `archive/website-services/RESERVATION.md`） |
+| ~~Reservation admin~~ | ❌ | ❌ | ❌ | ❌ | — | — | ❌ | REMOVED（2026-10-27 整包删除；规格文档已于 2026-10-29 随历史文档一并移除，见 git 历史） |
 | AI admin Prompt/KB/Conversation/Preview | ✅ | ✅（迁移至 V35） | ✅ | FORCE REAL | 对话在 Portal | ✅ MVC | ❌ | COMPLETE_V1_ADMIN_SCOPE |
 | AI LIVE provider | path ✅ / env | — | agent+admin SSE | preview | ✅ Portal 对话 | contract IT | ❌ | RESOLVED（2026-10-25 本机实证；部署环境需各自配置 key，见 CURRENT_STATE #5） |
 | Analytics/System | ❌ | ❌ | ❌ | placeholder | — | — | ❌ | PLACEHOLDER |

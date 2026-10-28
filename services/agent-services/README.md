@@ -2,7 +2,7 @@
 
 **Python 3.13 + FastAPI + Pydantic AI 2.54**（`pydantic-ai-slim[google,mcp]`，禁止 LangChain / LiteLLM）。原则：**Java owns business truth, Python owns AI execution**（ADR-0005）。
 
-- 设计：[`docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md`](../../docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)
+- 设计：[`ADR-0004`](../../docs/decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](../../docs/decisions/ADR-0005-java-business-truth-python-ai-execution.md)（原《Agent 服务技术选型与架构设计 V1》已于 2026-10-29 移除，见 git 历史）
 - 决策：ADR-0004（无 Provider 诚实失败）、ADR-0005（职责边界）
 
 ## 契约

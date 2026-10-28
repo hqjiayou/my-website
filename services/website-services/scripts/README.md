@@ -46,7 +46,7 @@ psql -h localhost -p 5432 -U postgres -d postgres -v ON_ERROR_STOP=1 -f scripts/
 
 # 持久层验证库：`my_website_3c_verify`
 
-用于 **[持久层真实 PostgreSQL 验证说明](../../../docs/website-services/数据文档/持久层真实PostgreSQL验证说明.md)**（Flyway V1 + Mapper 回归测试），与日常开发库 **`my_website_dev`** 分离。
+用于持久层真实 PostgreSQL 验证（Flyway V1 + Mapper 回归测试；原《持久层真实 PostgreSQL 验证说明》已于 2026-10-29 移除，见 git 历史），与日常开发库 **`my_website_dev`** 分离。
 
 在 **`local-postgres`**（或任一可达 **`localhost:5432`** 的实例）上建库示例：
 
@@ -62,7 +62,7 @@ docker exec -i local-postgres psql -U mywebsite -d postgres -c "CREATE DATABASE 
 
 # RBAC 种子验证库：`my_website_rbac_seed_verify`
 
-用于 **[阶段5C.1 RBAC 种子真实 PostgreSQL 迁移验证](../../../docs/website-services/数据文档/阶段5C.1-RBAC种子真实PostgreSQL迁移验证.md)**（Flyway **V1 + V2** 与种子数据），与开发库、持久层验证库分离。
+用于阶段 5C.1 RBAC 种子真实 PostgreSQL 迁移验证（Flyway **V1 + V2** 与种子数据；原验证说明已于 2026-10-29 移除，见 git 历史），与开发库、持久层验证库分离。
 
 ```bash
 docker exec -i local-postgres psql -U hqjiayou -d postgres -v ON_ERROR_STOP=1 \

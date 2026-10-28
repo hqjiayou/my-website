@@ -149,4 +149,4 @@ AGENT_PYTHON_CONTRACT_IT=true mvn -pl agent/agent-core test -Dtest=HttpAgentClie
 
 浏览器 E2E（Playwright，独立一次性栈）：见 [`../testing/E2E_GOLDEN_PATHS.md`](../testing/E2E_GOLDEN_PATHS.md) 与 `apps/admin-web/e2e/`。
 
-WSL / Docker 细节：[`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](../website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。
+WSL / Docker 细节以本篇与 `docker-compose.yml` 为准（原 WSL 专项文档已于 2026-10-29 移除，见 git 历史）。

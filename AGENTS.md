@@ -9,7 +9,7 @@
 | **Current Reality** | 代码 + DB/Flyway → [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md) → 域 `CURRENT_STATE` → [`docs/contracts/`](docs/contracts/) → [`docs/decisions/`](docs/decisions/)（ADR） |
 | **Open Work** | **GitHub Issues**（[`docs/overview/ROADMAP.md`](docs/overview/ROADMAP.md) 只留 Issue 号） |
 | **High-level Direction** | ROADMAP |
-| **Historical Evidence** | `docs/audit/` · Execution/Verification · `implementation-history/` · `archive/` · `analysis/archive/` — **不指导未来实施** |
+| **Historical Evidence** | 已于 2026-10-29 整体移除（原 `docs/audit/`、`docs/implementation-history/`、`docs/archive/`、`docs/analysis/`），需要查当时文字看 git 历史 — **不指导未来实施** |
 
 ## 默认阅读顺序（任务开始前）
 
@@ -21,7 +21,7 @@
 6. 未决工作：GitHub Issues（经 ROADMAP 指针）
 7. **当前** Task Brief / Instruction（若有）
 
-以下**默认不得**作为当前实现依据：`docs/implementation-history/`、`docs/audit/`、`docs/analysis/`、`docs/archive/`。文档先看 [`docs/README.md`](docs/README.md) 的三格（现在 / 规格 / 历史），不要沿总览和整体架构说明再往下找第二份现状。
+以下**默认不得**作为当前实现依据：git 历史中的旧文档（原 `docs/implementation-history/`、`docs/audit/`、`docs/analysis/`、`docs/archive/` 已于 2026-10-29 移除）。文档先看 [`docs/README.md`](docs/README.md) 的三格（现在 / 规格 / 历史），不要沿总览和整体架构说明再往下找第二份现状。
 
 ## 模块职责（摘要）
 
@@ -70,15 +70,12 @@
 修改 `services/website-services/` 前阅读：
 
 1. [`docs/website-services/CURRENT_STATE.md`](docs/website-services/CURRENT_STATE.md)
-2. [`单模块文件结构与AI开发约束规则V1.md`](docs/website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md)（结构总纲，冲突时以此为准）
-3. [`.cursor/rules/backend-structure.mdc`](.cursor/rules/backend-structure.mdc)
-4. [`后端包结构与命名规范V1.md`](docs/website-services/设计文档/基础架构/后端包结构与命名规范V1.md)
+2. [`.cursor/rules/backend-structure.mdc`](.cursor/rules/backend-structure.mdc)（结构与命名以此为准；原《单模块文件结构与AI开发约束规则 V1》《后端包结构与命名规范 V1》已于 2026-10-29 移除，见 git 历史）
 
 修改 `services/agent-services/` 前阅读：
 
 1. [`docs/decisions/ADR-0004`](docs/decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](docs/decisions/ADR-0005-java-business-truth-python-ai-execution.md)
-2. [`Agent服务技术选型与架构设计V1.md`](docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)
-3. [`.cursor/rules/agent-services.mdc`](.cursor/rules/agent-services.mdc)
+2. [`.cursor/rules/agent-services.mdc`](.cursor/rules/agent-services.mdc)（原《Agent 服务技术选型与架构设计 V1》已于 2026-10-29 移除，见 git 历史）
 
 ## Menu / 5E 现状
 

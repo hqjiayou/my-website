@@ -11,6 +11,6 @@ last_verified: 2026-10-10
 | 问题 | 正文 |
 |------|------|
 | 全栈进程 | [`../overview/SYSTEM_ARCHITECTURE.md`](../overview/SYSTEM_ARCHITECTURE.md) |
-| Maven 依赖 | [`总览/模块职责与依赖边界.md`](./总览/模块职责与依赖边界.md) |
-| 模块说明 | [`设计文档/基础架构/架构设计.md`](./设计文档/基础架构/架构设计.md) |
-| 单模块文件 | [`设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md`](./设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md) |
+| Maven 依赖 | [`../../services/website-services/README.md`](../../services/website-services/README.md)（模块树与依赖图；原《总览/模块职责与依赖边界》已于 2026-10-29 移除，见 git 历史） |
+| 模块说明 | 本页与 [`../../services/website-services/README.md`](../../services/website-services/README.md)（原《设计文档/基础架构/架构设计》已于 2026-10-29 移除，见 git 历史） |
+| 单模块文件 | [`.cursor/rules/backend-structure.mdc`](../../.cursor/rules/backend-structure.mdc)（原 V1 长文已于 2026-10-29 移除，见 git 历史） |

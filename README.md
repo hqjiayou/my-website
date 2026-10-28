@@ -67,8 +67,6 @@ Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。
 
 - [`docs/website-services/README.md`](docs/website-services/README.md)（文档落在哪一格）
 - [`docs/website-services/ARCHITECTURE.md`](docs/website-services/ARCHITECTURE.md)（跳转到架构正文）
-- [`docs/website-services/设计文档/基础架构/架构设计.md`](docs/website-services/设计文档/基础架构/架构设计.md)
-- [`docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md`](docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md)
 - [`docs/website-services/数据字典/`](docs/website-services/数据字典/)（表级字典，与 Flyway 对齐）
 - [`services/website-services/README.md`](services/website-services/README.md)
 
@@ -86,7 +84,7 @@ Python 3.13 + FastAPI + Pydantic AI 2.54 的 AI Execution Runtime，默认端口
 
 公开探活：`GET /health`（只表示进程存活）。缺 `AGENT_INTERNAL_SERVICE_TOKEN` 时拒绝启动；缺 `AI_MODEL` 时仍启动，chat 返回 503。
 
-详见 [`services/agent-services/README.md`](services/agent-services/README.md) 与设计文档 [`docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md`](docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)。
+详见 [`services/agent-services/README.md`](services/agent-services/README.md)（原 Agent 设计文档已于 2026-10-29 移除，见 git 历史）。
 
 ## 后端调用关系
 
@@ -215,8 +213,6 @@ Java 21 + Spring Boot 3.5.14 的 Maven 多模組後端工程。
 
 - [`docs/website-services/README.md`](docs/website-services/README.md)（文件落在哪一格）
 - [`docs/website-services/ARCHITECTURE.md`](docs/website-services/ARCHITECTURE.md)（跳轉到架構正文）
-- [`docs/website-services/设计文档/基础架构/架构设计.md`](docs/website-services/设计文档/基础架构/架构设计.md)
-- [`docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md`](docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md)
 - [`docs/website-services/数据字典/`](docs/website-services/数据字典/)（表級字典，與 Flyway 對齊）
 - [`services/website-services/README.md`](services/website-services/README.md)
 
@@ -234,7 +230,7 @@ Python 3.13 + FastAPI + Pydantic AI 2.54 的 AI Execution Runtime，預設連接
 
 公開探活：`GET /health`（只表示行程存活）。缺 `AGENT_INTERNAL_SERVICE_TOKEN` 時拒絕啟動；缺 `AI_MODEL` 時仍啟動，chat 回傳 503。
 
-詳見 [`services/agent-services/README.md`](services/agent-services/README.md) 與設計文件 [`docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md`](docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)。
+詳見 [`services/agent-services/README.md`](services/agent-services/README.md)（原 Agent 設計文件已於 2026-10-29 移除，見 git 歷史）。
 
 ## 後端呼叫關係
 
@@ -301,7 +297,7 @@ uv run agent-services
 
 應用在 **`services/website-services/.env`**（範本 `.env.example`）中設定 JDBC / Redis / MinIO 等；與 **local-stack** 目錄下的 `.env` **分開維護**，也與 **`services/agent-services/.env`** 分開。
 
-更多說明見 [`docs/operations/LOCAL_DEVELOPMENT.md`](docs/operations/LOCAL_DEVELOPMENT.md) 與 [`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。
+更多說明見 [`docs/operations/LOCAL_DEVELOPMENT.md`](docs/operations/LOCAL_DEVELOPMENT.md)（原 WSL/Docker 专项文档已于 2026-10-29 移除，见 git 历史）。
 
 
 ```bash
@@ -321,4 +317,4 @@ uv run agent-services
 
 应用在 **`services/website-services/.env`**（范本 `.env.example`）中配置 JDBC / Redis / MinIO 等；与 **local-stack** 目录下的 `.env` **分开维护**，也与 **`services/agent-services/.env`** 分开。
 
-更多说明见 [`docs/operations/LOCAL_DEVELOPMENT.md`](docs/operations/LOCAL_DEVELOPMENT.md) 与 [`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。
+更多说明见 [`docs/operations/LOCAL_DEVELOPMENT.md`](docs/operations/LOCAL_DEVELOPMENT.md)（原 WSL/Docker 专项文档已于 2026-10-29 移除，见 git 历史）。

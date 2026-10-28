@@ -66,8 +66,6 @@ Java 21 + Spring Boot 3.5.14 の Maven マルチモジュール。
 
 - [`docs/website-services/README.md`](docs/website-services/README.md)（文書がどの棚に属するか）
 - [`docs/website-services/ARCHITECTURE.md`](docs/website-services/ARCHITECTURE.md)（アーキテクチャ本文へのジャンプ）
-- [`docs/website-services/设计文档/基础架构/架构设计.md`](docs/website-services/设计文档/基础架构/架构设计.md)
-- [`docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md`](docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md)
 - [`docs/website-services/数据字典/`](docs/website-services/数据字典/)（テーブル辞書。Flyway と揃える）
 - [`services/website-services/README.md`](services/website-services/README.md)
 
@@ -85,7 +83,7 @@ Python 3.13 + FastAPI + Pydantic AI 2.54 の AI Execution Runtime。既定ポー
 
 公開の生存確認: `GET /health`（プロセスが生きていることだけ）。`AGENT_INTERNAL_SERVICE_TOKEN` が無いと起動を拒否する。`AI_MODEL` が無くても起動し、chat は 503 を返す。
 
-詳細は [`services/agent-services/README.md`](services/agent-services/README.md) と [`docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md`](docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)。
+詳細は [`services/agent-services/README.md`](services/agent-services/README.md) を参照（元の Agent 設計ドキュメントは 2026-10-29 に削除、git 履歴参照）。
 
 ## 呼び出し関係
 
@@ -152,4 +150,4 @@ uv run agent-services
 
 JDBC / Redis / MinIO は **`services/website-services/.env`**（雛形は `.env.example`）に書く。**local-stack** 配下の `.env` とは分け、**`services/agent-services/.env`** とも分ける。
 
-続きは [`docs/operations/LOCAL_DEVELOPMENT.md`](docs/operations/LOCAL_DEVELOPMENT.md) と [`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。
+続きは [`docs/operations/LOCAL_DEVELOPMENT.md`](docs/operations/LOCAL_DEVELOPMENT.md) を参照（元の WSL/Docker 専用ドキュメントは 2026-10-29 に削除、git 履歴参照）。
