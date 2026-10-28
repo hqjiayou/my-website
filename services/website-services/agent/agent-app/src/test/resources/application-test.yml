@@ -51,7 +51,6 @@ mywebsite:
     # 由 AbstractAgentSpringBootTest DynamicPropertySource 覆盖为进程内 stub
     base-url: http://127.0.0.1:9
     internal-service-token: unused-until-overridden
-  agent:
     ai:
       rate-limit-enabled: true
       rate-limit-per-minute: 100
