@@ -34,10 +34,15 @@ public class RequestIdGatewayFilter implements GlobalFilter, Ordered {
         ServerWebExchange mutated = exchange.mutate().request(request).build();
 
         long startedNanos = System.nanoTime();
+        // 在响应提交前写入请求 ID：提交后响应头只读，doFinally 里再 set 会抛
+        // UnsupportedOperationException（ReadOnlyHttpHeaders）。beforeCommit 在提交
+        // 瞬间恰好执行一次，set 覆盖写也不会与下游 Servlet 的同头叠加成重复值。
+        mutated.getResponse().beforeCommit(() -> {
+            mutated.getResponse().getHeaders().set(HttpRequestCorrelation.X_REQUEST_ID, requestId);
+            return Mono.empty();
+        });
         return chain.filter(mutated)
                 .doFinally(signal -> {
-                    // 仅在响应完成时写入一次，避免与下游 Servlet 同头叠加导致重复 X-Request-Id。
-                    mutated.getResponse().getHeaders().set(HttpRequestCorrelation.X_REQUEST_ID, requestId);
                     long costMs = (System.nanoTime() - startedNanos) / 1_000_000L;
                     Route route = mutated.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
                     String routeLabel = route != null ? route.getId() : "unset";
