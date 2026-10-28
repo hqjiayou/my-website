@@ -65,7 +65,7 @@ def default_harness_directory() -> str:
 
 def assemble_harness(
     *,
-    site_id: str,
+    agent_id: str,
     message: str,
     prompt_profile: PromptProfile | None = None,
     retrieval_context: list[str] | None = None,
@@ -95,7 +95,7 @@ def assemble_harness(
         for item in tool_guidance
     )
     site_prompt, user_message = build_prompt_parts(
-        site_id,
+        agent_id,
         message,
         prompt_profile,
         retrieval_context,

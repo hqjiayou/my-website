@@ -35,11 +35,11 @@ async def test_client_sends_token_and_site_scoped_path() -> None:
     data = await _client_with(handler).get_site_summary("7")
     assert data["siteName"] == "Cake Shop"
     request = captured[0]
-    assert request.url.path == "/internal/site/v1/sites/7"
+    assert request.url.path == "/internal/agent/v1/agents/7"
     assert request.headers["X-Internal-Service-Token"] == "test-internal-token"
 
 
-async def test_client_encodes_site_id_and_hides_error_body() -> None:
+async def test_client_encodes_agent_id_and_hides_error_body() -> None:
     captured: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -55,7 +55,7 @@ async def test_client_encodes_site_id_and_hides_error_body() -> None:
     except BusinessApiError as exc:
         assert "secret-stack" not in str(exc)
         assert "HTTP 500" in str(exc)
-    assert b"/internal/site/v1/sites/7%2F..%2Fother/contents" in captured[0].url.raw_path
+    assert b"/internal/agent/v1/agents/7%2F..%2Fother/contents" in captured[0].url.raw_path
 
     try:
         await client.get_site_summary("7")

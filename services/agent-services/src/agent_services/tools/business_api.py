@@ -88,16 +88,16 @@ class BusinessApiClient:
             raise BusinessApiError(_business_error_message(body))
         return body.get("data")
 
-    def _site_path(self, site_id: str, suffix: str = "") -> str:
-        return f"/internal/site/v1/sites/{quote(site_id, safe='')}{suffix}"
+    def _site_path(self, agent_id: str, suffix: str = "") -> str:
+        return f"/internal/agent/v1/agents/{quote(agent_id, safe='')}{suffix}"
 
-    async def get_site_summary(self, site_id: str) -> Any:
-        return await self._request("GET", self._site_path(site_id))
+    async def get_site_summary(self, agent_id: str) -> Any:
+        return await self._request("GET", self._site_path(agent_id))
 
     async def list_site_contents(
-        self, site_id: str, content_type: str | None = None, limit: int = 20
+        self, agent_id: str, content_type: str | None = None, limit: int = 20
     ) -> Any:
         params: dict[str, Any] = {"limit": limit}
         if content_type:
             params["type"] = content_type
-        return await self._request("GET", self._site_path(site_id, "/contents"), params=params)
+        return await self._request("GET", self._site_path(agent_id, "/contents"), params=params)

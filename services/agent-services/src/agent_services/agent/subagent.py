@@ -87,24 +87,24 @@ class _DelegationBudget:
 def build_research_agent(
     model: Model,
     *,
-    site_id: str,
+    agent_id: str,
     retrieval: RetrievalService | None,
 ) -> Agent[None, str]:
     """只有知识搜索的子 agent。没有 delegate_task、业务工具、MCP 或 Todo。"""
-    return Agent(model, system_prompt=_RESEARCH_INSTRUCTIONS, toolsets=[build_knowledge_toolset(site_id, retrieval)])
+    return Agent(model, system_prompt=_RESEARCH_INSTRUCTIONS, toolsets=[build_knowledge_toolset(agent_id, retrieval)])
 
 
 def build_delegate_tool(
     model: Model,
     *,
-    site_id: str,
+    agent_id: str,
     retrieval: RetrievalService | None,
     max_per_run: int = 4,
     timeout_seconds: float = 60,
     max_requests: int = 6,
 ) -> FunctionToolset:
     """闭包持有本 run 的模型、检索、站点和委派预算。"""
-    research = build_research_agent(model, site_id=site_id, retrieval=retrieval)
+    research = build_research_agent(model, agent_id=agent_id, retrieval=retrieval)
     budget = _DelegationBudget(max_per_run=max_per_run, max_requests=max_requests)
     toolset = _DelegateToolset()
 

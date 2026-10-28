@@ -44,7 +44,7 @@ def _echoing_model() -> FunctionModel:
 async def _run_case(inputs: dict) -> str:
     outcome = await run_chat(
         _echoing_model(),
-        site_id=inputs["site_id"],
+        agent_id=inputs["agent_id"],
         message=inputs["message"],
         history=[ChatHistoryMessage(**h) for h in inputs.get("history", [])],
     )
@@ -58,13 +58,13 @@ async def test_evals_baseline_dataset() -> None:
         cases=[
             Case(
                 name="single-turn-reply",
-                inputs={"site_id": "1", "message": "hello"},
+                inputs={"agent_id": "1", "message": "hello"},
                 expected_output=None,
             ),
             Case(
                 name="multi-turn-uses-history",
                 inputs={
-                    "site_id": "1",
+                    "agent_id": "1",
                     "message": "what is my name?",
                     "history": [
                         {"role": "USER", "content": "my name is Tanaka"},

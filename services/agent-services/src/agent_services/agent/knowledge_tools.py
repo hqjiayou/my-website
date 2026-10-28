@@ -69,7 +69,7 @@ class KnowledgeSearchCollector:
 
 
 def build_knowledge_toolset(
-    site_id: str,
+    agent_id: str,
     retrieval: RetrievalService | None,
     *,
     embedder: EmbeddingClient | None = None,
@@ -92,7 +92,7 @@ def build_knowledge_toolset(
             return "Site knowledge search is unavailable."
         try:
             chunks = await retrieval.retrieve_chunks(
-                site_id=site_id,
+                agent_id=agent_id,
                 query=cleaned,
                 embedder=embedder,
                 model_selection=model_selection,

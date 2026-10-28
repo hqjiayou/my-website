@@ -1,6 +1,6 @@
 """业务 Function Tools（Phase 4）：模型可调用的站点业务操作。
 
-- site_id 由请求上下文闭包注入（trusted），永不接受模型生成的 site_id；
+- agent_id 由请求上下文闭包注入（trusted），永不接受模型生成的 agent_id；
 - 所有工具回调 Java internal API（业务真相源），失败向模型返回可读错误，不伪造成功。
 """
 
@@ -25,7 +25,7 @@ def _present_site_summary(summary: object) -> object:
 
 def build_business_toolset(
     settings: Settings,
-    site_id: str,
+    agent_id: str,
     *,
     client: BusinessApiClient | None = None,
 ) -> FunctionToolset | None:
@@ -42,7 +42,7 @@ def build_business_toolset(
     async def get_site_info() -> dict:
         """Get basic information about the current site (name, category tag, description)."""
         try:
-            return {"site": _present_site_summary(await client.get_site_summary(site_id))}
+            return {"site": _present_site_summary(await client.get_site_summary(agent_id))}
         except BusinessApiError as exc:
             return {"error": str(exc)}
 
@@ -54,7 +54,7 @@ def build_business_toolset(
             content_type: optional filter, one of hero/service/case/faq/news/about/cta.
         """
         try:
-            return {"contents": await client.list_site_contents(site_id, content_type)}
+            return {"contents": await client.list_site_contents(agent_id, content_type)}
         except BusinessApiError as exc:
             return {"error": str(exc)}
 

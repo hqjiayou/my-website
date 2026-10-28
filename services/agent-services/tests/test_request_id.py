@@ -25,7 +25,7 @@ def test_valid_request_id_is_visible_during_run() -> None:
     response = TestClient(_capturing_app(seen)).post(
         "/internal/v1/chat",
         headers={**TOKEN_HEADER, "X-Request-Id": "req-abc_123"},
-        json={"siteId": "1", "message": "hi"},
+        json={"agentId": "1", "message": "hi"},
     )
     assert response.status_code == 200
     assert seen == ["req-abc_123"]
@@ -38,7 +38,7 @@ def test_invalid_request_id_is_dropped() -> None:
     TestClient(_capturing_app(seen)).post(
         "/internal/v1/chat",
         headers={**TOKEN_HEADER, "X-Request-Id": "bad id\twith spaces"},
-        json={"siteId": "1", "message": "hi"},
+        json={"agentId": "1", "message": "hi"},
     )
     assert seen == [None]
 

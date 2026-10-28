@@ -29,7 +29,7 @@ from agent_services.schemas.stream import AgentStreamEvent
 class _FakeRetrieval:
     degraded = False
 
-    async def retrieve_chunks(self, *, site_id: str, query: str, **_kwargs: object) -> list[RetrievedChunk]:
+    async def retrieve_chunks(self, *, agent_id: str, query: str, **_kwargs: object) -> list[RetrievedChunk]:
         return [RetrievedChunk(source_id="kb:1", chunk_index=2, content="KB-FACT", score=0.9)]
 
 
@@ -44,7 +44,7 @@ def _has_tool_return(messages: list[ModelMessage]) -> bool:
 async def _collect(model: FunctionModel, **kwargs: object) -> list[AgentStreamEvent]:
     return [
         event
-        async for event in stream_chat_events(model, site_id="1", message="hours?", **kwargs)  # type: ignore[arg-type]
+        async for event in stream_chat_events(model, agent_id="1", message="hours?", **kwargs)  # type: ignore[arg-type]
     ]
 
 

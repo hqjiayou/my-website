@@ -15,7 +15,7 @@ MAX_SEARCH_TOP_K = 20
 
 
 class RetrievalUpsertRequest(BaseModel):
-    site_id: str = Field(alias="siteId", max_length=MAX_SITE_ID_LENGTH)
+    agent_id: str = Field(alias="agentId", max_length=MAX_SITE_ID_LENGTH)
     source_id: str = Field(alias="sourceId", max_length=MAX_SOURCE_ID_LENGTH)
     title: str = Field(default="", max_length=MAX_TITLE_LENGTH)
     content: str = Field(max_length=MAX_CONTENT_LENGTH)
@@ -33,7 +33,7 @@ class RetrievalSearchRequest(BaseModel):
     topK 缺省为 RetrievalService 的 DEFAULT_TOP_K；大于 20 时夹制到 20。
     """
 
-    site_id: str = Field(alias="siteId", max_length=MAX_SITE_ID_LENGTH)
+    agent_id: str = Field(alias="agentId", max_length=MAX_SITE_ID_LENGTH)
     query: str = Field(max_length=MAX_CONTENT_LENGTH)
     top_k: int = Field(default=DEFAULT_TOP_K, alias="topK")
     embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)

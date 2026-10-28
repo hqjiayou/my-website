@@ -66,7 +66,7 @@ def test_contract_test_model_off_allows_production() -> None:
 
 def test_request_without_token_is_401_flat_body() -> None:
     client = TestClient(create_app(make_settings()))
-    response = client.post("/internal/v1/chat", json={"siteId": "1", "message": "hello"})
+    response = client.post("/internal/v1/chat", json={"agentId": "1", "message": "hello"})
     assert response.status_code == 401
     body = response.json()
     # 契约：顶层扁平字段，无 detail 嵌套

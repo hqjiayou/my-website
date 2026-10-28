@@ -1,4 +1,4 @@
-"""检索服务：分块 → embedding → 向量存取；site_id 全链路强制。"""
+"""检索服务：分块 → embedding → 向量存取；agent_id 全链路强制。"""
 
 import logging
 import re
@@ -386,7 +386,7 @@ class RetrievalService:
     async def upsert_document(
         self,
         *,
-        site_id: str,
+        agent_id: str,
         source_id: str,
         title: str,
         content: str,
@@ -394,7 +394,7 @@ class RetrievalService:
     ) -> int:
         chunks = split_text(content)
         if not chunks:
-            await self._store.delete_document(site_id=site_id, source_id=source_id)
+            await self._store.delete_document(agent_id=agent_id, source_id=source_id)
             return 0
         if len(chunks) > MAX_UPSERT_CHUNKS:
             raise RetrievalChunkLimitExceeded(
@@ -405,7 +405,7 @@ class RetrievalService:
             raise RuntimeError("Embedding client is not configured.")
         embeddings = await client.embed_documents(chunks)
         return await self._store.upsert_document(
-            site_id=site_id,
+            agent_id=agent_id,
             source_id=source_id,
             title=title,
             chunks=chunks,
@@ -443,8 +443,8 @@ class RetrievalService:
             dimensions=new_dim, column_dimensions=column_dim, recreated=True
         )
 
-    async def delete_document(self, *, site_id: str, source_id: str) -> None:
-        await self._store.delete_document(site_id=site_id, source_id=source_id)
+    async def delete_document(self, *, agent_id: str, source_id: str) -> None:
+        await self._store.delete_document(agent_id=agent_id, source_id=source_id)
 
     def _resolve_rerank_model(self, selection: ModelSelection | None) -> Model | None:
         """请求里的模型入口优先；建不起来再用测试注入或进程 AI_MODEL。"""
@@ -497,7 +497,7 @@ class RetrievalService:
     async def search(
         self,
         *,
-        site_id: str,
+        agent_id: str,
         query: str,
         top_k: int = DEFAULT_TOP_K,
         embedder: EmbeddingClient | None = None,
@@ -509,7 +509,7 @@ class RetrievalService:
             raise RuntimeError("Embedding client is not configured.")
         embedding = await client.embed_query(query)
         vector_hits = apply_min_score(
-            await self._store.search(site_id=site_id, embedding=embedding, top_k=top_k),
+            await self._store.search(agent_id=agent_id, embedding=embedding, top_k=top_k),
             self._min_score,
         )
         terms = query_terms(query)
@@ -517,7 +517,7 @@ class RetrievalService:
         # 上面的嵌入和向量查询若失败会直接抛出，词法查询不会先跑。
         if terms:
             lexical_hits = await self._store.search_lexical(
-                site_id=site_id,
+                agent_id=agent_id,
                 tokens=terms,
                 limit=LEXICAL_CANDIDATE_LIMIT,
             )
@@ -550,7 +550,7 @@ class RetrievalService:
     async def retrieve_chunks(
         self,
         *,
-        site_id: str,
+        agent_id: str,
         query: str,
         top_k: int = DEFAULT_TOP_K,
         embedder: EmbeddingClient | None = None,
@@ -562,7 +562,7 @@ class RetrievalService:
         """
         try:
             chunks = await self.search(
-                site_id=site_id,
+                agent_id=agent_id,
                 query=query,
                 top_k=top_k,
                 embedder=embedder,
@@ -578,12 +578,12 @@ class RetrievalService:
         self._last_error = None
         return chunks
 
-    async def retrieve_context(self, *, site_id: str, query: str) -> list[str]:
+    async def retrieve_context(self, *, agent_id: str, query: str) -> list[str]:
         """chat 检索增强：失败降级为无上下文（派生索引问题不阻断对话），记录日志。
 
         最近一次失败置 degraded 并记下异常类型名；成功则清除。返回值仍是上下文列表。
         """
-        chunks = await self.retrieve_chunks(site_id=site_id, query=query)
+        chunks = await self.retrieve_chunks(agent_id=agent_id, query=query)
         return [chunk.content for chunk in chunks]
 
     async def close(self) -> None:

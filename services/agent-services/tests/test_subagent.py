@@ -36,8 +36,8 @@ class _FakeRetrieval:
         self.degraded = False
         self._content = content
 
-    async def retrieve_chunks(self, *, site_id: str, query: str, **_kwargs: object) -> list[RetrievedChunk]:
-        self.calls.append((site_id, query))
+    async def retrieve_chunks(self, *, agent_id: str, query: str, **_kwargs: object) -> list[RetrievedChunk]:
+        self.calls.append((agent_id, query))
         return [RetrievedChunk(source_id="kb:1", chunk_index=2, content=self._content, score=0.9)]
 
 
@@ -93,10 +93,10 @@ async def test_delegate_returns_research_conclusion_to_the_parent() -> None:
         return ModelResponse(parts=[TextPart("answer RESEARCH-FACT")])
 
     model = FunctionModel(respond)
-    toolset = build_delegate_tool(model, site_id="42", retrieval=retrieval)  # type: ignore[arg-type]
+    toolset = build_delegate_tool(model, agent_id="42", retrieval=retrieval)  # type: ignore[arg-type]
     outcome = await run_chat(
         model,
-        site_id="42",
+        agent_id="42",
         message="what are the hours?",
         toolsets=[toolset],
         budget=_budget(),
@@ -110,7 +110,7 @@ async def test_delegate_returns_research_conclusion_to_the_parent() -> None:
 
 
 def test_research_agent_exposes_only_knowledge_search() -> None:
-    agent = build_research_agent(FunctionModel(lambda _m, _i: ModelResponse(parts=[TextPart("x")])), site_id="1", retrieval=None)
+    agent = build_research_agent(FunctionModel(lambda _m, _i: ModelResponse(parts=[TextPart("x")])), agent_id="1", retrieval=None)
     assert _tool_names(agent) == {"search_site_knowledge"}
     assert "delegate_task" not in _tool_names(agent)
     joined = " ".join(_tool_names(agent))
@@ -133,8 +133,8 @@ async def test_fifth_delegation_returns_limit_and_parent_finishes() -> None:
         return ModelResponse(parts=[TextPart("finished")])
 
     model = FunctionModel(respond)
-    toolset = build_delegate_tool(model, site_id="1", retrieval=None)
-    outcome = await run_chat(model, site_id="1", message="split this", toolsets=[toolset], budget=_budget())
+    toolset = build_delegate_tool(model, agent_id="1", retrieval=None)
+    outcome = await run_chat(model, agent_id="1", message="split this", toolsets=[toolset], budget=_budget())
     assert isinstance(outcome, ChatReply)
     assert outcome.reply == "finished"
     assert [item["ok"] for item in outcome.tools] == [True, True, True, True, False]
@@ -155,10 +155,10 @@ async def test_slow_subagent_returns_timeout_string_and_parent_finishes() -> Non
         return ModelResponse(parts=[TextPart("parent-done")])
 
     model = FunctionModel(respond)
-    toolset = build_delegate_tool(model, site_id="1", retrieval=None, timeout_seconds=0.2)
+    toolset = build_delegate_tool(model, agent_id="1", retrieval=None, timeout_seconds=0.2)
     outcome = await run_chat(
         model,
-        site_id="1",
+        agent_id="1",
         message="go",
         toolsets=[toolset],
         budget=RunBudget(
@@ -196,14 +196,14 @@ async def test_subagent_usage_is_added_above_the_parent_only_baseline() -> None:
     parent = FunctionModel(delegated)
     delegated_outcome = await run_chat(
         parent,
-        site_id="1",
+        agent_id="1",
         message="go",
-        toolsets=[build_delegate_tool(parent, site_id="1", retrieval=None)],
+        toolsets=[build_delegate_tool(parent, agent_id="1", retrieval=None)],
         budget=budget,
     )
     baseline_outcome = await run_chat(
         FunctionModel(baseline),
-        site_id="1",
+        agent_id="1",
         message="go",
         toolsets=[baseline_tools],
         budget=budget,
@@ -240,14 +240,14 @@ def test_disabled_omits_tool_and_leaves_harness_text_unchanged(tmp_path) -> None
     assert all("delegate_task" not in _tool_names_from_toolset(toolset) for toolset in disabled)
     assert any("delegate_task" in _tool_names_from_toolset(toolset) for toolset in enabled)
 
-    off = assemble_harness(site_id="9", message="hi", toolsets=disabled, harness_dir=str(tmp_path))
+    off = assemble_harness(agent_id="9", message="hi", toolsets=disabled, harness_dir=str(tmp_path))
     legacy = assemble_harness(
-        site_id="9",
+        agent_id="9",
         message="hi",
         toolsets=[build_todo_toolset(TodoStore())],
         harness_dir=str(tmp_path),
     )
-    on = assemble_harness(site_id="9", message="hi", toolsets=enabled, harness_dir=str(tmp_path))
+    on = assemble_harness(agent_id="9", message="hi", toolsets=enabled, harness_dir=str(tmp_path))
     assert off.system_prompt == legacy.system_prompt
     assert "# Delegation" not in off.system_prompt
     assert "delegate_task" not in off.system_prompt
@@ -279,9 +279,9 @@ async def test_stream_run_can_delegate() -> None:
         event
         async for event in stream_chat_events(
             model,
-            site_id="1",
+            agent_id="1",
             message="go",
-            toolsets=[build_delegate_tool(model, site_id="1", retrieval=None)],
+            toolsets=[build_delegate_tool(model, agent_id="1", retrieval=None)],
             budget=_budget(),
         )
     ]

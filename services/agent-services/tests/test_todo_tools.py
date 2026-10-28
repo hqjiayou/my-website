@@ -20,7 +20,7 @@ async def test_todo_tools_track_multi_step_plan() -> None:
 
     outcome = await run_chat(
         FunctionModel(model_fn),
-        site_id="1",
+        agent_id="1",
         message="plan this",
         toolsets=[toolset],
     )
@@ -48,7 +48,7 @@ async def test_todo_store_hydrates_from_request() -> None:
 
     outcome = await run_chat(
         FunctionModel(model_fn),
-        site_id="1",
+        agent_id="1",
         message="finish",
         toolsets=[toolset],
         initial_todos=store.items,
@@ -81,7 +81,7 @@ async def test_terminal_todo_cannot_be_reopened_and_emits_failed_tool_result() -
         event
         async for event in stream_chat_events(
             FunctionModel(stream_function=stream_fn),
-            site_id="1",
+            agent_id="1",
             message="reopen",
             toolsets=[toolset],
             todo_store=store,
@@ -109,6 +109,6 @@ async def test_add_todo_respects_item_cap() -> None:
             return ModelResponse(parts=[ToolCallPart(tool_name="add_todo", args={"title": "overflow"})])
         return ModelResponse(parts=[TextPart("stopped")])
 
-    outcome = await run_chat(FunctionModel(model_fn), site_id="1", message="add", toolsets=[toolset])
+    outcome = await run_chat(FunctionModel(model_fn), agent_id="1", message="add", toolsets=[toolset])
     assert isinstance(outcome, ChatReply)
     assert len(store.items) == MAX_TODO_ITEMS

@@ -1,4 +1,4 @@
-"""Phase 3 检索：分块、site_id 强制过滤、internal 同步端点、chat 检索增强。"""
+"""Phase 3 检索：分块、agent_id 强制过滤、internal 同步端点、chat 检索增强。"""
 
 import json
 
@@ -448,7 +448,7 @@ class FakeEmbedder:
 
 
 class FakeStore:
-    """in-memory store；验证 service 层把 site_id 全链路传入。"""
+    """in-memory store；验证 service 层把 agent_id 全链路传入。"""
 
     def __init__(self) -> None:
         self.docs: dict[tuple[str, str], list[str]] = {}
@@ -459,20 +459,20 @@ class FakeStore:
         self.recreate_calls: list[int] = []
         self.ensure_calls: list[int] = []
 
-    async def upsert_document(self, *, site_id, source_id, title, chunks, embeddings) -> int:
+    async def upsert_document(self, *, agent_id, source_id, title, chunks, embeddings) -> int:
         assert len(chunks) == len(embeddings)
-        self.docs[(site_id, source_id)] = list(chunks)
+        self.docs[(agent_id, source_id)] = list(chunks)
         return len(chunks)
 
-    async def delete_document(self, *, site_id, source_id) -> None:
-        self.docs.pop((site_id, source_id), None)
+    async def delete_document(self, *, agent_id, source_id) -> None:
+        self.docs.pop((agent_id, source_id), None)
 
-    async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
-        self.search_calls.append(site_id)
+    async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        self.search_calls.append(agent_id)
         self.search_top_ks.append(top_k)
         results = []
         for (sid, source_id), chunks in self.docs.items():
-            if sid != site_id:  # site_id 强制过滤
+            if sid != agent_id:  # agent_id 强制过滤
                 continue
             for i, content in enumerate(chunks[:top_k]):
                 results.append(
@@ -480,7 +480,7 @@ class FakeStore:
                 )
         return results[:top_k]
 
-    async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+    async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
         return []
 
     async def current_dimensions(self) -> int | None:
@@ -509,10 +509,10 @@ def _service(store: FakeStore | None = None) -> tuple[RetrievalService, FakeStor
 
 async def test_service_upsert_and_site_scoped_search() -> None:
     service, store = _service()
-    await service.upsert_document(site_id="1", source_id="kb:1", title="t", content="alpha facts")
-    await service.upsert_document(site_id="2", source_id="kb:9", title="t", content="beta facts")
+    await service.upsert_document(agent_id="1", source_id="kb:1", title="t", content="alpha facts")
+    await service.upsert_document(agent_id="2", source_id="kb:9", title="t", content="beta facts")
 
-    hits_site1 = await service.search(site_id="1", query="facts")
+    hits_site1 = await service.search(agent_id="1", query="facts")
     assert [h.content for h in hits_site1] == ["alpha facts"]
     # 站点隔离：site 2 的内容绝不可出现在 site 1 的检索结果
     assert all("beta" not in h.content for h in hits_site1)
@@ -533,10 +533,10 @@ async def test_service_retrieve_context_degrades_on_store_failure() -> None:
     service, _ = _service(FlakyStore())
     assert service.degraded is False
     assert service.last_error is None
-    assert await service.retrieve_context(site_id="1", query="q") == []
+    assert await service.retrieve_context(agent_id="1", query="q") == []
     assert service.degraded is True
     assert service.last_error == "RuntimeError"
-    assert await service.retrieve_context(site_id="1", query="q") == []
+    assert await service.retrieve_context(agent_id="1", query="q") == []
     assert service.degraded is False
     assert service.last_error is None
 
@@ -553,7 +553,7 @@ def test_retrieval_upsert_hides_database_url() -> None:
     response = TestClient(create_app(make_settings(), retrieval_service=service)).put(
         "/internal/v1/retrieval/documents",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "sourceId": "kb:1", "title": "t", "content": "hello"},
+        json={"agentId": "1", "sourceId": "kb:1", "title": "t", "content": "hello"},
     )
     body = response.json()
     assert response.status_code == 503
@@ -566,7 +566,7 @@ def test_retrieval_upsert_blocked_without_configuration() -> None:
     response = client.put(
         "/internal/v1/retrieval/documents",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "sourceId": "kb:1", "title": "t", "content": "hello"},
+        json={"agentId": "1", "sourceId": "kb:1", "title": "t", "content": "hello"},
     )
     assert response.status_code == 503
     body = response.json()
@@ -579,7 +579,7 @@ def test_retrieval_upsert_rejects_oversized_content() -> None:
         "/internal/v1/retrieval/documents",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "1",
+            "agentId": "1",
             "sourceId": "kb:1",
             "title": "t",
             "content": "x" * (MAX_CONTENT_LENGTH + 1),
@@ -604,7 +604,7 @@ def test_retrieval_upsert_rejects_too_many_chunks() -> None:
     response = TestClient(create_app(make_settings(), retrieval_service=service)).put(
         "/internal/v1/retrieval/documents",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "sourceId": "kb:1", "title": "t", "content": content},
+        json={"agentId": "1", "sourceId": "kb:1", "title": "t", "content": content},
     )
     assert response.status_code == 400
     body = response.json()
@@ -621,7 +621,7 @@ def test_retrieval_upsert_and_delete_with_service() -> None:
     response = client.put(
         "/internal/v1/retrieval/documents",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "sourceId": "kb:5", "title": "FAQ", "content": "opening hours 9-18"},
+        json={"agentId": "1", "sourceId": "kb:5", "title": "FAQ", "content": "opening hours 9-18"},
     )
     assert response.status_code == 200
     assert response.json() == {"ok": True, "data": {"chunks": 1}}
@@ -631,7 +631,7 @@ def test_retrieval_upsert_and_delete_with_service() -> None:
         "DELETE",
         "/internal/v1/retrieval/documents",
         headers=TOKEN_HEADER,
-        params={"siteId": "1", "sourceId": "kb:5"},
+        params={"agentId": "1", "sourceId": "kb:5"},
     )
     assert response.status_code == 200
     assert ("1", "kb:5") not in store.docs
@@ -649,7 +649,7 @@ async def test_run_chat_injects_retrieval_context_into_system_prompt() -> None:
 
     outcome = await run_chat(
         FunctionModel(capture),
-        site_id="1",
+        agent_id="1",
         message="when are you open?",
         retrieval_context=["opening hours 9-18"],
     )
@@ -666,13 +666,13 @@ def test_chat_endpoint_uses_retrieval_service() -> None:
     client.put(
         "/internal/v1/retrieval/documents",
         headers=TOKEN_HEADER,
-        json={"siteId": "7", "sourceId": "kb:1", "title": "t", "content": "site seven knowledge"},
+        json={"agentId": "7", "sourceId": "kb:1", "title": "t", "content": "site seven knowledge"},
     )
 
     response = client.post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "7", "message": "hello"},
+        json={"agentId": "7", "message": "hello"},
     )
     assert response.status_code == 200
     data = response.json()["data"]
@@ -696,7 +696,7 @@ def test_chat_reports_retrieval_degraded_without_blocking() -> None:
     response = client.post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "7", "message": "hello"},
+        json={"agentId": "7", "message": "hello"},
     )
     assert response.status_code == 200
     data = response.json()["data"]
@@ -719,7 +719,7 @@ async def test_stream_done_always_includes_retrieval_degraded() -> None:
             event
             async for event in stream_chat_events(
                 TestModel(custom_output_text="ok"),
-                site_id="1",
+                agent_id="1",
                 message="hello",
                 retrieval_degraded=retrieval_degraded,
             )
@@ -733,10 +733,10 @@ async def test_stream_done_always_includes_retrieval_degraded() -> None:
 
 async def test_service_repeat_upsert_keeps_only_the_latest_document() -> None:
     service, store = _service()
-    await service.upsert_document(site_id="1", source_id="kb:1", title="t", content="alpha facts")
-    await service.upsert_document(site_id="1", source_id="kb:1", title="t", content="beta facts")
+    await service.upsert_document(agent_id="1", source_id="kb:1", title="t", content="alpha facts")
+    await service.upsert_document(agent_id="1", source_id="kb:1", title="t", content="beta facts")
     assert store.docs[("1", "kb:1")] == ["beta facts"]
-    hits = await service.search(site_id="1", query="facts")
+    hits = await service.search(agent_id="1", query="facts")
     assert [hit.content for hit in hits] == ["beta facts"]
 
 
@@ -750,14 +750,14 @@ def test_retrieval_search_returns_hits() -> None:
     created = client.put(
         "/internal/v1/retrieval/documents",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "sourceId": "kb:1", "title": "t", "content": "alpha facts"},
+        json={"agentId": "1", "sourceId": "kb:1", "title": "t", "content": "alpha facts"},
     )
     assert created.status_code == 200
 
     response = client.post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "query": "alpha"},
+        json={"agentId": "1", "query": "alpha"},
     )
     assert response.status_code == 200
     assert response.json() == {
@@ -783,7 +783,7 @@ def test_retrieval_search_degrades_when_embedding_fails() -> None:
     response = _search_client(service).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "query": "alpha"},
+        json={"agentId": "1", "query": "alpha"},
     )
     assert response.status_code == 200
     assert response.json() == {"hits": [], "degraded": True}
@@ -797,10 +797,10 @@ def test_vector_failure_does_not_return_lexical_hits() -> None:
             super().__init__()
             self.lexical_calls = 0
 
-        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
             raise RuntimeError("db down")
 
-        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+        async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
             self.lexical_calls += 1
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
 
@@ -808,7 +808,7 @@ def test_vector_failure_does_not_return_lexical_hits() -> None:
     response = _search_client(RetrievalService(FakeEmbedder(), store)).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"siteId": "7", "query": "XJ-900", "topK": 4},
+        json={"agentId": "7", "query": "XJ-900", "topK": 4},
     )
     assert response.status_code == 200
     assert response.json() == {"hits": [], "degraded": True}
@@ -821,7 +821,7 @@ def test_embedder_failure_does_not_call_lexical_search() -> None:
             super().__init__()
             self.lexical_calls = 0
 
-        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+        async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
             self.lexical_calls += 1
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
 
@@ -833,7 +833,7 @@ def test_embedder_failure_does_not_call_lexical_search() -> None:
     response = _search_client(RetrievalService(FailingEmbedder(), store)).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"siteId": "7", "query": "XJ-900", "topK": 4},
+        json={"agentId": "7", "query": "XJ-900", "topK": 4},
     )
     assert response.status_code == 200
     assert response.json() == {"hits": [], "degraded": True}
@@ -855,7 +855,7 @@ def test_like_literal_pattern_escapes_wildcards() -> None:
     assert args[0] == "site-7"
     assert args[1] == like_literal_pattern(token)
     assert args[2] == 20
-    assert "WHERE site_id = $1 AND" in sql
+    assert "WHERE agent_id = $1 AND" in sql
     assert "ESCAPE" in sql
     assert "LIMIT $3" in sql
     assert sql.index("ORDER BY") < sql.index("LIMIT $3")
@@ -877,7 +877,7 @@ def test_like_literal_pattern_escapes_wildcards() -> None:
 def test_retrieval_search_requires_internal_token() -> None:
     response = _search_client(_service()[0]).post(
         "/internal/v1/retrieval/search",
-        json={"siteId": "1", "query": "alpha"},
+        json={"agentId": "1", "query": "alpha"},
     )
     assert response.status_code == 401
     body = response.json()
@@ -890,7 +890,7 @@ def test_retrieval_search_blank_query_is_422() -> None:
     response = _search_client(_service()[0]).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "query": "  "},
+        json={"agentId": "1", "query": "  "},
     )
     assert response.status_code == 422
     body = response.json()
@@ -905,7 +905,7 @@ def test_retrieval_search_clamps_top_k() -> None:
     response = _search_client(service).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "query": "alpha", "topK": 50},
+        json={"agentId": "1", "query": "alpha", "topK": 50},
     )
     assert response.status_code == 200
     assert store.search_top_ks == [20]
@@ -915,8 +915,8 @@ def test_retrieval_search_drops_hits_below_min_score() -> None:
     """查询不含代码 token。store 已给出 0.9 与 0.2 时，响应只留 0.9，且不改字段。"""
 
     class TwoScoreStore(FakeStore):
-        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
-            self.search_calls.append(site_id)
+        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+            self.search_calls.append(agent_id)
             self.search_top_ks.append(top_k)
             return [
                 RetrievedChunk("kb:hi", 0, "relevant", 0.9),
@@ -927,7 +927,7 @@ def test_retrieval_search_drops_hits_below_min_score() -> None:
     response = _search_client(RetrievalService(FakeEmbedder(), store)).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "query": "hi", "topK": 4},
+        json={"agentId": "1", "query": "hi", "topK": 4},
     )
     assert response.status_code == 200
     body = response.json()
@@ -948,14 +948,14 @@ def test_retrieval_search_drops_hits_below_min_score() -> None:
 
 async def test_retrieval_min_score_zero_keeps_low_vector_hits() -> None:
     class TwoScoreStore(FakeStore):
-        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
             return [
                 RetrievedChunk("kb:hi", 0, "relevant", 0.9),
                 RetrievedChunk("kb:lo", 0, "unrelated", 0.2),
             ]
 
     service = RetrievalService(FakeEmbedder(), TwoScoreStore(), min_score=0, score_ratio_floor=0)
-    hits = await service.search(site_id="1", query="hi", top_k=4)
+    hits = await service.search(agent_id="1", query="hi", top_k=4)
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:hi", 0.9), ("kb:lo", 0.2)]
 
 
@@ -1002,14 +1002,14 @@ async def test_retrieval_search_prunes_relative_tail() -> None:
     """min_score 关闭时相对裁剪仍生效：0.60 的命中在，0.10 的同批尾巴被丢弃。"""
 
     class TwoScoreStore(FakeStore):
-        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
             return [
                 RetrievedChunk("kb:hi", 0, "relevant", 0.6),
                 RetrievedChunk("kb:lo", 0, "unrelated", 0.1),
             ]
 
     service = RetrievalService(FakeEmbedder(), TwoScoreStore(), min_score=0)
-    hits = await service.search(site_id="1", query="hi", top_k=4)
+    hits = await service.search(agent_id="1", query="hi", top_k=4)
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:hi", 0.6)]
 
 
@@ -1017,14 +1017,14 @@ async def test_retrieval_search_keeps_close_scores_for_multi_doc() -> None:
     """多文档问题的两条命中分数接近（0.433/0.430）时相对裁剪不误伤。"""
 
     class TwoScoreStore(FakeStore):
-        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
             return [
                 RetrievedChunk("kb:a", 0, "spec", 0.433),
                 RetrievedChunk("kb:b", 0, "warranty", 0.430),
             ]
 
     service = RetrievalService(FakeEmbedder(), TwoScoreStore(), min_score=0)
-    hits = await service.search(site_id="1", query="hi", top_k=4)
+    hits = await service.search(agent_id="1", query="hi", top_k=4)
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.433), ("kb:b", 0.430)]
 
 
@@ -1049,13 +1049,13 @@ def test_retrieval_search_surfaces_code_token_below_vector_threshold() -> None:
             self.lexical_sites: list[str] = []
             self.lexical_tokens: list[list[str]] = []
 
-        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
-            self.search_calls.append(site_id)
+        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+            self.search_calls.append(agent_id)
             self.search_top_ks.append(top_k)
             return [RetrievedChunk("kb:other", 0, "unrelated prose", 0.9)]
 
-        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
-            self.lexical_sites.append(site_id)
+        async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
+            self.lexical_sites.append(agent_id)
             self.lexical_tokens.append(list(tokens))
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
 
@@ -1063,7 +1063,7 @@ def test_retrieval_search_surfaces_code_token_below_vector_threshold() -> None:
     response = _search_client(RetrievalService(FakeEmbedder(), store)).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"siteId": "7", "query": "XJ-900", "topK": 1},
+        json={"agentId": "7", "query": "XJ-900", "topK": 1},
     )
     assert response.status_code == 200
     assert response.json() == {
@@ -1083,25 +1083,25 @@ def test_retrieval_search_surfaces_code_token_below_vector_threshold() -> None:
 
 async def test_same_chunk_score_is_max_of_cosine_and_code_coverage() -> None:
     class BothStore(FakeStore):
-        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.4)]
 
-        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+        async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
 
     service = RetrievalService(FakeEmbedder(), BothStore())
-    hits = await service.search(site_id="7", query="XJ-900", top_k=4)
+    hits = await service.search(agent_id="7", query="XJ-900", top_k=4)
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:code", 1.0)]
 
     class CosineWins(FakeStore):
-        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
             return [RetrievedChunk("kb:code", 0, "only ABCD here", 0.92)]
 
-        async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+        async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
             return [RetrievedChunk("kb:code", 0, "only ABCD here", 0.1)]
 
     cosine_hits = await RetrievalService(FakeEmbedder(), CosineWins()).search(
-        site_id="7", query="ABCD XJ-900", top_k=4
+        agent_id="7", query="ABCD XJ-900", top_k=4
     )
     assert [(hit.source_id, hit.score) for hit in cosine_hits] == [("kb:code", 0.92)]
 
@@ -1147,8 +1147,8 @@ _EXPECTED_CITATIONS = [
 
 
 class _ManyHitStore(FakeStore):
-    async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
-        self.search_calls.append(site_id)
+    async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        self.search_calls.append(agent_id)
         self.search_top_ks.append(top_k)
         return list(_CITATION_HITS)
 
@@ -1177,7 +1177,7 @@ def test_chat_citations_follow_adopted_chunks_and_cap() -> None:
     response = client.post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello"},
+        json={"agentId": "1", "message": "hello"},
     )
     assert response.status_code == 200
     data = response.json()["data"]
@@ -1191,7 +1191,7 @@ def test_chat_omits_citations_without_grounding() -> None:
     response = client.post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello"},
+        json={"agentId": "1", "message": "hello"},
     )
     assert response.status_code == 200
     data = response.json()["data"]
@@ -1206,7 +1206,7 @@ def test_chat_omits_citations_without_grounding() -> None:
     failed = degraded.post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello"},
+        json={"agentId": "1", "message": "hello"},
     )
     assert failed.status_code == 200
     body = failed.json()["data"]
@@ -1222,7 +1222,7 @@ def test_stream_citations_follow_adopted_chunks_and_cap() -> None:
         "POST",
         "/internal/v1/chat/stream",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello"},
+        json={"agentId": "1", "message": "hello"},
     ) as response:
         assert response.status_code == 200
         done = _done_event_data(response.read().decode("utf-8"))
@@ -1236,7 +1236,7 @@ def test_stream_omits_citations_without_grounding() -> None:
         "POST",
         "/internal/v1/chat/stream",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello"},
+        json={"agentId": "1", "message": "hello"},
     ) as response:
         done = _done_event_data(response.read().decode("utf-8"))
     assert "citations" not in done
@@ -1250,7 +1250,7 @@ def test_stream_omits_citations_without_grounding() -> None:
         "POST",
         "/internal/v1/chat/stream",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello"},
+        json={"agentId": "1", "message": "hello"},
     ) as response:
         failed = _done_event_data(response.read().decode("utf-8"))
     assert failed["retrievalDegraded"] is True
@@ -1285,11 +1285,11 @@ class _LexicalV2Store(FakeStore):
         self.chunk = chunk
         self.lexical_tokens: list[list[str]] = []
 
-    async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
-        self.search_calls.append(site_id)
+    async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        self.search_calls.append(agent_id)
         return []
 
-    async def search_lexical(self, *, site_id, tokens, limit) -> list[RetrievedChunk]:
+    async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
         self.lexical_tokens.append(list(tokens))
         return [self.chunk]
 
@@ -1297,7 +1297,7 @@ class _LexicalV2Store(FakeStore):
 async def test_chinese_bigram_hits_when_vector_search_is_empty() -> None:
     store = _LexicalV2Store(RetrievedChunk("kb:fuji", 0, "参观富士山", 0.0))
     service = RetrievalService(FakeEmbedder(), store)
-    hits = await service.search(site_id="7", query="富士山", top_k=4)
+    hits = await service.search(agent_id="7", query="富士山", top_k=4)
     assert store.lexical_tokens == [["富士", "士山"]]
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:fuji", 1.0)]
     assert service.degraded is False
@@ -1306,7 +1306,7 @@ async def test_chinese_bigram_hits_when_vector_search_is_empty() -> None:
 async def test_japanese_bigram_hits_when_vector_search_is_empty() -> None:
     store = _LexicalV2Store(RetrievedChunk("kb:tokyo", 0, "東京都庁案内", 0.0))
     service = RetrievalService(FakeEmbedder(), store)
-    hits = await service.search(site_id="7", query="東京都", top_k=4)
+    hits = await service.search(agent_id="7", query="東京都", top_k=4)
     assert store.lexical_tokens == [["東京", "京都"]]
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:tokyo", 1.0)]
 
@@ -1320,7 +1320,7 @@ _RERANK_HITS = [
 
 
 class _RerankStore(FakeStore):
-    async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+    async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
         return list(_RERANK_HITS)
 
 
@@ -1339,7 +1339,7 @@ async def test_rerank_reorders_candidates_and_marks_applied() -> None:
         _RerankStore(),
         rerank_model=_order_model("[3, 1, 4, 2]", calls),
     )
-    hits = await service.search(site_id="1", query="q", top_k=2)
+    hits = await service.search(agent_id="1", query="q", top_k=2)
     assert calls == [1]
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:c", 0.7), ("kb:a", 0.9)]
     assert service.rerank_applied is True
@@ -1355,7 +1355,7 @@ def test_rerank_response_includes_rerank_applied_when_reordered() -> None:
     response = _search_client(service).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "query": "q", "topK": 2},
+        json={"agentId": "1", "query": "q", "topK": 2},
     )
     assert response.status_code == 200
     body = response.json()
@@ -1369,7 +1369,7 @@ async def test_rerank_model_error_keeps_fused_order() -> None:
         raise RuntimeError("rerank down")
 
     service = RetrievalService(FakeEmbedder(), _RerankStore(), rerank_model=FunctionModel(boom))
-    hits = await service.search(site_id="1", query="q", top_k=2)
+    hits = await service.search(agent_id="1", query="q", top_k=2)
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.9), ("kb:b", 0.8)]
     assert service.rerank_applied is False
     assert service.degraded is False
@@ -1383,7 +1383,7 @@ def test_rerank_response_omits_flag_when_model_fails() -> None:
     response = _search_client(service).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "query": "q", "topK": 2},
+        json={"agentId": "1", "query": "q", "topK": 2},
     )
     body = response.json()
     assert "rerankApplied" not in body
@@ -1402,7 +1402,7 @@ async def test_rerank_timeout_keeps_fused_order() -> None:
         rerank_model=FunctionModel(slow),
         rerank_timeout_seconds=0.05,
     )
-    hits = await service.search(site_id="1", query="q", top_k=2)
+    hits = await service.search(agent_id="1", query="q", top_k=2)
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.9), ("kb:b", 0.8)]
     assert service.rerank_applied is False
     assert service.degraded is False
@@ -1416,7 +1416,7 @@ async def test_rerank_disabled_does_not_call_model() -> None:
         rerank_model=_order_model("[4, 3, 2, 1]", calls),
         rerank_enabled=False,
     )
-    hits = await service.search(site_id="1", query="q", top_k=2)
+    hits = await service.search(agent_id="1", query="q", top_k=2)
     assert calls == []
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:a", 0.9), ("kb:b", 0.8)]
     assert service.rerank_applied is False
@@ -1432,7 +1432,7 @@ async def test_rerank_skips_model_when_candidates_fit_in_top_k() -> None:
         score_ratio_floor=0,
         rerank_cutoff=False,
     )
-    hits = await service.search(site_id="1", query="q", top_k=4)
+    hits = await service.search(agent_id="1", query="q", top_k=4)
     assert calls == []
     assert [hit.source_id for hit in hits] == ["kb:a", "kb:b", "kb:c", "kb:d"]
     assert service.rerank_applied is False
@@ -1463,7 +1463,7 @@ async def test_rerank_prefers_request_model_selection(monkeypatch: pytest.Monkey
         rerank_timeout_seconds=4,
     )
     hits = await service.search(
-        site_id="1",
+        agent_id="1",
         query="q",
         top_k=1,
         model_selection=ModelSelection(spec="openai:rerank-test", api_key="test-key"),
@@ -1487,7 +1487,7 @@ async def test_rerank_uses_process_model_without_selection(monkeypatch: pytest.M
         rerank_enabled=True,
         rerank_timeout_seconds=4,
     )
-    hits = await service.search(site_id="1", query="q", top_k=1)
+    hits = await service.search(agent_id="1", query="q", top_k=1)
     assert [hit.source_id for hit in hits] == ["kb:b"]
     assert service.rerank_applied is True
 
@@ -1512,7 +1512,7 @@ async def test_rerank_cutoff_drops_omitted_candidates() -> None:
         rerank_model=_order_model("[1, 3]", calls),
         score_ratio_floor=0,
     )
-    hits = await service.search(site_id="1", query="q", top_k=4)
+    hits = await service.search(agent_id="1", query="q", top_k=4)
     assert calls == [1]
     assert [hit.source_id for hit in hits] == ["kb:a", "kb:c"]
     assert service.rerank_applied is True
@@ -1527,7 +1527,7 @@ async def test_rerank_cutoff_empty_selection_falls_back_to_fused() -> None:
         rerank_model=_order_model("[]", calls),
         score_ratio_floor=0,
     )
-    hits = await service.search(site_id="1", query="q", top_k=4)
+    hits = await service.search(agent_id="1", query="q", top_k=4)
     assert calls == [1]
     assert [hit.source_id for hit in hits] == ["kb:a", "kb:b", "kb:c", "kb:d"]
     assert service.rerank_applied is False
@@ -1537,7 +1537,7 @@ async def test_rerank_cutoff_disabled_keeps_legacy_append() -> None:
     """裁门关时维持重排语义：模型没提到的候选按原序补在后面，不丢弃。"""
 
     class FiveHitStore(FakeStore):
-        async def search(self, *, site_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
             return [
                 RetrievedChunk("kb:a", 0, "alpha", 0.9),
                 RetrievedChunk("kb:b", 0, "beta", 0.85),
@@ -1555,7 +1555,7 @@ async def test_rerank_cutoff_disabled_keeps_legacy_append() -> None:
         score_ratio_floor=0,
         rerank_cutoff=False,
     )
-    hits = await service.search(site_id="1", query="q", top_k=4)
+    hits = await service.search(agent_id="1", query="q", top_k=4)
     # 模型只提了 b；a/c/d 是被按原序补回的（e 同样补回但被 top_k 截掉）
     assert [hit.source_id for hit in hits] == ["kb:b", "kb:a", "kb:c", "kb:d"]
     assert service.rerank_applied is True

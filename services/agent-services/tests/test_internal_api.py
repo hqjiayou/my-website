@@ -37,7 +37,7 @@ def test_chat_uses_request_model_when_process_model_is_blocked(monkeypatch) -> N
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "hello",
             "model": {
                 "spec": "fake:from-java",
@@ -66,7 +66,7 @@ def test_chat_uses_java_knowledge_when_vector_index_is_absent(monkeypatch) -> No
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "营业时间",
             "knowledgeContext": ["  门店\n周一至周五 9:00-18:00  "],
         },
@@ -78,9 +78,9 @@ def test_chat_uses_java_knowledge_when_vector_index_is_absent(monkeypatch) -> No
 def test_chat_request_business_url_registers_tools_against_that_host(monkeypatch) -> None:
     seen: dict[str, str] = {}
 
-    def fake_build(settings, site_id, *, client=None):
+    def fake_build(settings, agent_id, *, client=None):
         seen["url"] = settings.business_api_base_url
-        seen["site"] = site_id
+        seen["site"] = agent_id
         return None
 
     monkeypatch.setattr("agent_services.agent.toolset_factory.build_business_toolset", fake_build)
@@ -88,7 +88,7 @@ def test_chat_request_business_url_registers_tools_against_that_host(monkeypatch
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "hello",
             "businessApiBaseUrl": "http://127.0.0.1:8082/",
         },
@@ -103,7 +103,7 @@ def test_chat_rejects_business_url_with_userinfo() -> None:
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "hello",
             "businessApiBaseUrl": "http://user:secret@127.0.0.1:8082",
         },
@@ -117,7 +117,7 @@ def test_chat_blocked_returns_503_flat_body() -> None:
     response = _blocked_client().post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "10", "message": "hello"},
+        json={"agentId": "10", "message": "hello"},
     )
     assert response.status_code == 503
     body = response.json()
@@ -155,7 +155,7 @@ def test_chat_success_shape_matches_java_contract() -> None:
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "営業時間は？",
             "conversationId": "conv-1",
             "promptProfile": {"systemPrompt": "You are a garage assistant.", "temperature": 0.3},
@@ -178,7 +178,7 @@ def test_chat_success_returns_todos_snapshot_from_request() -> None:
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "continue",
             "todos": [{"id": "t1", "title": "Step 1", "status": "IN_PROGRESS"}],
         },
@@ -196,7 +196,7 @@ def test_chat_accepts_history_longer_than_message_cap() -> None:
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "next",
             "history": [
                 {"role": "USER", "content": "earlier"},
@@ -215,7 +215,7 @@ def test_chat_oversized_request_returns_400_flat_body() -> None:
     response = _live_client().post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "10", "message": "hello", "todos": too_many},
+        json={"agentId": "10", "message": "hello", "todos": too_many},
     )
     assert response.status_code == 400
     body = response.json()
@@ -229,10 +229,10 @@ def test_chat_blank_message_without_image_is_rejected() -> None:
     response = _live_client().post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "10", "message": "   "},
+        json={"agentId": "10", "message": "   "},
     )
     assert response.status_code == 400
-    assert response.json()["message"] == "siteId and message are required."
+    assert response.json()["message"] == "agentId and message are required."
 
 
 def test_chat_image_only_message_is_accepted() -> None:
@@ -240,7 +240,7 @@ def test_chat_image_only_message_is_accepted() -> None:
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "",
             "attachments": [
                 {
@@ -258,7 +258,7 @@ def test_chat_blank_input_returns_400_flat_body() -> None:
     response = _live_client().post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "  ", "message": "hello"},
+        json={"agentId": "  ", "message": "hello"},
     )
     assert response.status_code == 400
     body = response.json()
@@ -271,7 +271,7 @@ def test_chat_duplicate_todo_ids_return_400_flat_body() -> None:
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "hello",
             "todos": [
                 {"id": "t1", "title": "A", "status": "PENDING"},
@@ -292,7 +292,7 @@ def test_chat_blank_todo_title_returns_400_flat_body() -> None:
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "hello",
             "todos": [{"id": "t1", "title": "   ", "status": "PENDING"}],
         },
@@ -355,7 +355,7 @@ def test_chat_falls_back_to_request_fallback_models_on_api_error(monkeypatch) ->
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={
-            "siteId": "10",
+            "agentId": "10",
             "message": "hello",
             "model": {"spec": "fail:primary", "apiKey": "primary-key"},
             "fallbackModels": [{"spec": "fake:backup", "apiKey": "backup-key"}],
