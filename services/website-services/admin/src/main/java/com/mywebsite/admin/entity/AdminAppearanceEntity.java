@@ -12,6 +12,8 @@ import com.mywebsite.infra.entity.AbstractAuditableEntity;
 @TableName(value = "site_appearance", autoResultMap = true)
 public class AdminAppearanceEntity extends AbstractAuditableEntity {
 
+    /** CMS 表未随改名（site_content/site_appearance/media_file 的 site_id 列保持原名），显式钉住列名。 */
+    @TableField("site_id")
     private Long agentId;
     private Integer schemaVersion;
 

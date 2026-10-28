@@ -1,5 +1,6 @@
 package com.mywebsite.admin.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.time.OffsetDateTime;
@@ -8,6 +9,8 @@ import java.time.OffsetDateTime;
 @TableName("media_file")
 public class AdminMediaEntity extends AbstractAuditableEntity {
 
+    /** CMS 表未随改名（site_content/site_appearance/media_file 的 site_id 列保持原名），显式钉住列名。 */
+    @TableField("site_id")
     private Long agentId;
     private String bucket;
     private String objectKey;

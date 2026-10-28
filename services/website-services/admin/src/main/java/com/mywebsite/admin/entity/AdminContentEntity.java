@@ -10,6 +10,8 @@ import java.time.OffsetDateTime;
 @TableName("site_content")
 public class AdminContentEntity extends AbstractAuditableEntity {
 
+    /** CMS 表未随改名（site_content/site_appearance/media_file 的 site_id 列保持原名），显式钉住列名。 */
+    @TableField("site_id")
     private Long agentId;
     private String type;
     private String title;
