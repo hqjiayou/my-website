@@ -55,10 +55,10 @@ jobs:
           openssl rsa -pubout -in e2e/secrets/auth-private.pem -out e2e/secrets/auth-public.pem
 
       - name: Start E2E stack
-        run: docker compose -f e2e/docker-compose.e2e.yml up -d --build --wait --wait-timeout 1200 postgres redis minio admin auth gateway admin-web
+        run: docker compose -f e2e/docker-compose.e2e.yml up -d --build --wait --wait-timeout 1200 postgres redis seaweedfs admin auth gateway admin-web
 
       - name: Create media bucket
-        run: docker compose -f e2e/docker-compose.e2e.yml run --rm minio-init
+        run: docker compose -f e2e/docker-compose.e2e.yml run --rm s3-init
 
       - name: Seed super-admin (repo local seed)
         run: docker compose -f e2e/docker-compose.e2e.yml exec -T postgres psql -U mywebsite -d my_website_e2e < ../../services/website-services/scripts/local/seed-admin-hqjiayou-super.sql

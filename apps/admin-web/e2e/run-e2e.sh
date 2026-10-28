@@ -27,10 +27,10 @@ if [ ! -f e2e/secrets/auth-private.pem ]; then
 fi
 
 # 2. Stack up (admin runs Flyway; --wait blocks on healthchecks).
-$COMPOSE up -d --build --wait postgres redis minio admin auth gateway admin-web
+$COMPOSE up -d --build --wait postgres redis seaweedfs admin auth gateway admin-web
 
-# 3. Media bucket (backend does not create it).
-$COMPOSE run --rm minio-init
+# 3. S3 bucket for media uploads (backend does not create it).
+$COMPOSE run --rm s3-init
 
 # 4. Seed the super-admin user (idempotent SQL from the repo).
 $COMPOSE exec -T postgres psql -U mywebsite -d my_website_e2e <"$SEED_SQL"

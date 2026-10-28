@@ -27,7 +27,7 @@ Tracked in GitHub Issue #2. The suite lives in `apps/admin-web`:
 ## Covered golden paths (real browser, real stack)
 
 The stack under test is gateway + auth + admin + PostgreSQL + Redis +
-MinIO + admin-web (Caddy), seeded with the repo's local seed
+S3 (SeaweedFS) + admin-web (Caddy), seeded with the repo's local seed
 (`seed-admin-hqjiayou-super.sql`, super_admin `hqjiayou` — disposable
 stack only). Every test creates its own data with a unique suffix, so
 the suite is re-runnable without cleanup.
