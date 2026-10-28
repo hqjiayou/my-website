@@ -65,7 +65,7 @@ docker run --rm -v "$PWD:/app" -w /app -e UV_PROJECT_ENVIRONMENT=/tmp/venv -e UV
 
 ## 部署（定型）
 
-**internal only**：不经 gateway 暴露。Java `admin` 与 `site-app` 经 `agent` 模块的 `HttpAgentClient` 内网访问 `:3001`。
+**internal only**：不经 gateway 暴露。Java `admin` 与 `agent-app` 经 `agent` 模块的 `HttpAgentClient` 内网访问 `:3001`。
 
 ### Docker
 
@@ -98,7 +98,7 @@ docker run --rm -p 3001:3001 \
 | Liveness | `GET /health` | 无 | 进程存活 |
 | Readiness | `GET /internal/v1/health` | `X-Internal-Service-Token` | `providerStatus=LIVE` 表示可接 chat |
 
-### Java 侧（admin 与 site-app）
+### Java 侧（admin 与 agent-app）
 
 `services/website-services/.env.example`：
 

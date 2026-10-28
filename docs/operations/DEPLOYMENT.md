@@ -21,13 +21,13 @@ last_verified: 2026-10-28
 |----|--------|
 | 镜像 | `services/agent-services/Dockerfile`（Python 3.13-slim + uv） |
 | 端口 | `3001`（`PORT`） |
-| 网络 | 内网；`admin` 与 `site-app` 经 `HttpAgentClient` 调用 |
+| 网络 | 内网；`admin` 与 `agent-app` 经 `HttpAgentClient` 调用 |
 | Liveness | `GET /health`（无鉴权） |
 | Readiness | `GET /internal/v1/health` + `X-Internal-Service-Token`；`providerStatus=LIVE` 方可接 chat |
 | 必需密钥 | `AGENT_INTERNAL_SERVICE_TOKEN`（与 Java `AGENT_INTERNAL_SERVICE_TOKEN` 一致） |
 | Provider | `AI_MODEL` + 各 Provider 凭证；缺失 → BLOCKED（503），**不**阻止进程启动 |
 | RAG | `RETRIEVAL_DATABASE_URL` + `AI_EMBEDDING_MODEL`；缺失则检索 BLOCKED，纯问答仍可用 |
-| Tools | `BUSINESS_API_BASE_URL` 指向 site-app **internal**（不经 gateway）；缺失则不注册业务工具 |
+| Tools | `BUSINESS_API_BASE_URL` 指向 agent-app **internal**（不经 gateway）；缺失则不注册业务工具 |
 | Skills / Todo | `AGENT_DEFAULT_SKILLS` / `AGENT_ENABLE_TODO_TOOLS`；todo 状态经 chat 响应 `todos` 回传 |
 | MCP | `MCP_SERVERS_JSON`；内网 URL；`async with agent` 管理连接 |
 | 观测 | `OTEL_EXPORTER_OTLP_ENDPOINT` 设置后启用 OTLP HTTP trace |
@@ -41,15 +41,15 @@ docker run -d --name agent-services \
   -e AGENT_INTERNAL_SERVICE_TOKEN="$(openssl rand -hex 32)" \
   -e AI_MODEL=openai:gpt-4o-mini \
   -e AI_PROVIDER_API_KEY=sk-... \
-  -e BUSINESS_API_BASE_URL=http://site-app:8082 \
+  -e BUSINESS_API_BASE_URL=http://agent-service:8082 \
   agent-services:prod
 ```
 
-`BUSINESS_API_BASE_URL` 必须指向 site-app 内网地址（`/internal/**`），不要走 gateway。
+`BUSINESS_API_BASE_URL` 必须指向 agent-app 内网地址（`/internal/**`），不要走 gateway。根 compose 里的现行值是 `http://agent-service:8082`。
 
 检索库若启用：另设 `RETRIEVAL_DATABASE_URL`（专用用户，仅 `agent_retrieval` schema）。
 
-Java `admin` 与 `site-app` 配置：`AGENT_BASE_URL=http://<agent-host>:3001`，`AGENT_INTERNAL_SERVICE_TOKEN` 与上相同。
+Java `admin` 与 `agent-app` 配置：`AGENT_BASE_URL=http://<agent-host>:3001`，`AGENT_INTERNAL_SERVICE_TOKEN` 与上相同。
 
 ## 分支与 CI
 
@@ -57,10 +57,12 @@ Java `admin` 与 `site-app` 配置：`AGENT_BASE_URL=http://<agent-host>:3001`�
 
 约定是经 Pull Request 合入 `dev`，发版再合入 `main`，并看对应检查。私有仓库在当前 GitHub 方案下不能开启分支保护（需要 Pro，或把仓库改为 public），所以这项约定现在还不能在服务器上强制。
 
-Actions 有两种触发。指向 `dev` / `main` 的 Pull Request 按整个 PR 的改动匹配路径。`push` 按本次提交改到的路径匹配，功能分支还没开 PR 时也会跑。同一条分支上新的一次运行会取消该事件里尚未结束的上一次。Actions 页也可以手动跑这三条工作流。
+Actions 有两种触发（2026-10-28 起，PR #113）。指向 `dev` / `main` 的 Pull Request 按整个 PR 的改动匹配路径；`push` **只限 `dev` / `main` 分支**（功能分支 push 不再触发，避免与 PR 重复跑）。同一条分支上新的一次运行会取消该事件里尚未结束的上一次。Actions 页也可以手动跑这些工作流（`workflow_dispatch`）。
 
 | 工作流 | 路径 | 检查 |
 |--------|------|------|
 | `.github/workflows/backend-ci.yml` | `services/website-services/**` | Java 快速测试 + PostgreSQL 契约测试 |
 | `.github/workflows/agent-services-ci.yml` | `services/agent-services/**` 或 `services/website-services/agent/**` | pytest，然后 Java 契约 IT 与 docker build 并行 |
 | `.github/workflows/admin-web-ci.yml` | `apps/admin-web/**` | `pnpm lint`、导入检查、`pnpm build` |
+| `.github/workflows/agent-portal-ci.yml` | `apps/agent-portal/**` | `pnpm lint`、`pnpm build` |
+| `.github/workflows/browser-e2e-ci.yml` | `apps/admin-web/**`（E2E 相关路径） | Playwright 浏览器 E2E（PR #111） |

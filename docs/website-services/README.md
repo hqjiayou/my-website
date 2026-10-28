@@ -10,7 +10,7 @@ last_verified: 2026-10-10
 
 ## 现在
 
-[`CURRENT_STATE.md`](./CURRENT_STATE.md) 以及域摘要 [`AUTH.md`](./AUTH.md) [`RBAC.md`](./RBAC.md) [`SITE.md`](./SITE.md) [`MEDIA.md`](./MEDIA.md) [`CONTENT.md`](./CONTENT.md) [`RESERVATION.md`](./RESERVATION.md) [`PERSISTENCE.md`](./PERSISTENCE.md)。
+[`CURRENT_STATE.md`](./CURRENT_STATE.md) 以及域摘要 [`AUTH.md`](./AUTH.md) [`RBAC.md`](./RBAC.md) [`AGENT.md`](./AGENT.md) [`MEDIA.md`](./MEDIA.md) [`CONTENT.md`](./CONTENT.md) （Reservation 已删除，规格归档至 [`../archive/website-services/RESERVATION.md`](../archive/website-services/RESERVATION.md)） [`PERSISTENCE.md`](./PERSISTENCE.md)。
 
 完成度不要读 `总览/当前功能完成度总览.md` 或 `总览/后端开发路线图与阶段状态.md`。
 

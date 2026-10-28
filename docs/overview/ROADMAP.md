@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: REFERENCE
 status: CURRENT
-last_verified: 2026-10-10
+last_verified: 2026-10-28
 ```
 
 未完成工程 / 产品工作以 **GitHub Issues** 为唯一跟踪源。本文只保留 Issue 号 + 短状态，不复制完整 TODO。
@@ -12,15 +12,15 @@ last_verified: 2026-10-10
 
 | 主题 | 状态 | Issue |
 |------|------|-------|
-| Auth trusted-proxy / XFF / rate-limit boundary | PARTIALLY_RESOLVED（配置已加；缺集成断言 + 暴露面硬化） | [#1](https://github.com/hqjiayou/my-website/issues/1) |
-| Site Web Auth 前端接入 | BACKEND_COMPLETE / FE NOT_IMPLEMENTED | [#3](https://github.com/hqjiayou/my-website/issues/3) |
+| Auth trusted-proxy / XFF / rate-limit boundary | RESOLVED（集成断言 + prod 收窄已落地，PR #112 合入，Issue 已关闭） | [#1](https://github.com/hqjiayou/my-website/issues/1) |
+| 站点用户 Auth 前端接入 | RESOLVED（superseded：site-web 已移除，整套登录已在 agent-portal 落地，Issue 已关闭） | [#3](https://github.com/hqjiayou/my-website/issues/3) |
 
 ## P2 — 测试 / 阻塞中的产品能力
 
 | 主题 | 状态 | Issue |
 |------|------|-------|
-| Browser golden-path E2E | NOT_IMPLEMENTED | [#2](https://github.com/hqjiayou/my-website/issues/2) |
-| AI LIVE provider integration | EXTERNAL_BLOCKED | [#5](https://github.com/hqjiayou/my-website/issues/5) |
+| Browser golden-path E2E | LANDED（PR #111 合入，Issue 已关闭）；首次 CI 实跑待 2026-11-01 Actions 额度重置后 workflow_dispatch 补跑 | [#2](https://github.com/hqjiayou/my-website/issues/2) |
+| AI LIVE provider integration | RESOLVED（2026-10-25 本机实证，Issue 已关闭；部署环境各自配 key） | [#5](https://github.com/hqjiayou/my-website/issues/5) |
 
 ## P3 — 技术债
 
@@ -33,13 +33,17 @@ last_verified: 2026-10-10
 | 主题 | 状态 | 理由 |
 |------|------|------|
 | Menu write API | DEFERRED_BY_DESIGN | 只读已够用；产品决定需要时再建 Issue |
-| Template 本体 CRUD | DEFERRED_BY_DESIGN | 目录+status 已闭环 |
-| Reservation 冲突/公开预约 | NOT_PLANNED（本阶段） | COMPLETE_V1_ADMIN_SCOPE 边界外 |
+| Template 功能 | REMOVED（2026-10-27，PR #72） | 种子软删 + 后端/后台页移除，不再是延期项 |
+| Reservation 功能 | REMOVED（2026-10-27） | 整包删除；规格归档于 `archive/website-services/RESERVATION.md` |
 | Site runtime-status REAL | DEFERRED | UI 在 REAL 下已诚实占位；产品确认后再开 Issue |
 | Analytics / System 业务 | PLACEHOLDER | 有意占位 |
 
+## 进行中
+
+| 主题 | 状态 | Issue |
+|------|------|-------|
+| Portal 双模式（CLI / Key）切换 | 进行中（UoW-1 后端 PR #109、UoW-2 前端 PR #114 已合入 dev） | [#110](https://github.com/hqjiayou/my-website/issues/110) |
+
 ## 建议下一阶段顺序
 
-1. [#1](https://github.com/hqjiayou/my-website/issues/1) 关闭 / 证明 Auth IP 信任边界  
-2. [#3](https://github.com/hqjiayou/my-website/issues/3) site-web auth **或** [#2](https://github.com/hqjiayou/my-website/issues/2) Browser E2E（择一/并行）  
-3. [#5](https://github.com/hqjiayou/my-website/issues/5) 在 provider 可用时解除 AI LIVE
+以 GitHub Issues 当前 open 列表为准；本文不再维护静态顺序（上一版列的 #1/#2/#3/#5 均已关闭）。

@@ -1,13 +1,13 @@
 # my-website
 
-[简体中文](README.md) · [繁體中文](README.zh-TW.md) · [English](README.en.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
+[简体中文](README.md) · [繁體中文](README.md) · [日本語](README.ja.md)
 
 ウェブサイトを一つの管理画面で中央制御する集合です。総控は `apps/admin-web`、Java サービスは `services/website-services`、AI 実行は Python の `services/agent-services` です。このワークスペースに来訪者向けフロントはありません。
 
 ## 位置づけ
 
 - 一つの総控が、集合内の各サイトを管理する。
-- このワークスペースにあるフロントは総控だけ。来訪者向けサイトはツリーにない。サイト API は Java の `site-app`。
+- サイト利用者向けフロントは `apps/agent-portal`。サイト API は Java の `agent-app`（旧 site-app、2026-10-28 改名）。
 - `apps/admin-web` がその総控（プラットフォームと各サイト）。
 - `services/website-services` がこのシステムの Java サービス。**共通ゲートウェイ**、**独立した認証サービス（`auth`）**、管理 API、サイト API、インフラ接続を含む。**JWT は RS256 + JWKS**（Auth が署名し、業務サービスは JWKS で検証する）。
 - `services/agent-services` は **Python 3.13 + FastAPI + Pydantic AI 2.54** の AI Execution Runtime（internal only。gateway には出さない）。業務の正は Java、AI 実行だけが Python（ADR-0005）。`AI_MODEL` がなくてもプロセスは起動し、呼び出しは正直に失敗する（ADR-0004）。
@@ -30,14 +30,14 @@ my-website/
 
 ### 来訪者向けサイト
 
-このワークスペースに来訪者向けフロントはない（`apps/site-web/` はツリーにない）。
+サイト利用者向けフロントは `apps/agent-portal`（ログイン / AI チャット）。来訪者向け公開フロント `apps/site-web/` は 2026-10-28 に削除された。
 
 サイト API は `website-services/gateway` 経由で呼ぶ。  
-**Site Auth のバックエンドは完了**（`/api/auth/site/**` がログイン / リフレッシュ / ログアウト、`GET /api/site/auth/me` は site-app）。**フロントは未接続**（[`docs/site-web/CURRENT_STATE.md`](docs/site-web/CURRENT_STATE.md)）。
+**Agent Auth（旧 Site Auth）のバックエンドは完了**（`/api/auth/agent/**` がログイン / リフレッシュ / ログアウト、`GET /api/agent/auth/me` は agent-app）。**フロントは agent-portal が接続済み**（現状は [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md)）。
 
 ### apps/admin-web
 
-管理コンソール。縦割り本流（Site / User / Template / Appearance / Media / Content / Reservation / RBAC）とサイト AI 管理は実 API。`AI_MODEL` がないとき、プレビューは正直に失敗する。Analytics / System などのページはまだプレースホルダ。
+管理コンソール。縦割り本流（Agent / User / Appearance / Media / Content / RBAC）※Template / Reservation は 2026-10-27 削除とサイト AI 管理は実 API。`AI_MODEL` がないとき、プレビューは正直に失敗する。Analytics / System などのページはまだプレースホルダ。
 
 文書:
 
@@ -54,15 +54,13 @@ Java 21 + Spring Boot 3.5.14 の Maven マルチモジュール。
 - `gateway`: 共通 API ゲートウェイ。ポート `8080`
 - `auth`: **共通認証**（Admin のログイン / リフレッシュ / ログアウト、JWT 発行）。ポート `8083`
 - `admin`: 管理 API（OAuth2 Resource Server と業務）。ポート `8081`
-- `site/site-app`: サイト API。ポート `8082`
+- `agent/agent-app`: サイト API。ポート `8082`
 
 共通モジュールと予約モジュール:
 
 - `common`: 共通レスポンス、エラーコード、例外、ページング。**`common.security`** は JWT / 身分の薄い契約
 - `infra`: PostgreSQL、Redis、MinIO / S3、MyBatis-Plus、Flyway、**システムメッセージの i18n**
-- `agent`: `HttpAgentClient` と Java↔Python 契約 DTO。業務オーケストレーションはしない
-- `site/site-core`: サイト共通のエンティティと Mapper（ユーザー、コンテンツ、予約、サイト AI）
-- `site/site-car`、`site/site-cake`: 空モジュール。`pom.xml` のみで、業務コードはない
+- `agent/agent-core`: サイト共通のエンティティと Mapper（ユーザー、コンテンツ、サイト AI）＋ `HttpAgentClient`（旧 site-core と agent クライアントを 2026-10-28 に統合）
 
 文書:
 
@@ -96,7 +94,7 @@ Python 3.13 + FastAPI + Pydantic AI 2.54 の AI Execution Runtime。既定ポー
 ```text
 admin-web ──> website-services/gateway:8080 ──> /api/auth/**   → auth:8083
                                               ──> /api/admin/**  → admin:8081（GET /api/admin/auth/me を含む）
-                                              └──> /api/site/**   → site-app:8082（GET /api/site/auth/me を含む）
+                                              └──> /api/agent/**  → agent-app:8082（GET /api/agent/auth/me を含む）
 ```
 
 リクエストは同じ gateway を通る。ログインは auth の `/api/auth/admin/**` と `/api/auth/site/**`。`/me` は auth にはなく、対応する業務サービスにある。
@@ -104,7 +102,7 @@ admin-web ──> website-services/gateway:8080 ──> /api/auth/**   → auth:
 Maven の内部依存（HTTP トポロジではない）:
 
 ```text
-admin / site-app / auth
+admin / agent-app / auth
   ├── infra  -> PostgreSQL / Redis / MinIO
   └── agent（必要なとき） -> services/agent-services
 ```
@@ -124,19 +122,16 @@ cd services/website-services
 mvn clean install -DskipTests
 mvn -pl auth -am spring-boot:run
 mvn -pl admin -am spring-boot:run
-mvn -pl site/site-app -am spring-boot:run
+mvn -pl agent/agent-app -am spring-boot:run
 mvn -pl gateway spring-boot:run
 ```
 
-`admin-web` を起動する:
+フロントを起動する:
 
 ```bash
-cd apps/admin-web
-pnpm install
-pnpm dev
+cd apps/admin-web && pnpm install && pnpm dev    # http://localhost:5173
+cd apps/agent-portal && pnpm install && pnpm dev # http://localhost:5174
 ```
-
-このワークスペースに来訪者向けフロントはない。
 
 `agent-services` を起動する:
 
