@@ -1,0 +1,192 @@
+# Disposable full stack for the admin-web browser E2E suite (Issue #2).
+#
+# Why a dedicated compose file instead of the repo-root docker-compose.yml:
+# the root stack targets self-hosting (Tailscale/Caddy, the Python agent
+# service, .env-driven secrets) and currently references a stale
+# services/webagent-services/Dockerfile path. The E2E stack only needs the
+# admin golden-path slice: postgres + redis + S3 (SeaweedFS) + admin + auth +
+# gateway + admin-web, with fixed throwaway credentials and generated
+# JWT keys (see run-e2e.sh / the browser-e2e-ci workflow).
+#
+# All credentials below are E2E-only placeholders for a stack that is
+# created and destroyed per run. Do not reuse them anywhere else.
+#
+# Usage: see run-e2e.sh (one command) or docs/testing/E2E_GOLDEN_PATHS.md.
+
+name: mywebsite-e2e
+
+x-java-env: &java-env
+  JAVA_OPTS: "-Xmx384m"
+  DB_URL: "jdbc:postgresql://postgres:5432/my_website_e2e"
+  DB_USERNAME: "mywebsite"
+  DB_PASSWORD: "e2e-postgres-password"
+  POSTGRES_DB: "my_website_e2e"
+  POSTGRES_USER: "mywebsite"
+  POSTGRES_PASSWORD: "e2e-postgres-password"
+
+x-java-health: &java-health
+  interval: 15s
+  timeout: 5s
+  retries: 20
+  start_period: 120s
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: "my_website_e2e"
+      POSTGRES_USER: "mywebsite"
+      POSTGRES_PASSWORD: "e2e-postgres-password"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mywebsite -d my_website_e2e"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7
+    # No password: matches the services' local-profile default
+    # (AUTH_REDIS_PASSWORD defaults to empty).
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # S3-compatible object storage for media uploads. The app talks S3
+  # via the MinIO Java SDK (storage.minio.* config), so any S3 endpoint
+  # works; official MinIO images/binaries are no longer anonymously
+  # downloadable, hence SeaweedFS (public Docker Hub image, S3 gateway
+  # on :8333, anonymous mode accepts the stack's throwaway keys).
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: ["server", "-dir=/data", "-s3"]
+
+  # One-shot bucket creation (media uploads require the bucket to exist;
+  # the backend does not create it). Run explicitly after the stack is up:
+  #   docker compose -f e2e/docker-compose.e2e.yml run --rm s3-init
+  s3-init:
+    image: amazon/aws-cli:latest
+    environment:
+      AWS_ACCESS_KEY_ID: "e2es3key"
+      AWS_SECRET_ACCESS_KEY: "e2e-s3-secret"
+      AWS_DEFAULT_REGION: "us-east-1"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "for i in $(seq 1 30); do aws --endpoint-url http://seaweedfs:8333 s3 mb s3://uploads && exit 0; sleep 2; done; exit 1"
+
+  admin:
+    build:
+      context: ../../..
+      dockerfile: services/website-services/Dockerfile
+      args:
+        MODULE: admin
+        JAR_GLOB: admin/target/admin-*.jar
+        EXPOSE_PORT: "8081"
+    environment:
+      <<: *java-env
+      AUTH_JWKS_URI: "http://auth:8083/.well-known/jwks.json"
+      AGENT_BUSINESS_API_BASE_URL: "http://admin:8081"
+      AI_MODEL_ENTRY_SECRET: "e2e-model-entry-secret"
+      MINIO_ENDPOINT: "http://seaweedfs:8333"
+      MINIO_ACCESS_KEY: "e2es3key"
+      MINIO_SECRET_KEY: "e2e-s3-secret"
+      MINIO_BUCKET: "uploads"
+      SECURITY_REFRESH_COOKIE_SECURE: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_started
+    healthcheck:
+      <<: *java-health
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/actuator/health >/dev/null"]
+
+  auth:
+    build:
+      context: ../../..
+      dockerfile: services/website-services/Dockerfile
+      args:
+        MODULE: auth
+        JAR_GLOB: auth/target/auth-*.jar
+        EXPOSE_PORT: "8083"
+    environment:
+      <<: *java-env
+      AUTH_DB_URL: "jdbc:postgresql://postgres:5432/my_website_e2e"
+      AUTH_DB_USERNAME: "mywebsite"
+      AUTH_DB_PASSWORD: "e2e-postgres-password"
+      AUTH_REDIS_HOST: redis
+      AUTH_REDIS_PORT: "6379"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      AUTH_JWT_PRIVATE_KEY_PATH: "/secrets/auth-private.pem"
+      AUTH_JWT_PUBLIC_KEY_PATH: "/secrets/auth-public.pem"
+      AUTH_JWT_KEY_ID: "e2e-rs256-key-1"
+      SECURITY_REFRESH_COOKIE_SECURE: "false"
+    volumes:
+      - ./secrets:/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Admin runs Flyway and owns the admin_user table auth reads.
+      admin:
+        condition: service_healthy
+    healthcheck:
+      <<: *java-health
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8083/actuator/health >/dev/null"]
+
+  gateway:
+    build:
+      context: ../../..
+      dockerfile: services/website-services/Dockerfile
+      args:
+        MODULE: gateway
+        JAR_GLOB: gateway/target/gateway-*.jar
+        EXPOSE_PORT: "8080"
+    environment:
+      JAVA_OPTS: "-Xmx384m"
+      # Same env-override pattern as the root compose: application.yml
+      # ships localhost URIs, the stack rewires them to service names.
+      # Route 2 (/api/agent/**) is not exercised by the admin golden
+      # paths; it points at admin so the path fails honestly (404)
+      # instead of being routed nowhere.
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_0_ID: auth-service-api
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_0_URI: "http://auth:8083"
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_0_PREDICATES_0: "Path=/api/auth/**"
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_1_ID: admin-service
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_1_URI: "http://admin:8081"
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_1_PREDICATES_0: "Path=/api/admin/**"
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_2_ID: agent-service
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_2_URI: "http://admin:8081"
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_2_PREDICATES_0: "Path=/api/agent/**"
+    depends_on:
+      auth:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+    healthcheck:
+      <<: *java-health
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health >/dev/null"]
+
+  admin-web:
+    build:
+      context: ../../..
+      dockerfile: apps/admin-web/Dockerfile
+    # Caddy in the admin-web image serves the admin SPA on :8081 and
+    # reverse-proxies /api to gateway:8080 (see deploy/Caddyfile).
+    ports:
+      - "8081:8081"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
