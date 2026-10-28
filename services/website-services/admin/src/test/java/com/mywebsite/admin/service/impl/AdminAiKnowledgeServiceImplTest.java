@@ -340,6 +340,36 @@ class AdminAiKnowledgeServiceImplTest {
     }
 
     @Test
+    void transcribeImageReturnsEmptyWhenChainEmpty() {
+        when(modelEntryService.selectionChain(7L)).thenReturn(List.of());
+
+        assertThat(service.transcribeImage(7L, new byte[] {1}, "image/png")).isEmpty();
+        verify(agentClient, never()).ocrImage(any());
+    }
+
+    @Test
+    void transcribeImageSendsChainMediaTypeAndReturnsTrimmedText() {
+        AgentModelSelection primary = new AgentModelSelection("google:gemini", "k", null);
+        byte[] png = new byte[] {(byte) 0x89, 'P', 'N', 'G'};
+        when(modelEntryService.selectionChain(7L)).thenReturn(List.of(primary));
+        java.util.concurrent.atomic.AtomicReference<
+                        com.mywebsite.agent.dto.AgentOcrImageRequest>
+                sent = new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(
+                        invocation -> {
+                            sent.set(invocation.getArgument(0));
+                            return new AgentOcrPdfResult("  图片文字  ", "google:gemini");
+                        })
+                .when(agentClient)
+                .ocrImage(any());
+
+        assertThat(service.transcribeImage(7L, png, "image/png")).isEqualTo("图片文字");
+        assertThat(sent.get().model()).isEqualTo(primary);
+        assertThat(sent.get().mediaType()).isEqualTo("image/png");
+        assertThat(sent.get().contentBase64()).isEqualTo(Base64.getEncoder().encodeToString(png));
+    }
+
+    @Test
     void transcribeScannedPdfSwallowsClientFailure() {
         when(modelEntryService.selectionChain(7L))
                 .thenReturn(List.of(new AgentModelSelection("google:gemini", "k", null)));

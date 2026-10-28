@@ -10,9 +10,9 @@ import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeListQuery;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedConflictResponse;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedResultDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUpdateRequest;
-import com.mywebsite.admin.service.AdminAiKnowledgeContentConverter;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
-import com.mywebsite.admin.service.AdminAiKnowledgeTextExtractor;
+import com.mywebsite.infra.knowledge.KnowledgeContentConverter;
+import com.mywebsite.infra.knowledge.KnowledgeTextExtractor;
 import com.mywebsite.admin.service.AdminAiKnowledgeService.ReembedConflictException;
 import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.api.ResponseMessages;
@@ -49,15 +49,30 @@ public class AdminAiKnowledgeController {
 
     private static final String DOCUMENTS = "/api/admin/sites/{siteId}/ai/knowledge-documents";
     private static final int MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+    /** zip 批量导入上限：条目数与解压后总字节（防 zip 炸弹与整批拖垮请求）。 */
+    private static final int MAX_ARCHIVE_ENTRIES = 100;
+
+    private static final long MAX_ARCHIVE_TOTAL_BYTES = 50L * 1024 * 1024;
     /** 抽取文本上限（字符），与 agent-services 的 MAX_CONTENT_LENGTH 对齐。 */
     private static final int MAX_CONTENT_CHARS = 3_000_000;
     private static final int MAX_TITLE_LENGTH = 255;
     private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
-            "txt", "md", "markdown", "csv", "tsv", "json", "xml", "yaml", "yml", "toml", "ini", "log",
+            "txt", "md", "markdown", "text", "rst", "adoc", "asciidoc", "org", "tex",
+            "csv", "tsv", "json", "xml", "yaml", "yml", "toml", "ini", "log",
+            "jsonl", "ndjson", "properties", "conf", "cfg", "env", "diff", "patch",
             "py", "java", "js", "ts", "tsx", "jsx", "css", "scss", "sql", "sh",
-            "go", "rs", "c", "h", "cpp", "hpp", "cs", "rb", "php", "swift", "kt",
-            "scala", "pl", "r", "lua", "vue",
-            "pdf", "docx", "html", "htm", "xlsx", "pptx", "epub", "odt", "ods", "odp", "rtf");
+            "bash", "zsh", "ps1", "mjs", "cjs",
+            "go", "rs", "c", "h", "cpp", "hpp", "cs", "rb", "php", "swift", "kt", "kts",
+            "scala", "pl", "r", "lua", "vue", "svelte", "dart", "groovy", "gradle",
+            "hs", "ex", "exs", "tf", "proto",
+            "pdf", "docx", "docm", "doc", "html", "htm", "xlsx", "xlsm", "xls",
+            "pptx", "pptm", "ppt", "epub", "odt", "ods", "odp", "rtf",
+            "png", "jpg", "jpeg", "webp", "gif", "bmp", "heic", "heif");
+
+    /** 图片扩展名：不走文本转换器，内容来自视觉转写（见 toUploadPayload）。 */
+    private static final Set<String> IMAGE_EXTENSIONS =
+            Set.of("png", "jpg", "jpeg", "webp", "gif", "bmp", "heic", "heif");
 
     private static final java.util.Map<String, String> CONTENT_TYPES = java.util.Map.ofEntries(
             java.util.Map.entry("pdf", "application/pdf"),
@@ -73,7 +88,18 @@ public class AdminAiKnowledgeController {
             java.util.Map.entry("rtf", "application/rtf"),
             java.util.Map.entry("json", "application/json"),
             java.util.Map.entry("csv", "text/csv"),
-            java.util.Map.entry("md", "text/markdown"));
+            java.util.Map.entry("md", "text/markdown"),
+            java.util.Map.entry("png", "image/png"),
+            java.util.Map.entry("jpg", "image/jpeg"),
+            java.util.Map.entry("jpeg", "image/jpeg"),
+            java.util.Map.entry("webp", "image/webp"),
+            java.util.Map.entry("gif", "image/gif"),
+            java.util.Map.entry("bmp", "image/bmp"),
+            java.util.Map.entry("heic", "image/heic"),
+            java.util.Map.entry("heif", "image/heif"),
+            java.util.Map.entry("doc", "application/msword"),
+            java.util.Map.entry("xls", "application/vnd.ms-excel"),
+            java.util.Map.entry("ppt", "application/vnd.ms-powerpoint"));
 
     private final AdminAiKnowledgeService adminAiKnowledgeService;
 
@@ -183,6 +209,71 @@ public class AdminAiKnowledgeController {
                 adminAiKnowledgeService.createUploadedDocument(siteId, payload.request(), payload.meta())));
     }
 
+    @PostMapping(value = DOCUMENTS + "/upload-archive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
+    @Operation(summary = "上传 zip 批量导入 AI 知识库文档（逐条转换入库，部分失败不回滚）")
+    public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveResultDto>> uploadArchive(
+            @PathVariable long siteId,
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(value = "baseId", required = false) Long baseId) {
+        if (file == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_REQUIRED);
+        }
+        if (!"zip".equals(extensionOf(baseName(file.getOriginalFilename())))) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_TYPE);
+        }
+        byte[] zipBytes = readBytes(file);
+        java.util.List<AdminAiKnowledgeDetailDto> documents = new java.util.ArrayList<>();
+        java.util.List<AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveFailureDto> failures =
+                new java.util.ArrayList<>();
+        long totalBytes = 0;
+        int entries = 0;
+        try (java.util.zip.ZipInputStream zip =
+                new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zipBytes))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                String entryPath = entry.getName();
+                String entryName = baseName(entryPath);
+                // 系统垃圾（macOS 资源叉、缩略图缓存、隐藏文件）不算用户文档，静默跳过
+                if (entryName.isBlank()
+                        || entryName.startsWith(".")
+                        || entryPath.startsWith("__MACOSX")) {
+                    continue;
+                }
+                entries++;
+                if (entries > MAX_ARCHIVE_ENTRIES) {
+                    failures.add(new AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveFailureDto(
+                            entryName, AdminAiKnowledgeMessageKeys.FILE_SIZE));
+                    break;
+                }
+                byte[] entryBytes = zip.readAllBytes();
+                totalBytes += entryBytes.length;
+                if (totalBytes > MAX_ARCHIVE_TOTAL_BYTES) {
+                    failures.add(new AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveFailureDto(
+                            entryName, AdminAiKnowledgeMessageKeys.FILE_SIZE));
+                    break;
+                }
+                try {
+                    UploadPayload payload = toUploadPayload(siteId, entryName, entryBytes, null, baseId);
+                    documents.add(adminAiKnowledgeService.createUploadedDocument(
+                            siteId, payload.request(), payload.meta()));
+                } catch (BusinessException ex) {
+                    failures.add(new AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveFailureDto(
+                            entryName, ex.getMessageKey()));
+                }
+            }
+        } catch (java.io.IOException ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_ENCODING);
+        }
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS,
+                new AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveResultDto(
+                        documents.size(), documents, failures)));
+    }
+
     @GetMapping(DOCUMENTS + "/{id}/file")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "AI 知识库文档原档下载（短时 presigned URL）")
@@ -199,22 +290,33 @@ public class AdminAiKnowledgeController {
         if (file == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_REQUIRED);
         }
-        String filename = baseName(file.getOriginalFilename());
+        if (file.getSize() > MAX_UPLOAD_BYTES) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
+        }
+        return toUploadPayload(siteId, baseName(file.getOriginalFilename()), readBytes(file), titleOverride, baseId);
+    }
+
+    private UploadPayload toUploadPayload(
+            long siteId, String filename, byte[] bytes, String titleOverride, Long baseId) {
         String extension = extensionOf(filename);
         if (!SUPPORTED_EXTENSIONS.contains(extension)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_TYPE);
         }
-        if (file.getSize() > MAX_UPLOAD_BYTES) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
-        }
-        byte[] bytes = readBytes(file);
         if (bytes.length > MAX_UPLOAD_BYTES) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
         }
-        String content = convertContent(extension, bytes);
-        if (!StringUtils.hasText(content) && "pdf".equals(extension)) {
-            // 扫描版 PDF 无文本层：经站点生效模型链转写；仍为空才按 FILE_EMPTY 拒绝。
-            content = adminAiKnowledgeService.transcribeScannedPdf(siteId, bytes);
+        String content;
+        if (IMAGE_EXTENSIONS.contains(extension)) {
+            // 图片没有文本层可抽：直接经站点生效模型链视觉转写；为空按 FILE_EMPTY 拒绝。
+            content =
+                    adminAiKnowledgeService.transcribeImage(
+                            siteId, bytes, CONTENT_TYPES.getOrDefault(extension, "application/octet-stream"));
+        } else {
+            content = convertContent(extension, bytes);
+            if (!StringUtils.hasText(content) && "pdf".equals(extension)) {
+                // 扫描版 PDF 无文本层：经站点生效模型链转写；仍为空才按 FILE_EMPTY 拒绝。
+                content = adminAiKnowledgeService.transcribeScannedPdf(siteId, bytes);
+            }
         }
         if (!StringUtils.hasText(content)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_EMPTY);
@@ -238,8 +340,8 @@ public class AdminAiKnowledgeController {
 
     private static String convertContent(String extension, byte[] bytes) {
         try {
-            return AdminAiKnowledgeContentConverter.toStoredContent(extension, bytes);
-        } catch (AdminAiKnowledgeTextExtractor.ExtractionException ex) {
+            return KnowledgeContentConverter.toStoredContent(extension, bytes);
+        } catch (KnowledgeTextExtractor.ExtractionException ex) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_ENCODING);
         }
     }
