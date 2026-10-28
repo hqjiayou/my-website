@@ -4,6 +4,7 @@ import type {
   SiteAiChatRequest,
   SiteAiConversation,
   SiteAiMessage,
+  SiteAiSearchHit,
   SiteAiShare,
   SiteKnowledgeDocumentDetail,
   SiteKnowledgeDocumentListItem,
@@ -78,6 +79,13 @@ export const siteAiApi = {
           throw new ApiError(body.message || '請求失敗', { code: body.code })
         }
       })
+  },
+
+  /** 跨對話全文搜尋：回傳命中消息的摘要（按消息 id 倒序，最多 30 條）。 */
+  searchConversations(siteId: string, query: string) {
+    return httpClient
+      .get<HttpMessageBody<SiteAiSearchHit[]>>(`/api/site/${siteId}/ai/search?q=${encodeURIComponent(query)}`)
+      .then(unwrapData)
   },
 
   /** 公開讀分享快照（不需要登入）。 */

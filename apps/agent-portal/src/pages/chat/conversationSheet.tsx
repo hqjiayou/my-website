@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pencil, RefreshCw, Search, SquarePen, Trash, X } from 'lucide-react'
 
-import type { SiteAiConversation } from '@/types/api'
+import type { SiteAiConversation, SiteAiSearchHit } from '@/types/api'
 import { errorMessage } from '@/utils/http/apiError'
 
 /** 与站点会话标题生成截断、重命名 DTO 上限一致。 */
@@ -19,6 +19,9 @@ interface ConversationSheetProps {
   onRefresh: () => void
   onCreate: () => void
   onOpen: (id: string) => void
+  /** 跨對話全文搜尋（可選）：輸入至少 2 字時 debounce 調用，結果在標題列表下方分區顯示。 */
+  onSearchContent?: (query: string) => Promise<SiteAiSearchHit[]>
+  onOpenHit?: (conversationId: string, messageId: string) => void
   onRename: (id: string, title: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
 }
@@ -36,6 +39,8 @@ export function ConversationSheet({
   onOpen,
   onRename,
   onDelete,
+  onSearchContent,
+  onOpenHit,
 }: ConversationSheetProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
@@ -45,6 +50,27 @@ export function ConversationSheet({
   const [pending, setPending] = useState(false)
   const [query, setQuery] = useState('')
   const pendingRef = useRef(false)
+
+  const [contentHits, setContentHits] = useState<{ q: string; hits: SiteAiSearchHit[] } | null>(null)
+
+  useEffect(() => {
+    const q = query.trim()
+    if (!onSearchContent || q.length < 2) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      onSearchContent(q)
+        .then((hits) => {
+          if (!cancelled) setContentHits({ q, hits })
+        })
+        .catch(() => {
+          if (!cancelled) setContentHits({ q, hits: [] })
+        })
+    }, 300)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [query, onSearchContent])
 
   if (!open) return null
 
@@ -95,6 +121,8 @@ export function ConversationSheet({
   const visibleItems = query.trim()
     ? items.filter((item) => (item.title ?? '').toLowerCase().includes(query.trim().toLowerCase()))
     : items
+
+  const shownHits = contentHits && contentHits.q === query.trim() ? contentHits.hits : null
 
   function submitDelete(id: string) {
     if (pendingRef.current) return
@@ -310,6 +338,33 @@ export function ConversationSheet({
             )
           })}
         </ul>
+        {shownHits !== null && onOpenHit ? (
+          <div className="mt-2 border-t border-gpt-line pt-2">
+            <p className="px-2 pb-1 text-xs font-medium tracking-wide text-gpt-muted">
+              內容匹配{shownHits.length > 0 ? `（${shownHits.length}）` : ''}
+            </p>
+            {shownHits.length === 0 ? (
+              <p className="px-2 py-2 text-sm leading-6 text-gpt-muted">沒有找到包含這段文字的消息。</p>
+            ) : (
+              <ul className="flex flex-col">
+                {shownHits.map((hit) => (
+                  <li key={hit.messageId}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenHit(String(hit.conversationId), String(hit.messageId))}
+                      className="flex w-full flex-col gap-0.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-gpt-hover"
+                    >
+                      <span className="w-full truncate text-sm font-medium">
+                        {hit.conversationTitle?.trim() || '未命名對話'}
+                      </span>
+                      <span className="line-clamp-2 text-xs leading-5 text-gpt-muted">{hit.snippet}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   )

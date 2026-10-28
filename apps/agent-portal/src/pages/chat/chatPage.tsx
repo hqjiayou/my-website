@@ -509,6 +509,33 @@ export function ChatPage() {
     if (routeId) navigate(ROUTES.chat)
   }
 
+  const pendingScrollRef = useRef<string | null>(null)
+
+  function flashToMessage(messageId: string): boolean {
+    const element = document.querySelector(`[data-mid="${messageId}"]`)
+    if (!element) return false
+    element.scrollIntoView({ block: 'center' })
+    element.classList.add('bg-gpt-active')
+    window.setTimeout(() => element.classList.remove('bg-gpt-active'), 1600)
+    return true
+  }
+
+  function openSearchHit(conversationId: string, messageId: string) {
+    if (conversationId === routeId) {
+      closeDrawer()
+      flashToMessage(messageId)
+      return
+    }
+    pendingScrollRef.current = messageId
+    openConversation(conversationId)
+  }
+
+  useEffect(() => {
+    const target = pendingScrollRef.current
+    if (!target || historyLoading) return
+    if (flashToMessage(target)) pendingScrollRef.current = null
+  }, [historyLoading, messages])
+
   function openConversation(conversationId: string) {
     stopSpeaking()
     if (!site.ok) return
@@ -993,6 +1020,8 @@ export function ChatPage() {
         onRefresh={() => void loadConversations(site.siteId)}
         onCreate={startNewChat}
         onOpen={(id) => void openConversation(id)}
+        onSearchContent={(q) => siteAiApi.searchConversations(site.siteId, q)}
+        onOpenHit={openSearchHit}
         onRename={renameConversation}
         onDelete={removeConversation}
       />,
@@ -1416,7 +1445,13 @@ export function ChatPage() {
               return (
                 <li
                   key={message.id}
-                  className={isUser ? 'msg-in group flex flex-col items-end' : 'msg-in group flex flex-col items-start'}
+                  data-mid={message.id}
+                  className={
+                    (isUser
+                      ? 'msg-in group flex flex-col items-end'
+                      : 'msg-in group flex flex-col items-start') +
+                    ' rounded-2xl transition-colors duration-500'
+                  }
                 >
                   <div className={isUser ? 'max-w-[85%] rounded-3xl bg-gpt-user px-4 py-2.5' : 'max-w-full'}>
                     {hasProcess ? (

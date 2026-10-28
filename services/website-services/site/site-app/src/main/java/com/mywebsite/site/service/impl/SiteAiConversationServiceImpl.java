@@ -17,6 +17,7 @@ import com.mywebsite.site.dto.SiteAiAttachmentDto;
 import com.mywebsite.site.dto.SiteAiConversationDto;
 import com.mywebsite.site.dto.SiteAiConversationRenameRequestDto;
 import com.mywebsite.site.dto.SiteAiMessageDto;
+import com.mywebsite.site.dto.SiteAiSearchHitDto;
 import com.mywebsite.site.dto.SiteAiShareDto;
 import com.mywebsite.site.dto.SiteAiSharedConversationDto;
 import com.mywebsite.site.entity.SiteAiConversationEntity;
@@ -41,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -278,6 +280,74 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
             log.warn("site ai conversation share {} has malformed snapshot, treated as gone", share.getId(), ex);
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
+    }
+
+    @Override
+    public List<SiteAiSearchHitDto> searchConversations(long siteId, long siteUserId, String query) {
+        String trimmed = query == null ? "" : query.trim();
+        if (trimmed.isEmpty()) {
+            return List.of();
+        }
+        List<Long> conversationIds = conversationMapper
+                .selectList(new LambdaQueryWrapper<SiteAiConversationEntity>()
+                        .select(SiteAiConversationEntity::getId)
+                        .eq(SiteAiConversationEntity::getSiteId, siteId)
+                        .eq(SiteAiConversationEntity::getSiteUserId, siteUserId))
+                .stream()
+                .map(SiteAiConversationEntity::getId)
+                .toList();
+        if (conversationIds.isEmpty()) {
+            return List.of();
+        }
+        String pattern = likePattern(trimmed);
+        List<SiteAiMessageEntity> hits = messageMapper.selectList(
+                new LambdaQueryWrapper<SiteAiMessageEntity>()
+                        .in(SiteAiMessageEntity::getConversationId, conversationIds)
+                        .apply("content ILIKE {0} ESCAPE '\\'", pattern)
+                        .orderByDesc(SiteAiMessageEntity::getId)
+                        .last("LIMIT 30"));
+        if (hits.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, String> titles = conversationMapper
+                .selectBatchIds(
+                        hits.stream().map(SiteAiMessageEntity::getConversationId).collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.toMap(
+                        SiteAiConversationEntity::getId,
+                        c -> c.getTitle() == null ? "" : c.getTitle(),
+                        (a, b) -> a));
+        return hits.stream()
+                .map(m -> new SiteAiSearchHitDto(
+                        m.getConversationId(),
+                        titles.getOrDefault(m.getConversationId(), ""),
+                        m.getId(),
+                        m.getRole(),
+                        snippet(m.getContent(), trimmed),
+                        m.getCreatedAt()))
+                .toList();
+    }
+
+    /** LIKE 模式：转义反斜杠与通配符后包裹 %，与 SQL 的 ESCAPE '\' 对应。 */
+    static String likePattern(String trimmedQuery) {
+        return "%"
+                + trimmedQuery.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                + "%";
+    }
+
+    /** 围绕首个命中位置截取 ±30 字摘要（空白折叠）；找不到时退化为开头 60 字。 */
+    private static String snippet(String content, String query) {
+        if (content == null) {
+            return "";
+        }
+        int index = content.toLowerCase().indexOf(query.toLowerCase());
+        if (index < 0) {
+            return content.length() > 60 ? content.substring(0, 60) + "…" : content;
+        }
+        int start = Math.max(0, index - 30);
+        int end = Math.min(content.length(), index + query.length() + 30);
+        String part = content.substring(start, end).replaceAll("\\s+", " ");
+        return (start > 0 ? "…" : "") + part + (end < content.length() ? "…" : "");
     }
 
     private SiteAiConversationShareEntity findShare(long conversationId) {
