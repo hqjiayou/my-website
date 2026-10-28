@@ -1,0 +1,4 @@
+# Playwright E2E artifacts and throwaway stack secrets (Issue #2)
+test-results/
+playwright-report/
+e2e/secrets/
