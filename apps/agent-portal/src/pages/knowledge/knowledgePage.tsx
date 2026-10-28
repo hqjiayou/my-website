@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronDown, Search, X } from 'lucide-react'
 
-import { siteAiApi } from '@/api/siteAiApi'
+import { agentAiApi } from '@/api/agentAiApi'
 import { Card, CardTitle } from '@/components/card'
 import { MarkdownText } from '@/components/markdown'
 import { Screen } from '@/components/screen'
-import { resolvePortalSiteId } from '@/config/env'
+import { resolvePortalAgentId } from '@/config/env'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
-import type { SiteKnowledgeDocumentDetail, SiteKnowledgeDocumentListItem } from '@/types/api'
+import type { AgentKnowledgeDocumentDetail, AgentKnowledgeDocumentListItem } from '@/types/api'
 import { errorMessage } from '@/utils/http/apiError'
 
 /**
@@ -17,18 +17,18 @@ import { errorMessage } from '@/utils/http/apiError'
  * 检索不在这里发生：到 AI 对话里提问，agent 会在回答时自行检索知识库。
  */
 export function KnowledgePage() {
-  const site = useMemo(() => resolvePortalSiteId(useAuthStore.getState().site?.siteId), [])
-  const [documents, setDocuments] = useState<SiteKnowledgeDocumentListItem[] | null>(null)
+  const site = useMemo(() => resolvePortalAgentId(useAuthStore.getState().site?.agentId), [])
+  const [documents, setDocuments] = useState<AgentKnowledgeDocumentListItem[] | null>(null)
   const [documentsError, setDocumentsError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [openDocumentId, setOpenDocumentId] = useState<number | null>(null)
-  const [details, setDetails] = useState<Record<number, SiteKnowledgeDocumentDetail | 'loading' | 'error'>>({})
+  const [details, setDetails] = useState<Record<number, AgentKnowledgeDocumentDetail | 'loading' | 'error'>>({})
 
   useEffect(() => {
     if (!site.ok) return
     let cancelled = false
-    siteAiApi
-      .listKnowledgeDocuments(site.siteId)
+    agentAiApi
+      .listKnowledgeDocuments(site.agentId)
       .then((items) => {
         if (!cancelled) setDocuments(items)
       })
@@ -41,7 +41,7 @@ export function KnowledgePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site.ok])
 
-  async function toggleDocument(document: SiteKnowledgeDocumentListItem) {
+  async function toggleDocument(document: AgentKnowledgeDocumentListItem) {
     if (!site.ok) return
     if (openDocumentId === document.id) {
       setOpenDocumentId(null)
@@ -51,7 +51,7 @@ export function KnowledgePage() {
     if (details[document.id] !== undefined) return
     setDetails((current) => ({ ...current, [document.id]: 'loading' }))
     try {
-      const detail = await siteAiApi.getKnowledgeDocument(site.siteId, document.id)
+      const detail = await agentAiApi.getKnowledgeDocument(site.agentId, document.id)
       setDetails((current) => ({ ...current, [document.id]: detail }))
     } catch {
       setDetails((current) => ({ ...current, [document.id]: 'error' }))

@@ -72,49 +72,49 @@ class AdminMediaManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void happyPath_uploadListDetailPreviewDelete() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
 
         byte[] jpeg = minimalJpeg();
         MockMultipartFile file = new MockMultipartFile(
                 "file", "photo.jpg", "application/octet-stream", jpeg);
 
-        MvcResult uploaded = mockMvc.perform(multipart("/api/admin/sites/" + siteId + "/media")
+        MvcResult uploaded = mockMvc.perform(multipart("/api/admin/agents/" + agentId + "/media")
                         .file(file)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.contentType").value("image/jpeg"))
                 .andExpect(jsonPath("$.data.extension").value("jpg"))
                 .andExpect(jsonPath("$.data.status").value("READY"))
-                .andExpect(jsonPath("$.data.siteId").value((int) siteId))
+                .andExpect(jsonPath("$.data.agentId").value((int) agentId))
                 .andReturn();
 
         long mediaId =
                 MAPPER.readTree(uploaded.getResponse().getContentAsString()).path("data").path("id").asLong();
         verify(objectStorageService).put(eq("test"), anyString(), any(), eq((long) jpeg.length), eq("image/jpeg"));
 
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/media")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/media")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.records[0].id").value((int) mediaId));
 
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/media/" + mediaId)
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/media/" + mediaId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.originalFilename").value("photo.jpg"))
                 .andExpect(jsonPath("$.data.sha256").isNotEmpty());
 
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/media/" + mediaId + "/preview")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/media/" + mediaId + "/preview")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.previewUrl").value("http://example.test/presigned"))
                 .andExpect(jsonPath("$.data.expiresAt").isNotEmpty());
 
-        mockMvc.perform(delete("/api/admin/sites/" + siteId + "/media/" + mediaId)
+        mockMvc.perform(delete("/api/admin/agents/" + agentId + "/media/" + mediaId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/media/" + mediaId)
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/media/" + mediaId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
 
@@ -124,22 +124,22 @@ class AdminMediaManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void uploadForbiddenWithoutPermission() throws Exception {
         String token = tokenFor(100L);
-        long siteId = createSite(tokenFor(500L));
+        long agentId = createSite(tokenFor(500L));
         MockMultipartFile file =
                 new MockMultipartFile("file", "a.jpg", "image/jpeg", minimalJpeg());
-        mockMvc.perform(multipart("/api/admin/sites/" + siteId + "/media")
+        mockMvc.perform(multipart("/api/admin/agents/" + agentId + "/media")
                         .file(file)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    void crossSiteMediaReturns404() throws Exception {
+    void crossAgentMediaReturns404() throws Exception {
         String token = tokenFor(500L);
-        long siteA = createSite(token);
-        long siteB = createSite(token);
+        long agentA = createSite(token);
+        long agentB = createSite(token);
 
-        MvcResult uploaded = mockMvc.perform(multipart("/api/admin/sites/" + siteA + "/media")
+        MvcResult uploaded = mockMvc.perform(multipart("/api/admin/agents/" + agentA + "/media")
                         .file(new MockMultipartFile("file", "a.jpg", "image/jpeg", minimalJpeg()))
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
@@ -147,15 +147,15 @@ class AdminMediaManagementMvcTest extends AbstractAdminSpringBootTest {
         long mediaId =
                 MAPPER.readTree(uploaded.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        mockMvc.perform(get("/api/admin/sites/" + siteB + "/media/" + mediaId)
+        mockMvc.perform(get("/api/admin/agents/" + agentB + "/media/" + mediaId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(get("/api/admin/sites/" + siteB + "/media/" + mediaId + "/preview")
+        mockMvc.perform(get("/api/admin/agents/" + agentB + "/media/" + mediaId + "/preview")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(delete("/api/admin/sites/" + siteB + "/media/" + mediaId)
+        mockMvc.perform(delete("/api/admin/agents/" + agentB + "/media/" + mediaId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
@@ -163,9 +163,9 @@ class AdminMediaManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void rejectsSvgAndHtmlByMagic() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
 
-        mockMvc.perform(multipart("/api/admin/sites/" + siteId + "/media")
+        mockMvc.perform(multipart("/api/admin/agents/" + agentId + "/media")
                         .file(new MockMultipartFile(
                                 "file",
                                 "x.svg",
@@ -175,7 +175,7 @@ class AdminMediaManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isBadRequest());
 
-        mockMvc.perform(multipart("/api/admin/sites/" + siteId + "/media")
+        mockMvc.perform(multipart("/api/admin/agents/" + agentId + "/media")
                         .file(new MockMultipartFile(
                                 "file",
                                 "x.html",
@@ -188,14 +188,14 @@ class AdminMediaManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void rejectsOversizedImage() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
 
         byte[] header = minimalJpeg();
         byte[] oversized = new byte[5 * 1024 * 1024 + 64];
         System.arraycopy(header, 0, oversized, 0, header.length);
         Arrays.fill(oversized, header.length, oversized.length, (byte) 0x00);
 
-        mockMvc.perform(multipart("/api/admin/sites/" + siteId + "/media")
+        mockMvc.perform(multipart("/api/admin/agents/" + agentId + "/media")
                         .file(new MockMultipartFile("file", "big.jpg", "image/jpeg", oversized))
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isBadRequest());
@@ -204,12 +204,12 @@ class AdminMediaManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void uploadFailsWhenStoragePutFails_marksFailedPath() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
         doThrow(new IllegalStateException("boom"))
                 .when(objectStorageService)
                 .put(anyString(), anyString(), any(), anyLong(), anyString());
 
-        mockMvc.perform(multipart("/api/admin/sites/" + siteId + "/media")
+        mockMvc.perform(multipart("/api/admin/agents/" + agentId + "/media")
                         .file(new MockMultipartFile("file", "a.jpg", "image/jpeg", minimalJpeg()))
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isInternalServerError());
@@ -223,18 +223,18 @@ class AdminMediaManagementMvcTest extends AbstractAdminSpringBootTest {
                 ORDER BY id DESC
                 LIMIT 1
                 """,
-                siteId);
+                agentId);
         assertThat(row.get("status")).isEqualTo("FAILED");
         assertThat(row.get("deleted")).isEqualTo(false);
         assertThat(row.get("object_purged_at")).isNull();
     }
 
     @Test
-    void softDeleteSiteAlsoSoftDeletesMedia() throws Exception {
+    void softDeleteAgentAlsoSoftDeletesMedia() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
 
-        MvcResult uploaded = mockMvc.perform(multipart("/api/admin/sites/" + siteId + "/media")
+        MvcResult uploaded = mockMvc.perform(multipart("/api/admin/agents/" + agentId + "/media")
                         .file(new MockMultipartFile("file", "a.jpg", "image/jpeg", minimalJpeg()))
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
@@ -242,20 +242,20 @@ class AdminMediaManagementMvcTest extends AbstractAdminSpringBootTest {
         long mediaId =
                 MAPPER.readTree(uploaded.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        mockMvc.perform(delete("/api/admin/sites/" + siteId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(delete("/api/admin/agents/" + agentId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/media/" + mediaId)
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/media/" + mediaId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
 
     private long createSite(String token) throws Exception {
         ObjectNode body = MAPPER.createObjectNode();
-        body.put("siteCode", "m_" + Long.toHexString(System.nanoTime()));
-        body.put("siteName", "Media Site");
-        body.put("siteType", "CAKE");
-        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+        body.put("agentCode", "m_" + Long.toHexString(System.nanoTime()));
+        body.put("agentName", "Media Agent");
+        body.put("agentType", "CAKE");
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))

@@ -61,7 +61,7 @@ async def test_over_budget_history_puts_dropped_prefix_summary_in_system_prompt(
     assert summary == "EARLIER SUMMARY"
 
     harness = assemble_harness(
-        site_id="1",
+        agent_id="1",
         message="now",
         history=history,
         budget=RunBudget(history_max_chars=25),
@@ -100,7 +100,7 @@ async def test_history_summary_failure_does_not_block_chat(tmp_path, monkeypatch
 
         outcome = await run_chat(
             FunctionModel(capture),
-            site_id="1",
+            agent_id="1",
             message="now",
             history=history,
             budget=RunBudget(history_max_chars=7),
@@ -128,7 +128,7 @@ async def test_history_summary_does_not_rewrite_history_or_reply(tmp_path, monke
 
     outcome = await run_chat(
         FunctionModel(capture),
-        site_id="1",
+        agent_id="1",
         message="now",
         history=history,
         budget=RunBudget(history_max_chars=7),
@@ -163,7 +163,7 @@ def _looping_model() -> FunctionModel:
 async def test_request_limit_exceeded_is_budget_error_not_dependency_error() -> None:
     outcome = await run_chat(
         _looping_model(),
-        site_id="1",
+        agent_id="1",
         message="loop",
         toolsets=[_ping_toolset()],
         budget=RunBudget(usage_limits=UsageLimits(request_limit=3)),
@@ -180,7 +180,7 @@ async def test_stream_budget_exceeded_emits_error_without_done() -> None:
         event
         async for event in stream_chat_events(
             FunctionModel(stream_function=stream_fn),
-            site_id="1",
+            agent_id="1",
             message="loop",
             toolsets=[_ping_toolset()],
             budget=RunBudget(usage_limits=UsageLimits(request_limit=2)),
@@ -196,7 +196,7 @@ async def test_reply_carries_usage() -> None:
     def respond(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart("hi")])
 
-    outcome = await run_chat(FunctionModel(respond), site_id="1", message="hello")
+    outcome = await run_chat(FunctionModel(respond), agent_id="1", message="hello")
     assert isinstance(outcome, ChatReply)
     assert outcome.usage["requests"] == 1
     assert set(outcome.usage) == {"requests", "toolCalls", "inputTokens", "outputTokens"}
@@ -210,7 +210,7 @@ def _ping_then_answer(messages: list[ModelMessage], _info: AgentInfo) -> ModelRe
 
 async def test_sync_reply_carries_tool_trace_without_content() -> None:
     outcome = await run_chat(
-        FunctionModel(_ping_then_answer), site_id="1", message="go", toolsets=[_ping_toolset()]
+        FunctionModel(_ping_then_answer), agent_id="1", message="go", toolsets=[_ping_toolset()]
     )
     assert isinstance(outcome, ChatReply)
     assert outcome.tools == [{"name": "ping", "ok": True}]
@@ -227,7 +227,7 @@ async def test_stream_done_carries_tool_trace() -> None:
         event
         async for event in stream_chat_events(
             FunctionModel(stream_function=stream_fn),
-            site_id="1",
+            agent_id="1",
             message="go",
             toolsets=[_ping_toolset()],
         )
@@ -257,7 +257,7 @@ async def test_slow_tool_times_out_and_reports_failed_tool_result() -> None:
         event
         async for event in stream_chat_events(
             FunctionModel(stream_function=stream_fn),
-            site_id="1",
+            agent_id="1",
             message="slow",
             toolsets=[toolset],
             budget=RunBudget(usage_limits=UsageLimits(request_limit=5), tool_timeout_seconds=0.1),
@@ -274,7 +274,7 @@ def test_chat_endpoint_maps_budget_to_422_flat_body() -> None:
     looping = ModelHandle(model=FunctionModel(respond), spec="test:loop", blocked_reason=None)
     app = create_app(make_settings(agent_max_requests=2), model_handle=looping)
     response = TestClient(app).post(
-        "/internal/v1/chat", headers=TOKEN_HEADER, json={"siteId": "1", "message": "loop"}
+        "/internal/v1/chat", headers=TOKEN_HEADER, json={"agentId": "1", "message": "loop"}
     )
     assert response.status_code == 422
     body = response.json()
@@ -285,6 +285,6 @@ def test_chat_endpoint_returns_usage() -> None:
     ok_handle = ModelHandle(model=TestModel(custom_output_text="ok"), spec="test", blocked_reason=None)
     ok_app = create_app(make_settings(agent_enable_todo_tools=False), model_handle=ok_handle)
     data = TestClient(ok_app).post(
-        "/internal/v1/chat", headers=TOKEN_HEADER, json={"siteId": "1", "message": "hi"}
+        "/internal/v1/chat", headers=TOKEN_HEADER, json={"agentId": "1", "message": "hi"}
     ).json()["data"]
     assert data["usage"]["requests"] >= 1

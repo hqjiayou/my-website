@@ -27,7 +27,7 @@
         </dependency>
         <dependency>
             <groupId>com.mywebsite</groupId>
-            <artifactId>agent</artifactId>
+            <artifactId>agent-core</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

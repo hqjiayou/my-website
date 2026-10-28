@@ -4,29 +4,29 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.time.OffsetDateTime;
 
-/** 站点 AI 会话（表 {@code site_ai_conversation}，SoT；写入仅 site-app）。 */
-@TableName("site_ai_conversation")
+/** 站点 AI 会话（表 {@code agent_ai_conversation}，SoT；写入仅 agent-app）。 */
+@TableName("agent_ai_conversation")
 public class AdminAiConversationEntity extends AbstractAuditableEntity {
 
-    private Long siteId;
-    private Long siteUserId;
+    private Long agentId;
+    private Long agentUserId;
     private String title;
     private OffsetDateTime lastMessageAt;
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
-    public Long getSiteUserId() {
-        return siteUserId;
+    public Long getAgentUserId() {
+        return agentUserId;
     }
 
-    public void setSiteUserId(Long siteUserId) {
-        this.siteUserId = siteUserId;
+    public void setAgentUserId(Long agentUserId) {
+        this.agentUserId = agentUserId;
     }
 
     public String getTitle() {

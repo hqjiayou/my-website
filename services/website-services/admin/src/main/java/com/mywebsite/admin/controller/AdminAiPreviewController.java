@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
-@RequestMapping("/api/admin/sites/{siteId}/ai")
+@RequestMapping("/api/admin/agents/{agentId}/ai")
 @Tag(name = "Admin · AI Preview")
 @SecurityRequirement(name = "adminBearer")
 public class AdminAiPreviewController {
@@ -38,32 +38,32 @@ public class AdminAiPreviewController {
     @GetMapping("/preview/skills")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:read')")
     @Operation(summary = "预览可选 skill 目录（agent-services 平台能力，只元数据）")
-    public ResponseEntity<HttpMessageBody<List<AdminAiPreviewSkillDto>>> listSkills(@PathVariable long siteId) {
+    public ResponseEntity<HttpMessageBody<List<AdminAiPreviewSkillDto>>> listSkills(@PathVariable long agentId) {
         return ResponseEntity.ok(
-                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAiPreviewService.listSkills(siteId)));
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAiPreviewService.listSkills(agentId)));
     }
 
     @PostMapping(value = "/preview/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:read')")
     @Operation(summary = "站点 AI 预览流式对话（不落库；Prompt 由服务端注入）")
     public SseEmitter previewStream(
-            @PathVariable long siteId, @Valid @RequestBody AdminAiPreviewChatRequest request) {
-        return adminAiPreviewService.previewStream(siteId, request);
+            @PathVariable long agentId, @Valid @RequestBody AdminAiPreviewChatRequest request) {
+        return adminAiPreviewService.previewStream(agentId, request);
     }
 
     @GetMapping("/runtime")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:read')")
     @Operation(summary = "Agent 运行时快照（Provider / Fallback / MCP / 预算）；不可达时 reachable=false")
-    public ResponseEntity<HttpMessageBody<AdminAiRuntimeDto>> runtime(@PathVariable long siteId) {
+    public ResponseEntity<HttpMessageBody<AdminAiRuntimeDto>> runtime(@PathVariable long agentId) {
         return ResponseEntity.ok(
-                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAiPreviewService.runtimeStatus(siteId)));
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAiPreviewService.runtimeStatus(agentId)));
     }
 
     @GetMapping("/mcp-ready")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:read')")
     @Operation(summary = "MCP 深检（手动）；agent-services 不可达时 reachable=false，MCP 不通时 probe.ok=false")
-    public ResponseEntity<HttpMessageBody<AdminAiMcpReadyDto>> mcpReady(@PathVariable long siteId) {
+    public ResponseEntity<HttpMessageBody<AdminAiMcpReadyDto>> mcpReady(@PathVariable long agentId) {
         return ResponseEntity.ok(
-                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAiPreviewService.mcpReady(siteId)));
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAiPreviewService.mcpReady(agentId)));
     }
 }

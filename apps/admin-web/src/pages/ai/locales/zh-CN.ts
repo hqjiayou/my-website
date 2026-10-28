@@ -4,7 +4,7 @@ export default {
   error: '加载失败',
   retry: '重试',
   noSites: '暂无站点，请先创建站点。',
-  siteLabel: '选择站点',
+  agentLabel: '选择站点',
   settings: {
     title: '模型入口',
     description: '集中维护模型 spec 和 API key。对话与预览使用当前启用的默认入口。',
@@ -22,7 +22,7 @@ export default {
     spec: '模型 spec',
     specHint: '例如 google:gemini-3-flash-preview 或 openai:gpt-4o-mini',
     site: '适用站点',
-    sitePlatform: '全站',
+    agentPlatform: '全站',
     embeddingSpec: '向量模型 spec',
     embeddingSpecHint: '可选。例如 google:gemini-embedding-001，与上面同一把 key',
     apiKey: 'API key',

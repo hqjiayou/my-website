@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import type { SiteSearchSummary } from '@/types/api'
+import type { AgentSearchSummary } from '@/types/api'
 
 /**
  * 一轮回复的过程步骤：模型思考与工具调用。
@@ -15,7 +15,7 @@ export type ProcessStep =
       callId: string
       name: string
       status: 'running' | 'ok' | 'failed'
-      summary?: SiteSearchSummary
+      summary?: AgentSearchSummary
     }
 
 const TOOL_LABELS: Record<string, string> = {

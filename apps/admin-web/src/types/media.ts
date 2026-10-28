@@ -35,7 +35,7 @@ export interface MediaListQuery {
 
 export interface MediaListItem {
   id: number
-  siteId: number
+  agentId: number
   originalFilename: string
   contentType: string
   extension: string
@@ -47,7 +47,7 @@ export interface MediaListItem {
 
 export interface MediaDetail {
   id: number
-  siteId: number
+  agentId: number
   originalFilename: string
   contentType: string
   extension: string

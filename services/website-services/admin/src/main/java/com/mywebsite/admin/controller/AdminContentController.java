@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/sites/{siteId}/contents")
+@RequestMapping("/api/admin/agents/{agentId}/contents")
 @Tag(name = "Admin · Content")
 @SecurityRequirement(name = "adminBearer")
 public class AdminContentController {
@@ -43,13 +43,13 @@ public class AdminContentController {
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:list')")
     @Operation(summary = "站点内容分页列表")
     public ResponseEntity<HttpMessageBody<PageResult<AdminContentListItemDto>>> list(
-            @PathVariable long siteId,
+            @PathVariable long agentId,
             @RequestParam(required = false) Integer pageNum,
             @RequestParam(required = false) Integer pageSize,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String status) {
         PageResult<AdminContentListItemDto> data = adminContentService.listContents(
-                siteId, new AdminContentListQuery(pageNum, pageSize, type, status));
+                agentId, new AdminContentListQuery(pageNum, pageSize, type, status));
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, data));
     }
 
@@ -57,48 +57,48 @@ public class AdminContentController {
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:list')")
     @Operation(summary = "站点内容详情")
     public ResponseEntity<HttpMessageBody<AdminContentDetailDto>> get(
-            @PathVariable long siteId, @PathVariable("id") long id) {
+            @PathVariable long agentId, @PathVariable("id") long id) {
         return ResponseEntity.ok(
-                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminContentService.getContent(siteId, id)));
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminContentService.getContent(agentId, id)));
     }
 
     @PostMapping
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:create')")
     @Operation(summary = "创建站点内容")
     public ResponseEntity<HttpMessageBody<AdminContentDetailDto>> create(
-            @PathVariable long siteId, @Valid @RequestBody AdminContentCreateRequest request) {
+            @PathVariable long agentId, @Valid @RequestBody AdminContentCreateRequest request) {
         return ResponseEntity.ok(new HttpMessageBody<>(
-                ResponseMessages.SUCCESS, adminContentService.createContent(siteId, request)));
+                ResponseMessages.SUCCESS, adminContentService.createContent(agentId, request)));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:update')")
     @Operation(summary = "更新站点内容")
     public ResponseEntity<HttpMessageBody<AdminContentDetailDto>> update(
-            @PathVariable long siteId,
+            @PathVariable long agentId,
             @PathVariable("id") long id,
             @Valid @RequestBody AdminContentUpdateRequest request) {
         return ResponseEntity.ok(new HttpMessageBody<>(
-                ResponseMessages.SUCCESS, adminContentService.updateContent(siteId, id, request)));
+                ResponseMessages.SUCCESS, adminContentService.updateContent(agentId, id, request)));
     }
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:status')")
     @Operation(summary = "变更站点内容状态")
     public ResponseEntity<HttpMessageBody<AdminContentDetailDto>> updateStatus(
-            @PathVariable long siteId,
+            @PathVariable long agentId,
             @PathVariable("id") long id,
             @Valid @RequestBody AdminContentStatusUpdateRequest request) {
         return ResponseEntity.ok(new HttpMessageBody<>(
-                ResponseMessages.SUCCESS, adminContentService.updateStatus(siteId, id, request)));
+                ResponseMessages.SUCCESS, adminContentService.updateStatus(agentId, id, request)));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:delete')")
     @Operation(summary = "删除站点内容（软删除）")
     public ResponseEntity<HttpMessageBody<Void>> delete(
-            @PathVariable long siteId, @PathVariable("id") long id) {
-        adminContentService.deleteContent(siteId, id);
+            @PathVariable long agentId, @PathVariable("id") long id) {
+        adminContentService.deleteContent(agentId, id);
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
     }
 }

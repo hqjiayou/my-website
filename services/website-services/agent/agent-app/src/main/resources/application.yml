@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: agent-service
+  profiles:
+    default: local
+  flyway:
+    enabled: ${SITE_APP_FLYWAY_ENABLED:false}
+  messages:
+    basename: i18n/common/messages,i18n/auth/messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_JWKS_URI:http://localhost:8083/.well-known/jwks.json}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
+
+server:
+  port: 8082
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+app:
+  i18n:
+    default-locale: ja-JP
+    supported-locales:
+      - ja-JP
+      - zh-CN
+      - en-US
+
+security:
+  jwt:
+    issuer: my-website
+    audience: AGENT
+
+mywebsite:
+  agent:
+    base-url: ${AGENT_BASE_URL:http://127.0.0.1:3001}
+    connect-timeout-ms: ${AGENT_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${AGENT_READ_TIMEOUT_MS:120000}
+    internal-service-token: ${AGENT_INTERNAL_SERVICE_TOKEN:}
+    retry-max-attempts: ${AGENT_RETRY_MAX_ATTEMPTS:1}
+    ai:
+      rate-limit-enabled: true
+      rate-limit-per-minute: 30

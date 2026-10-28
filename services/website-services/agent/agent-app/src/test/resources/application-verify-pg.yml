@@ -1,0 +1,25 @@
+# 持久层真实 PostgreSQL 回归验证：与 admin 共用 infra 内 Flyway 脚本（classpath:db/migration），验证 agent / site_user Mapper（FK/触发器/乐观锁）。
+# 默认由 Testcontainers 自举一次性容器；指向外部 PG：VERIFY_PG_URL + VERIFY_PG_DRIVER=org.postgresql.Driver + VERIFY_PG_USER/PASSWORD。
+spring:
+  datasource:
+    url: ${VERIFY_PG_URL:jdbc:tc:postgresql:16-alpine:///my_website_verify}
+    driver-class-name: ${VERIFY_PG_DRIVER:org.testcontainers.jdbc.ContainerDatabaseDriver}
+    username: ${VERIFY_PG_USER:test}
+    password: ${VERIFY_PG_PASSWORD:test}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+storage:
+  minio:
+    endpoint: http://127.0.0.1:19000
+    access-key: test
+    secret-key: test
+    bucket: test
+    secure: false
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true

@@ -3,9 +3,9 @@ package com.mywebsite.admin;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.mywebsite.admin.entity.AdminAppearanceEntity;
-import com.mywebsite.admin.entity.AdminSiteEntity;
+import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminAppearanceMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Tag;
@@ -35,7 +35,7 @@ import org.springframework.test.context.ActiveProfiles;
 class AdminAppearancePersistenceVerifyPgTest {
 
     @Autowired
-    private AdminSiteMapper adminSiteMapper;
+    private AdminAgentMapper adminAgentMapper;
 
     @Autowired
     private AdminAppearanceMapper adminAppearanceMapper;
@@ -46,16 +46,16 @@ class AdminAppearancePersistenceVerifyPgTest {
     @Test
     void appearanceJsonb_roundTrip_andSoftDelete() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
-        AdminSiteEntity site = new AdminSiteEntity();
-        site.setSiteCode("pg_ap_" + suffix);
-        site.setSiteName("PG Appearance");
-        site.setSiteType("PERSONAL");
-        site.setStatus("ACTIVE");
-        adminSiteMapper.insert(site);
-        assertThat(site.getId()).isNotNull();
+        AdminAgentEntity agent = new AdminAgentEntity();
+        agent.setAgentCode("pg_ap_" + suffix);
+        agent.setAgentName("PG Appearance");
+        agent.setAgentType("PERSONAL");
+        agent.setStatus("ACTIVE");
+        adminAgentMapper.insert(agent);
+        assertThat(agent.getId()).isNotNull();
 
         AdminAppearanceEntity appearance = new AdminAppearanceEntity();
-        appearance.setSiteId(site.getId());
+        appearance.setAgentId(agent.getId());
         appearance.setSchemaVersion(1);
         appearance.setConfigJson(
                 "{\"primaryColor\":\"#B91C1C\",\"fontStyle\":\"modern\","
@@ -74,7 +74,7 @@ class AdminAppearancePersistenceVerifyPgTest {
         assertThat(row.get("deleted")).isEqualTo(false);
 
         adminAppearanceMapper.deleteById(appearance.getId());
-        adminSiteMapper.deleteById(site.getId());
+        adminAgentMapper.deleteById(agent.getId());
 
         Integer deletedAppearance = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM site_appearance WHERE id = ? AND deleted = TRUE",
@@ -83,7 +83,7 @@ class AdminAppearancePersistenceVerifyPgTest {
         assertThat(deletedAppearance).isEqualTo(1);
 
         Integer deletedSite = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM site WHERE id = ? AND deleted = TRUE", Integer.class, site.getId());
+                "SELECT COUNT(*) FROM agent WHERE id = ? AND deleted = TRUE", Integer.class, agent.getId());
         assertThat(deletedSite).isEqualTo(1);
     }
 

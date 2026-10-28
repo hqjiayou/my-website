@@ -5,8 +5,8 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 
-/** 平台模型入口（表 {@code ai_model_entry}）。{@code apiKey} 不得写入接口响应。 */
-@TableName("ai_model_entry")
+/** 平台模型入口（表 {@code agent_model_entry}）。{@code apiKey} 不得写入接口响应。 */
+@TableName("agent_model_entry")
 public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
 
     private String displayName;
@@ -18,7 +18,7 @@ public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
     private String baseUrl;
 
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
-    private Long siteId;
+    private Long agentId;
 
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String embeddingSpec;
@@ -59,12 +59,12 @@ public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
         this.baseUrl = baseUrl;
     }
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public String getEmbeddingSpec() {

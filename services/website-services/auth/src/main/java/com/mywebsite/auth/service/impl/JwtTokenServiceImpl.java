@@ -57,7 +57,7 @@ public class JwtTokenServiceImpl implements TokenService {
         long numericId = Long.parseLong(issuance.subjectUserId());
         String subject = issuance.audience() == TokenAudience.ADMIN
                 ? SubjectCodes.formatAdminSubject(numericId)
-                : SubjectCodes.formatSiteUserSubject(numericId);
+                : SubjectCodes.formatAgentUserSubject(numericId);
 
         SubjectType subjectType = subjectTypeForAudience(issuance.audience());
 
@@ -70,9 +70,9 @@ public class JwtTokenServiceImpl implements TokenService {
                 .id(jti)
                 .claim(JwtClaimConstants.SUBJECT_TYPE, subjectType.name());
 
-        // SITE 必须写入 site_id；ADMIN 不得携带，避免跨受众冒充站点上下文。
-        if (issuance.audience() == TokenAudience.SITE) {
-            claimsBuilder.claim(JwtClaimConstants.SITE_ID, issuance.siteIdOrNull());
+        // AGENT 必须写入 agent_id；ADMIN 不得携带，避免跨受众冒充站点上下文。
+        if (issuance.audience() == TokenAudience.AGENT) {
+            claimsBuilder.claim(JwtClaimConstants.AGENT_ID, issuance.agentIdOrNull());
         }
 
         JwtClaimsSet claims = claimsBuilder.build();
@@ -82,7 +82,7 @@ public class JwtTokenServiceImpl implements TokenService {
     }
 
     private String audienceForJwt(TokenAudience audience) {
-        return audience == TokenAudience.ADMIN ? authJwtProperties.getAudience() : authJwtProperties.getSiteAudience();
+        return audience == TokenAudience.ADMIN ? authJwtProperties.getAudience() : authJwtProperties.getAgentAudience();
     }
 
     @Override
@@ -103,18 +103,18 @@ public class JwtTokenServiceImpl implements TokenService {
 
         boolean subjectOk = switch (expectedAudience) {
             case ADMIN -> SubjectCodes.parseAdminUserId(jwt.getSubject()).isPresent();
-            case SITE -> SubjectCodes.parseSiteUserId(jwt.getSubject()).isPresent();
+            case AGENT -> SubjectCodes.parseAgentUserId(jwt.getSubject()).isPresent();
         };
         if (!subjectOk) {
             return Optional.empty();
         }
 
-        if (expectedAudience == TokenAudience.SITE
-                && AuthenticatedUserUtils.parsePositiveSiteIdClaim(jwt.getClaim(JwtClaimConstants.SITE_ID))
+        if (expectedAudience == TokenAudience.AGENT
+                && AuthenticatedUserUtils.parsePositiveAgentIdClaim(jwt.getClaim(JwtClaimConstants.AGENT_ID))
                         .isEmpty()) {
             return Optional.empty();
         }
-        if (expectedAudience == TokenAudience.ADMIN && jwt.getClaim(JwtClaimConstants.SITE_ID) != null) {
+        if (expectedAudience == TokenAudience.ADMIN && jwt.getClaim(JwtClaimConstants.AGENT_ID) != null) {
             return Optional.empty();
         }
 
@@ -130,7 +130,7 @@ public class JwtTokenServiceImpl implements TokenService {
     private static SubjectType subjectTypeForAudience(TokenAudience audience) {
         return switch (audience) {
             case ADMIN -> SubjectType.ADMIN;
-            case SITE -> SubjectType.SITE;
+            case AGENT -> SubjectType.AGENT;
         };
     }
 

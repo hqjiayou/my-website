@@ -4,7 +4,7 @@ export default {
   error: '読み込みに失敗しました',
   retry: '再試行',
   noSites: 'サイトがありません。先にサイトを作成してください。',
-  siteLabel: 'サイト',
+  agentLabel: 'サイト',
   settings: {
     title: 'モデル入口',
     description: 'モデル spec と API key をまとめて管理します。対話とプレビューは有効なデフォルト入口を使います。',
@@ -22,7 +22,7 @@ export default {
     spec: 'モデル spec',
     specHint: '例: google:gemini-3-flash-preview または openai:gpt-4o-mini',
     site: '対象サイト',
-    sitePlatform: '全サイト',
+    agentPlatform: '全サイト',
     embeddingSpec: '埋め込み spec',
     embeddingSpecHint: '任意。例: google:gemini-embedding-001。上と同じキーを使います',
     apiKey: 'API key',

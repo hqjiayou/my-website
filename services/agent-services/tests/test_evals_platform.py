@@ -118,7 +118,7 @@ async def run_scenario(name: str) -> dict[str, object]:
     store = TodoStore(items=[item.model_copy() for item in scenario.todos])
     outcome = await run_chat(
         FunctionModel(scenario.responder),
-        site_id="1",
+        agent_id="1",
         message=scenario.message,
         history=scenario.history or None,
         skill_instructions=scenario.skill_instructions,

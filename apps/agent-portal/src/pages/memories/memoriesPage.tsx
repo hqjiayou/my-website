@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Trash } from 'lucide-react'
 
-import { siteAiApi } from '@/api/siteAiApi'
+import { agentAiApi } from '@/api/agentAiApi'
 import { Screen } from '@/components/screen'
-import { resolvePortalSiteId } from '@/config/env'
+import { resolvePortalAgentId } from '@/config/env'
 import { useAuthStore } from '@/stores/authStore'
-import type { SiteUserMemory } from '@/types/api'
+import type { AgentUserMemory } from '@/types/api'
 import { errorMessage } from '@/utils/http/apiError'
 
 export function MemoriesPage() {
-  const site = useMemo(() => resolvePortalSiteId(useAuthStore.getState().site?.siteId), [])
-  const [items, setItems] = useState<SiteUserMemory[]>([])
+  const site = useMemo(() => resolvePortalAgentId(useAuthStore.getState().site?.agentId), [])
+  const [items, setItems] = useState<AgentUserMemory[]>([])
   const [loading, setLoading] = useState(site.ok)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -20,7 +20,7 @@ export function MemoriesPage() {
   useEffect(() => {
     if (!site.ok) return
     let current = true
-    siteAiApi.listMemories(site.siteId).then(
+    agentAiApi.listMemories(site.agentId).then(
       (rows) => {
         if (!current) return
         setItems(Array.isArray(rows) ? rows : [])
@@ -42,7 +42,7 @@ export function MemoriesPage() {
     setPending(true)
     setError(null)
     try {
-      await siteAiApi.deleteMemory(site.siteId, id)
+      await agentAiApi.deleteMemory(site.agentId, id)
       setConfirmId(null)
       setItems((current) => current.filter((item) => String(item.id) !== id))
     } catch (caught) {
@@ -57,7 +57,7 @@ export function MemoriesPage() {
     setPending(true)
     setError(null)
     try {
-      await siteAiApi.clearMemories(site.siteId)
+      await agentAiApi.clearMemories(site.agentId)
       setConfirmClear(false)
       setConfirmId(null)
       setItems([])

@@ -85,12 +85,12 @@ class AdminPingSecurityMvcTest extends AbstractAdminSpringBootTest {
     }
 
     @Test
-    void siteAudienceTokenRejectedOnAdminPing() throws Exception {
+    void agentAudienceTokenRejectedOnAdminPing() throws Exception {
         RSAKey pk = AdminTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
-        String siteToken = AdminTestJwtSigner.signSiteAccess(pk, "test-issuer", "SITE", 200L, 10L);
+        String agentToken = AdminTestJwtSigner.signAgentAccess(pk, "test-issuer", "AGENT", 200L, 10L);
 
         mockMvc.perform(get("/api/admin/ping")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + siteToken)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + agentToken)
                         .header(HttpHeaders.ACCEPT_LANGUAGE, "ja-JP"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(1002))

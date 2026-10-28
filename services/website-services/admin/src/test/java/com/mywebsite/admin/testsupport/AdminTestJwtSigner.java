@@ -61,18 +61,18 @@ public final class AdminTestJwtSigner {
         return jwt.serialize();
     }
 
-    public static String signSiteAccess(
-            RSAKey privateKeyJwk, String issuer, String audience, long siteUserId, long siteId) throws Exception {
+    public static String signAgentAccess(
+            RSAKey privateKeyJwk, String issuer, String audience, long agentUserId, long agentId) throws Exception {
         Instant now = Instant.now();
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .issuer(issuer)
-                .subject(SubjectCodes.formatSiteUserSubject(siteUserId))
+                .subject(SubjectCodes.formatAgentUserSubject(agentUserId))
                 .audience(audience)
                 .jwtID(UUID.randomUUID().toString())
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(now.plusSeconds(3600)))
-                .claim(JwtClaimConstants.SUBJECT_TYPE, SubjectType.SITE.name())
-                .claim(JwtClaimConstants.SITE_ID, siteId)
+                .claim(JwtClaimConstants.SUBJECT_TYPE, SubjectType.AGENT.name())
+                .claim(JwtClaimConstants.AGENT_ID, agentId)
                 .build();
         SignedJWT jwt = new SignedJWT(
                 new JWSHeader.Builder(JWSAlgorithm.RS256)

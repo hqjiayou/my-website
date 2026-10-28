@@ -49,7 +49,7 @@ import com.mywebsite.infra.knowledge.KnowledgeTextExtractor.ExtractionException;
 
 
 /**
- * 文档内容归一化（共享）：知识库上传（admin）与聊天文档附件（site）共用同一份实现，
+ * 文档内容归一化（共享）：知识库上传（admin）与聊天文档附件（agent）共用同一份实现，
  * 避免两处格式覆盖与转换行为漂移。所有格式统一转成 Markdown 标准形（PDF 文字层无结构、存纯文本段落）。
  * 文本类（txt/md/标记/代码/数据）按 UTF-8→MS932→GB18030 回退解码，代码/数据类包代码围栏，CSV/TSV 转 Md 表格；
  * 二进制类（docx/docm/doc、xlsx/xlsm/xls、pptx/pptm/ppt、html/epub/odt/ods/odp/rtf）走各自转换器，

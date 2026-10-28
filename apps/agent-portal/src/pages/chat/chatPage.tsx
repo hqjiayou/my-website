@@ -2,13 +2,13 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Check, Copy, Download, Ellipsis, FileText, ImagePlus, Mic, Pencil, Plus, RotateCcw, Share2, Square, SquarePen, Trash, Unlink, Volume2, VolumeX, X } from 'lucide-react'
 
-import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
+import { agentAiApi, sseErrorText } from '@/api/agentAiApi'
 import { MarkdownText } from '@/components/markdown'
 import { useSidebarExtra } from '@/components/sidebarExtra'
-import { resolvePortalSiteId } from '@/config/env'
+import { resolvePortalAgentId } from '@/config/env'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
-import type { SiteAiCitation, SiteAiConversation, SiteAiDocument, SiteAiMessage } from '@/types/api'
+import type { AgentAiCitation, AgentAiConversation, AgentAiDocument, AgentAiMessage } from '@/types/api'
 import { formatSimilarityPercent } from '@/utils/formatSimilarity'
 import { errorMessage } from '@/utils/http/apiError'
 
@@ -23,7 +23,7 @@ const MAX_IMAGE_EDGE = 1600
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
 const MAX_DOCUMENTS = 3
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
-// 与后端 SiteAiServiceImpl.DOCUMENT_MEDIA_TYPES 及知识库支持集合一致（共享转换器可路由的非图片格式）
+// 与后端 AgentAiServiceImpl.DOCUMENT_MEDIA_TYPES 及知识库支持集合一致（共享转换器可路由的非图片格式）
 const DOCUMENT_EXTENSIONS = [
   'pdf', 'docx', 'docm', 'doc', 'xlsx', 'xlsm', 'xls', 'pptx', 'pptm', 'ppt',
   'html', 'htm', 'epub', 'odt', 'ods', 'odp', 'rtf', 'csv', 'tsv',
@@ -47,7 +47,7 @@ interface PendingImage extends ChatImage {
   id: string
 }
 
-interface PendingDocument extends SiteAiDocument {
+interface PendingDocument extends AgentAiDocument {
   id: string
   sizeBytes: number
 }
@@ -74,14 +74,14 @@ interface ChatTurn {
   documents?: ChatDocumentRef[]
   pending?: boolean
   providerStatus?: string
-  citations?: SiteAiCitation[]
+  citations?: AgentAiCitation[]
   /** 本轮的过程步骤（思考/工具）。只在当次会话内保留，刷新后服务端不回传。 */
   process?: ProcessStep[]
 }
 
 interface StoredLoadOptions {
   silent?: boolean
-  citations?: SiteAiCitation[]
+  citations?: AgentAiCitation[]
   providerStatus?: string
   process?: ProcessStep[]
 }
@@ -97,7 +97,7 @@ function readRouteConversationId(value: string | undefined): string | null {
 }
 
 /** 历史过程摘要 → 时间线步骤：只有工具步（无思考文本）；搜索摘要按序挂到搜索工具步。 */
-function storedProcessSteps(messageId: string, process: SiteAiMessage['process']): ProcessStep[] {
+function storedProcessSteps(messageId: string, process: AgentAiMessage['process']): ProcessStep[] {
   if (!process) return []
   const steps: ProcessStep[] = []
   let searchIndex = 0
@@ -118,7 +118,7 @@ function storedProcessSteps(messageId: string, process: SiteAiMessage['process']
 }
 
 function toStoredTurns(
-  items: SiteAiMessage[],
+  items: AgentAiMessage[],
   extra?: Pick<StoredLoadOptions, 'citations' | 'providerStatus' | 'process'>,
 ): ChatTurn[] {
   let lastAssistant = -1
@@ -165,7 +165,7 @@ interface SendFailure {
   message: string
   retryText: string
   retryImages: ChatImage[]
-  retryDocuments: SiteAiDocument[]
+  retryDocuments: AgentAiDocument[]
   userId: string
   assistantId: string
 }
@@ -205,7 +205,7 @@ export function ChatPage() {
   const navigate = useNavigate()
   const routeConversationId = useParams().conversationId
   const routeId = readRouteConversationId(routeConversationId)
-  const site = useMemo(() => resolvePortalSiteId(useAuthStore.getState().site?.siteId), [])
+  const site = useMemo(() => resolvePortalAgentId(useAuthStore.getState().site?.agentId), [])
   const displayName = useAuthStore((state) => state.user?.displayName || state.user?.username || '')
   const { setExtra, closeDrawer } = useSidebarExtra()
   useKeyboardInset()
@@ -227,7 +227,7 @@ export function ChatPage() {
     speech.start()
   }
 
-  const [conversations, setConversations] = useState<SiteAiConversation[]>([])
+  const [conversations, setConversations] = useState<AgentAiConversation[]>([])
   const [listLoading, setListLoading] = useState(site.ok)
   const [listError, setListError] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -277,11 +277,11 @@ export function ChatPage() {
     if (!routeId) loadToken.current += 1
   }, [routeId])
 
-  const loadConversations = useCallback(async (siteId: string, isCurrent: () => boolean = () => true) => {
+  const loadConversations = useCallback(async (agentId: string, isCurrent: () => boolean = () => true) => {
     setListLoading(true)
     setListError(null)
     try {
-      const items = await siteAiApi.listConversations(siteId)
+      const items = await agentAiApi.listConversations(agentId)
       if (!isCurrent()) return
       setConversations(items)
     } catch (error) {
@@ -303,8 +303,8 @@ export function ChatPage() {
         setHistoryLoading(true)
         setHistoryError(null)
       }
-      return siteAiApi
-        .listMessages(site.siteId, id)
+      return agentAiApi
+        .listMessages(site.agentId, id)
         .then((items) => {
           if (loadToken.current !== token) return
           if (items.length === 0 && options?.silent) return
@@ -337,7 +337,7 @@ export function ChatPage() {
   useEffect(() => {
     if (!site.ok) return
     let current = true
-    siteAiApi.listConversations(site.siteId).then(
+    agentAiApi.listConversations(site.agentId).then(
       (items) => {
         if (!current) return
         setConversations(items)
@@ -432,7 +432,7 @@ export function ChatPage() {
   async function truncateStoredTurn(userTurn: ChatTurn): Promise<boolean> {
     if (!site.ok || !selectedId || !/^\d+$/.test(userTurn.id)) return true
     try {
-      await siteAiApi.truncateConversation(site.siteId, selectedId, userTurn.id)
+      await agentAiApi.truncateConversation(site.agentId, selectedId, userTurn.id)
       return true
     } catch {
       setAttachError('刪除舊訊息失敗，請重試')
@@ -643,7 +643,7 @@ export function ChatPage() {
   async function send(
     text: string,
     images: ChatImage[] = [],
-    documents: SiteAiDocument[] = [],
+    documents: AgentAiDocument[] = [],
     replace?: { userId: string; assistantId: string },
   ) {
     if (!site.ok || sendingRef.current || historyLoading || compressingRef.current) return
@@ -713,7 +713,7 @@ export function ChatPage() {
     }
 
     let finished = false
-    let liveCitations: SiteAiCitation[] | undefined
+    let liveCitations: AgentAiCitation[] | undefined
     let liveProviderStatus: string | undefined
     // 过程步骤在闭包里同步累积，同时镜像进 assistant 轮渲染；DONE 后随静默重载带回。
     const liveSteps: ProcessStep[] = []
@@ -724,8 +724,8 @@ export function ChatPage() {
       )
     }
     try {
-      await siteAiApi.streamChat(
-        site.siteId,
+      await agentAiApi.streamChat(
+        site.agentId,
         {
           message: trimmed,
           ...(conversationId ? { conversationId } : {}),
@@ -837,7 +837,7 @@ export function ChatPage() {
       if (generation.current === gen) {
         sendingRef.current = false
         setSending(false)
-        void loadConversations(site.siteId)
+        void loadConversations(site.agentId)
       }
     }
   }
@@ -853,7 +853,7 @@ export function ChatPage() {
 
   async function renameConversation(id: string, title: string) {
     if (!site.ok) return
-    const updated = await siteAiApi.renameConversation(site.siteId, id, title)
+    const updated = await agentAiApi.renameConversation(site.agentId, id, title)
     setConversations((current) =>
       current.map((item) => (String(item.id) === id ? { ...item, title: updated.title } : item)),
     )
@@ -864,7 +864,7 @@ export function ChatPage() {
     if (sending && id === selectedId) {
       throw new Error('正在產生回覆，請稍後再刪除')
     }
-    await siteAiApi.deleteConversation(site.siteId, id)
+    await agentAiApi.deleteConversation(site.agentId, id)
     setConversations((current) => current.filter((item) => String(item.id) !== id))
     if (id === selectedId) startNewChat()
   }
@@ -874,8 +874,8 @@ export function ChatPage() {
   useEffect(() => {
     if (!site.ok || !selectedId) return
     let cancelled = false
-    siteAiApi
-      .getShare(site.siteId, selectedId)
+    agentAiApi
+      .getShare(site.agentId, selectedId)
       .then((result) => {
         if (!cancelled) {
           setShare(result ? { conversationId: selectedId, token: result.token } : null)
@@ -893,7 +893,7 @@ export function ChatPage() {
     if (!site.ok || !selectedId) return
     setHeaderMenuOpen(false)
     try {
-      const created = await siteAiApi.createShare(site.siteId, selectedId)
+      const created = await agentAiApi.createShare(site.agentId, selectedId)
       setShare({ conversationId: selectedId, token: created.token })
       let copied = true
       try {
@@ -918,7 +918,7 @@ export function ChatPage() {
     if (!site.ok || !selectedId) return
     setHeaderMenuOpen(false)
     try {
-      await siteAiApi.revokeShare(site.siteId, selectedId)
+      await agentAiApi.revokeShare(site.agentId, selectedId)
       setShare(null)
       setHeaderNotice('分享已撤銷')
     } catch (error) {
@@ -1017,10 +1017,10 @@ export function ChatPage() {
         activeId={selectedId}
         deleteLockedId={sending ? selectedId : null}
         onClose={closeDrawer}
-        onRefresh={() => void loadConversations(site.siteId)}
+        onRefresh={() => void loadConversations(site.agentId)}
         onCreate={startNewChat}
         onOpen={(id) => void openConversation(id)}
-        onSearchContent={(q) => siteAiApi.searchConversations(site.siteId, q)}
+        onSearchContent={(q) => agentAiApi.searchConversations(site.agentId, q)}
         onOpenHit={openSearchHit}
         onRename={renameConversation}
         onDelete={removeConversation}

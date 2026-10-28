@@ -1,7 +1,7 @@
 package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.mywebsite.admin.constant.AdminSiteMessageKeys;
+import com.mywebsite.admin.constant.AdminAgentMessageKeys;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewChatRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewHistoryMessage;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewSkillDto;
@@ -12,7 +12,7 @@ import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
 import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminAiPromptProfileMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiPreviewService;
 import com.mywebsite.agent.client.AgentClient;
@@ -50,7 +50,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
 
     private final AgentClient agentClient;
     private final AgentProperties agentProperties;
-    private final AdminSiteMapper adminSiteMapper;
+    private final AdminAgentMapper adminAgentMapper;
     private final AdminAiPromptProfileMapper promptProfileMapper;
     private final AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper;
     private final AdminAiModelEntryService modelEntryService;
@@ -60,7 +60,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     public AdminAiPreviewServiceImpl(
             AgentClient agentClient,
             AgentProperties agentProperties,
-            AdminSiteMapper adminSiteMapper,
+            AdminAgentMapper adminAgentMapper,
             AdminAiPromptProfileMapper promptProfileMapper,
             AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper,
             AdminAiModelEntryService modelEntryService,
@@ -68,7 +68,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             ExecutorService adminAiStreamExecutor) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
-        this.adminSiteMapper = adminSiteMapper;
+        this.adminAgentMapper = adminAgentMapper;
         this.promptProfileMapper = promptProfileMapper;
         this.knowledgeDocumentMapper = knowledgeDocumentMapper;
         this.modelEntryService = modelEntryService;
@@ -77,24 +77,24 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     }
 
     @Override
-    public SseEmitter previewStream(long siteId, AdminAiPreviewChatRequest request) {
-        requireSite(siteId);
+    public SseEmitter previewStream(long agentId, AdminAiPreviewChatRequest request) {
+        requireSite(agentId);
         if (request == null || !StringUtils.hasText(request.message())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        List<AgentModelSelection> chain = modelEntryService.selectionChain(siteId);
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId);
         AgentChatRequest agentRequest = new AgentChatRequest(
-                String.valueOf(siteId),
+                String.valueOf(agentId),
                 request.message().trim(),
                 localizedMessageService.currentLanguageTag(),
                 null,
-                loadPromptProfile(siteId),
+                loadPromptProfile(agentId),
                 toHistory(request.history()),
                 normalizeSkills(request.skills()),
                 toTodos(request.todos()),
                 chain.isEmpty() ? null : chain.get(0),
                 callbackBaseUrl(),
-                knowledgeSnippets(siteId, request.message().trim()),
+                knowledgeSnippets(agentId, request.message().trim()),
                 null,
                 null,
                 null,
@@ -106,26 +106,26 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     }
 
     @Override
-    public List<AdminAiPreviewSkillDto> listSkills(long siteId) {
-        requireSite(siteId);
+    public List<AdminAiPreviewSkillDto> listSkills(long agentId) {
+        requireSite(agentId);
         return agentClient.listSkills().stream()
                 .map(skill -> new AdminAiPreviewSkillDto(skill.id(), skill.description(), skill.version()))
                 .toList();
     }
 
     @Override
-    public AdminAiRuntimeDto runtimeStatus(long siteId) {
-        requireSite(siteId);
+    public AdminAiRuntimeDto runtimeStatus(long agentId) {
+        requireSite(agentId);
         try {
-            return new AdminAiRuntimeDto(true, null, overlayEntry(siteId, agentClient.runtimeStatus()));
+            return new AdminAiRuntimeDto(true, null, overlayEntry(agentId, agentClient.runtimeStatus()));
         } catch (BusinessException ex) {
             return new AdminAiRuntimeDto(false, toClientErrorCode(ex), null);
         }
     }
 
     @Override
-    public AdminAiMcpReadyDto mcpReady(long siteId) {
-        requireSite(siteId);
+    public AdminAiMcpReadyDto mcpReady(long agentId) {
+        requireSite(agentId);
         try {
             return new AdminAiMcpReadyDto(true, null, agentClient.mcpReady());
         } catch (BusinessException ex) {
@@ -133,9 +133,9 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         }
     }
 
-    private void requireSite(long siteId) {
-        if (adminSiteMapper.selectById(siteId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminSiteMessageKeys.SITE_NOT_FOUND);
+    private void requireSite(long agentId) {
+        if (adminAgentMapper.selectById(agentId) == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
         }
     }
 
@@ -160,8 +160,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
      * 备援列显示入口链在主用之后的 specs（各入口自带 key，主用运行期 API 错误时 Python 顺链切换）；
      * 进程级 AI_FALLBACK_MODELS 不在面板上，因为入口链在前、进程备援在后且面板无从得知其凭证状态。
      */
-    private AgentRuntimeStatus overlayEntry(long siteId, AgentRuntimeStatus status) {
-        List<AgentModelSelection> chain = modelEntryService.selectionChain(siteId);
+    private AgentRuntimeStatus overlayEntry(long agentId, AgentRuntimeStatus status) {
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId);
         if (chain.isEmpty() || !StringUtils.hasText(chain.get(0).spec())) {
             return status;
         }
@@ -182,7 +182,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         return StringUtils.hasText(configured) ? configured.trim() : null;
     }
 
-    private List<String> knowledgeSnippets(long siteId, String query) {
+    private List<String> knowledgeSnippets(long agentId, String query) {
         String trimmed = query.trim();
         if (trimmed.length() > KNOWLEDGE_NEEDLE_CHARS) {
             trimmed = trimmed.substring(0, KNOWLEDGE_NEEDLE_CHARS);
@@ -193,7 +193,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         String needle = trimmed;
         List<String> snippets = knowledgeDocumentMapper
                 .selectList(new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
-                        .eq(AdminAiKnowledgeDocumentEntity::getSiteId, siteId)
+                        .eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId)
                         .eq(AdminAiKnowledgeDocumentEntity::getStatus, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)
                         .and(wrapper -> wrapper
                                 .like(AdminAiKnowledgeDocumentEntity::getTitle, needle)
@@ -220,10 +220,10 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         return StringUtils.hasText(content) ? title + "\n" + content : title;
     }
 
-    private AgentPromptProfile loadPromptProfile(long siteId) {
+    private AgentPromptProfile loadPromptProfile(long agentId) {
         AdminAiPromptProfileEntity profile = promptProfileMapper.selectOne(
                 new LambdaQueryWrapper<AdminAiPromptProfileEntity>()
-                        .eq(AdminAiPromptProfileEntity::getSiteId, siteId)
+                        .eq(AdminAiPromptProfileEntity::getAgentId, agentId)
                         .last("LIMIT 1"));
         if (profile == null) {
             return null;

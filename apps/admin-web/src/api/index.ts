@@ -14,7 +14,7 @@ export {
   createDefaultAppearanceConfig,
 } from './appearanceApi'
 export {
-  siteApi,
+  agentApi,
   SITE_CODE_PATTERN,
   SITE_INDUSTRY_VALUES,
   SITE_STATUS,
@@ -22,7 +22,7 @@ export {
   SITE_TYPE_VALUES,
   SITE_TYPE_PRESETS,
   SITE_TAG_PATTERN,
-} from './apps/siteApi'
+} from './apps/agentApi'
 export {
   mediaApi,
   MEDIA_ACCEPT,
@@ -45,7 +45,7 @@ export type {
   AppearancePutRequest,
   ButtonStyle,
   HeroLayout,
-  SiteFontStyle,
+  AgentFontStyle,
 } from './appearanceApi'
 export type {
   MediaDetail,
@@ -65,15 +65,15 @@ export type {
   UpdateContentStatusInput,
 } from './apps/contentApi'
 export type {
-  CreateSiteInput,
+  CreateAgentInput,
   PageResult,
   Site,
-  SiteDetail,
-  SiteListItem,
-  SiteListQuery,
-  SiteRuntimeStatus,
-  SiteStatus,
-  SiteType,
-  UpdateSiteInput,
-  UpdateSiteStatusInput,
-} from './apps/siteApi'
+  AgentDetail,
+  AgentListItem,
+  AgentListQuery,
+  AgentRuntimeStatus,
+  AgentStatus,
+  AgentType,
+  UpdateAgentInput,
+  UpdateAgentStatusInput,
+} from './apps/agentApi'

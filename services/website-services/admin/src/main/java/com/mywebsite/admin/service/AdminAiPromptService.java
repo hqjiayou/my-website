@@ -5,9 +5,9 @@ import com.mywebsite.admin.dto.AdminAiPromptDtos.AdminAiPromptProfileUpdateReque
 
 public interface AdminAiPromptService {
 
-    AdminAiPromptProfileDto getPromptProfile(long siteId);
+    AdminAiPromptProfileDto getPromptProfile(long agentId);
 
-    AdminAiPromptProfileDto upsertPromptProfile(long siteId, AdminAiPromptProfileUpdateRequest request);
+    AdminAiPromptProfileDto upsertPromptProfile(long agentId, AdminAiPromptProfileUpdateRequest request);
 
-    void softDeleteBySiteId(long siteId);
+    void softDeleteByAgentId(long agentId);
 }

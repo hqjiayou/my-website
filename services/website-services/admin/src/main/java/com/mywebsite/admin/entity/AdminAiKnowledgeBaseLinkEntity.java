@@ -7,14 +7,14 @@ import java.io.Serializable;
 import java.time.OffsetDateTime;
 
 /** 知识库共享链接（纯关系行，删除即真删，不走软删）。 */
-@TableName("site_ai_knowledge_base_link")
+@TableName("agent_ai_knowledge_base_link")
 public class AdminAiKnowledgeBaseLinkEntity implements Serializable {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
     private Long baseId;
-    private Long siteId;
+    private Long agentId;
     private OffsetDateTime createdAt;
 
     public Long getId() {
@@ -33,12 +33,12 @@ public class AdminAiKnowledgeBaseLinkEntity implements Serializable {
         this.baseId = baseId;
     }
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public OffsetDateTime getCreatedAt() {

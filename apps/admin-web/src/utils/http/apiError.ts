@@ -2,7 +2,7 @@
  * 统一 API 错误类型，供 axios 拦截器与 React Query 全局处理复用。
  */
 export interface ApiErrorConflict {
-  siteId: number
+  agentId: number
   dimensions: number
 }
 

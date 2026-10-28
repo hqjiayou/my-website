@@ -1,15 +1,15 @@
 package com.mywebsite.auth.config;
 
 import com.mywebsite.auth.properties.AdminAuthProperties;
-import com.mywebsite.auth.properties.SiteAuthProperties;
+import com.mywebsite.auth.properties.AgentAuthProperties;
 import com.mywebsite.auth.service.AdminAuthRateLimitService;
 import com.mywebsite.auth.service.AdminRefreshSessionService;
-import com.mywebsite.auth.service.SiteAuthRateLimitService;
-import com.mywebsite.auth.service.SiteRefreshSessionService;
+import com.mywebsite.auth.service.AgentAuthRateLimitService;
+import com.mywebsite.auth.service.AgentRefreshSessionService;
 import com.mywebsite.auth.service.impl.InMemoryAdminAuthRateLimitServiceImpl;
 import com.mywebsite.auth.service.impl.InMemoryAdminRefreshSessionServiceImpl;
-import com.mywebsite.auth.service.impl.InMemorySiteAuthRateLimitServiceImpl;
-import com.mywebsite.auth.service.impl.InMemorySiteRefreshSessionServiceImpl;
+import com.mywebsite.auth.service.impl.InMemoryAgentAuthRateLimitServiceImpl;
+import com.mywebsite.auth.service.impl.InMemoryAgentRefreshSessionServiceImpl;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,14 +36,14 @@ public class AuthTestProfileConfig {
     }
 
     @Bean
-    @ConditionalOnMissingBean(SiteRefreshSessionService.class)
-    public SiteRefreshSessionService inMemorySiteRefreshSessionService() {
-        return new InMemorySiteRefreshSessionServiceImpl();
+    @ConditionalOnMissingBean(AgentRefreshSessionService.class)
+    public AgentRefreshSessionService inMemoryAgentRefreshSessionService() {
+        return new InMemoryAgentRefreshSessionServiceImpl();
     }
 
     @Bean
-    @ConditionalOnMissingBean(SiteAuthRateLimitService.class)
-    public SiteAuthRateLimitService inMemorySiteAuthRateLimitService(SiteAuthProperties siteAuthProperties) {
-        return new InMemorySiteAuthRateLimitServiceImpl(siteAuthProperties);
+    @ConditionalOnMissingBean(AgentAuthRateLimitService.class)
+    public AgentAuthRateLimitService inMemoryAgentAuthRateLimitService(AgentAuthProperties agentAuthProperties) {
+        return new InMemoryAgentAuthRateLimitServiceImpl(agentAuthProperties);
     }
 }

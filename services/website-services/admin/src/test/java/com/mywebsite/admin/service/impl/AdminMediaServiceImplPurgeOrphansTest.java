@@ -15,7 +15,7 @@ import com.mywebsite.admin.constant.AdminMediaConstants;
 import com.mywebsite.admin.entity.AdminMediaEntity;
 import com.mywebsite.admin.mapper.AdminContentMapper;
 import com.mywebsite.admin.mapper.AdminMediaMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.properties.AdminMediaProperties;
 import com.mywebsite.infra.properties.StorageProperties;
 import com.mywebsite.infra.service.ObjectStorageService;
@@ -42,7 +42,7 @@ class AdminMediaServiceImplPurgeOrphansTest {
     private AdminMediaMapper adminMediaMapper;
 
     @Mock
-    private AdminSiteMapper adminSiteMapper;
+    private AdminAgentMapper adminAgentMapper;
 
     @Mock
     private AdminContentMapper adminContentMapper;
@@ -63,7 +63,7 @@ class AdminMediaServiceImplPurgeOrphansTest {
         storageProperties.setBucket("test");
         service = new AdminMediaServiceImpl(
                 adminMediaMapper,
-                adminSiteMapper,
+                adminAgentMapper,
                 adminContentMapper,
                 objectStorageService,
                 storageProperties,
@@ -159,7 +159,7 @@ class AdminMediaServiceImplPurgeOrphansTest {
     private static AdminMediaEntity base(long id, String objectKey) {
         AdminMediaEntity entity = new AdminMediaEntity();
         entity.setId(id);
-        entity.setSiteId(1L);
+        entity.setAgentId(1L);
         entity.setBucket("b");
         entity.setObjectKey(objectKey);
         entity.setOriginalFilename("a.jpg");

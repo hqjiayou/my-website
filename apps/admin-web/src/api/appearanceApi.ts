@@ -1,6 +1,6 @@
 /**
  * 站点外观 API。
- * Appearance（get/put）→ 始终 REAL `/admin/sites/{id}/appearance`。
+ * Appearance（get/put）→ 始终 REAL `/admin/agents/{id}/appearance`。
  */
 import type { AppearanceDetail, AppearancePutRequest } from '@/types/appearance'
 import {
@@ -16,16 +16,16 @@ import { httpClient } from '@/utils/http/axios'
 import { unwrapData } from '@/utils/http/unwrap'
 
 export const appearanceApi = {
-  getAppearance(siteId: number): Promise<AppearanceDetail> {
+  getAppearance(agentId: number): Promise<AppearanceDetail> {
     return httpClient
-      .get<HttpMessageBody<AppearanceDetail>>(`/admin/sites/${siteId}/appearance`)
+      .get<HttpMessageBody<AppearanceDetail>>(`/admin/agents/${agentId}/appearance`)
       .then(unwrapData)
   },
 
-  putAppearance(siteId: number, input: AppearancePutRequest): Promise<AppearanceDetail> {
+  putAppearance(agentId: number, input: AppearancePutRequest): Promise<AppearanceDetail> {
     return httpClient
       .put<HttpMessageBody<AppearanceDetail>, AppearancePutRequest>(
-        `/admin/sites/${siteId}/appearance`,
+        `/admin/agents/${agentId}/appearance`,
         input,
       )
       .then(unwrapData)
@@ -38,7 +38,7 @@ export type {
   AppearancePutRequest,
   ButtonStyle,
   HeroLayout,
-  SiteFontStyle,
+  AgentFontStyle,
 } from '@/types/appearance'
 
 export {

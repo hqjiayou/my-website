@@ -12,19 +12,21 @@ import com.mywebsite.infra.entity.AbstractAuditableEntity;
 @TableName(value = "site_appearance", autoResultMap = true)
 public class AdminAppearanceEntity extends AbstractAuditableEntity {
 
-    private Long siteId;
+    /** CMS 表未随改名（site_content/site_appearance/media_file 的 site_id 列保持原名），显式钉住列名。 */
+    @TableField("site_id")
+    private Long agentId;
     private Integer schemaVersion;
 
     /** JSON 文本；列类型见 Flyway V8（JSONB）。 */
     @TableField(value = "config", typeHandler = JsonbStringTypeHandler.class)
     private String configJson;
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public Integer getSchemaVersion() {

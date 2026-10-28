@@ -3,8 +3,8 @@ package com.mywebsite.admin.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 
-/** AI 知识库文档（表 {@code site_ai_knowledge_document}，KB SoT）。 */
-@TableName("site_ai_knowledge_document")
+/** AI 知识库文档（表 {@code agent_ai_knowledge_document}，KB SoT）。 */
+@TableName("agent_ai_knowledge_document")
 public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public static final String STATUS_ACTIVE = "ACTIVE";
@@ -16,7 +16,7 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     public static final String INDEX_STATUS_INDEXED = "INDEXED";
     public static final String INDEX_STATUS_FAILED = "FAILED";
 
-    private Long siteId;
+    private Long agentId;
     private String title;
     private String content;
     private String status;
@@ -39,12 +39,12 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
         this.baseId = baseId;
     }
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public String getTitle() {

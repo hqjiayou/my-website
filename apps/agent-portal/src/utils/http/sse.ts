@@ -1,5 +1,5 @@
 import { apiUrl } from '@/config/env'
-import type { SiteAiChatRequest, SiteAiCitation, SiteSearchSummary } from '@/types/api'
+import type { AgentAiChatRequest, AgentAiCitation, AgentSearchSummary } from '@/types/api'
 import { getAccessToken } from '@/utils/token'
 
 import { ApiError } from './apiError'
@@ -7,7 +7,7 @@ import { refreshAccessToken } from './axios'
 
 const STREAM_TIMEOUT_MS = 130_000
 
-export type SiteSseEvent =
+export type AgentSseEvent =
   | { event: 'START' }
   | { event: 'TEXT_DELTA'; delta: string }
   | { event: 'THINKING'; delta: string }
@@ -17,25 +17,25 @@ export type SiteSseEvent =
       toolName: string
       toolCallId: string
       ok: boolean
-      summary?: SiteSearchSummary
+      summary?: AgentSearchSummary
     }
-  | { event: 'DONE'; reply: string; providerStatus: string; citations?: SiteAiCitation[] }
+  | { event: 'DONE'; reply: string; providerStatus: string; citations?: AgentAiCitation[] }
   | { event: 'CONVERSATION'; conversationId: string }
   | { event: 'ERROR'; errorCode: string }
 
-export async function streamSiteChat(
-  siteId: string,
-  body: SiteAiChatRequest,
-  onEvent: (event: SiteSseEvent) => void,
+export async function streamAgentChat(
+  agentId: string,
+  body: AgentAiChatRequest,
+  onEvent: (event: AgentSseEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  await readStream(siteId, body, onEvent, signal, false)
+  await readStream(agentId, body, onEvent, signal, false)
 }
 
 async function readStream(
-  siteId: string,
-  body: SiteAiChatRequest,
-  onEvent: (event: SiteSseEvent) => void,
+  agentId: string,
+  body: AgentAiChatRequest,
+  onEvent: (event: AgentSseEvent) => void,
   signal: AbortSignal | undefined,
   retried: boolean,
 ): Promise<void> {
@@ -56,7 +56,7 @@ async function readStream(
     const token = getAccessToken()
     if (token) headers.set('Authorization', `Bearer ${token}`)
 
-    const response = await fetch(apiUrl(`/api/site/${siteId}/ai/chat/stream`), {
+    const response = await fetch(apiUrl(`/api/agent/${agentId}/ai/chat/stream`), {
       method: 'POST',
       credentials: 'include',
       headers,
@@ -67,7 +67,7 @@ async function readStream(
     if (response.status === 401 && !retried) {
       await response.body?.cancel()
       await refreshAccessToken()
-      await readStream(siteId, body, onEvent, signal, true)
+      await readStream(agentId, body, onEvent, signal, true)
       return
     }
 
@@ -90,7 +90,7 @@ async function readStream(
   }
 }
 
-async function consumeSse(response: Response, onEvent: (event: SiteSseEvent) => void): Promise<void> {
+async function consumeSse(response: Response, onEvent: (event: AgentSseEvent) => void): Promise<void> {
   const reader = response.body?.getReader()
   if (!reader) throw new ApiError('回應沒有可讀內容')
 
@@ -112,7 +112,7 @@ async function consumeSse(response: Response, onEvent: (event: SiteSseEvent) => 
   }
 }
 
-function parseFrame(raw: string): SiteSseEvent | null {
+function parseFrame(raw: string): AgentSseEvent | null {
   let eventName = ''
   const dataLines: string[] = []
   for (const line of raw.split('\n')) {
@@ -136,10 +136,10 @@ function parseFrame(raw: string): SiteSseEvent | null {
       throw new ApiError(`無法解析 ${eventName} 事件`)
     }
   }
-  return toSiteEvent(eventName, data)
+  return toAgentEvent(eventName, data)
 }
 
-function toSiteEvent(eventName: string, data: unknown): SiteSseEvent | null {
+function toAgentEvent(eventName: string, data: unknown): AgentSseEvent | null {
   const record = isRecord(data) ? data : {}
   switch (eventName) {
     case 'START':
@@ -201,10 +201,10 @@ function readString(record: Record<string, unknown>, key: string): string {
 }
 
 /** 知识搜索摘要：字段缺失或格式不对时整段丢弃，不让事件解析失败。 */
-function readSearchSummary(record: Record<string, unknown>): SiteSearchSummary | undefined {
+function readSearchSummary(record: Record<string, unknown>): AgentSearchSummary | undefined {
   const raw = record.summary
   if (!isRecord(raw)) return undefined
-  const sources: SiteAiCitation[] = []
+  const sources: AgentAiCitation[] = []
   if (Array.isArray(raw.sources)) {
     for (const item of raw.sources) {
       const citation = readCitation(item)
@@ -222,10 +222,10 @@ function readSearchSummary(record: Record<string, unknown>): SiteSearchSummary |
  * 沒有 grounding 時 citations 不出現，Java 也可能送空陣列。
  * 缺失、非陣列，或沒有任何格式正確的項目時為 undefined，不讓 DONE 解析失敗。
  */
-function readCitations(record: Record<string, unknown>): SiteAiCitation[] | undefined {
+function readCitations(record: Record<string, unknown>): AgentAiCitation[] | undefined {
   if (!Object.prototype.hasOwnProperty.call(record, 'citations') || record.citations == null) return undefined
   if (!Array.isArray(record.citations)) return undefined
-  const citations: SiteAiCitation[] = []
+  const citations: AgentAiCitation[] = []
   for (const item of record.citations) {
     const citation = readCitation(item)
     if (!citation) continue
@@ -234,7 +234,7 @@ function readCitations(record: Record<string, unknown>): SiteAiCitation[] | unde
   return citations.length > 0 ? citations : undefined
 }
 
-function readCitation(value: unknown): SiteAiCitation | null {
+function readCitation(value: unknown): AgentAiCitation | null {
   if (!isRecord(value)) return null
   const { sourceId, chunkIndex, score } = value
   if (typeof sourceId !== 'string' || sourceId.length === 0) return null

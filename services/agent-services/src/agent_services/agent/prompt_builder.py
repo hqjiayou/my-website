@@ -9,7 +9,7 @@ _LOCALE_RE = re.compile(r"^[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8}){0,3}$")
 
 
 def build_prompt_parts(
-    site_id: str,
+    agent_id: str,
     user_message: str,
     prompt_profile: PromptProfile | None = None,
     retrieval_context: list[str] | None = None,
@@ -22,7 +22,7 @@ def build_prompt_parts(
     system = (
         prompt_profile.system_prompt.strip()
         if prompt_profile and prompt_profile.system_prompt and prompt_profile.system_prompt.strip()
-        else f"You are the assistant for site: {site_id}. Answer in a concise and helpful way."
+        else f"You are the assistant for site: {agent_id}. Answer in a concise and helpful way."
     )
     # 事实锚定（常开）：关于本站的陈述只能来自工具结果与既有上下文；
     # category 只是组织用标签、不是行业定性；工具没覆盖的就说不可用，禁止臆造站点业务与身份。

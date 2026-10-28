@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Pencil, RefreshCw, Search, SquarePen, Trash, X } from 'lucide-react'
 
-import type { SiteAiConversation, SiteAiSearchHit } from '@/types/api'
+import type { AgentAiConversation, AgentAiSearchHit } from '@/types/api'
 import { errorMessage } from '@/utils/http/apiError'
 
 /** 与站点会话标题生成截断、重命名 DTO 上限一致。 */
@@ -9,7 +9,7 @@ const TITLE_MAX_LENGTH = 60
 
 interface ConversationSheetProps {
   open: boolean
-  items: SiteAiConversation[]
+  items: AgentAiConversation[]
   loading: boolean
   error: string | null
   activeId: string | null
@@ -20,7 +20,7 @@ interface ConversationSheetProps {
   onCreate: () => void
   onOpen: (id: string) => void
   /** 跨對話全文搜尋（可選）：輸入至少 2 字時 debounce 調用，結果在標題列表下方分區顯示。 */
-  onSearchContent?: (query: string) => Promise<SiteAiSearchHit[]>
+  onSearchContent?: (query: string) => Promise<AgentAiSearchHit[]>
   onOpenHit?: (conversationId: string, messageId: string) => void
   onRename: (id: string, title: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -51,7 +51,7 @@ export function ConversationSheet({
   const [query, setQuery] = useState('')
   const pendingRef = useRef(false)
 
-  const [contentHits, setContentHits] = useState<{ q: string; hits: SiteAiSearchHit[] } | null>(null)
+  const [contentHits, setContentHits] = useState<{ q: string; hits: AgentAiSearchHit[] } | null>(null)
 
   useEffect(() => {
     const q = query.trim()
@@ -74,7 +74,7 @@ export function ConversationSheet({
 
   if (!open) return null
 
-  function beginRename(item: SiteAiConversation) {
+  function beginRename(item: AgentAiConversation) {
     if (pendingRef.current) return
     setEditingId(String(item.id))
     setEditDraft(item.title?.trim() || '')

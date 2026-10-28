@@ -1,6 +1,6 @@
 /**
  * 站点媒体 API。
- * Media（list/upload/get/preview/delete）→ 始终 REAL `/admin/sites/{siteId}/media`。
+ * Media（list/upload/get/preview/delete）→ 始终 REAL `/admin/agents/{agentId}/media`。
  */
 import type {
   MediaDetail,
@@ -32,47 +32,47 @@ function unwrapVoid(body: HttpMessageBody<null | void>) {
   }
 }
 
-function mediaBase(siteId: number) {
-  return `/admin/sites/${siteId}/media`
+function mediaBase(agentId: number) {
+  return `/admin/agents/${agentId}/media`
 }
 
 export const mediaApi = {
-  listMedia(siteId: number, query: MediaListQuery = {}): Promise<PageResult<MediaListItem>> {
+  listMedia(agentId: number, query: MediaListQuery = {}): Promise<PageResult<MediaListItem>> {
     const qs = toQueryString({
       pageNum: query.pageNum ?? 1,
       pageSize: query.pageSize ?? 20,
       contentTypePrefix: query.contentTypePrefix,
     })
     return httpClient
-      .get<HttpMessageBody<PageResult<MediaListItem>>>(`${mediaBase(siteId)}${qs}`)
+      .get<HttpMessageBody<PageResult<MediaListItem>>>(`${mediaBase(agentId)}${qs}`)
       .then(unwrapData)
   },
 
-  getMedia(siteId: number, id: number): Promise<MediaDetail> {
+  getMedia(agentId: number, id: number): Promise<MediaDetail> {
     return httpClient
-      .get<HttpMessageBody<MediaDetail>>(`${mediaBase(siteId)}/${id}`)
+      .get<HttpMessageBody<MediaDetail>>(`${mediaBase(agentId)}/${id}`)
       .then(unwrapData)
   },
 
-  uploadMedia(siteId: number, file: File): Promise<MediaDetail> {
+  uploadMedia(agentId: number, file: File): Promise<MediaDetail> {
     const form = new FormData()
     form.append('file', file)
     return httpClient
-      .post<HttpMessageBody<MediaDetail>, FormData>(mediaBase(siteId), form, {
+      .post<HttpMessageBody<MediaDetail>, FormData>(mediaBase(agentId), form, {
         timeout: UPLOAD_TIMEOUT_MS,
       })
       .then(unwrapData)
   },
 
-  previewMedia(siteId: number, id: number): Promise<MediaPreview> {
+  previewMedia(agentId: number, id: number): Promise<MediaPreview> {
     return httpClient
-      .get<HttpMessageBody<MediaPreview>>(`${mediaBase(siteId)}/${id}/preview`)
+      .get<HttpMessageBody<MediaPreview>>(`${mediaBase(agentId)}/${id}/preview`)
       .then(unwrapData)
   },
 
-  deleteMedia(siteId: number, id: number): Promise<void> {
+  deleteMedia(agentId: number, id: number): Promise<void> {
     return httpClient
-      .delete<HttpMessageBody<null>>(`${mediaBase(siteId)}/${id}`)
+      .delete<HttpMessageBody<null>>(`${mediaBase(agentId)}/${id}`)
       .then(unwrapVoid)
   },
 }

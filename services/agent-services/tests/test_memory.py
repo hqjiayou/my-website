@@ -46,17 +46,17 @@ def _model(facts: list[str] | None, calls: list[str], *, boom: bool = False) -> 
 
 def test_request_caps_memory_count_and_length() -> None:
     kept = ChatRequest.model_validate(
-        {"siteId": "1", "message": "hi", "memories": ["  " + ("a" * (MAX_MEMORY_CHARS + 5)), "  tea  "]}
+        {"agentId": "1", "message": "hi", "memories": ["  " + ("a" * (MAX_MEMORY_CHARS + 5)), "  tea  "]}
     )
     assert kept.memories is not None
     assert kept.memories[0] == "a" * MAX_MEMORY_CHARS
     assert kept.memories[1] == "tea"
-    blank = ChatRequest.model_validate({"siteId": "1", "message": "hi", "memories": ["  ", ""]})
+    blank = ChatRequest.model_validate({"agentId": "1", "message": "hi", "memories": ["  ", ""]})
     assert blank.memories is None
     assert blank.memory_enabled is False
     try:
         ChatRequest.model_validate(
-            {"siteId": "1", "message": "hi", "memories": [str(i) for i in range(MAX_MEMORIES + 1)]}
+            {"agentId": "1", "message": "hi", "memories": [str(i) for i in range(MAX_MEMORIES + 1)]}
         )
     except ValidationError:
         return
@@ -65,9 +65,9 @@ def test_request_caps_memory_count_and_length() -> None:
 
 def test_harness_prompt_is_unchanged_without_memories(tmp_path) -> None:
     (tmp_path / "background.md").write_text("BACKGROUND", encoding="utf-8")
-    bare = assemble_harness(site_id="1", message="hi", harness_dir=str(tmp_path))
-    empty = assemble_harness(site_id="1", message="hi", harness_dir=str(tmp_path), memories=None)
-    blank = assemble_harness(site_id="1", message="hi", harness_dir=str(tmp_path), memories=["  ", ""])
+    bare = assemble_harness(agent_id="1", message="hi", harness_dir=str(tmp_path))
+    empty = assemble_harness(agent_id="1", message="hi", harness_dir=str(tmp_path), memories=None)
+    blank = assemble_harness(agent_id="1", message="hi", harness_dir=str(tmp_path), memories=["  ", ""])
     assert bare.system_prompt == empty.system_prompt == blank.system_prompt
     assert "Long-term memory" not in bare.system_prompt
 
@@ -75,7 +75,7 @@ def test_harness_prompt_is_unchanged_without_memories(tmp_path) -> None:
 def test_harness_adds_memory_section_only_when_present(tmp_path) -> None:
     (tmp_path / "background.md").write_text("BACKGROUND", encoding="utf-8")
     harness = assemble_harness(
-        site_id="1",
+        agent_id="1",
         message="hi",
         harness_dir=str(tmp_path),
         memories=["User likes tea."],
@@ -92,7 +92,7 @@ async def test_extract_returns_facts_on_the_reply() -> None:
     calls: list[str] = []
     outcome = await run_chat(
         _model(["User likes tea."], calls),
-        site_id="1",
+        agent_id="1",
         message="I like tea",
         memories=["User lives in Taipei."],
         memory_enabled=True,
@@ -106,7 +106,7 @@ async def test_extract_returns_facts_on_the_reply() -> None:
 async def test_extract_drops_exact_duplicates_of_existing() -> None:
     outcome = await run_chat(
         _model(["User likes tea.", "  User likes tea.  "], []),
-        site_id="1",
+        agent_id="1",
         message="tea again",
         memories=["User likes tea."],
         memory_enabled=True,
@@ -119,7 +119,7 @@ async def test_extract_drops_exact_duplicates_of_existing() -> None:
 async def test_extract_failure_keeps_the_reply_and_returns_empty() -> None:
     outcome = await run_chat(
         _model(None, [], boom=True),
-        site_id="1",
+        agent_id="1",
         message="hello",
         memory_enabled=True,
     )
@@ -132,7 +132,7 @@ async def test_memory_disabled_does_not_extract() -> None:
     calls: list[str] = []
     outcome = await run_chat(
         _model(["User likes tea."], calls),
-        site_id="1",
+        agent_id="1",
         message="I like tea",
         memories=["User likes tea."],
         memory_enabled=False,
@@ -146,7 +146,7 @@ async def test_extraction_switch_off_does_not_extract() -> None:
     calls: list[str] = []
     outcome = await run_chat(
         _model(["User likes tea."], calls),
-        site_id="1",
+        agent_id="1",
         message="I like tea",
         memory_enabled=True,
         memory_extraction_enabled=False,
@@ -162,7 +162,7 @@ async def test_stream_done_carries_extracted_memories() -> None:
         event
         async for event in stream_chat_events(
             _model(["User lives in Taipei."], calls),
-            site_id="1",
+            agent_id="1",
             message="I live in Taipei",
             memory_enabled=True,
         )

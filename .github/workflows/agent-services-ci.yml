@@ -67,8 +67,8 @@ jobs:
         env:
           AGENT_PYTHON_CONTRACT_IT: 'true'
         run: |
-          mvn -B -ntp -pl agent -am install -DskipTests
-          mvn -B -ntp -pl agent test -Dtest=HttpAgentClientPythonContractIT
+          mvn -B -ntp -pl agent/agent-core -am install -DskipTests
+          mvn -B -ntp -pl agent/agent-core test -Dtest=HttpAgentClientPythonContractIT
 
   docker-build:
     name: Docker image build

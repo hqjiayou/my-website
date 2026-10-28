@@ -72,7 +72,7 @@ def _error_event(error_code: str, message: str) -> AgentStreamEvent:
 async def stream_chat_events(
     model: Model,
     *,
-    site_id: str,
+    agent_id: str,
     message: str,
     attachments: list[ChatAttachment] | None = None,
     documents: list[ChatDocument] | None = None,
@@ -102,7 +102,7 @@ async def stream_chat_events(
         model, history, resolved_budget.history_max_chars
     )
     harness = assemble_harness(
-        site_id=site_id,
+        agent_id=agent_id,
         message=message,
         prompt_profile=prompt_profile,
         retrieval_context=retrieval_context,
@@ -121,7 +121,7 @@ async def stream_chat_events(
     )
     system_prompt = harness.system_prompt
     user_prompt = build_user_prompt(harness.user_message, attachments, documents)
-    start_data: dict[str, object] = {"siteId": site_id}
+    start_data: dict[str, object] = {"agentId": agent_id}
     if skills_applied:
         start_data["skillsApplied"] = list(skills_applied)
     if skills_missing:

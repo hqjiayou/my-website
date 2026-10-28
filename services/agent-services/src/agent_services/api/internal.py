@@ -189,7 +189,7 @@ def _skills_dir(request: Request) -> str:
     return settings.agent_skills_dir.strip() or default_skills_directory()
 
 
-def _prepare_execution(request: Request, body: ChatRequest, site_id: str, model: Model | None):
+def _prepare_execution(request: Request, body: ChatRequest, agent_id: str, model: Model | None):
     settings = request.app.state.settings
     skills_dir = _skills_dir(request)
     resolution = resolve_skills(
@@ -214,7 +214,7 @@ def _prepare_execution(request: Request, body: ChatRequest, site_id: str, model:
     collector = KnowledgeSearchCollector()
     toolsets = build_execution_toolsets(
         _business_settings(settings, body.business_api_base_url),
-        site_id,
+        agent_id,
         todo_store=todo_store,
         model=model,
         retrieval=_retrieval_service_or_none(request),
@@ -317,13 +317,13 @@ async def mcp_ready(request: Request) -> JSONResponse:
 
 @router.post("/chat")
 async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object]:
-    site_id = body.site_id.strip()
+    agent_id = body.agent_id.strip()
     message = body.message.strip()
-    if not site_id or (not message and not body.attachments and not body.documents):
+    if not agent_id or (not message and not body.attachments and not body.documents):
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
-            message="siteId and message are required.",
+            message="agentId and message are required.",
         )
 
     handle = _execution_handle(request, body)
@@ -336,12 +336,12 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         )
 
     skill_resolution, todo_store, toolsets, collector = _prepare_execution(
-        request, body, site_id, handle.model
+        request, body, agent_id, handle.model
     )
 
     outcome = await run_chat(
         handle.model,  # type: ignore[arg-type]  # live 已保证非 None
-        site_id=site_id,
+        agent_id=agent_id,
         message=message,
         attachments=body.attachments,
         documents=body.documents,
@@ -498,13 +498,13 @@ async def internal_ocr_image(request: Request, body: OcrImageRequest) -> dict[st
 
 @router.post("/chat/stream")
 async def internal_chat_stream(request: Request, body: ChatRequest) -> StreamingResponse:
-    site_id = body.site_id.strip()
+    agent_id = body.agent_id.strip()
     message = body.message.strip()
-    if not site_id or (not message and not body.attachments and not body.documents):
+    if not agent_id or (not message and not body.attachments and not body.documents):
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
-            message="siteId and message are required.",
+            message="agentId and message are required.",
         )
 
     handle = _execution_handle(request, body)
@@ -517,13 +517,13 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
         )
 
     skill_resolution, todo_store, toolsets, collector = _prepare_execution(
-        request, body, site_id, handle.model
+        request, body, agent_id, handle.model
     )
 
     async def event_generator():
         async for event in stream_chat_events(
             handle.model,  # type: ignore[arg-type]
-            site_id=site_id,
+            agent_id=agent_id,
             message=message,
             attachments=body.attachments,
             documents=body.documents,
@@ -565,18 +565,18 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
 async def upsert_retrieval_document(
     request: Request, body: RetrievalUpsertRequest
 ) -> dict[str, object]:
-    site_id = body.site_id.strip()
+    agent_id = body.agent_id.strip()
     source_id = body.source_id.strip()
-    if not site_id or not source_id or not body.content.strip():
+    if not agent_id or not source_id or not body.content.strip():
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
-            message="siteId, sourceId and content are required.",
+            message="agentId, sourceId and content are required.",
         )
     service = _require_retrieval_service(request)
     try:
         chunk_count = await service.upsert_document(
-            site_id=site_id,
+            agent_id=agent_id,
             source_id=source_id,
             title=body.title,
             content=body.content,
@@ -636,19 +636,19 @@ async def prepare_retrieval_reembed(
 
 @router.delete("/retrieval/documents")
 async def delete_retrieval_document(
-    request: Request, siteId: str, sourceId: str
+    request: Request, agentId: str, sourceId: str
 ) -> dict[str, object]:
-    site_id = siteId.strip()
+    agent_id = agentId.strip()
     source_id = sourceId.strip()
-    if not site_id or not source_id:
+    if not agent_id or not source_id:
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
-            message="siteId and sourceId are required.",
+            message="agentId and sourceId are required.",
         )
     service = _require_retrieval_service(request)
     try:
-        await service.delete_document(site_id=site_id, source_id=source_id)
+        await service.delete_document(agent_id=agent_id, source_id=source_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Retrieval index delete failed", exc_info=exc)
         raise InternalApiError(
@@ -663,7 +663,7 @@ async def delete_retrieval_document(
 @router.post("/retrieval/search")
 async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> dict[str, object]:
     """内部知识检索。嵌入或向量库失败时沿用 retrieve_chunks 的 degraded，不回 500。"""
-    site_id = body.site_id.strip()
+    agent_id = body.agent_id.strip()
     query = body.query.strip()
     if not query:
         raise InternalApiError(
@@ -671,15 +671,15 @@ async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> di
             error_code="BAD_REQUEST",
             message="query must not be blank.",
         )
-    if not site_id:
+    if not agent_id:
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
-            message="siteId is required.",
+            message="agentId is required.",
         )
     service = _require_retrieval_service(request)
     chunks = await service.retrieve_chunks(
-        site_id=site_id,
+        agent_id=agent_id,
         query=query,
         top_k=body.top_k,
         embedder=_request_embedder(request, body.embedding_spec, body.api_key, body.base_url),

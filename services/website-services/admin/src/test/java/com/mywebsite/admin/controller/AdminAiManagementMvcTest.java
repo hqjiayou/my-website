@@ -86,18 +86,18 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void promptProfileGetEmptyThenUpsert() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
 
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/prompt-profile")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/prompt-profile")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").doesNotExist())
-                .andExpect(jsonPath("$.data.siteId").value((int) siteId));
+                .andExpect(jsonPath("$.data.agentId").value((int) agentId));
 
         ObjectNode body = MAPPER.createObjectNode();
         body.put("systemPrompt", "You are a shop assistant.");
         body.put("temperature", 0.2);
-        mockMvc.perform(put("/api/admin/sites/" + siteId + "/ai/prompt-profile")
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/ai/prompt-profile")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))
@@ -109,13 +109,13 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void knowledgeCrudAndCrossSite404() throws Exception {
         String token = tokenFor(500L);
-        long siteA = createSite(token);
-        long siteB = createSite(token);
+        long agentA = createSite(token);
+        long agentB = createSite(token);
 
         ObjectNode create = MAPPER.createObjectNode();
         create.put("title", "Hours");
         create.put("content", "09:00-18:00");
-        MvcResult created = mockMvc.perform(post("/api/admin/sites/" + siteA + "/ai/knowledge-documents")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents/" + agentA + "/ai/knowledge-documents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(create)))
@@ -125,20 +125,20 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         long docId =
                 MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        mockMvc.perform(get("/api/admin/sites/" + siteB + "/ai/knowledge-documents/" + docId)
+        mockMvc.perform(get("/api/admin/agents/" + agentB + "/ai/knowledge-documents/" + docId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void deleteSiteRemovesAiRowsAndRetrievalIndex() throws Exception {
+    void deleteAgentRemovesAiRowsAndRetrievalIndex() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
 
         ObjectNode prompt = MAPPER.createObjectNode();
         prompt.put("systemPrompt", "shop");
         prompt.put("temperature", 0.2);
-        mockMvc.perform(put("/api/admin/sites/" + siteId + "/ai/prompt-profile")
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/ai/prompt-profile")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(prompt)))
@@ -147,46 +147,46 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         ObjectNode knowledge = MAPPER.createObjectNode();
         knowledge.put("title", "Hours");
         knowledge.put("content", "09:00-18:00");
-        MvcResult created = mockMvc.perform(post("/api/admin/sites/" + siteId + "/ai/knowledge-documents")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/knowledge-documents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(knowledge)))
                 .andExpect(status().isOk())
                 .andReturn();
         long docId = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
-        long conversationId = insertConversation(siteId, "hours?");
+        long conversationId = insertConversation(agentId, "hours?");
 
         doThrow(new RuntimeException("index down")).when(agentClient).deleteRetrievalDocument(any(), any());
 
-        mockMvc.perform(delete("/api/admin/sites/" + siteId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(delete("/api/admin/agents/" + agentId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
         assertThat(knowledgeDocumentMapper.selectById(docId)).isNull();
         assertThat(promptProfileMapper.selectCount(new LambdaQueryWrapper<AdminAiPromptProfileEntity>()
-                        .eq(AdminAiPromptProfileEntity::getSiteId, siteId)))
+                        .eq(AdminAiPromptProfileEntity::getAgentId, agentId)))
                 .isZero();
         assertThat(conversationMapper.selectById(conversationId)).isNull();
         assertThat(messageMapper.selectCount(new LambdaQueryWrapper<AdminAiMessageEntity>()
                         .eq(AdminAiMessageEntity::getConversationId, conversationId)))
                 .isZero();
-        verify(agentClient).deleteRetrievalDocument(String.valueOf(siteId), "kb:" + docId);
+        verify(agentClient).deleteRetrievalDocument(String.valueOf(agentId), "kb:" + docId);
     }
 
     @Test
-    void conversationListIsSiteScoped() throws Exception {
+    void conversationListIsAgentScoped() throws Exception {
         String token = tokenFor(500L);
-        long siteA = createSite(token);
-        long siteB = createSite(token);
-        long conversationId = insertConversation(siteA, "hours?");
-        insertConversation(siteB, "other");
+        long agentA = createSite(token);
+        long agentB = createSite(token);
+        long conversationId = insertConversation(agentA, "hours?");
+        insertConversation(agentB, "other");
 
-        mockMvc.perform(get("/api/admin/sites/" + siteA + "/ai/conversations")
+        mockMvc.perform(get("/api/admin/agents/" + agentA + "/ai/conversations")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.records[0].title").value("hours?"));
 
-        mockMvc.perform(get("/api/admin/sites/" + siteA + "/ai/conversations/" + conversationId
+        mockMvc.perform(get("/api/admin/agents/" + agentA + "/ai/conversations/" + conversationId
                                 + "/messages")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
@@ -200,7 +200,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void previewStreamForwardsAgentEvents() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
                     listener.onEvent("START", "{\"ok\":true}");
@@ -213,7 +213,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
 
         ObjectNode body = MAPPER.createObjectNode();
         body.put("message", "hello");
-        MvcResult mvcResult = mockMvc.perform(post("/api/admin/sites/" + siteId + "/ai/preview/chat/stream")
+        MvcResult mvcResult = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))
@@ -229,7 +229,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void previewForwardsSkillsAndTodosToAgent() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
         ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
@@ -241,7 +241,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
 
         String body = "{\"message\":\"hello\",\"skills\":[\" orchestration \",\"orchestration\"],"
                 + "\"todos\":[{\"id\":\"t1\",\"title\":\"Step 1\",\"status\":\"IN_PROGRESS\"}]}";
-        MvcResult mvcResult = mockMvc.perform(post("/api/admin/sites/" + siteId + "/ai/preview/chat/stream")
+        MvcResult mvcResult = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .header(HttpHeaders.ACCEPT_LANGUAGE, "zh-CN")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -259,9 +259,9 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void previewRejectsInvalidTodoStatus() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
         String body = "{\"message\":\"hello\",\"todos\":[{\"id\":\"t1\",\"title\":\"x\",\"status\":\"DONE\"}]}";
-        mockMvc.perform(post("/api/admin/sites/" + siteId + "/ai/preview/chat/stream")
+        mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
@@ -271,10 +271,10 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void previewSkillsCatalogIsProxied() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
         when(agentClient.listSkills()).thenReturn(List.of(new AgentSkillSummary("orchestration", "plan", "1")));
 
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/preview/skills")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/preview/skills")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].id").value("orchestration"))
@@ -284,7 +284,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void runtimeStatusIsProxiedAndUnreachableIsReportedNotThrown() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
         when(agentClient.runtimeStatus()).thenReturn(new AgentRuntimeStatus(
                 "openai:gpt-4o",
                 "LIVE",
@@ -296,7 +296,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 "Retrieval database is not configured (missing RETRIEVAL_DATABASE_URL).",
                 new AgentRuntimeStatus.HarnessFiles(true, true, false)));
 
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/runtime")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/runtime")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reachable").value(true))
@@ -310,13 +310,13 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.status.harness.toolGuidance").value(false));
 
         when(agentClient.runtimeStatus()).thenThrow(new BusinessException(ErrorCode.SYSTEM_ERROR));
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/runtime")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/runtime")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reachable").value(false))
                 .andExpect(jsonPath("$.data.errorCode").value("SYSTEM_ERROR"));
 
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/runtime")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/runtime")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(100L)))
                 .andExpect(status().isForbidden());
     }
@@ -324,7 +324,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void mcpReadyIsProxiedIncludingUnreachableProbe() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
         when(agentClient.mcpReady())
                 .thenReturn(new AgentMcpReady(
                         false,
@@ -333,7 +333,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                         "MCP_UNAVAILABLE",
                         "MCP server unreachable: dead"));
 
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/mcp-ready")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/mcp-ready")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reachable").value(true))
@@ -342,7 +342,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.probe.servers[0].error").value("TimeoutError"));
 
         when(agentClient.mcpReady()).thenThrow(new BusinessException(ErrorCode.SYSTEM_ERROR));
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/mcp-ready")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/mcp-ready")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reachable").value(false))
@@ -352,10 +352,10 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void previewForbiddenWithoutPermission() throws Exception {
         String token = tokenFor(100L);
-        long siteId = createSite(tokenFor(500L));
+        long agentId = createSite(tokenFor(500L));
         ObjectNode body = MAPPER.createObjectNode();
         body.put("message", "hello");
-        mockMvc.perform(post("/api/admin/sites/" + siteId + "/ai/preview/chat/stream")
+        mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))
@@ -365,14 +365,14 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void previewMapsBlocked() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
         doThrow(new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED))
                 .when(agentClient)
                 .chatStream(any(), any());
 
         ObjectNode body = MAPPER.createObjectNode();
         body.put("message", "hello");
-        MvcResult mvcResult = mockMvc.perform(post("/api/admin/sites/" + siteId + "/ai/preview/chat/stream")
+        MvcResult mvcResult = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))
@@ -387,7 +387,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void modelEntryKeepsKeyOffTheApiAndPreviewUsesTheDefault() throws Exception {
         String token = tokenFor(500L);
-        long siteId = createSite(token);
+        long agentId = createSite(token);
         String secret = "super-secret-key";
 
         ObjectNode create = MAPPER.createObjectNode();
@@ -439,7 +439,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .chatStream(captor.capture(), any());
         ObjectNode preview = MAPPER.createObjectNode();
         preview.put("message", "hello");
-        MvcResult streamed = mockMvc.perform(post("/api/admin/sites/" + siteId + "/ai/preview/chat/stream")
+        MvcResult streamed = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(preview)))
@@ -460,7 +460,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 "BLOCKED",
                 "Retrieval database is not configured (missing RETRIEVAL_DATABASE_URL).",
                 AgentRuntimeStatus.HarnessFiles.UNKNOWN));
-        mockMvc.perform(get("/api/admin/sites/" + siteId + "/ai/runtime")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/runtime")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status.provider").value("google:gemini-3-flash-preview"))
@@ -494,36 +494,36 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .doesNotContain("another-secret-key")
                 .doesNotContain("enc:v1:");
 
-        ObjectNode siteEntry = MAPPER.createObjectNode();
-        siteEntry.put("displayName", "Site Gemini");
-        siteEntry.put("modelSpec", "google:gemini-3-flash-preview");
-        siteEntry.put("apiKey", "site-secret-key");
-        siteEntry.put("siteId", siteId);
-        siteEntry.put("enabled", true);
-        siteEntry.put("defaultEntry", true);
+        ObjectNode agentEntry = MAPPER.createObjectNode();
+        agentEntry.put("displayName", "Agent Gemini");
+        agentEntry.put("modelSpec", "google:gemini-3-flash-preview");
+        agentEntry.put("apiKey", "agent-secret-key");
+        agentEntry.put("agentId", agentId);
+        agentEntry.put("enabled", true);
+        agentEntry.put("defaultEntry", true);
         mockMvc.perform(post("/api/admin/ai/model-entries")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(siteEntry)))
+                        .content(MAPPER.writeValueAsString(agentEntry)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.siteId").value((int) siteId))
+                .andExpect(jsonPath("$.data.agentId").value((int) agentId))
                 .andExpect(jsonPath("$.data.defaultEntry").value(true));
         MvcResult scoped = mockMvc.perform(get("/api/admin/ai/model-entries")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andReturn();
         boolean platformDefaultRemains = false;
-        boolean siteDefault = false;
+        boolean agentDefault = false;
         for (var item : MAPPER.readTree(scoped.getResponse().getContentAsString()).path("data")) {
             if ("OpenAI".equals(item.path("displayName").asText())) {
                 platformDefaultRemains = item.path("defaultEntry").asBoolean();
             }
-            if ("Site Gemini".equals(item.path("displayName").asText())) {
-                siteDefault = item.path("defaultEntry").asBoolean();
+            if ("Agent Gemini".equals(item.path("displayName").asText())) {
+                agentDefault = item.path("defaultEntry").asBoolean();
             }
         }
         assertThat(platformDefaultRemains).isTrue();
-        assertThat(siteDefault).isTrue();
+        assertThat(agentDefault).isTrue();
         for (var item : MAPPER.readTree(scoped.getResponse().getContentAsString()).path("data")) {
             mockMvc.perform(delete("/api/admin/ai/model-entries/" + item.path("id").asLong())
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -533,10 +533,10 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
 
     private long createSite(String token) throws Exception {
         ObjectNode body = MAPPER.createObjectNode();
-        body.put("siteCode", "ai_" + Long.toHexString(System.nanoTime()));
-        body.put("siteName", "AI Site");
-        body.put("siteType", "CAKE");
-        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+        body.put("agentCode", "ai_" + Long.toHexString(System.nanoTime()));
+        body.put("agentName", "AI Agent");
+        body.put("agentType", "CAKE");
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))
@@ -545,24 +545,24 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         return MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
     }
 
-    private long insertConversation(long siteId, String title) {
+    private long insertConversation(long agentId, String title) {
         AdminAiConversationEntity conversation = new AdminAiConversationEntity();
-        conversation.setSiteId(siteId);
-        conversation.setSiteUserId(1L);
+        conversation.setAgentId(agentId);
+        conversation.setAgentUserId(1L);
         conversation.setTitle(title);
         conversation.setLastMessageAt(OffsetDateTime.now(ZoneOffset.UTC));
         conversationMapper.insert(conversation);
 
         AdminAiMessageEntity user = new AdminAiMessageEntity();
         user.setConversationId(conversation.getId());
-        user.setSiteId(siteId);
+        user.setAgentId(agentId);
         user.setRole(AdminAiMessageEntity.ROLE_USER);
         user.setContent(title);
         messageMapper.insert(user);
 
         AdminAiMessageEntity assistant = new AdminAiMessageEntity();
         assistant.setConversationId(conversation.getId());
-        assistant.setSiteId(siteId);
+        assistant.setAgentId(agentId);
         assistant.setRole(AdminAiMessageEntity.ROLE_ASSISTANT);
         assistant.setContent("ok");
         assistant.setAgentMeta("{\"usage\":{\"requests\":2,\"toolCalls\":1,\"inputTokens\":30,\"outputTokens\":5},"

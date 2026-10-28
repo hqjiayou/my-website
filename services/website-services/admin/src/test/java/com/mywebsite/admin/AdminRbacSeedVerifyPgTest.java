@@ -17,7 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * RBAC 种子 Flyway（V1–V30：含 Site/User/Media/Content/AI；模板与预约权限已由 V30 下架）在真实 PostgreSQL 上的迁移与数据验证。
+ * RBAC 种子 Flyway（V1–V30：含 Agent/User/Media/Content/AI；模板与预约权限已由 V30 下架）在真实 PostgreSQL 上的迁移与数据验证。
  *
  * <p>默认由 Testcontainers 自举一次性 PostgreSQL（库名 {@code my_website_rbac_verify}）；执行：
  * {@code mvn clean test -Ppersistence-verify-pg -pl admin -am -Dtest=AdminRbacSeedVerifyPgTest}
@@ -49,12 +49,12 @@ class AdminRbacSeedVerifyPgTest {
             "admin:user:status",
             "admin:user:role:view",
             "admin:user:role:update",
-            "admin:site:list",
-            "admin:site:detail",
-            "admin:site:create",
-            "admin:site:update",
-            "admin:site:delete",
-            "admin:site:status",
+            "admin:agent:list",
+            "admin:agent:detail",
+            "admin:agent:create",
+            "admin:agent:update",
+            "admin:agent:delete",
+            "admin:agent:status",
             "admin:media:list",
             "admin:media:upload",
             "admin:media:download",
@@ -89,7 +89,7 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-model:read",
             "admin:ai-model:update");
 
-    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 32;
+    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 34;
     private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 55;
 
     @Autowired
@@ -192,7 +192,7 @@ class AdminRbacSeedVerifyPgTest {
         Integer count = jdbcTemplate.queryForObject(
                 """
                 SELECT COUNT(*) FROM information_schema.columns
-                WHERE table_name = 'site_ai_knowledge_base' AND column_name = 'deleted_at'
+                WHERE table_name = 'agent_ai_knowledge_base' AND column_name = 'deleted_at'
                 """,
                 Integer.class);
         assertThat(count).isEqualTo(1);

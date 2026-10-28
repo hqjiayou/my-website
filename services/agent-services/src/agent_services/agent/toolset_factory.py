@@ -21,7 +21,7 @@ from agent_services.tools.business_api import BusinessApiClient
 
 def build_execution_toolsets(
     settings: Settings,
-    site_id: str,
+    agent_id: str,
     *,
     todo_store: TodoStore,
     client: BusinessApiClient | None = None,
@@ -32,7 +32,7 @@ def build_execution_toolsets(
     knowledge_collector: KnowledgeSearchCollector | None = None,
 ) -> list[object]:
     toolsets: list[object] = []
-    business = build_business_toolset(settings, site_id, client=client)
+    business = build_business_toolset(settings, agent_id, client=client)
     if business is not None:
         toolsets.append(business)
     if retrieval is not None:
@@ -40,7 +40,7 @@ def build_execution_toolsets(
         # 主 agent 任何一轮都能直接查知识库，不必先委派。
         toolsets.append(
             build_knowledge_toolset(
-                site_id,
+                agent_id,
                 retrieval,
                 embedder=retrieval_embedder,
                 model_selection=retrieval_model_selection,
@@ -54,7 +54,7 @@ def build_execution_toolsets(
         toolsets.append(
             build_delegate_tool(
                 model,
-                site_id=site_id,
+                agent_id=agent_id,
                 retrieval=retrieval,
                 max_per_run=settings.agent_subagent_max_per_run,
                 timeout_seconds=settings.agent_subagent_timeout_seconds,

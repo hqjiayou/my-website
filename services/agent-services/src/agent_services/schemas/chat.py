@@ -129,7 +129,7 @@ class ModelSelection(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    site_id: str = Field(alias="siteId")
+    agent_id: str = Field(alias="agentId")
     message: str = Field(max_length=MAX_MESSAGE_CHARS)
     attachments: list[ChatAttachment] | None = Field(default=None, max_length=MAX_ATTACHMENTS)
     documents: list[ChatDocument] | None = Field(default=None, max_length=MAX_DOCUMENTS)

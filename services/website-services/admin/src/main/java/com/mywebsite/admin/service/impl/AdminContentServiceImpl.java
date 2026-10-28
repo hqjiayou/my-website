@@ -6,7 +6,7 @@ import com.mywebsite.admin.constant.AdminContentConstants;
 import com.mywebsite.admin.constant.AdminContentMessageKeys;
 import com.mywebsite.admin.constant.AdminMediaConstants;
 import com.mywebsite.admin.constant.AdminMediaMessageKeys;
-import com.mywebsite.admin.constant.AdminSiteMessageKeys;
+import com.mywebsite.admin.constant.AdminAgentMessageKeys;
 import com.mywebsite.admin.dto.AdminContentDtos.AdminContentCreateRequest;
 import com.mywebsite.admin.dto.AdminContentDtos.AdminContentDetailDto;
 import com.mywebsite.admin.dto.AdminContentDtos.AdminContentListItemDto;
@@ -15,10 +15,10 @@ import com.mywebsite.admin.dto.AdminContentDtos.AdminContentStatusUpdateRequest;
 import com.mywebsite.admin.dto.AdminContentDtos.AdminContentUpdateRequest;
 import com.mywebsite.admin.entity.AdminContentEntity;
 import com.mywebsite.admin.entity.AdminMediaEntity;
-import com.mywebsite.admin.entity.AdminSiteEntity;
+import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminContentMapper;
 import com.mywebsite.admin.mapper.AdminMediaMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminContentService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -34,21 +34,21 @@ import org.springframework.util.StringUtils;
 public class AdminContentServiceImpl implements AdminContentService {
 
     private final AdminContentMapper adminContentMapper;
-    private final AdminSiteMapper adminSiteMapper;
+    private final AdminAgentMapper adminAgentMapper;
     private final AdminMediaMapper adminMediaMapper;
 
     public AdminContentServiceImpl(
             AdminContentMapper adminContentMapper,
-            AdminSiteMapper adminSiteMapper,
+            AdminAgentMapper adminAgentMapper,
             AdminMediaMapper adminMediaMapper) {
         this.adminContentMapper = adminContentMapper;
-        this.adminSiteMapper = adminSiteMapper;
+        this.adminAgentMapper = adminAgentMapper;
         this.adminMediaMapper = adminMediaMapper;
     }
 
     @Override
-    public PageResult<AdminContentListItemDto> listContents(long siteId, AdminContentListQuery query) {
-        requireSite(siteId);
+    public PageResult<AdminContentListItemDto> listContents(long agentId, AdminContentListQuery query) {
+        requireSite(agentId);
         int pageNum = query != null && query.pageNum() != null
                 ? query.pageNum()
                 : AdminContentConstants.DEFAULT_PAGE_NUM;
@@ -57,7 +57,7 @@ public class AdminContentServiceImpl implements AdminContentService {
                 : AdminContentConstants.DEFAULT_PAGE_SIZE;
 
         LambdaQueryWrapper<AdminContentEntity> wrapper = new LambdaQueryWrapper<AdminContentEntity>()
-                .eq(AdminContentEntity::getSiteId, siteId)
+                .eq(AdminContentEntity::getAgentId, agentId)
                 .orderByAsc(AdminContentEntity::getSortOrder)
                 .orderByDesc(AdminContentEntity::getId);
         if (query != null) {
@@ -81,23 +81,23 @@ public class AdminContentServiceImpl implements AdminContentService {
     }
 
     @Override
-    public AdminContentDetailDto getContent(long siteId, long contentId) {
-        requireSite(siteId);
-        return toDetail(requireContentInSite(siteId, contentId));
+    public AdminContentDetailDto getContent(long agentId, long contentId) {
+        requireSite(agentId);
+        return toDetail(requireContentInSite(agentId, contentId));
     }
 
     @Override
     @Transactional
-    public AdminContentDetailDto createContent(long siteId, AdminContentCreateRequest request) {
-        requireSite(siteId);
+    public AdminContentDetailDto createContent(long agentId, AdminContentCreateRequest request) {
+        requireSite(agentId);
         requireType(request.type());
         requireStatus(request.status());
         if (request.coverMediaId() != null) {
-            requireReadyCoverMediaInSite(siteId, request.coverMediaId());
+            requireReadyCoverMediaInSite(agentId, request.coverMediaId());
         }
 
         AdminContentEntity entity = new AdminContentEntity();
-        entity.setSiteId(siteId);
+        entity.setAgentId(agentId);
         entity.setType(request.type());
         entity.setTitle(request.title().trim());
         entity.setBody(blankToNull(request.body()));
@@ -107,19 +107,19 @@ public class AdminContentServiceImpl implements AdminContentService {
         entity.setCoverMediaId(request.coverMediaId());
         applyPublishedAt(entity, request.status(), null);
         adminContentMapper.insert(entity);
-        return toDetail(requireContentInSite(siteId, entity.getId()));
+        return toDetail(requireContentInSite(agentId, entity.getId()));
     }
 
     @Override
     @Transactional
     public AdminContentDetailDto updateContent(
-            long siteId, long contentId, AdminContentUpdateRequest request) {
-        requireSite(siteId);
+            long agentId, long contentId, AdminContentUpdateRequest request) {
+        requireSite(agentId);
         requireType(request.type());
-        AdminContentEntity entity = requireContentInSite(siteId, contentId);
+        AdminContentEntity entity = requireContentInSite(agentId, contentId);
 
         if (request.coverMediaId() != null) {
-            requireReadyCoverMediaInSite(siteId, request.coverMediaId());
+            requireReadyCoverMediaInSite(agentId, request.coverMediaId());
         }
 
         entity.setType(request.type());
@@ -134,16 +134,16 @@ public class AdminContentServiceImpl implements AdminContentService {
             throw new BusinessException(
                     ErrorCode.CONFLICT.getCode(), AdminContentMessageKeys.CONTENT_VERSION_CONFLICT);
         }
-        return toDetail(requireContentInSite(siteId, contentId));
+        return toDetail(requireContentInSite(agentId, contentId));
     }
 
     @Override
     @Transactional
     public AdminContentDetailDto updateStatus(
-            long siteId, long contentId, AdminContentStatusUpdateRequest request) {
-        requireSite(siteId);
+            long agentId, long contentId, AdminContentStatusUpdateRequest request) {
+        requireSite(agentId);
         requireStatus(request.status());
-        AdminContentEntity entity = requireContentInSite(siteId, contentId);
+        AdminContentEntity entity = requireContentInSite(agentId, contentId);
         String previousStatus = entity.getStatus();
         entity.setStatus(request.status());
         applyPublishedAt(entity, request.status(), previousStatus);
@@ -153,14 +153,14 @@ public class AdminContentServiceImpl implements AdminContentService {
             throw new BusinessException(
                     ErrorCode.CONFLICT.getCode(), AdminContentMessageKeys.CONTENT_VERSION_CONFLICT);
         }
-        return toDetail(requireContentInSite(siteId, contentId));
+        return toDetail(requireContentInSite(agentId, contentId));
     }
 
     @Override
     @Transactional
-    public void deleteContent(long siteId, long contentId) {
-        requireSite(siteId);
-        AdminContentEntity entity = requireContentInSite(siteId, contentId);
+    public void deleteContent(long agentId, long contentId) {
+        requireSite(agentId);
+        AdminContentEntity entity = requireContentInSite(agentId, contentId);
         entity.setDeletedAt(OffsetDateTime.now(ZoneOffset.UTC));
         adminContentMapper.updateById(entity);
         int deleted = adminContentMapper.deleteById(entity.getId());
@@ -172,9 +172,9 @@ public class AdminContentServiceImpl implements AdminContentService {
 
     @Override
     @Transactional
-    public void softDeleteBySiteId(long siteId) {
+    public void softDeleteByAgentId(long agentId) {
         List<AdminContentEntity> contents = adminContentMapper.selectList(
-                new LambdaQueryWrapper<AdminContentEntity>().eq(AdminContentEntity::getSiteId, siteId));
+                new LambdaQueryWrapper<AdminContentEntity>().eq(AdminContentEntity::getAgentId, agentId));
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         for (AdminContentEntity content : contents) {
             content.setDeletedAt(now);
@@ -183,27 +183,27 @@ public class AdminContentServiceImpl implements AdminContentService {
         }
     }
 
-    private AdminSiteEntity requireSite(long siteId) {
-        AdminSiteEntity site = adminSiteMapper.selectById(siteId);
-        if (site == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminSiteMessageKeys.SITE_NOT_FOUND);
+    private AdminAgentEntity requireSite(long agentId) {
+        AdminAgentEntity agent = adminAgentMapper.selectById(agentId);
+        if (agent == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
         }
-        return site;
+        return agent;
     }
 
-    private AdminContentEntity requireContentInSite(long siteId, long contentId) {
+    private AdminContentEntity requireContentInSite(long agentId, long contentId) {
         AdminContentEntity content = adminContentMapper.selectById(contentId);
         // 跨站或不存在统一 404，避免泄露归属
-        if (content == null || !Long.valueOf(siteId).equals(content.getSiteId())) {
+        if (content == null || !Long.valueOf(agentId).equals(content.getAgentId())) {
             throw new BusinessException(
                     ErrorCode.NOT_FOUND.getCode(), AdminContentMessageKeys.CONTENT_NOT_FOUND);
         }
         return content;
     }
 
-    private void requireReadyCoverMediaInSite(long siteId, long mediaId) {
+    private void requireReadyCoverMediaInSite(long agentId, long mediaId) {
         AdminMediaEntity media = adminMediaMapper.selectById(mediaId);
-        if (media == null || !Long.valueOf(siteId).equals(media.getSiteId())) {
+        if (media == null || !Long.valueOf(agentId).equals(media.getAgentId())) {
             throw new BusinessException(
                     ErrorCode.BAD_REQUEST.getCode(), AdminContentMessageKeys.CONTENT_COVER_MEDIA_INVALID);
         }
@@ -247,7 +247,7 @@ public class AdminContentServiceImpl implements AdminContentService {
     private AdminContentListItemDto toListItem(AdminContentEntity entity) {
         return new AdminContentListItemDto(
                 entity.getId(),
-                entity.getSiteId(),
+                entity.getAgentId(),
                 entity.getType(),
                 entity.getTitle(),
                 entity.getBody(),
@@ -263,7 +263,7 @@ public class AdminContentServiceImpl implements AdminContentService {
     private AdminContentDetailDto toDetail(AdminContentEntity entity) {
         return new AdminContentDetailDto(
                 entity.getId(),
-                entity.getSiteId(),
+                entity.getAgentId(),
                 entity.getType(),
                 entity.getTitle(),
                 entity.getBody(),

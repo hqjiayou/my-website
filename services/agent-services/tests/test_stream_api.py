@@ -16,7 +16,7 @@ def test_chat_stream_emits_application_events() -> None:
         "POST",
         "/internal/v1/chat/stream",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello"},
+        json={"agentId": "1", "message": "hello"},
     ) as response:
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/event-stream")
@@ -34,7 +34,7 @@ def test_chat_stream_blocked_without_model() -> None:
     response = client.post(
         "/internal/v1/chat/stream",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello"},
+        json={"agentId": "1", "message": "hello"},
     )
     assert response.status_code == 503
     body = response.json()

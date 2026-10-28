@@ -7,7 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.infra.crypto.ModelEntryCipher;
 import java.util.List;
@@ -25,7 +25,7 @@ class AdminAiModelEntryServiceImplTest {
     private AdminAiModelEntryMapper modelEntryMapper;
 
     @Mock
-    private AdminSiteMapper adminSiteMapper;
+    private AdminAgentMapper adminAgentMapper;
 
     @Mock
     private ModelEntryCipher cipher;
@@ -34,7 +34,7 @@ class AdminAiModelEntryServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new AdminAiModelEntryServiceImpl(modelEntryMapper, adminSiteMapper, cipher);
+        service = new AdminAiModelEntryServiceImpl(modelEntryMapper, adminAgentMapper, cipher);
         // 无默认入口的用例走不到解密，stub 放宽避免 strict stub 误报
         lenient().when(cipher.decrypt(any())).thenAnswer(invocation -> {
             String raw = invocation.getArgument(0);
@@ -42,10 +42,10 @@ class AdminAiModelEntryServiceImplTest {
         });
     }
 
-    private static AdminAiModelEntryEntity entry(long id, Long siteId, String spec, boolean isDefault) {
+    private static AdminAiModelEntryEntity entry(long id, Long agentId, String spec, boolean isDefault) {
         AdminAiModelEntryEntity entry = new AdminAiModelEntryEntity();
         entry.setId(id);
-        entry.setSiteId(siteId);
+        entry.setAgentId(agentId);
         entry.setModelSpec(spec);
         entry.setApiKey("enc:key-" + id);
         entry.setEnabled(true);
@@ -58,13 +58,13 @@ class AdminAiModelEntryServiceImplTest {
     }
 
     @Test
-    void chainOrdersSiteDefaultThenSiteOthersThenGlobal() {
+    void chainOrdersAgentDefaultThenAgentOthersThenGlobal() {
         // mapper 已按「默认在前、id 升序」返回，service 只负责组链
         when(modelEntryMapper.selectList(any()))
                 .thenReturn(
                         List.of(
-                                entry(3L, 10L, "google:site-default", true),
-                                entry(4L, 10L, "openai:site-alt", false)),
+                                entry(3L, 10L, "google:agent-default", true),
+                                entry(4L, 10L, "openai:agent-alt", false)),
                         List.of(
                                 entry(1L, null, "google:global-default", true),
                                 entry(2L, null, "anthropic:global-alt", false)));
@@ -73,7 +73,7 @@ class AdminAiModelEntryServiceImplTest {
 
         assertThat(specs(chain))
                 .containsExactly(
-                        "google:site-default", "openai:site-alt", "google:global-default", "anthropic:global-alt");
+                        "google:agent-default", "openai:agent-alt", "google:global-default", "anthropic:global-alt");
         assertThat(chain.get(0).apiKey()).isEqualTo("key-3");
     }
 
@@ -81,17 +81,17 @@ class AdminAiModelEntryServiceImplTest {
     void currentSelectionReturnsChainHead() {
         when(modelEntryMapper.selectList(any()))
                 .thenReturn(
-                        List.of(entry(3L, 10L, "google:site-default", true)),
+                        List.of(entry(3L, 10L, "google:agent-default", true)),
                         List.of(entry(1L, null, "google:global-default", true)));
 
-        assertThat(service.currentSelection(10L).spec()).isEqualTo("google:site-default");
+        assertThat(service.currentSelection(10L).spec()).isEqualTo("google:agent-default");
     }
 
     @Test
-    void chainFallsToGlobalDefaultWhenSiteHasNoDefault() {
+    void chainFallsToGlobalDefaultWhenAgentHasNoDefault() {
         when(modelEntryMapper.selectList(any()))
                 .thenReturn(
-                        List.of(entry(4L, 10L, "openai:site-alt", false)),
+                        List.of(entry(4L, 10L, "openai:agent-alt", false)),
                         List.of(
                                 entry(1L, null, "google:global-default", true),
                                 entry(2L, null, "anthropic:global-alt", false)));
@@ -99,14 +99,14 @@ class AdminAiModelEntryServiceImplTest {
         List<AgentModelSelection> chain = service.selectionChain(10L);
 
         assertThat(specs(chain))
-                .containsExactly("google:global-default", "openai:site-alt", "anthropic:global-alt");
+                .containsExactly("google:global-default", "openai:agent-alt", "anthropic:global-alt");
     }
 
     @Test
     void chainIsEmptyWithoutAnyDefault() {
         when(modelEntryMapper.selectList(any()))
                 .thenReturn(
-                        List.of(entry(4L, 10L, "openai:site-alt", false)),
+                        List.of(entry(4L, 10L, "openai:agent-alt", false)),
                         List.of(entry(2L, null, "anthropic:global-alt", false)));
 
         assertThat(service.selectionChain(10L)).isEmpty();
@@ -119,8 +119,8 @@ class AdminAiModelEntryServiceImplTest {
         when(modelEntryMapper.selectList(any()))
                 .thenReturn(
                         List.of(
-                                entry(3L, 10L, "google:site-default", true),
-                                entry(4L, 10L, "openai:site-alt", false)),
+                                entry(3L, 10L, "google:agent-default", true),
+                                entry(4L, 10L, "openai:agent-alt", false)),
                         List.of(entry(1L, null, "google:global-default", true)));
 
         // 主用坏掉时备援不得顶上，整链不启用
@@ -133,11 +133,11 @@ class AdminAiModelEntryServiceImplTest {
         when(modelEntryMapper.selectList(any()))
                 .thenReturn(
                         List.of(
-                                entry(3L, 10L, "google:site-default", true),
-                                entry(4L, 10L, "openai:site-alt", false)),
+                                entry(3L, 10L, "google:agent-default", true),
+                                entry(4L, 10L, "openai:agent-alt", false)),
                         List.of(entry(1L, null, "google:global-default", true)));
 
         assertThat(specs(service.selectionChain(10L)))
-                .containsExactly("google:site-default", "google:global-default");
+                .containsExactly("google:agent-default", "google:global-default");
     }
 }

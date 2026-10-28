@@ -1,6 +1,6 @@
 /**
  * 站点 AI 管理 API。
- * Prompt / KB / Conversation / Preview / Runtime → 始终 REAL `/admin/sites/{siteId}/ai/*`。
+ * Prompt / KB / Conversation / Preview / Runtime → 始终 REAL `/admin/agents/{agentId}/ai/*`。
  */
 import type { PageResult } from '@/types/site'
 import type { HttpMessageBody } from '@/types/rbac'
@@ -51,8 +51,8 @@ function unwrapVoid(body: HttpMessageBody<null | void>) {
 const UPLOAD_TIMEOUT_MS = 60_000
 const REEMBED_TIMEOUT_MS = 600_000
 
-function aiBase(siteId: number) {
-  return `/admin/sites/${siteId}/ai`
+function aiBase(agentId: number) {
+  return `/admin/agents/${agentId}/ai`
 }
 
 export const aiApi = {
@@ -78,23 +78,23 @@ export const aiApi = {
       .then(unwrapVoid)
   },
 
-  getPromptProfile(siteId: number): Promise<AiPromptProfile> {
+  getPromptProfile(agentId: number): Promise<AiPromptProfile> {
     return httpClient
-      .get<HttpMessageBody<AiPromptProfile>>(`${aiBase(siteId)}/prompt-profile`)
+      .get<HttpMessageBody<AiPromptProfile>>(`${aiBase(agentId)}/prompt-profile`)
       .then(unwrapData)
   },
 
-  upsertPromptProfile(siteId: number, input: UpdateAiPromptProfileInput): Promise<AiPromptProfile> {
+  upsertPromptProfile(agentId: number, input: UpdateAiPromptProfileInput): Promise<AiPromptProfile> {
     return httpClient
       .put<HttpMessageBody<AiPromptProfile>, UpdateAiPromptProfileInput>(
-        `${aiBase(siteId)}/prompt-profile`,
+        `${aiBase(agentId)}/prompt-profile`,
         input,
       )
       .then(unwrapData)
   },
 
   listKnowledgeDocuments(
-    siteId: number,
+    agentId: number,
     query: AiKnowledgeListQuery = {},
   ): Promise<PageResult<AiKnowledgeListItem>> {
     const qs = toQueryString({
@@ -105,28 +105,28 @@ export const aiApi = {
     })
     return httpClient
       .get<HttpMessageBody<PageResult<AiKnowledgeListItem>>>(
-        `${aiBase(siteId)}/knowledge-documents${qs}`,
+        `${aiBase(agentId)}/knowledge-documents${qs}`,
       )
       .then(unwrapData)
   },
 
-  getKnowledgeDocument(siteId: number, id: number): Promise<AiKnowledgeDetail> {
+  getKnowledgeDocument(agentId: number, id: number): Promise<AiKnowledgeDetail> {
     return httpClient
-      .get<HttpMessageBody<AiKnowledgeDetail>>(`${aiBase(siteId)}/knowledge-documents/${id}`)
+      .get<HttpMessageBody<AiKnowledgeDetail>>(`${aiBase(agentId)}/knowledge-documents/${id}`)
       .then(unwrapData)
   },
 
-  createKnowledgeDocument(siteId: number, input: CreateAiKnowledgeInput): Promise<AiKnowledgeDetail> {
+  createKnowledgeDocument(agentId: number, input: CreateAiKnowledgeInput): Promise<AiKnowledgeDetail> {
     return httpClient
       .post<HttpMessageBody<AiKnowledgeDetail>, CreateAiKnowledgeInput>(
-        `${aiBase(siteId)}/knowledge-documents`,
+        `${aiBase(agentId)}/knowledge-documents`,
         input,
       )
       .then(unwrapData)
   },
 
   uploadKnowledgeDocument(
-    siteId: number,
+    agentId: number,
     file: File,
     title?: string,
     baseId?: number | null,
@@ -142,7 +142,7 @@ export const aiApi = {
     }
     return httpClient
       .post<HttpMessageBody<AiKnowledgeDetail>, FormData>(
-        `${aiBase(siteId)}/knowledge-documents/upload`,
+        `${aiBase(agentId)}/knowledge-documents/upload`,
         form,
         { timeout: UPLOAD_TIMEOUT_MS },
       )
@@ -150,7 +150,7 @@ export const aiApi = {
   },
 
   uploadKnowledgeArchive(
-    siteId: number,
+    agentId: number,
     file: File,
     baseId?: number | null,
   ): Promise<AiKnowledgeArchiveResult> {
@@ -161,7 +161,7 @@ export const aiApi = {
     }
     return httpClient
       .post<HttpMessageBody<AiKnowledgeArchiveResult>, FormData>(
-        `${aiBase(siteId)}/knowledge-documents/upload-archive`,
+        `${aiBase(agentId)}/knowledge-documents/upload-archive`,
         form,
         { timeout: UPLOAD_TIMEOUT_MS },
       )
@@ -169,55 +169,55 @@ export const aiApi = {
   },
 
   getKnowledgeDocumentFile(
-    siteId: number,
+    agentId: number,
     id: number,
   ): Promise<{ url: string; filename: string | null; sourceFormat: string | null }> {
     return httpClient
       .get<HttpMessageBody<{ url: string; filename: string | null; sourceFormat: string | null }>>(
-        `${aiBase(siteId)}/knowledge-documents/${id}/file`,
+        `${aiBase(agentId)}/knowledge-documents/${id}/file`,
       )
       .then(unwrapData)
   },
 
-  reindexKnowledgeDocument(siteId: number, id: number): Promise<AiKnowledgeDetail> {
+  reindexKnowledgeDocument(agentId: number, id: number): Promise<AiKnowledgeDetail> {
     return httpClient
       .post<HttpMessageBody<AiKnowledgeDetail>, Record<string, never>>(
-        `${aiBase(siteId)}/knowledge-documents/${id}/reindex`,
+        `${aiBase(agentId)}/knowledge-documents/${id}/reindex`,
         {},
       )
       .then(unwrapData)
   },
 
   updateKnowledgeDocument(
-    siteId: number,
+    agentId: number,
     id: number,
     input: UpdateAiKnowledgeInput,
   ): Promise<AiKnowledgeDetail> {
     return httpClient
       .put<HttpMessageBody<AiKnowledgeDetail>, UpdateAiKnowledgeInput>(
-        `${aiBase(siteId)}/knowledge-documents/${id}`,
+        `${aiBase(agentId)}/knowledge-documents/${id}`,
         input,
       )
       .then(unwrapData)
   },
 
-  listKnowledgeBases(siteId: number): Promise<AiKnowledgeBase[]> {
+  listKnowledgeBases(agentId: number): Promise<AiKnowledgeBase[]> {
     return httpClient
-      .get<HttpMessageBody<AiKnowledgeBase[]>>(`${aiBase(siteId)}/knowledge-bases`)
+      .get<HttpMessageBody<AiKnowledgeBase[]>>(`${aiBase(agentId)}/knowledge-bases`)
       .then(unwrapData)
   },
 
-  createKnowledgeBase(siteId: number, name: string): Promise<AiKnowledgeBase> {
+  createKnowledgeBase(agentId: number, name: string): Promise<AiKnowledgeBase> {
     return httpClient
-      .post<HttpMessageBody<AiKnowledgeBase>, { name: string }>(`${aiBase(siteId)}/knowledge-bases`, {
+      .post<HttpMessageBody<AiKnowledgeBase>, { name: string }>(`${aiBase(agentId)}/knowledge-bases`, {
         name,
       })
       .then(unwrapData)
   },
 
-  deleteKnowledgeBase(siteId: number, baseId: number): Promise<void> {
+  deleteKnowledgeBase(agentId: number, baseId: number): Promise<void> {
     return httpClient
-      .delete<HttpMessageBody<null>>(`${aiBase(siteId)}/knowledge-bases/${baseId}`)
+      .delete<HttpMessageBody<null>>(`${aiBase(agentId)}/knowledge-bases/${baseId}`)
       .then(() => undefined)
   },
 
@@ -227,15 +227,15 @@ export const aiApi = {
       .then(unwrapData)
   },
 
-  linkKnowledgeBase(baseId: number, targetSiteId: number): Promise<void> {
+  linkKnowledgeBase(baseId: number, targetAgentId: number): Promise<void> {
     return httpClient
-      .post<HttpMessageBody<null>>(`/admin/ai/knowledge-bases/${baseId}/links/${targetSiteId}`, {})
+      .post<HttpMessageBody<null>>(`/admin/ai/knowledge-bases/${baseId}/links/${targetAgentId}`, {})
       .then(() => undefined)
   },
 
-  unlinkKnowledgeBase(baseId: number, targetSiteId: number): Promise<void> {
+  unlinkKnowledgeBase(baseId: number, targetAgentId: number): Promise<void> {
     return httpClient
-      .delete<HttpMessageBody<null>>(`/admin/ai/knowledge-bases/${baseId}/links/${targetSiteId}`)
+      .delete<HttpMessageBody<null>>(`/admin/ai/knowledge-bases/${baseId}/links/${targetAgentId}`)
       .then(() => undefined)
   },
 
@@ -262,14 +262,14 @@ export const aiApi = {
       .then(unwrapData)
   },
 
-  deleteKnowledgeDocument(siteId: number, id: number): Promise<void> {
+  deleteKnowledgeDocument(agentId: number, id: number): Promise<void> {
     return httpClient
-      .delete<HttpMessageBody<null | void>>(`${aiBase(siteId)}/knowledge-documents/${id}`)
+      .delete<HttpMessageBody<null | void>>(`${aiBase(agentId)}/knowledge-documents/${id}`)
       .then(unwrapVoid)
   },
 
   listConversations(
-    siteId: number,
+    agentId: number,
     query: AiConversationListQuery = {},
   ): Promise<PageResult<AiConversationListItem>> {
     const qs = toQueryString({
@@ -277,44 +277,44 @@ export const aiApi = {
       pageSize: query.pageSize ?? 20,
     })
     return httpClient
-      .get<HttpMessageBody<PageResult<AiConversationListItem>>>(`${aiBase(siteId)}/conversations${qs}`)
+      .get<HttpMessageBody<PageResult<AiConversationListItem>>>(`${aiBase(agentId)}/conversations${qs}`)
       .then(unwrapData)
   },
 
-  listConversationMessages(siteId: number, conversationId: number): Promise<AiMessage[]> {
+  listConversationMessages(agentId: number, conversationId: number): Promise<AiMessage[]> {
     return httpClient
-      .get<HttpMessageBody<AiMessage[]>>(`${aiBase(siteId)}/conversations/${conversationId}/messages`)
+      .get<HttpMessageBody<AiMessage[]>>(`${aiBase(agentId)}/conversations/${conversationId}/messages`)
       .then(unwrapData)
   },
 
-  listPreviewSkills(siteId: number): Promise<AiPreviewSkill[]> {
+  listPreviewSkills(agentId: number): Promise<AiPreviewSkill[]> {
     return httpClient
-      .get<HttpMessageBody<AiPreviewSkill[]>>(`${aiBase(siteId)}/preview/skills`)
+      .get<HttpMessageBody<AiPreviewSkill[]>>(`${aiBase(agentId)}/preview/skills`)
       .then(unwrapData)
   },
 
-  getRuntime(siteId: number): Promise<AiRuntime> {
-    return httpClient.get<HttpMessageBody<AiRuntime>>(`${aiBase(siteId)}/runtime`).then(unwrapData)
+  getRuntime(agentId: number): Promise<AiRuntime> {
+    return httpClient.get<HttpMessageBody<AiRuntime>>(`${aiBase(agentId)}/runtime`).then(unwrapData)
   },
 
-  probeMcp(siteId: number): Promise<AiMcpReady> {
-    return httpClient.get<HttpMessageBody<AiMcpReady>>(`${aiBase(siteId)}/mcp-ready`).then(unwrapData)
+  probeMcp(agentId: number): Promise<AiMcpReady> {
+    return httpClient.get<HttpMessageBody<AiMcpReady>>(`${aiBase(agentId)}/mcp-ready`).then(unwrapData)
   },
 }
 
-export function previewChatStreamUrl(siteId: number) {
+export function previewChatStreamUrl(agentId: number) {
   const base = import.meta.env.VITE_API_BASE_URL ?? '/api'
-  return `${base}${aiBase(siteId)}/preview/chat/stream`
+  return `${base}${aiBase(agentId)}/preview/chat/stream`
 }
 
 /** SSE 预览走 fetch：axios 默认超时不适合流式响应。 */
 export function streamPreviewChat(
-  siteId: number,
+  agentId: number,
   body: AiPreviewChatInput,
   abortSignal?: AbortSignal,
 ): Promise<Response> {
   const token = getAccessToken()
-  return fetch(previewChatStreamUrl(siteId), {
+  return fetch(previewChatStreamUrl(agentId), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

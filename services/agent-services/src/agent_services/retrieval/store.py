@@ -1,6 +1,6 @@
 """向量存储：agent_retrieval schema（pgvector）。
 
-所有查询强制携带 site_id 过滤——多租户隔离是硬约束，不允许全库检索。
+所有查询强制携带 agent_id 过滤——多租户隔离是硬约束，不允许全库检索。
 """
 
 import asyncio
@@ -76,14 +76,14 @@ def like_literal_pattern(token: str) -> str:
 
 
 def lexical_search_statement(
-    site_id: str, tokens: list[str], limit: int
+    agent_id: str, tokens: list[str], limit: int
 ) -> tuple[str, list[object]]:
-    """词法 SQL 只按调用方 site_id 过滤，token 只进绑定参数。
+    """词法 SQL 只按调用方 agent_id 过滤，token 只进绑定参数。
 
     LIMIT 之前按命中 token 数降序，同分再按 source_id、chunk_index。
     否则更宽的短 token 会占满候选窗口，把型号整段命中挤掉。
     """
-    arguments: list[object] = [site_id]
+    arguments: list[object] = [agent_id]
     clauses: list[str] = []
     for token in tokens:
         arguments.append(like_literal_pattern(token))
@@ -95,7 +95,7 @@ def lexical_search_statement(
     sql = (
         "SELECT source_id, chunk_index, content, 0::float8 AS score "
         "FROM agent_retrieval.chunks "
-        f"WHERE site_id = $1 AND ({' OR '.join(clauses)}) "
+        f"WHERE agent_id = $1 AND ({' OR '.join(clauses)}) "
         f"ORDER BY ({' + '.join(rank_terms)}) DESC, source_id, chunk_index "
         f"LIMIT ${len(arguments)}"
     )
@@ -106,24 +106,50 @@ class RetrievalStore(Protocol):
     async def upsert_document(
         self,
         *,
-        site_id: str,
+        agent_id: str,
         source_id: str,
         title: str,
         chunks: list[str],
         embeddings: list[list[float]],
     ) -> int: ...
 
-    async def delete_document(self, *, site_id: str, source_id: str) -> None: ...
+    async def delete_document(self, *, agent_id: str, source_id: str) -> None: ...
 
     async def search(
-        self, *, site_id: str, embedding: list[float], top_k: int
+        self, *, agent_id: str, embedding: list[float], top_k: int
     ) -> list[RetrievedChunk]: ...
 
     async def search_lexical(
-        self, *, site_id: str, tokens: list[str], limit: int
+        self, *, agent_id: str, tokens: list[str], limit: int
     ) -> list[RetrievedChunk]: ...
 
     async def current_dimensions(self) -> int | None: ...
+
+    @staticmethod
+    async def _rename_legacy_agent_column(conn) -> None:
+        """存量库列名迁移：chunks 表的租户列旧名 site_id → agent_id。
+        幂等：仅当旧列存在且新列不存在时才改名；新库无此列直接跳过。"""
+        legacy = await conn.fetchval(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = 'agent_retrieval' AND table_name = 'chunks' "
+            "AND column_name = 'site_id'"
+        )
+        if legacy is None:
+            return
+        current = await conn.fetchval(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = 'agent_retrieval' AND table_name = 'chunks' "
+            "AND column_name = 'agent_id'"
+        )
+        if current is not None:
+            return
+        await conn.execute(
+            "ALTER TABLE agent_retrieval.chunks RENAME COLUMN site_id TO agent_id"
+        )
+        await conn.execute(
+            "ALTER INDEX IF EXISTS agent_retrieval.idx_agent_retrieval_chunks_site_source "
+            "RENAME TO idx_agent_retrieval_chunks_agent_source"
+        )
 
     async def ensure_schema(self, dimensions: int) -> None: ...
 
@@ -182,7 +208,7 @@ class PgVectorRetrievalStore:
             f"""
             CREATE TABLE IF NOT EXISTS agent_retrieval.chunks (
                 id          BIGSERIAL PRIMARY KEY,
-                site_id     TEXT NOT NULL,
+                agent_id     TEXT NOT NULL,
                 source_id   TEXT NOT NULL,
                 chunk_index INTEGER NOT NULL,
                 content     TEXT NOT NULL,
@@ -193,8 +219,8 @@ class PgVectorRetrievalStore:
             """
         )
         await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_agent_retrieval_chunks_site_source "
-            "ON agent_retrieval.chunks (site_id, source_id)"
+            "CREATE INDEX IF NOT EXISTS idx_agent_retrieval_chunks_agent_source "
+            "ON agent_retrieval.chunks (agent_id, source_id)"
         )
         if hnsw_index_allowed(dimensions):
             await conn.execute(
@@ -232,6 +258,7 @@ class PgVectorRetrievalStore:
         conn = await self._connect()
         try:
             await self._install_vector_extension(conn)
+            await self._rename_legacy_agent_column(conn)
             await self._create_chunks(conn, dimensions)
             self._dimensions = dimensions
         finally:
@@ -260,7 +287,7 @@ class PgVectorRetrievalStore:
     async def upsert_document(
         self,
         *,
-        site_id: str,
+        agent_id: str,
         source_id: str,
         title: str,
         chunks: list[str],
@@ -269,24 +296,24 @@ class PgVectorRetrievalStore:
         pool = await self._get_pool()
         metadata = json.dumps({"title": title})
         async with pool.acquire() as conn, conn.transaction():
-            # 同一文件的删除与插入都在这个事务里。锁键是 site_id:source_id 的 64-bit hash，
+            # 同一文件的删除与插入都在这个事务里。锁键是 agent_id:source_id 的 64-bit hash，
             # 只串行化这一份文件；事务提交或回滚时 pg_advisory_xact_lock 自动释放，其它 source 不互相阻塞。
             # 本机单测没有 pgvector，不会执行到这里。
             await conn.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-                f"{site_id}:{source_id}",
+                f"{agent_id}:{source_id}",
             )
             await conn.execute(
-                "DELETE FROM agent_retrieval.chunks WHERE site_id = $1 AND source_id = $2",
-                site_id,
+                "DELETE FROM agent_retrieval.chunks WHERE agent_id = $1 AND source_id = $2",
+                agent_id,
                 source_id,
             )
             for index, (content, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
                 await conn.execute(
                     "INSERT INTO agent_retrieval.chunks "
-                    "(site_id, source_id, chunk_index, content, embedding, metadata) "
+                    "(agent_id, source_id, chunk_index, content, embedding, metadata) "
                     "VALUES ($1, $2, $3, $4, $5::vector, $6::jsonb)",
-                    site_id,
+                    agent_id,
                     source_id,
                     index,
                     content,
@@ -295,17 +322,17 @@ class PgVectorRetrievalStore:
                 )
         return len(chunks)
 
-    async def delete_document(self, *, site_id: str, source_id: str) -> None:
+    async def delete_document(self, *, agent_id: str, source_id: str) -> None:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM agent_retrieval.chunks WHERE site_id = $1 AND source_id = $2",
-                site_id,
+                "DELETE FROM agent_retrieval.chunks WHERE agent_id = $1 AND source_id = $2",
+                agent_id,
                 source_id,
             )
 
     async def search(
-        self, *, site_id: str, embedding: list[float], top_k: int
+        self, *, agent_id: str, embedding: list[float], top_k: int
     ) -> list[RetrievedChunk]:
         pool = await self._get_pool()
         # hnsw.ef_search 是事务局部参数。asyncpg 必须把 set_config 和查询放进同一个 transaction。
@@ -323,9 +350,9 @@ class PgVectorRetrievalStore:
                 "SELECT source_id, chunk_index, content, "
                 "1 - (embedding <=> $2::vector) AS score "
                 "FROM agent_retrieval.chunks "
-                "WHERE site_id = $1 "
+                "WHERE agent_id = $1 "
                 "ORDER BY embedding <=> $2::vector LIMIT $3",
-                site_id,
+                agent_id,
                 self._vector_literal(embedding),
                 top_k,
             )
@@ -340,13 +367,13 @@ class PgVectorRetrievalStore:
         ]
 
     async def search_lexical(
-        self, *, site_id: str, tokens: list[str], limit: int
+        self, *, agent_id: str, tokens: list[str], limit: int
     ) -> list[RetrievedChunk]:
-        """按调用方 site_id 做字面量子串匹配。分数由服务层覆盖率决定，这里不取向量分。"""
+        """按调用方 agent_id 做字面量子串匹配。分数由服务层覆盖率决定，这里不取向量分。"""
         if not tokens or limit < 1:
             return []
         pool = await self._get_pool()
-        sql, arguments = lexical_search_statement(site_id, tokens, limit)
+        sql, arguments = lexical_search_statement(agent_id, tokens, limit)
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *arguments)
         return [

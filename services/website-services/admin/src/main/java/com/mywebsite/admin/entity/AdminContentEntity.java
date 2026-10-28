@@ -10,7 +10,9 @@ import java.time.OffsetDateTime;
 @TableName("site_content")
 public class AdminContentEntity extends AbstractAuditableEntity {
 
-    private Long siteId;
+    /** CMS 表未随改名（site_content/site_appearance/media_file 的 site_id 列保持原名），显式钉住列名。 */
+    @TableField("site_id")
+    private Long agentId;
     private String type;
     private String title;
     /** 可清空：null 必须写入 DB，不能被 NOT_NULL 策略跳过。 */
@@ -23,12 +25,12 @@ public class AdminContentEntity extends AbstractAuditableEntity {
     private Long coverMediaId;
     private OffsetDateTime publishedAt;
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public String getType() {

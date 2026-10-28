@@ -6,8 +6,8 @@ export default {
     empty: 'No sites yet',
     permissionHint: 'Button visibility is controlled by permissions; backend authorization is the source of truth.',
     columns: {
-      siteName: 'Site Name',
-      siteType: 'Site Type',
+      agentName: 'Site Name',
+      agentType: 'Site Type',
       industry: 'Industry',
       domain: 'Default Domain',
       status: 'Status',
@@ -16,7 +16,7 @@ export default {
     },
     filters: {
       allStatus: 'All statuses',
-      allSiteType: 'All types',
+      allAgentType: 'All types',
       search: 'Search',
       reset: 'Reset',
     },
@@ -44,14 +44,14 @@ export default {
       confirm: 'Confirm',
     },
     fields: {
-      siteName: 'Site Name',
-      siteCode: 'Site Code',
-      siteType: 'Site Type',
-      customSiteType: 'Custom tag',
+      agentName: 'Site Name',
+      agentCode: 'Site Code',
+      agentType: 'Site Type',
+      customAgentType: 'Custom tag',
       industry: 'Industry',
       domain: 'Domain Settings',
       defaultDomain: 'Default Domain',
-      siteDescription: 'Description',
+      agentDescription: 'Description',
       phone: 'Phone',
       address: 'Address',
       businessHours: 'Business Hours',
@@ -61,11 +61,11 @@ export default {
       heroLayout: 'Hero Layout',
     },
     placeholders: {
-      customSiteType: 'e.g. My-Docs',
-      siteName: 'e.g. Example Site',
-      siteCode: 'e.g. demo-site',
+      customAgentType: 'e.g. My-Docs',
+      agentName: 'e.g. Example Site',
+      agentCode: 'e.g. demo-site',
       domain: 'e.g. demo.example.com',
-      siteDescription: 'Describe the business positioning and services',
+      agentDescription: 'Describe the business positioning and services',
       phone: 'e.g. 03-1111-2200',
       address: 'Enter business address',
       businessHours: 'e.g. 09:00 - 18:00',
@@ -106,8 +106,8 @@ export default {
     },
     messages: {
       requiredFields: 'Please fill in required fields',
-      invalidSiteCode: 'Site code must match ^[a-z][a-z0-9_-]{1,63}$',
-      invalidSiteType: 'Tag must be 1-32 chars, start with a letter or digit, and contain only letters, digits, underscore, hyphen or space.',
+      invalidAgentCode: 'Site code must match ^[a-z][a-z0-9_-]{1,63}$',
+      invalidAgentType: 'Tag must be 1-32 chars, start with a letter or digit, and contain only letters, digits, underscore, hyphen or space.',
       invalidPrimaryColor: 'Primary color must be #RRGGBB',
       createdSuccess: 'Site created successfully',
     },
@@ -132,7 +132,7 @@ export default {
     loading: 'Loading site data...',
     labels: {
       industry: 'Industry',
-      siteType: 'Site Type',
+      agentType: 'Site Type',
       status: 'Status',
       domain: 'Default Domain',
       primaryColor: 'Primary Color',
@@ -150,7 +150,7 @@ export default {
     backToList: 'Back to Site List',
     notFound: {
       title: 'Site Not Found',
-      description: 'No site matches the current siteId. Please return to the site list and choose again.',
+      description: 'No site matches the current agentId. Please return to the site list and choose again.',
     },
     theme: {
       description: 'Read-only view of the persisted site appearance (schema v1).',
@@ -242,12 +242,12 @@ export default {
     visitSite: 'Visit Site',
     notFound: {
       title: 'Site Not Found',
-      description: 'No site matches the current siteId. Please return to the site list and choose again.',
+      description: 'No site matches the current agentId. Please return to the site list and choose again.',
     },
     placeholderNotice: 'This is a placeholder page and will be connected to site-service / agent-service later.',
   },
   placeholderPages: {
-    currentSiteLabel: 'Current Site',
+    currentAgentLabel: 'Current Site',
     contents: {
       description: 'Used to maintain homepage, service items, case studies, FAQs, banners, and announcements for this site.',
     },
@@ -365,7 +365,7 @@ export default {
     draft: 'Draft',
     inactive: 'Inactive',
   },
-  siteType: {
+  agentType: {
     PERSONAL: 'Personal',
     PORTFOLIO: 'Portfolio',
     BLOG: 'Blog',
@@ -454,7 +454,7 @@ export default {
       view: 'View',
       columns: {
         title: 'Title',
-        siteUserId: 'Site user',
+        agentUserId: 'Site user',
         lastMessageAt: 'Last message',
         actions: 'Actions',
       },

@@ -391,7 +391,7 @@ def build_run_kwargs(
 async def run_chat(
     model: Model,
     *,
-    site_id: str,
+    agent_id: str,
     message: str,
     attachments: list[ChatAttachment] | None = None,
     documents: list[ChatDocument] | None = None,
@@ -418,7 +418,7 @@ async def run_chat(
         model, history, resolved_budget.history_max_chars
     )
     harness = assemble_harness(
-        site_id=site_id,
+        agent_id=agent_id,
         message=message,
         prompt_profile=prompt_profile,
         retrieval_context=retrieval_context,

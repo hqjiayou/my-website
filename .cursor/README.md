@@ -101,7 +101,7 @@ stop: 复现测试 HttpAgentClientTest.chatReadTimeoutDoesNotRetry 转绿，agen
 
 ## AI 域快速指针
 
-- **业务真相**：Java admin + site-app + PostgreSQL  
+- **业务真相**：Java admin + agent-app + PostgreSQL  
 - **执行层**：`services/agent-services`（internal only）  
 - **契约**：`services/website-services/agent` 的 `HttpAgentClient`  
 - **前端**：`aiApi` FORCE REAL；见 [`docs/rules/MOCK_POLICY.md`](../docs/rules/MOCK_POLICY.md)

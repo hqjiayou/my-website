@@ -6,14 +6,14 @@ import com.mywebsite.admin.dto.AdminAppearanceDtos.AdminAppearancePutRequest;
 
 public interface AdminAppearanceService {
 
-    AdminAppearanceDetailDto getAppearance(long siteId);
+    AdminAppearanceDetailDto getAppearance(long agentId);
 
-    AdminAppearanceDetailDto putAppearance(long siteId, AdminAppearancePutRequest request);
+    AdminAppearanceDetailDto putAppearance(long agentId, AdminAppearancePutRequest request);
 
     /** Create 事务内插入；调用前须已通过 {@link #requireValidConfigV1}。 */
-    void insertForSite(long siteId, AdminAppearanceConfigV1Dto config);
+    void insertForSite(long agentId, AdminAppearanceConfigV1Dto config);
 
-    void softDeleteBySiteId(long siteId);
+    void softDeleteByAgentId(long agentId);
 
     void requireValidConfigV1(AdminAppearanceConfigV1Dto config);
 

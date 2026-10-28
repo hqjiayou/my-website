@@ -185,7 +185,7 @@ def test_entry_request_attaches_process_fallbacks(monkeypatch: pytest.MonkeyPatc
         app=SimpleNamespace(state=SimpleNamespace(settings=settings, model_handle=None))
     )
     body = ChatRequest(
-        siteId="1",
+        agentId="1",
         message="hi",
         model={
             "spec": "google:gemini-3-flash-preview",
@@ -212,7 +212,7 @@ def test_blocked_entry_is_not_replaced_by_process_fallback() -> None:
         app=SimpleNamespace(state=SimpleNamespace(settings=settings, model_handle=None))
     )
     body = ChatRequest(
-        siteId="1",
+        agentId="1",
         message="hi",
         model={"spec": "bad:x", "apiKey": "entry-key"},
     )
@@ -387,6 +387,6 @@ async def test_entry_chain_falls_back_on_api_error(monkeypatch: pytest.MonkeyPat
     )
     assert handle.live
     assert handle.fallback_specs == ("fake:backup",)
-    outcome = await run_chat(handle.model, site_id="1", message="hi")  # type: ignore[arg-type]
+    outcome = await run_chat(handle.model, agent_id="1", message="hi")  # type: ignore[arg-type]
     assert isinstance(outcome, ChatReply)
     assert outcome.reply == "from-backup"

@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, FileText, MessageSquare } from 'lucide-react'
 
-import { siteAiApi } from '@/api/siteAiApi'
+import { agentAiApi } from '@/api/agentAiApi'
 import { Card, CardTitle } from '@/components/card'
 import { Screen } from '@/components/screen'
-import { readAccessTokenSiteId, resolvePortalSiteId } from '@/config/env'
+import { readAccessTokenAgentId, resolvePortalAgentId } from '@/config/env'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
-import type { SiteAiConversation, SiteKnowledgeDocumentListItem, SiteUserMemory } from '@/types/api'
+import type { AgentAiConversation, AgentKnowledgeDocumentListItem, AgentUserMemory } from '@/types/api'
 
 const RECENT_CONVERSATIONS = 3
 const RECENT_DOCUMENTS = 2
@@ -30,21 +30,21 @@ export function HomePage() {
   const user = useAuthStore((state) => state.user)
   const sessionSite = useAuthStore((state) => state.site)
   const accessToken = useAuthStore((state) => state.accessToken)
-  const site = resolvePortalSiteId(sessionSite?.siteId)
-  const tokenSiteId = readAccessTokenSiteId(accessToken)
+  const site = resolvePortalAgentId(sessionSite?.agentId)
+  const tokenAgentId = readAccessTokenAgentId(accessToken)
 
-  const [conversations, setConversations] = useState<SiteAiConversation[] | null>(null)
-  const [documents, setDocuments] = useState<SiteKnowledgeDocumentListItem[] | null>(null)
-  const [memories, setMemories] = useState<SiteUserMemory[] | null>(null)
+  const [conversations, setConversations] = useState<AgentAiConversation[] | null>(null)
+  const [documents, setDocuments] = useState<AgentKnowledgeDocumentListItem[] | null>(null)
+  const [memories, setMemories] = useState<AgentUserMemory[] | null>(null)
   const [modulesError, setModulesError] = useState(false)
 
   useEffect(() => {
     if (!site.ok) return
     let cancelled = false
     void Promise.allSettled([
-      siteAiApi.listConversations(site.siteId),
-      siteAiApi.listKnowledgeDocuments(site.siteId),
-      siteAiApi.listMemories(site.siteId),
+      agentAiApi.listConversations(site.agentId),
+      agentAiApi.listKnowledgeDocuments(site.agentId),
+      agentAiApi.listMemories(site.agentId),
     ]).then(([conv, docs, mem]) => {
       if (cancelled) return
       if (conv.status === 'fulfilled') setConversations(conv.value)
@@ -57,19 +57,19 @@ export function HomePage() {
     return () => {
       cancelled = true
     }
-    // site.siteId 在登入期間不變，只在掛載時載入一次
+    // site.agentId 在登入期間不變，只在掛載時載入一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site.ok])
 
   const displayName = user?.displayName || user?.username || '已登入'
-  const siteMismatch = site.ok && tokenSiteId !== null && tokenSiteId !== site.siteId
-  const siteIdFromSession = sessionSite != null && site.ok && String(sessionSite.siteId) === site.siteId
-  const siteName = sessionSite?.siteName || 'Agent Portal'
+  const agentMismatch = site.ok && tokenAgentId !== null && tokenAgentId !== site.agentId
+  const agentIdFromSession = sessionSite != null && site.ok && String(sessionSite.agentId) === site.agentId
+  const agentName = sessionSite?.agentName || 'Agent Portal'
 
   return (
     <Screen>
       <main className="safe-x flex flex-1 flex-col overflow-y-auto px-page py-6">
-        <h1 className="text-3xl font-semibold tracking-tight">{siteName}</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{agentName}</h1>
         <p className="mt-2 text-sm leading-6 text-gpt-muted">問 AI、查知識庫，或接續之前的對話。</p>
 
         <button
@@ -249,26 +249,26 @@ export function HomePage() {
             <dl className="mt-3 flex flex-col gap-2 text-sm">
               <div>
                 <dt className="text-xs text-gpt-muted">站點名稱</dt>
-                <dd className="mt-0.5">{sessionSite.siteName}</dd>
+                <dd className="mt-0.5">{sessionSite.agentName}</dd>
               </div>
               <div>
                 <dt className="text-xs text-gpt-muted">站點代碼</dt>
-                <dd className="mt-0.5 break-all">{sessionSite.siteCode}</dd>
+                <dd className="mt-0.5 break-all">{sessionSite.agentCode}</dd>
               </div>
             </dl>
           ) : site.ok ? (
-            <p className="mt-1 text-lg font-medium">站點 ID {site.siteId}</p>
+            <p className="mt-1 text-lg font-medium">站點 ID {site.agentId}</p>
           ) : (
             <p className="mt-1 text-sm leading-6 text-danger">{site.message}</p>
           )}
           {sessionSite && !site.ok ? (
             <p className="mt-2 text-sm leading-6 text-danger">{site.message}</p>
           ) : null}
-          {siteMismatch ? (
+          {agentMismatch ? (
             <p className="mt-2 text-sm leading-6 text-danger">
-              {siteIdFromSession
+              {agentIdFromSession
                 ? '權杖裡的 site_id 與目前站點不一致。站點 AI 會依路徑上的站點 ID 驗證，存取會被拒絕。'
-                : '權杖裡的 site_id 與 VITE_PORTAL_SITE_ID 不一致。站點 AI 會依路徑上的站點 ID 驗證，存取會被拒絕。'}
+                : '權杖裡的 site_id 與 VITE_PORTAL_AGENT_ID 不一致。站點 AI 會依路徑上的站點 ID 驗證，存取會被拒絕。'}
             </p>
           ) : null}
         </Card>

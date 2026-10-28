@@ -53,7 +53,7 @@ class AdminPermissionCheckerTest extends AbstractAdminSpringBootTest {
     void returnsFalseForNonAdminAudience() {
         AdminRbacTestSupport.bindAdminRequestContext(100L);
         AuthContext.set(new AuthenticatedUser(
-                TokenAudience.SITE, SubjectCodes.formatSiteUserSubject(1L), null, 1L, Set.of()));
+                TokenAudience.AGENT, SubjectCodes.formatAgentUserSubject(1L), null, 1L, Set.of()));
         assertThat(permissionChecker.hasPermission(PERMISSION_RBAC_CHECK)).isFalse();
     }
 

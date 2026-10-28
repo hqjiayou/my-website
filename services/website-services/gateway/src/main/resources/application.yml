@@ -17,7 +17,7 @@ spring:
             enabled: true
             for-append: true
           routes:
-            # 顺序敏感：/api/auth/** 须在 /api/admin/**、/api/site/** 之前，以免登录被业务路由吞掉。
+            # 顺序敏感：/api/auth/** 须在 /api/admin/**、/api/agent/** 之前，以免登录被业务路由吞掉。
             - id: auth-service-api
               uri: http://localhost:8083
               predicates:
@@ -26,10 +26,10 @@ spring:
               uri: http://localhost:8081
               predicates:
                 - Path=/api/admin/**
-            - id: site-service
+            - id: agent-service
               uri: http://localhost:8082
               predicates:
-                - Path=/api/site/**
+                - Path=/api/agent/**
           globalcors:
             cors-configurations:
               '[/**]':

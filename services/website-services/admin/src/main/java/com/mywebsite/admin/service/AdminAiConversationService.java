@@ -8,9 +8,9 @@ import java.util.List;
 
 public interface AdminAiConversationService {
 
-    PageResult<AdminAiConversationListItemDto> listConversations(long siteId, AdminAiConversationListQuery query);
+    PageResult<AdminAiConversationListItemDto> listConversations(long agentId, AdminAiConversationListQuery query);
 
-    List<AdminAiMessageDto> listMessages(long siteId, long conversationId);
+    List<AdminAiMessageDto> listMessages(long agentId, long conversationId);
 
-    void softDeleteBySiteId(long siteId);
+    void softDeleteByAgentId(long agentId);
 }

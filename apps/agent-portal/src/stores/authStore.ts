@@ -1,17 +1,17 @@
 import { create } from 'zustand'
 
 import { authApi } from '@/api/authApi'
-import type { SiteAuthMe, SiteAuthUser } from '@/types/api'
+import type { AgentAuthMe, AgentAuthUser } from '@/types/api'
 import { refreshAccessToken } from '@/utils/http/axios'
 import { clearAccessToken, getAccessToken, setAccessToken, subscribeAccessToken } from '@/utils/token'
 
 export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated'
 
-type SessionSite = NonNullable<SiteAuthMe['site']>
+type SessionSite = NonNullable<AgentAuthMe['site']>
 
 interface AuthState {
   accessToken: string | null
-  user: SiteAuthUser | null
+  user: AgentAuthUser | null
   site: SessionSite | null
   status: AuthStatus
   bootstrap: () => Promise<void>

@@ -43,7 +43,7 @@ export function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
   const displayName = useAuthStore((state) => state.user?.displayName || state.user?.username || '')
-  const siteName = useAuthStore((state) => state.site?.siteName || 'Agent Portal')
+  const agentName = useAuthStore((state) => state.site?.agentName || 'Agent Portal')
   const logout = useAuthStore((state) => state.logout)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
@@ -92,7 +92,7 @@ export function AppShell() {
   const sidebar = (
     <div className="flex h-full min-h-0 w-full flex-col bg-gpt-sidebar">
       <div className="safe-top flex items-center gap-2 px-3 pb-1 pt-3">
-        <p className="min-w-0 flex-1 truncate px-1 text-[15px] font-semibold tracking-tight">{siteName}</p>
+        <p className="min-w-0 flex-1 truncate px-1 text-[15px] font-semibold tracking-tight">{agentName}</p>
         <button
           type="button"
           aria-label="收起側邊欄"

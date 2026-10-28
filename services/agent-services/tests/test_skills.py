@@ -143,7 +143,7 @@ def test_chat_includes_skills_applied_and_missing(tmp_path: Path) -> None:
     response = TestClient(app).post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello", "skills": ["missing-x"]},
+        json={"agentId": "1", "message": "hello", "skills": ["missing-x"]},
     )
     assert response.status_code == 200
     data = response.json()["data"]
@@ -170,7 +170,7 @@ def test_reject_unknown_skills_returns_400(tmp_path: Path) -> None:
     response = TestClient(app).post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello", "skills": ["nope"]},
+        json={"agentId": "1", "message": "hello", "skills": ["nope"]},
     )
     assert response.status_code == 400
     assert response.json()["errorCode"] == "BAD_REQUEST"
@@ -273,7 +273,7 @@ def test_chat_applies_skill_instruction_budget(tmp_path: Path) -> None:
     response = TestClient(app).post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
-        json={"siteId": "1", "message": "hello", "skills": ["big", "tiny"]},
+        json={"agentId": "1", "message": "hello", "skills": ["big", "tiny"]},
     )
     assert response.status_code == 200
     data = response.json()["data"]

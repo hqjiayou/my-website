@@ -33,7 +33,7 @@ export interface ContentListQuery {
 
 export interface ContentListItem {
   id: number
-  siteId: number
+  agentId: number
   type: string
   title: string
   body: string | null
@@ -48,7 +48,7 @@ export interface ContentListItem {
 
 export interface ContentDetail {
   id: number
-  siteId: number
+  agentId: number
   type: string
   title: string
   body: string | null

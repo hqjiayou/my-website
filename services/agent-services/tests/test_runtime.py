@@ -82,7 +82,7 @@ def test_prompt_builder_uses_trusted_profile_prompt() -> None:
 async def test_run_chat_returns_reply_from_test_model() -> None:
     outcome = await run_chat(
         TestModel(custom_output_text="ok!"),
-        site_id="1",
+        agent_id="1",
         message="hello",
     )
     assert isinstance(outcome, ChatReply)
@@ -98,7 +98,7 @@ async def test_run_chat_passes_system_prompt_to_model() -> None:
 
     outcome = await run_chat(
         FunctionModel(capture),
-        site_id="7",
+        agent_id="7",
         message="hi",
         prompt_profile=PromptProfile(systemPrompt="TRUSTED-JAVA-PROMPT"),
     )
@@ -112,7 +112,7 @@ async def test_run_chat_maps_provider_failure_to_blocked() -> None:
     def boom(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
         raise RuntimeError("provider exploded")
 
-    outcome = await run_chat(FunctionModel(boom), site_id="1", message="hi")
+    outcome = await run_chat(FunctionModel(boom), agent_id="1", message="hi")
     assert isinstance(outcome, ChatBlocked)
     assert "provider" in outcome.message.lower()
 
@@ -121,7 +121,7 @@ async def test_run_chat_empty_output_is_blocked() -> None:
     def empty(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart("   ")])
 
-    outcome = await run_chat(FunctionModel(empty), site_id="1", message="hi")
+    outcome = await run_chat(FunctionModel(empty), agent_id="1", message="hi")
     assert isinstance(outcome, ChatBlocked)
 
 
@@ -138,7 +138,7 @@ async def test_run_chat_passes_history_as_message_history() -> None:
     ]
     outcome = await run_chat(
         FunctionModel(capture),
-        site_id="1",
+        agent_id="1",
         message="what is my name?",
         history=history,
     )
@@ -259,7 +259,7 @@ def test_attachment_schema_rejects_oversized_payload() -> None:
 def test_attachment_schema_rejects_too_many() -> None:
     with pytest.raises(ValidationError):
         ChatRequest(
-            siteId="1",
+            agentId="1",
             message="hi",
             attachments=[_image() for _ in range(MAX_ATTACHMENTS + 1)],
         )
@@ -273,7 +273,7 @@ def test_build_user_prompt_text_only_stays_string() -> None:
 def test_document_schema_rejects_too_many_and_oversized_text() -> None:
     with pytest.raises(ValidationError):
         ChatRequest(
-            siteId="1",
+            agentId="1",
             message="hi",
             documents=[ChatDocument(name="a.txt", text="x") for _ in range(MAX_DOCUMENTS + 1)],
         )
@@ -313,7 +313,7 @@ async def test_run_chat_sends_image_bytes_for_current_turn_and_history() -> None
 
     outcome = await run_chat(
         FunctionModel(capture),
-        site_id="1",
+        agent_id="1",
         message="look",
         attachments=[_image()],
         history=[
@@ -346,7 +346,7 @@ async def test_stream_chat_sends_current_image_part() -> None:
         event
         async for event in stream_chat_events(
             FunctionModel(stream_function=stream_fn),
-            site_id="1",
+            agent_id="1",
             message="",
             attachments=[_image()],
         )

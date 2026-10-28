@@ -11,7 +11,7 @@ public final class AdminAiKnowledgeDtos {
 
     public record AdminAiKnowledgeListItemDto(
             Long id,
-            Long siteId,
+            Long agentId,
             Long baseId,
             boolean owned,
             String title,
@@ -29,7 +29,7 @@ public final class AdminAiKnowledgeDtos {
 
     public record AdminAiKnowledgeDetailDto(
             Long id,
-            Long siteId,
+            Long agentId,
             Long baseId,
             boolean owned,
             String title,
@@ -74,12 +74,12 @@ public final class AdminAiKnowledgeDtos {
             long failedDocuments,
             long pendingDocuments,
             long originalBytes,
-            List<AdminAiKnowledgeSiteStatDto> sites,
+            List<AdminAiKnowledgeAgentStatDto> sites,
             List<AdminAiKnowledgeFailureDto> recentFailures) {}
 
-    public record AdminAiKnowledgeSiteStatDto(
-            Long siteId,
-            String siteName,
+    public record AdminAiKnowledgeAgentStatDto(
+            Long agentId,
+            String agentName,
             long totalDocuments,
             long indexedDocuments,
             long failedDocuments,
@@ -87,8 +87,8 @@ public final class AdminAiKnowledgeDtos {
 
     public record AdminAiKnowledgeFailureDto(
             Long documentId,
-            Long siteId,
-            String siteName,
+            Long agentId,
+            String agentName,
             String title,
             String indexError,
             OffsetDateTime updatedAt) {}
@@ -107,13 +107,13 @@ public final class AdminAiKnowledgeDtos {
     /** 知识库（base）：owned=false 表示经共享链接可见（只读）。 */
     public record AdminAiKnowledgeBaseDto(
             Long id,
-            Long siteId,
-            String ownerSiteName,
+            Long agentId,
+            String ownerAgentName,
             String name,
             boolean isDefault,
             boolean owned,
             long documentCount,
-            List<Long> linkedSiteIds,
+            List<Long> linkedAgentIds,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {}
 
@@ -132,9 +132,9 @@ public final class AdminAiKnowledgeDtos {
         }
     }
 
-    public record AdminAiKnowledgeReembedConflictDto(Long siteId, Integer dimensions) {}
+    public record AdminAiKnowledgeReembedConflictDto(Long agentId, Integer dimensions) {}
 
-    public record AdminAiKnowledgeReembedFailureDto(Long siteId, String sourceId, String error) {}
+    public record AdminAiKnowledgeReembedFailureDto(Long agentId, String sourceId, String error) {}
 
     public record AdminAiKnowledgeReembedResultDto(
             int sites,

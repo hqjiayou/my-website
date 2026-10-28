@@ -11,16 +11,16 @@ import {
   HERO_LAYOUT_VALUES,
   PRIMARY_COLOR_PATTERN,
   appearanceApi,
-  siteApi,
+  agentApi,
   type AppearanceConfigV1,
   type AppearanceDetail,
   type ButtonStyle,
   type HeroLayout,
-  type SiteFontStyle,
+  type AgentFontStyle,
 } from '@/api'
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
-import { SiteAppearancePreview } from '@/pages/apps/style/siteAppearancePreview'
+import { AgentAppearancePreview } from '@/pages/apps/style/agentAppearancePreview'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
@@ -32,7 +32,7 @@ export function StyleSettingsPage() {
   const { t } = useTranslation('styleSettings')
   const queryClient = useQueryClient()
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
-  const [selectedSiteId, setSelectedSiteId] = useState<string>('')
+  const [selectedAgentId, setSelectedAgentId] = useState<string>('')
 
   const listQuery = useMemo(() => ({ pageNum: 1, pageSize: 100 }), [])
   const {
@@ -42,12 +42,12 @@ export function StyleSettingsPage() {
     error: sitesError,
   } = useQuery({
     queryKey: ['sites', listQuery],
-    queryFn: () => siteApi.listSites(listQuery),
+    queryFn: () => agentApi.listSites(listQuery),
   })
   const sites = useMemo(() => sitesPage?.records ?? [], [sitesPage?.records])
 
-  const activeSiteId = selectedSiteId || (sites[0] ? String(sites[0].id) : '')
-  const numericSiteId = Number(activeSiteId)
+  const activeAgentId = selectedAgentId || (sites[0] ? String(sites[0].id) : '')
+  const numericAgentId = Number(activeAgentId)
 
   const {
     data: appearanceDetail,
@@ -55,14 +55,14 @@ export function StyleSettingsPage() {
     isError: isAppearanceError,
     error: appearanceError,
   } = useQuery({
-    queryKey: ['appearances', numericSiteId],
-    queryFn: () => appearanceApi.getAppearance(numericSiteId),
-    enabled: Number.isFinite(numericSiteId) && numericSiteId > 0,
+    queryKey: ['appearances', numericAgentId],
+    queryFn: () => appearanceApi.getAppearance(numericAgentId),
+    enabled: Number.isFinite(numericAgentId) && numericAgentId > 0,
   })
 
   const selectedSite = useMemo(
-    () => sites.find((site) => String(site.id) === activeSiteId) ?? null,
-    [activeSiteId, sites],
+    () => sites.find((site) => String(site.id) === activeAgentId) ?? null,
+    [activeAgentId, sites],
   )
 
   if (isSitesPending) {
@@ -101,13 +101,13 @@ export function StyleSettingsPage() {
           <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700">
             <span className="text-slate-500">{t('currentSite')}</span>
             <select
-              value={activeSiteId}
-              onChange={(event) => setSelectedSiteId(event.target.value)}
+              value={activeAgentId}
+              onChange={(event) => setSelectedAgentId(event.target.value)}
               className="min-w-36 border-none bg-transparent text-sm outline-none"
             >
               {sites.map((site) => (
                 <option key={site.id} value={String(site.id)}>
-                  {site.siteName}
+                  {site.agentName}
                 </option>
               ))}
             </select>
@@ -129,10 +129,10 @@ export function StyleSettingsPage() {
 
       {appearanceDetail && !isAppearancePending && !isAppearanceError ? (
         <StyleSettingsWorkspace
-          key={`${numericSiteId}-${appearanceDetail.version}`}
+          key={`${numericAgentId}-${appearanceDetail.version}`}
           appearanceDetail={appearanceDetail}
-          siteId={numericSiteId}
-          selectedSiteName={selectedSite?.siteName ?? '-'}
+          agentId={numericAgentId}
+          selectedAgentName={selectedSite?.agentName ?? '-'}
           previewMode={previewMode}
           setPreviewMode={setPreviewMode}
           t={t}
@@ -145,8 +145,8 @@ export function StyleSettingsPage() {
 
 type StyleSettingsWorkspaceProps = {
   appearanceDetail: AppearanceDetail
-  siteId: number
-  selectedSiteName: string
+  agentId: number
+  selectedAgentName: string
   previewMode: 'desktop' | 'mobile'
   setPreviewMode: (mode: 'desktop' | 'mobile') => void
   t: ReturnType<typeof useTranslation<'styleSettings'>>['t']
@@ -155,21 +155,21 @@ type StyleSettingsWorkspaceProps = {
 
 function StyleSettingsWorkspace({
   appearanceDetail,
-  siteId,
-  selectedSiteName,
+  agentId,
+  selectedAgentName,
   previewMode,
   setPreviewMode,
   t,
   queryClient,
 }: StyleSettingsWorkspaceProps) {
-  const canUpdate = useHasPermission(PERMISSION_CODES.siteUpdate)
+  const canUpdate = useHasPermission(PERMISSION_CODES.agentUpdate)
   // 父级以 id+version 作为 key 重建本组件，避免 effect 内同步 setState
   const [draftConfig, setDraftConfig] = useState(() => cloneConfig(appearanceDetail.config))
   const [version, setVersion] = useState(appearanceDetail.version)
 
   const saveMutation = useMutation({
     mutationFn: (input: { config: AppearanceConfigV1; version: number }) =>
-      appearanceApi.putAppearance(siteId, {
+      appearanceApi.putAppearance(agentId, {
         schemaVersion: APPEARANCE_SCHEMA_VERSION_V1,
         config: input.config,
         version: input.version,
@@ -177,13 +177,13 @@ function StyleSettingsWorkspace({
     onSuccess: async (updated) => {
       setDraftConfig(cloneConfig(updated.config))
       setVersion(updated.version)
-      await queryClient.invalidateQueries({ queryKey: ['appearances', siteId] })
+      await queryClient.invalidateQueries({ queryKey: ['appearances', agentId] })
       toast.success(t('messages.saved'))
     },
     onError: (error: Error) => {
       toast.error(error.message)
       // 乐观锁冲突后刷新 version，避免连点沿用旧 version
-      void queryClient.invalidateQueries({ queryKey: ['appearances', siteId] })
+      void queryClient.invalidateQueries({ queryKey: ['appearances', agentId] })
     },
   })
 
@@ -209,7 +209,7 @@ function StyleSettingsWorkspace({
   return (
     <>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <PermissionGate code={PERMISSION_CODES.siteUpdate}>
+        <PermissionGate code={PERMISSION_CODES.agentUpdate}>
           <button
             type="button"
             onClick={saveConfig}
@@ -257,7 +257,7 @@ function StyleSettingsWorkspace({
               <span className="font-medium text-slate-700">{t('fields.fontStyle')}</span>
               <select
                 value={draftConfig.fontStyle}
-                onChange={(event) => updateField('fontStyle', event.target.value as SiteFontStyle)}
+                onChange={(event) => updateField('fontStyle', event.target.value as AgentFontStyle)}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
               >
                 {FONT_STYLE_VALUES.map((value) => (
@@ -329,7 +329,7 @@ function StyleSettingsWorkspace({
             </div>
           </div>
 
-          <SiteAppearancePreview siteName={selectedSiteName} config={draftConfig} previewMode={previewMode} />
+          <AgentAppearancePreview agentName={selectedAgentName} config={draftConfig} previewMode={previewMode} />
         </article>
       </div>
     </>

@@ -96,44 +96,44 @@ export const NAV_SECTIONS: NavSection[] = [
 
 /** 根据 pathname 解析顶栏 i18n 标题 key（站点工作区等动态路径单独处理）。 */
 export function resolveNavTitleKey(pathname: string): string | undefined {
-  if (pathname === ROUTES.apps.siteCreate || pathname.startsWith(`${ROUTES.apps.siteCreate}/`)) {
-    return 'items.siteCreate'
+  if (pathname === ROUTES.apps.agentCreate || pathname.startsWith(`${ROUTES.apps.agentCreate}/`)) {
+    return 'items.agentCreate'
   }
   if (/^\/apps\/sites\/[^/]+\/?$/.test(pathname)) {
-    return 'items.siteAgentOverview'
+    return 'items.agentOverview'
   }
   if (/^\/apps\/sites\/[^/]+\/agent\/?$/.test(pathname)) {
-    return 'items.siteAgentOverview'
+    return 'items.agentOverview'
   }
   if (/^\/apps\/sites\/[^/]+\/agent\/prompt(?:\/|$)/.test(pathname)) {
-    return 'items.siteAgentPrompt'
+    return 'items.agentPrompt'
   }
   if (/^\/apps\/sites\/[^/]+\/agent\/knowledge(?:\/|$)/.test(pathname)) {
-    return 'items.siteAgentKnowledge'
+    return 'items.agentKnowledge'
   }
   if (/^\/apps\/sites\/[^/]+\/agent\/conversations(?:\/|$)/.test(pathname)) {
-    return 'items.siteAgentConversations'
+    return 'items.agentConversations'
   }
   if (/^\/apps\/sites\/[^/]+\/agent\/preview(?:\/|$)/.test(pathname)) {
-    return 'items.siteAgentPreview'
+    return 'items.agentPreview'
   }
   if (/^\/apps\/sites\/[^/]+\/agent\/runtime(?:\/|$)/.test(pathname)) {
-    return 'items.siteAgentRuntime'
+    return 'items.agentRuntime'
   }
   if (/^\/apps\/sites\/[^/]+\/basic(?:\/|$)/.test(pathname)) {
-    return 'items.siteBasic'
+    return 'items.agentBasic'
   }
   if (/^\/apps\/sites\/[^/]+\/theme(?:\/|$)/.test(pathname)) {
-    return 'items.siteTheme'
+    return 'items.agentTheme'
   }
   if (/^\/apps\/sites\/[^/]+\/domain(?:\/|$)/.test(pathname)) {
-    return 'items.siteDomain'
+    return 'items.agentDomain'
   }
   if (/^\/apps\/sites\/[^/]+\/contents(?:\/|$)/.test(pathname)) {
-    return 'items.siteContents'
+    return 'items.agentContents'
   }
   if (/^\/apps\/sites\/[^/]+\/files(?:\/|$)/.test(pathname)) {
-    return 'items.siteFiles'
+    return 'items.agentFiles'
   }
 
   for (const section of NAV_SECTIONS) {

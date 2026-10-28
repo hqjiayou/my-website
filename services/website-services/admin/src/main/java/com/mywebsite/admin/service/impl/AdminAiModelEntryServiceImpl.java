@@ -1,12 +1,12 @@
 package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.mywebsite.admin.constant.AdminSiteMessageKeys;
+import com.mywebsite.admin.constant.AdminAgentMessageKeys;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryDto;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryWriteRequest;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.common.enums.ErrorCode;
@@ -25,15 +25,15 @@ import org.springframework.util.StringUtils;
 public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
 
     private final AdminAiModelEntryMapper modelEntryMapper;
-    private final AdminSiteMapper adminSiteMapper;
+    private final AdminAgentMapper adminAgentMapper;
     private final ModelEntryCipher cipher;
 
     public AdminAiModelEntryServiceImpl(
             AdminAiModelEntryMapper modelEntryMapper,
-            AdminSiteMapper adminSiteMapper,
+            AdminAgentMapper adminAgentMapper,
             ModelEntryCipher cipher) {
         this.modelEntryMapper = modelEntryMapper;
-        this.adminSiteMapper = adminSiteMapper;
+        this.adminAgentMapper = adminAgentMapper;
         this.cipher = cipher;
     }
 
@@ -55,10 +55,10 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         if (!StringUtils.hasText(request.apiKey())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        requireSiteIfPresent(request.siteId());
+        requireAgentIfPresent(request.agentId());
         boolean asDefault = asDefault(request);
         if (asDefault) {
-            clearOtherDefaults(request.siteId(), null);
+            clearOtherDefaults(request.agentId(), null);
         }
         AdminAiModelEntryEntity entry = new AdminAiModelEntryEntity();
         apply(entry, request, request.apiKey().trim(), asDefault);
@@ -76,11 +76,11 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         if (request.version() == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        requireSiteIfPresent(request.siteId());
+        requireAgentIfPresent(request.agentId());
         AdminAiModelEntryEntity entry = requireEntry(id);
         boolean asDefault = asDefault(request);
         if (asDefault) {
-            clearOtherDefaults(request.siteId(), id);
+            clearOtherDefaults(request.agentId(), id);
         }
         String apiKey = StringUtils.hasText(request.apiKey()) ? request.apiKey().trim() : decryptKey(entry);
         if (!StringUtils.hasText(apiKey)) {
@@ -110,17 +110,17 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
 
     @Override
     @Transactional
-    public AgentModelSelection currentSelection(long siteId) {
-        List<AgentModelSelection> chain = selectionChain(siteId);
+    public AgentModelSelection currentSelection(long agentId) {
+        List<AgentModelSelection> chain = selectionChain(agentId);
         return chain.isEmpty() ? null : chain.get(0);
     }
 
     @Override
     @Transactional
-    public List<AgentModelSelection> selectionChain(long siteId) {
-        List<AdminAiModelEntryEntity> siteEntries = enabledEntries(siteId);
+    public List<AgentModelSelection> selectionChain(long agentId) {
+        List<AdminAiModelEntryEntity> agentEntries = enabledEntries(agentId);
         List<AdminAiModelEntryEntity> globalEntries = enabledEntries(null);
-        AdminAiModelEntryEntity primary = firstDefault(siteEntries);
+        AdminAiModelEntryEntity primary = firstDefault(agentEntries);
         if (primary == null) {
             primary = firstDefault(globalEntries);
         }
@@ -135,21 +135,21 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         }
         List<AgentModelSelection> chain = new ArrayList<>();
         chain.add(primarySelection);
-        appendSelections(chain, siteEntries, primary.getId());
+        appendSelections(chain, agentEntries, primary.getId());
         appendSelections(chain, globalEntries, primary.getId());
         return List.copyOf(chain);
     }
 
     /** 作用域内启用入口：默认在前，其余 id 升序（与 listEntries 的展示序一致）。 */
-    private List<AdminAiModelEntryEntity> enabledEntries(Long siteId) {
+    private List<AdminAiModelEntryEntity> enabledEntries(Long agentId) {
         LambdaQueryWrapper<AdminAiModelEntryEntity> query = new LambdaQueryWrapper<AdminAiModelEntryEntity>()
                 .eq(AdminAiModelEntryEntity::getEnabled, true)
                 .orderByDesc(AdminAiModelEntryEntity::getDefaultEntry)
                 .orderByAsc(AdminAiModelEntryEntity::getId);
-        if (siteId == null) {
-            query.isNull(AdminAiModelEntryEntity::getSiteId);
+        if (agentId == null) {
+            query.isNull(AdminAiModelEntryEntity::getAgentId);
         } else {
-            query.eq(AdminAiModelEntryEntity::getSiteId, siteId);
+            query.eq(AdminAiModelEntryEntity::getAgentId, agentId);
         }
         return modelEntryMapper.selectList(query);
     }
@@ -176,13 +176,13 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         }
     }
 
-    private void clearOtherDefaults(Long siteId, Long keepId) {
+    private void clearOtherDefaults(Long agentId, Long keepId) {
         LambdaQueryWrapper<AdminAiModelEntryEntity> query = new LambdaQueryWrapper<AdminAiModelEntryEntity>()
                 .eq(AdminAiModelEntryEntity::getDefaultEntry, true);
-        if (siteId == null) {
-            query.isNull(AdminAiModelEntryEntity::getSiteId);
+        if (agentId == null) {
+            query.isNull(AdminAiModelEntryEntity::getAgentId);
         } else {
-            query.eq(AdminAiModelEntryEntity::getSiteId, siteId);
+            query.eq(AdminAiModelEntryEntity::getAgentId, agentId);
         }
         for (AdminAiModelEntryEntity current : modelEntryMapper.selectList(query)) {
             if (keepId != null && keepId.equals(current.getId())) {
@@ -193,12 +193,12 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         }
     }
 
-    private void requireSiteIfPresent(Long siteId) {
-        if (siteId == null) {
+    private void requireAgentIfPresent(Long agentId) {
+        if (agentId == null) {
             return;
         }
-        if (adminSiteMapper.selectById(siteId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminSiteMessageKeys.SITE_NOT_FOUND);
+        if (adminAgentMapper.selectById(agentId) == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
         }
     }
 
@@ -224,7 +224,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         entry.setModelSpec(normalizeSpec(request.modelSpec()));
         entry.setApiKey(cipher.encrypt(apiKey));
         entry.setBaseUrl(normalizeBaseUrl(request.baseUrl()));
-        entry.setSiteId(request.siteId());
+        entry.setAgentId(request.agentId());
         entry.setEmbeddingSpec(normalizeOptionalSpec(request.embeddingSpec()));
         entry.setEnabled(request.enabled());
         entry.setDefaultEntry(asDefault);
@@ -266,7 +266,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
                 StringUtils.hasText(plain),
                 apiKeyHint(plain),
                 entry.getBaseUrl(),
-                entry.getSiteId(),
+                entry.getAgentId(),
                 entry.getEmbeddingSpec(),
                 Boolean.TRUE.equals(entry.getEnabled()),
                 Boolean.TRUE.equals(entry.getDefaultEntry()),

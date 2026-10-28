@@ -2,7 +2,7 @@
 
 export interface AiPromptProfile {
   id: number | null
-  siteId: number
+  agentId: number
   systemPrompt: string | null
   temperature: number | null
   version: number | null
@@ -23,7 +23,7 @@ export interface AiModelEntry {
   apiKeyConfigured: boolean
   apiKeyHint: string
   baseUrl: string | null
-  siteId: number | null
+  agentId: number | null
   embeddingSpec: string | null
   enabled: boolean
   defaultEntry: boolean
@@ -36,7 +36,7 @@ export interface AiModelEntryWriteInput {
   modelSpec: string
   apiKey?: string
   baseUrl?: string | null
-  siteId?: number | null
+  agentId?: number | null
   embeddingSpec?: string | null
   enabled: boolean
   defaultEntry: boolean
@@ -54,7 +54,7 @@ export const AI_KB_STATUS_VALUES = Object.values(AI_KB_STATUS)
 
 export interface AiKnowledgeListItem {
   id: number
-  siteId: number
+  agentId: number
   baseId: number | null
   owned: boolean
   title: string
@@ -71,9 +71,9 @@ export interface AiKnowledgeListItem {
   updatedAt: string
 }
 
-export interface AiKnowledgeSiteStat {
-  siteId: number
-  siteName: string | null
+export interface AiKnowledgeAgentStat {
+  agentId: number
+  agentName: string | null
   totalDocuments: number
   indexedDocuments: number
   failedDocuments: number
@@ -82,8 +82,8 @@ export interface AiKnowledgeSiteStat {
 
 export interface AiKnowledgeFailure {
   documentId: number
-  siteId: number
-  siteName: string | null
+  agentId: number
+  agentName: string | null
   title: string
   indexError: string | null
   updatedAt: string | null
@@ -95,7 +95,7 @@ export interface AiKnowledgeOverview {
   failedDocuments: number
   pendingDocuments: number
   originalBytes: number
-  sites: AiKnowledgeSiteStat[]
+  sites: AiKnowledgeAgentStat[]
   recentFailures: AiKnowledgeFailure[]
 }
 
@@ -129,13 +129,13 @@ export interface CreateAiKnowledgeInput {
 
 export interface AiKnowledgeBase {
   id: number
-  siteId: number
-  ownerSiteName: string | null
+  agentId: number
+  ownerAgentName: string | null
   name: string
   isDefault: boolean
   owned: boolean
   documentCount: number
-  linkedSiteIds: number[]
+  linkedAgentIds: number[]
   createdAt: string | null
   updatedAt: string | null
 }
@@ -148,7 +148,7 @@ export interface UpdateAiKnowledgeInput {
 }
 
 export interface AiKnowledgeReembedFailure {
-  siteId: number
+  agentId: number
   sourceId: string
   error: string
 }
@@ -163,14 +163,14 @@ export interface AiKnowledgeReembedResult {
 }
 
 export interface AiKnowledgeReembedConflict {
-  siteId: number
+  agentId: number
   dimensions: number
 }
 
 export interface AiConversationListItem {
   id: number
-  siteId: number
-  siteUserId: number
+  agentId: number
+  agentUserId: number
   title: string | null
   lastMessageAt: string | null
   createdAt: string

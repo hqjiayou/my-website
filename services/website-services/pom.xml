@@ -25,7 +25,6 @@
         <module>agent</module>
         <module>auth</module>
         <module>admin</module>
-        <module>site</module>
     </modules>
 
     <properties>

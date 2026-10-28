@@ -17,18 +17,18 @@ public final class AuthenticatedUserUtils {
         return new AuthenticatedUser(TokenAudience.ADMIN, jwt.getSubject(), null, null, Set.of());
     }
 
-    /** Maps a SITE audience access JWT into {@link AuthenticatedUser} for request-scope context. */
-    public static AuthenticatedUser fromSiteAccessJwt(Jwt jwt) {
+    /** Maps a AGENT audience access JWT into {@link AuthenticatedUser} for request-scope context. */
+    public static AuthenticatedUser fromAgentAccessJwt(Jwt jwt) {
         Objects.requireNonNull(jwt.getSubject(), "jwt.sub missing");
-        SubjectCodes.parseSiteUserId(jwt.getSubject())
-                .orElseThrow(() -> new IllegalStateException("jwt.sub is not a valid site subject code"));
-        Long siteId = parsePositiveSiteIdClaim(jwt.getClaim(JwtClaimConstants.SITE_ID))
-                .orElseThrow(() -> new IllegalStateException("jwt.site_id missing or invalid"));
-        return new AuthenticatedUser(TokenAudience.SITE, jwt.getSubject(), null, siteId, Set.of());
+        SubjectCodes.parseAgentUserId(jwt.getSubject())
+                .orElseThrow(() -> new IllegalStateException("jwt.sub is not a valid agent subject code"));
+        Long agentId = parsePositiveAgentIdClaim(jwt.getClaim(JwtClaimConstants.AGENT_ID))
+                .orElseThrow(() -> new IllegalStateException("jwt.agent_id missing or invalid"));
+        return new AuthenticatedUser(TokenAudience.AGENT, jwt.getSubject(), null, agentId, Set.of());
     }
 
-    /** 解析 JWT {@code site_id} 声明为正向 Long；非法或缺失返回 empty。 */
-    public static java.util.Optional<Long> parsePositiveSiteIdClaim(Object raw) {
+    /** 解析 JWT {@code agent_id} 声明为正向 Long；非法或缺失返回 empty。 */
+    public static java.util.Optional<Long> parsePositiveAgentIdClaim(Object raw) {
         if (raw == null) {
             return java.util.Optional.empty();
         }

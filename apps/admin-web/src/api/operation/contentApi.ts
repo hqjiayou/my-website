@@ -1,7 +1,7 @@
 /**
  * 运营「全局内容」中心。
  *
- * 无专用跨站后端；通过 fan-out 站点级 REAL API 聚合（`/admin/sites/{siteId}/contents`）。
+ * 无专用跨站后端；通过 fan-out 站点级 REAL API 聚合（`/admin/agents/{agentId}/contents`）。
  */
 import { contentApi } from '@/api/apps/contentApi'
 import type { ContentListItem } from '@/types/content'
@@ -13,9 +13,9 @@ import { listAllSitesForAggregation, paginateClient } from './aggregateSites'
 export const OPERATION_CONTENTS_CONNECTED = true
 
 export interface OperationContentRow extends ContentListItem {
-  siteId: number
-  siteCode: string
-  siteName: string
+  agentId: number
+  agentCode: string
+  agentName: string
 }
 
 export interface OperationContentListQuery {
@@ -46,9 +46,9 @@ export async function listOperationContents(
       for (const item of page.records) {
         rows.push({
           ...item,
-          siteId: site.id,
-          siteCode: site.siteCode,
-          siteName: site.siteName,
+          agentId: site.id,
+          agentCode: site.agentCode,
+          agentName: site.agentName,
         })
       }
     }),

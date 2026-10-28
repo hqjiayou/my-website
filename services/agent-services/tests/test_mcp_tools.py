@@ -343,7 +343,7 @@ async def test_inprocess_mcp_echo_tool_callable() -> None:
 
     outcome = await run_chat(
         FunctionModel(model_fn),
-        site_id="1",
+        agent_id="1",
         message="use mcp echo",
         toolsets=[toolset],
     )
@@ -358,7 +358,7 @@ async def test_mcp_connect_failure_is_mcp_unavailable() -> None:
     ).prefixed("dead")
     outcome = await run_chat(
         TestModel(),
-        site_id="1",
+        agent_id="1",
         message="hello",
         toolsets=[toolset],
     )
@@ -380,7 +380,7 @@ async def test_mcp_stream_connect_failure_emits_mcp_unavailable() -> None:
         event
         async for event in stream_chat_events(
             TestModel(),
-            site_id="1",
+            agent_id="1",
             message="hello",
             toolsets=[toolset],
         )
@@ -411,7 +411,7 @@ async def test_mcp_tool_call_emits_tool_sse_events() -> None:
         event
         async for event in stream_chat_events(
             FunctionModel(stream_function=stream_fn),
-            site_id="1",
+            agent_id="1",
             message="use mcp echo",
             toolsets=[toolset],
         )

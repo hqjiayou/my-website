@@ -13,7 +13,7 @@ public final class AdminAiPromptDtos {
     /** 站点未配置时字段全空（id 为 null），不视为 404。 */
     public record AdminAiPromptProfileDto(
             Long id,
-            Long siteId,
+            Long agentId,
             String systemPrompt,
             BigDecimal temperature,
             Integer version,

@@ -4,10 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.mywebsite.admin.entity.AdminContentEntity;
 import com.mywebsite.admin.entity.AdminMediaEntity;
-import com.mywebsite.admin.entity.AdminSiteEntity;
+import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminContentMapper;
 import com.mywebsite.admin.mapper.AdminMediaMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Tag;
@@ -36,7 +36,7 @@ import org.springframework.test.context.ActiveProfiles;
 class AdminContentPersistenceVerifyPgTest {
 
     @Autowired
-    private AdminSiteMapper adminSiteMapper;
+    private AdminAgentMapper adminAgentMapper;
 
     @Autowired
     private AdminMediaMapper adminMediaMapper;
@@ -48,20 +48,20 @@ class AdminContentPersistenceVerifyPgTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void siteContentRoundTripSoftDeleteAndCoverFk() {
+    void agentContentRoundTripSoftDeleteAndCoverFk() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
-        AdminSiteEntity site = new AdminSiteEntity();
-        site.setSiteCode("pg_ct_" + suffix);
-        site.setSiteName("PG Content");
-        site.setSiteType("CAKE");
-        site.setStatus("ACTIVE");
-        adminSiteMapper.insert(site);
-        assertThat(site.getId()).isNotNull();
+        AdminAgentEntity agent = new AdminAgentEntity();
+        agent.setAgentCode("pg_ct_" + suffix);
+        agent.setAgentName("PG Content");
+        agent.setAgentType("CAKE");
+        agent.setStatus("ACTIVE");
+        adminAgentMapper.insert(agent);
+        assertThat(agent.getId()).isNotNull();
 
         AdminMediaEntity media = new AdminMediaEntity();
-        media.setSiteId(site.getId());
+        media.setAgentId(agent.getId());
         media.setBucket("uploads");
-        media.setObjectKey("sites/" + site.getId() + "/2026/08/" + UUID.randomUUID() + ".jpg");
+        media.setObjectKey("sites/" + agent.getId() + "/2026/08/" + UUID.randomUUID() + ".jpg");
         media.setOriginalFilename("cover.jpg");
         media.setContentType("image/jpeg");
         media.setExtension("jpg");
@@ -72,7 +72,7 @@ class AdminContentPersistenceVerifyPgTest {
         adminMediaMapper.insert(media);
 
         AdminContentEntity content = new AdminContentEntity();
-        content.setSiteId(site.getId());
+        content.setAgentId(agent.getId());
         content.setType("hero");
         content.setTitle("Hero");
         content.setBody("body");
@@ -88,7 +88,7 @@ class AdminContentPersistenceVerifyPgTest {
                 FROM site_content WHERE id = ?
                 """,
                 content.getId());
-        assertThat(row.get("site_id")).isEqualTo(site.getId());
+        assertThat(row.get("site_id")).isEqualTo(agent.getId());
         assertThat(row.get("type")).isEqualTo("hero");
         assertThat(row.get("status")).isEqualTo("DRAFT");
         assertThat(row.get("cover_media_id")).isEqualTo(media.getId());

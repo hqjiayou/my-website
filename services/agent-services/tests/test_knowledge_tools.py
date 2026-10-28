@@ -22,8 +22,8 @@ class _FakeRetrieval:
         self.degraded = degraded
         self._fail = fail
 
-    async def retrieve_chunks(self, *, site_id: str, query: str, **kwargs: object) -> list[RetrievedChunk]:
-        self.calls.append((site_id, query))
+    async def retrieve_chunks(self, *, agent_id: str, query: str, **kwargs: object) -> list[RetrievedChunk]:
+        self.calls.append((agent_id, query))
         self.kwargs.append(dict(kwargs))
         if self._fail:
             raise RuntimeError("boom")
@@ -143,13 +143,13 @@ async def test_knowledge_tool_passes_request_embedder_and_selection() -> None:
 
 def test_harness_adds_knowledge_guidance_only_when_tool_registered(tmp_path) -> None:
     with_tool = assemble_harness(
-        site_id="42",
+        agent_id="42",
         message="hi",
         toolsets=[build_knowledge_toolset("42", _FakeRetrieval())],  # type: ignore[arg-type]
         harness_dir=str(tmp_path),
     )
     without_tool = assemble_harness(
-        site_id="42",
+        agent_id="42",
         message="hi",
         toolsets=[],
         harness_dir=str(tmp_path),

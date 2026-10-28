@@ -53,7 +53,7 @@ def test_assemble_lands_background_skills_mcp_and_hides_secrets(tmp_path) -> Non
     _write_platform(tmp_path)
     skill_ids = ["orchestration"]
     harness = assemble_harness(
-        site_id="9",
+        agent_id="9",
         message="  hi  ",
         prompt_profile=PromptProfile(systemPrompt="JAVA-PROMPT"),
         skill_instructions="SKILL-BODY",
@@ -105,7 +105,7 @@ def test_assemble_lands_background_skills_mcp_and_hides_secrets(tmp_path) -> Non
 def test_long_background_is_marked_truncated(tmp_path) -> None:
     (tmp_path / "background.md").write_text("A" * 4_005, encoding="utf-8")
     harness = assemble_harness(
-        site_id="1",
+        agent_id="1",
         message="hi",
         harness_dir=str(tmp_path),
     )
@@ -134,7 +134,7 @@ async def test_run_chat_sends_trimmed_memory_to_the_model(tmp_path) -> None:
 
     outcome = await run_chat(
         FunctionModel(capture),
-        site_id="1",
+        agent_id="1",
         message="now",
         history=[
             ChatHistoryMessage(role="USER", content="DROP-ME"),
@@ -161,7 +161,7 @@ async def test_run_chat_sends_harness_background_to_the_model(tmp_path) -> None:
 
     outcome = await run_chat(
         FunctionModel(capture),
-        site_id="7",
+        agent_id="7",
         message="hi",
         prompt_profile=PromptProfile(systemPrompt="TRUSTED-JAVA-PROMPT"),
         skill_instructions="SKILL-BODY",
@@ -187,7 +187,7 @@ async def test_stream_sends_harness_background_to_the_model(tmp_path) -> None:
         event.type.value
         async for event in stream_chat_events(
             FunctionModel(stream_function=stream_fn),
-            site_id="1",
+            agent_id="1",
             message="hi",
             prompt_profile=PromptProfile(systemPrompt="JAVA-PROMPT"),
             harness_dir=str(tmp_path),

@@ -1,6 +1,6 @@
 /**
  * 站点内容 API。
- * Content（list/get/create/update/status/delete）→ 始终 REAL `/admin/sites/{siteId}/contents`。
+ * Content（list/get/create/update/status/delete）→ 始终 REAL `/admin/agents/{agentId}/contents`。
  */
 import type {
   ContentDetail,
@@ -32,12 +32,12 @@ function unwrapVoid(body: HttpMessageBody<null | void>) {
   }
 }
 
-function contentBase(siteId: number) {
-  return `/admin/sites/${siteId}/contents`
+function contentBase(agentId: number) {
+  return `/admin/agents/${agentId}/contents`
 }
 
 export const contentApi = {
-  listContents(siteId: number, query: ContentListQuery = {}): Promise<PageResult<ContentListItem>> {
+  listContents(agentId: number, query: ContentListQuery = {}): Promise<PageResult<ContentListItem>> {
     const qs = toQueryString({
       pageNum: query.pageNum ?? 1,
       pageSize: query.pageSize ?? 20,
@@ -45,44 +45,44 @@ export const contentApi = {
       status: query.status,
     })
     return httpClient
-      .get<HttpMessageBody<PageResult<ContentListItem>>>(`${contentBase(siteId)}${qs}`)
+      .get<HttpMessageBody<PageResult<ContentListItem>>>(`${contentBase(agentId)}${qs}`)
       .then(unwrapData)
   },
 
-  getContent(siteId: number, id: number): Promise<ContentDetail> {
+  getContent(agentId: number, id: number): Promise<ContentDetail> {
     return httpClient
-      .get<HttpMessageBody<ContentDetail>>(`${contentBase(siteId)}/${id}`)
+      .get<HttpMessageBody<ContentDetail>>(`${contentBase(agentId)}/${id}`)
       .then(unwrapData)
   },
 
-  createContent(siteId: number, input: CreateContentInput): Promise<ContentDetail> {
+  createContent(agentId: number, input: CreateContentInput): Promise<ContentDetail> {
     return httpClient
-      .post<HttpMessageBody<ContentDetail>, CreateContentInput>(contentBase(siteId), input)
+      .post<HttpMessageBody<ContentDetail>, CreateContentInput>(contentBase(agentId), input)
       .then(unwrapData)
   },
 
-  updateContent(siteId: number, id: number, input: UpdateContentInput): Promise<ContentDetail> {
+  updateContent(agentId: number, id: number, input: UpdateContentInput): Promise<ContentDetail> {
     return httpClient
-      .put<HttpMessageBody<ContentDetail>, UpdateContentInput>(`${contentBase(siteId)}/${id}`, input)
+      .put<HttpMessageBody<ContentDetail>, UpdateContentInput>(`${contentBase(agentId)}/${id}`, input)
       .then(unwrapData)
   },
 
   updateContentStatus(
-    siteId: number,
+    agentId: number,
     id: number,
     input: UpdateContentStatusInput,
   ): Promise<ContentDetail> {
     return httpClient
       .patch<HttpMessageBody<ContentDetail>, UpdateContentStatusInput>(
-        `${contentBase(siteId)}/${id}/status`,
+        `${contentBase(agentId)}/${id}/status`,
         input,
       )
       .then(unwrapData)
   },
 
-  deleteContent(siteId: number, id: number): Promise<void> {
+  deleteContent(agentId: number, id: number): Promise<void> {
     return httpClient
-      .delete<HttpMessageBody<null>>(`${contentBase(siteId)}/${id}`)
+      .delete<HttpMessageBody<null>>(`${contentBase(agentId)}/${id}`)
       .then(unwrapVoid)
   },
 }

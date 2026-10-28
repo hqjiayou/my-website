@@ -1,12 +1,12 @@
 package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.mywebsite.admin.constant.AdminSiteMessageKeys;
+import com.mywebsite.admin.constant.AdminAgentMessageKeys;
 import com.mywebsite.admin.dto.AdminAiPromptDtos.AdminAiPromptProfileDto;
 import com.mywebsite.admin.dto.AdminAiPromptDtos.AdminAiPromptProfileUpdateRequest;
 import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
 import com.mywebsite.admin.mapper.AdminAiPromptProfileMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiPromptService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -21,31 +21,31 @@ import org.springframework.util.StringUtils;
 public class AdminAiPromptServiceImpl implements AdminAiPromptService {
 
     private final AdminAiPromptProfileMapper promptProfileMapper;
-    private final AdminSiteMapper adminSiteMapper;
+    private final AdminAgentMapper adminAgentMapper;
 
     public AdminAiPromptServiceImpl(
-            AdminAiPromptProfileMapper promptProfileMapper, AdminSiteMapper adminSiteMapper) {
+            AdminAiPromptProfileMapper promptProfileMapper, AdminAgentMapper adminAgentMapper) {
         this.promptProfileMapper = promptProfileMapper;
-        this.adminSiteMapper = adminSiteMapper;
+        this.adminAgentMapper = adminAgentMapper;
     }
 
     @Override
-    public AdminAiPromptProfileDto getPromptProfile(long siteId) {
-        requireSite(siteId);
-        AdminAiPromptProfileEntity profile = selectBySiteId(siteId);
+    public AdminAiPromptProfileDto getPromptProfile(long agentId) {
+        requireSite(agentId);
+        AdminAiPromptProfileEntity profile = selectByAgentId(agentId);
         if (profile == null) {
             // 未配置返回空壳而非 404：前端据此渲染"尚未配置"
-            return new AdminAiPromptProfileDto(null, siteId, null, null, null, null);
+            return new AdminAiPromptProfileDto(null, agentId, null, null, null, null);
         }
         return toDto(profile);
     }
 
     @Override
     @Transactional
-    public void softDeleteBySiteId(long siteId) {
+    public void softDeleteByAgentId(long agentId) {
         List<AdminAiPromptProfileEntity> profiles = promptProfileMapper.selectList(
                 new LambdaQueryWrapper<AdminAiPromptProfileEntity>()
-                        .eq(AdminAiPromptProfileEntity::getSiteId, siteId));
+                        .eq(AdminAiPromptProfileEntity::getAgentId, agentId));
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         for (AdminAiPromptProfileEntity profile : profiles) {
             profile.setDeletedAt(now);
@@ -57,12 +57,12 @@ public class AdminAiPromptServiceImpl implements AdminAiPromptService {
     @Override
     @Transactional
     public AdminAiPromptProfileDto upsertPromptProfile(
-            long siteId, AdminAiPromptProfileUpdateRequest request) {
-        requireSite(siteId);
-        AdminAiPromptProfileEntity profile = selectBySiteId(siteId);
+            long agentId, AdminAiPromptProfileUpdateRequest request) {
+        requireSite(agentId);
+        AdminAiPromptProfileEntity profile = selectByAgentId(agentId);
         if (profile == null) {
             profile = new AdminAiPromptProfileEntity();
-            profile.setSiteId(siteId);
+            profile.setAgentId(agentId);
             applyRequest(profile, request);
             promptProfileMapper.insert(profile);
         } else {
@@ -73,18 +73,18 @@ public class AdminAiPromptServiceImpl implements AdminAiPromptService {
                 throw new BusinessException(ErrorCode.CONFLICT);
             }
         }
-        return toDto(selectBySiteId(siteId));
+        return toDto(selectByAgentId(agentId));
     }
 
-    private void requireSite(long siteId) {
-        if (adminSiteMapper.selectById(siteId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminSiteMessageKeys.SITE_NOT_FOUND);
+    private void requireSite(long agentId) {
+        if (adminAgentMapper.selectById(agentId) == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
         }
     }
 
-    private AdminAiPromptProfileEntity selectBySiteId(long siteId) {
+    private AdminAiPromptProfileEntity selectByAgentId(long agentId) {
         return promptProfileMapper.selectOne(new LambdaQueryWrapper<AdminAiPromptProfileEntity>()
-                .eq(AdminAiPromptProfileEntity::getSiteId, siteId)
+                .eq(AdminAiPromptProfileEntity::getAgentId, agentId)
                 .last("LIMIT 1"));
     }
 
@@ -98,7 +98,7 @@ public class AdminAiPromptServiceImpl implements AdminAiPromptService {
     private static AdminAiPromptProfileDto toDto(AdminAiPromptProfileEntity profile) {
         return new AdminAiPromptProfileDto(
                 profile.getId(),
-                profile.getSiteId(),
+                profile.getAgentId(),
                 profile.getSystemPrompt(),
                 profile.getTemperature(),
                 profile.getVersion(),
