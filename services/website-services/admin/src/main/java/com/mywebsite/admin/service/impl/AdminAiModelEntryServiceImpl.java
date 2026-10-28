@@ -58,7 +58,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         requireAgentIfPresent(request.agentId());
         boolean asDefault = asDefault(request);
         if (asDefault) {
-            clearOtherDefaults(request.agentId(), null);
+            clearOtherDefaults(request.agentId(), null, normalizeMode(request.mode()));
         }
         AdminAiModelEntryEntity entry = new AdminAiModelEntryEntity();
         apply(entry, request, request.apiKey().trim(), asDefault);
@@ -80,7 +80,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         AdminAiModelEntryEntity entry = requireEntry(id);
         boolean asDefault = asDefault(request);
         if (asDefault) {
-            clearOtherDefaults(request.agentId(), id);
+            clearOtherDefaults(request.agentId(), id, normalizeMode(request.mode()));
         }
         String apiKey = StringUtils.hasText(request.apiKey()) ? request.apiKey().trim() : decryptKey(entry);
         if (!StringUtils.hasText(apiKey)) {
@@ -115,6 +115,10 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         return chain.isEmpty() ? null : chain.get(0);
     }
 
+    /**
+     * admin 侧（试聊 / 知识索引）用整链、不分模式；Portal 聊天的按模式组链在 agent-app
+     * AgentAiServiceImpl.loadModelChain(agentId, mode)，规则除模式过滤外一致。
+     */
     @Override
     @Transactional
     public List<AgentModelSelection> selectionChain(long agentId) {
@@ -176,9 +180,10 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         }
     }
 
-    private void clearOtherDefaults(Long agentId, Long keepId) {
+    private void clearOtherDefaults(Long agentId, Long keepId, String mode) {
         LambdaQueryWrapper<AdminAiModelEntryEntity> query = new LambdaQueryWrapper<AdminAiModelEntryEntity>()
-                .eq(AdminAiModelEntryEntity::getDefaultEntry, true);
+                .eq(AdminAiModelEntryEntity::getDefaultEntry, true)
+                .eq(AdminAiModelEntryEntity::getMode, mode);
         if (agentId == null) {
             query.isNull(AdminAiModelEntryEntity::getAgentId);
         } else {
@@ -228,6 +233,19 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         entry.setEmbeddingSpec(normalizeOptionalSpec(request.embeddingSpec()));
         entry.setEnabled(request.enabled());
         entry.setDefaultEntry(asDefault);
+        entry.setMode(normalizeMode(request.mode()));
+    }
+
+    /** 双模式归属：空缺省 KEY（直连 key）；只接受 KEY / CLI，其余拒绝。 */
+    static String normalizeMode(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return "KEY";
+        }
+        String value = raw.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!value.equals("KEY") && !value.equals("CLI")) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        return value;
     }
 
     /** 只解密。明文旧数据保持原样，下次保存时才加密，避免读接口改版本号。 */
@@ -271,7 +289,8 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
                 Boolean.TRUE.equals(entry.getEnabled()),
                 Boolean.TRUE.equals(entry.getDefaultEntry()),
                 entry.getVersion(),
-                entry.getUpdatedAt());
+                entry.getUpdatedAt(),
+                normalizeMode(entry.getMode()));
     }
 
     private static String normalizeOptionalSpec(String raw) {

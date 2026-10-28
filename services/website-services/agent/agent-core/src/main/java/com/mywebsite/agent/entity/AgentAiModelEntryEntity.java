@@ -21,6 +21,9 @@ public class AgentAiModelEntryEntity extends AbstractAuditableEntity {
     @TableField("is_default")
     private Boolean defaultEntry;
 
+    /** 双模式归属：KEY=直连 API key；CLI=经 CLI 代理池。旧数据由 DB 默认 KEY。 */
+    private String mode;
+
     public String getModelSpec() {
         return modelSpec;
     }
@@ -75,5 +78,13 @@ public class AgentAiModelEntryEntity extends AbstractAuditableEntity {
 
     public void setDefaultEntry(Boolean defaultEntry) {
         this.defaultEntry = defaultEntry;
+    }
+
+    public String getMode() {
+        return mode;
+    }
+
+    public void setMode(String mode) {
+        this.mode = mode;
     }
 }

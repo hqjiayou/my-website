@@ -27,6 +27,7 @@ import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.agent.dto.AgentAiAttachmentDto;
 import com.mywebsite.agent.dto.AgentAiChatRequestDto;
+import com.mywebsite.agent.dto.AgentAiModelModesDto;
 import com.mywebsite.agent.entity.AgentAiKnowledgeDocumentEntity;
 import com.mywebsite.agent.entity.AgentAiModelEntryEntity;
 import com.mywebsite.agent.mapper.AgentAiKnowledgeDocumentMapper;
@@ -221,7 +222,9 @@ public class AgentAiServiceImpl implements AgentAiService {
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
         AgentChatResponse response = agentClient.chat(
-                buildAgentRequest(agentId, message, attachments, validated.documents(), preparation, memories));
+                buildAgentRequest(
+                        agentId, message, attachments, validated.documents(), preparation, memories,
+                        normalizeChatMode(request.mode())));
         persistTurn(
                 agentId,
                 agentUserId,
@@ -346,7 +349,9 @@ public class AgentAiServiceImpl implements AgentAiService {
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
         AgentChatRequest agentRequest =
-                buildAgentRequest(agentId, message, attachments, validated.documents(), preparation, memories);
+                buildAgentRequest(
+                        agentId, message, attachments, validated.documents(), preparation, memories,
+                        normalizeChatMode(request.mode()));
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         List<AgentAttachmentDto> stored = storedAttachments(attachments, validated);
@@ -372,9 +377,10 @@ public class AgentAiServiceImpl implements AgentAiService {
             List<AgentAttachmentDto> attachments,
             List<AgentDocumentContext> documents,
             ChatPreparation preparation,
-            List<String> memories) {
+            List<String> memories,
+            String mode) {
         Long conversationId = preparation.conversation().getId();
-        List<AgentModelSelection> chain = loadModelChain(agentId);
+        List<AgentModelSelection> chain = loadModelChain(agentId, mode);
         return new AgentChatRequest(
                 String.valueOf(agentId),
                 message,
@@ -497,6 +503,47 @@ public class AgentAiServiceImpl implements AgentAiService {
         return StringUtils.hasText(content) ? title + "\n" + content : title;
     }
 
+    /** 聊天请求模式：空 = 不分模式（整链）；只接受 KEY / CLI，其余拒绝。 */
+    static String normalizeChatMode(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String value = raw.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!value.equals("KEY") && !value.equals("CLI")) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    /** 入口模式归属：空值按 KEY（与 V35 列默认同口径）。 */
+    private static String entryMode(AgentAiModelEntryEntity entry) {
+        return StringUtils.hasText(entry.getMode())
+                ? entry.getMode().trim().toUpperCase(java.util.Locale.ROOT)
+                : "KEY";
+    }
+
+    @Override
+    public AgentAiModelModesDto modelModes(long agentId) {
+        requireAgentMember(agentId);
+        List<AgentAiModelModesDto.ModeOption> options = new ArrayList<>();
+        for (String mode : List.of("KEY", "CLI")) {
+            List<AgentModelSelection> chain = loadModelChain(agentId, mode);
+            boolean available = !chain.isEmpty();
+            options.add(new AgentAiModelModesDto.ModeOption(
+                    mode, available, available ? modelLabel(chain.get(0).spec()) : null));
+        }
+        return new AgentAiModelModesDto(options);
+    }
+
+    /** spec（provider:model）取冒号后模型名作展示；无冒号用原文。 */
+    private static String modelLabel(String spec) {
+        if (spec == null) {
+            return null;
+        }
+        int idx = spec.indexOf(':');
+        return idx >= 0 && idx + 1 < spec.length() ? spec.substring(idx + 1) : spec;
+    }
+
     /** 站点默认入口优先，否则全站默认。没有时不带 model，Python 回退进程 AI_MODEL。 */
     private AgentModelSelection loadDefaultModel(long agentId) {
         List<AgentModelSelection> chain = loadModelChain(agentId);
@@ -510,8 +557,20 @@ public class AgentAiServiceImpl implements AgentAiService {
      * 解密不出 key 的备援跳过。
      */
     private List<AgentModelSelection> loadModelChain(long agentId) {
+        return loadModelChain(agentId, null);
+    }
+
+    /**
+     * 按模式组链（Portal 双模式）：先按模式过滤入口（备援封闭在模式内，不跨模式烧配额），
+     * 其余规则与整链一致——模式内无默认入口即空链。mode 为空时即整链（旧行为）。
+     */
+    private List<AgentModelSelection> loadModelChain(long agentId, String mode) {
         List<AgentAiModelEntryEntity> agentEntries = enabledModelEntries(agentId);
         List<AgentAiModelEntryEntity> globalEntries = enabledModelEntries(null);
+        if (mode != null) {
+            agentEntries = agentEntries.stream().filter(entry -> mode.equals(entryMode(entry))).toList();
+            globalEntries = globalEntries.stream().filter(entry -> mode.equals(entryMode(entry))).toList();
+        }
         AgentAiModelEntryEntity primary = firstDefaultEntry(agentEntries);
         if (primary == null) {
             primary = firstDefaultEntry(globalEntries);

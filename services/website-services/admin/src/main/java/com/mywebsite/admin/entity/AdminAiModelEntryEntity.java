@@ -26,6 +26,7 @@ public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
 
     @TableField("is_default")
     private Boolean defaultEntry;
+    private String mode;
 
     public String getDisplayName() {
         return displayName;
@@ -89,5 +90,13 @@ public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
 
     public void setDefaultEntry(Boolean defaultEntry) {
         this.defaultEntry = defaultEntry;
+    }
+
+    public String getMode() {
+        return mode;
+    }
+
+    public void setMode(String mode) {
+        this.mode = mode;
     }
 }
