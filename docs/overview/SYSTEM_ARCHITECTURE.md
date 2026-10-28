@@ -24,6 +24,5 @@ Browser
 
 ## 规格（不在本文重复）
 
-- Maven 依赖：[`../website-services/总览/模块职责与依赖边界.md`](../website-services/总览/模块职责与依赖边界.md)
-- 模块说明：[`../website-services/设计文档/基础架构/架构设计.md`](../website-services/设计文档/基础架构/架构设计.md)
-- 单模块文件怎么放：[`../website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md`](../website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md)
+- Maven 依赖与模块说明：[`../website-services/ARCHITECTURE.md`](../website-services/ARCHITECTURE.md) 与 [`../../services/website-services/README.md`](../../services/website-services/README.md)
+- 单模块文件怎么放：[`.cursor/rules/backend-structure.mdc`](../../.cursor/rules/backend-structure.mdc)（原《总览》《设计文档》长文已于 2026-10-29 移除，见 git 历史）

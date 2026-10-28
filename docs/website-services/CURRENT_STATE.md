@@ -5,7 +5,7 @@ artifact_type: SPEC
 status: CURRENT
 last_verified: 2026-10-25
 source_of_truth: services/website-services
-supersedes: 总览/当前功能完成度总览.md（作为完成度权威）
+supersedes: 总览/当前功能完成度总览.md（作为完成度权威；该文件已于 2026-10-29 移除，见 git 历史）
 ```
 
 ## 模块
@@ -27,13 +27,9 @@ supersedes: 总览/当前功能完成度总览.md（作为完成度权威）
 - **Menu 写 = DEFERRED_BY_DESIGN**  
 - **Appearance = heroLayout**  
 
-## 仍有效的 SPEC（勿归档）
+## 仍有效的 SPEC
 
-- `设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md`  
-- `设计文档/基础架构/后端包结构与命名规范V1.md`  
-- `设计文档/基础架构/架构设计.md`  
-- `设计文档/数据与持久层/*`（与 Flyway 冲突时以 Flyway 为准）  
-- `设计文档/权限与后台管理/阶段5A–5E*`（5E 写操作仍 deferred）  
-- `数据字典/*`  
+- `数据字典/*`（与 Flyway 冲突时以 Flyway 为准）
+- 结构与命名：`.cursor/rules/backend-structure.mdc`
 
-阶段联调记录、作業検査、过时完成度总览 → `docs/archive/` / `implementation-history/`。
+原 `设计文档/`（基础架构、数据与持久层、权限与后台管理等长文）已于 2026-10-29 整体移除，见 git 历史；阶段联调记录、作業検査、过时完成度总览（原 `docs/archive/`、`implementation-history/`）亦同批移除。

@@ -11,4 +11,4 @@ last_verified: 2026-10-10
 | [`instructions/templates/`](./instructions/templates/) | 可复用的任务模板，里面不写当前完成度 |
 | [`instructions/archive/`](./instructions/archive/) | 已经用过的一次性指令 |
 
-没有 `instructions/active/`、`runbooks/`、`checklists/`。本地怎么跑看 [`../operations/LOCAL_DEVELOPMENT.md`](../operations/LOCAL_DEVELOPMENT.md)。某次完整实施包在 [`../implementation-history/`](../implementation-history/)。
+没有 `instructions/active/`、`runbooks/`、`checklists/`。本地怎么跑看 [`../operations/LOCAL_DEVELOPMENT.md`](../operations/LOCAL_DEVELOPMENT.md)。（某次完整实施包原在 `implementation-history/`，已于 2026-10-29 移除，见 git 历史。）

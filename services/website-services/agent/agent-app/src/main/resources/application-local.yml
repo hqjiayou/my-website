@@ -8,7 +8,7 @@ spring:
     password: ${DB_PASSWORD:${POSTGRES_PASSWORD:CHANGE_ME}}
   flyway:
     # 与 admin 共用同一库时须避免双应用各跑一套 migration；DDL 由 infra classpath:db/migration 单一维护，默认建议仅 admin 执行迁移
-    enabled: ${SITE_APP_FLYWAY_ENABLED:false}
+    enabled: ${AGENT_APP_FLYWAY_ENABLED:false}
     locations: classpath:db/migration
     baseline-on-migrate: true
   data:

@@ -10,17 +10,17 @@ last_verified: 2026-10-10
 
 （历史链接常写 `docs/数据字典/`——该路径现为跳转 stub，正文只在本目录维护。）
 
-本目录收录 **已与 Flyway migration 对齐** 的表级数据定义，作为 [`../设计文档/数据与持久层/数据库模型设计V1.md`](../设计文档/数据与持久层/数据库模型设计V1.md) 的补充：设计文档侧重规范与蓝图，**数据字典侧重已落地字段、约束与索引的可查手册**。与 Flyway 冲突时以 schema 为准。
+本目录收录 **已与 Flyway migration 对齐** 的表级数据定义，是已落地字段、约束与索引的可查手册（原配套《数据库模型设计 V1》已于 2026-10-29 随 `设计文档/` 整体移除，见 git 历史）。与 Flyway 冲突时以 schema 为准。
 
 ## 归档约定（长期）
 
 | 类别 | 权威路径 |
 | --- | --- |
-| website-services **设计正文** | **`docs/website-services/设计文档/`** |
+| website-services **设计正文** | `docs/website-services/` 根层各域摘要（`设计文档/` 已于 2026-10-29 移除，见 git 历史） |
 | 数据库数据字典（按业务域拆分） | **`docs/website-services/数据字典/`**（本目录） |
 | 全栈当前完成度 | **`docs/overview/CURRENT_STATE.md`** |
 
-**禁止**在 `services/website-services/docs/` 维护权威正文（该路径仅保留跳转说明）。凡新增表、变更字段、索引、唯一约束、外键或新增 Flyway migration，**必须同步更新**本目录对应条目及 **`docs/website-services/设计文档/数据与持久层/数据库模型设计V1.md`** 中与蓝图相关的章节。
+**禁止**在 `services/website-services/docs/` 维护权威正文（该路径仅保留跳转说明）。凡新增表、变更字段、索引、唯一约束、外键或新增 Flyway migration，**必须同步更新**本目录对应条目。
 
 ## 文档索引
 
@@ -52,11 +52,11 @@ DDL 在 `services/website-services/infra/src/main/resources/db/migration/`，当
 
 表、函数 `fn_touch_updated_at` 及关键列在 V1 脚本末尾有 `COMMENT ON`。后续表以各自迁移为准。
 
-Flyway 执行策略见 [`services/website-services/README.md`](../../services/website-services/README.md) 与《数据库模型设计 V1》§8。
+Flyway 执行策略见 [`services/website-services/README.md`](../../../services/website-services/README.md)。
 
 ## 维护流程（强制）
 
-凡发生以下任一情况，须在同一变更交付内更新字典与设计文档：
+凡发生以下任一情况，须在同一变更交付内更新本字典：
 
 - 新增表、删除表或更名表
 - 新增 / 修改 / 删除字段（类型、非空、默认值）
@@ -64,4 +64,4 @@ Flyway 执行策略见 [`services/website-services/README.md`](../../services/we
 - 新增或调整外键或关联语义
 - 新增 Flyway migration 版本
 
-推荐顺序：**编写或审查 migration SQL → 更新本目录（数据字典）→ 按需修订 `docs/website-services/设计文档/数据与持久层/数据库模型设计V1.md`**。
+推荐顺序：**编写或审查 migration SQL → 更新本目录（数据字典）**。

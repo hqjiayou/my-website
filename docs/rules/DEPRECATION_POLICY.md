@@ -8,7 +8,7 @@ last_verified: 2026-08-09
 
 ## 文档
 
-- 过时事实文档：顶部加 `Status: SUPERSEDED` + `Superseded by:`，移入 `archive/` 或 `implementation-history/`。  
+- 过时事实文档：顶部加 `Status: SUPERSEDED` + `Superseded by:`；历史归档目录已于 2026-10-29 整体移除，过时文档按 DOCUMENT_LIFECYCLE 处理或直接删除（git 历史保留）。  
 - **不得**通过删除文档抹掉未解决问题。  
 - **不得**改写历史 AUDIT / EXECUTION_REPORT 的 PASS/FAIL。  
 

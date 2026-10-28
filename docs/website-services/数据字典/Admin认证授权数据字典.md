@@ -152,7 +152,7 @@
 | `admin:menu:list` … `admin:menu:bind` | ACTION | 菜单管理接口鉴权 |
 | `admin:menu:view` | MENU | **V2 占位**；V4 置为 `DISABLED`，由 `admin:menu:system` 体系替代 |
 
-详见 **[阶段5E-菜单权限与导航说明](../设计文档/权限与后台管理/阶段5E-菜单权限与导航说明.md)**。
+菜单权限现行说明见 **[`../RBAC.md`](../RBAC.md)**（原《阶段5E-菜单权限与导航说明》已于 2026-10-29 移除，见 git 历史）。
 
 ---
 

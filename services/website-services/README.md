@@ -1,8 +1,10 @@
 # website-services
 
-`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。**阶段 4H.0（请求链路 + Token 错误体）**、**4H（Gateway 全链路）**、**4I（认证收口）** 已完成；**阶段 5A（Admin RBAC 详细设计）**、**5B（RBAC 权限校验底座）**、**5C（角色与权限管理）** 已完成（见 [**5A**](../../docs/website-services/设计文档/权限与后台管理/阶段5A-Admin-RBAC权限体系详细设计.md) / [**5B**](../../docs/website-services/设计文档/权限与后台管理/阶段5B-Admin-RBAC权限校验底座落地说明.md) / [**5C**](../../docs/website-services/设计文档/权限与后台管理/阶段5C-角色与权限管理接口落地说明.md)）。**现行认证 HTTP 契约**（网关 **`/api/auth/**`**、业务 **`/api/*/auth/me`**）已与实现对齐。**5D（管理员与角色绑定）** 已完成；**下一步：5E** 菜单权限与导航。**阶段 4F** 已将 **`auth`** 收敛为**单一可执行认证服务**（**`mvn -pl auth -am spring-boot:run`**），负责 **Login / Refresh / Logout**、**JWT 签发**、**Redis Refresh 会话**；**Admin / Site-app** 为 **OAuth2 Resource Server** 与业务 API。**阶段 4G** 已完成 **RS256 + JWKS**。设计见 [**阶段 4D**](../../docs/website-services/设计文档/认证与安全/阶段4D-Auth独立认证服务架构回归设计与迁移方案.md) · **落地**见 [**阶段 4F**](../../docs/website-services/设计文档/认证与安全/阶段4F-Auth单服务收敛与认证主链路上提落地说明.md) · **4G** 见 [**RS256/JWKS**](../../docs/website-services/设计文档/认证与安全/阶段4G-RS256与JWKS签名验签体系迁移说明.md)。**完整文档导航**：[`docs/website-services/README.md`](../../docs/website-services/README.md)。
+`website-services` 是 Java 21 + Spring Boot 3.5.14 的 Maven 多模块后端工程。**阶段 4H.0（请求链路 + Token 错误体）**、**4H（Gateway 全链路）**、**4I（认证收口）** 已完成；**阶段 5A（Admin RBAC 详细设计）**、**5B（RBAC 权限校验底座）**、**5C（角色与权限管理）** 已完成（见 **5A** / **5B** / **5C**）。**现行认证 HTTP 契约**（网关 **`/api/auth/**`**、业务 **`/api/*/auth/me`**）已与实现对齐。**5D（管理员与角色绑定）** 已完成；**下一步：5E** 菜单权限与导航。**阶段 4F** 已将 **`auth`** 收敛为**单一可执行认证服务**（**`mvn -pl auth -am spring-boot:run`**），负责 **Login / Refresh / Logout**、**JWT 签发**、**Redis Refresh 会话**；**Admin / Site-app** 为 **OAuth2 Resource Server** 与业务 API。**阶段 4G** 已完成 **RS256 + JWKS**。设计见 **阶段 4D** · **落地**见 **阶段 4F** · **4G** 见 **RS256/JWKS**。**完整文档导航**：[`docs/website-services/README.md`](../../docs/website-services/README.md)。
 
-除此之外：统一网关入口、多端可启动应用、基础设施、MyBatis-Plus、Flyway、OpenAPI。（[`架构设计`](../../docs/website-services/设计文档/基础架构/架构设计.md) §8）
+> 注：本文多处提及的阶段设计/落地文档（原 `docs/website-services/设计文档/`、`总览/`、`数据文档/`）已于 **2026-10-29 整体移除**，文中保留阶段名称作为历史叙述，原文见 git 历史；现行权威以 `docs/website-services/` 根层各域摘要、契约与 CURRENT_STATE 为准。
+
+除此之外：统一网关入口、多端可启动应用、基础设施、MyBatis-Plus、Flyway、OpenAPI。（`架构设计` §8）
 
 ## 认证 HTTP 契约（现行 · 对外以此为准）
 
@@ -24,7 +26,7 @@
 
 **Access JWT**：载荷含 **`subject_type`**（**`SubjectType`**：`ADMIN` / `AGENT`，与 **`aud`「面向谁」** 语义分离）；**`auth`** 内 **`JwtTokenServiceImpl.parseToken`** 将声明解析为 **`SubjectType`** 后与期望值 **枚举比对**，不再与 **`TokenAudience.name()`** 混绑。
 
-**响应信封**：**Auth** Login/Refresh/Logout 成功路径仍为 **`HttpMessageBody`**，`code` **省略**（Jackson 不传 `null`），**message = "success"** 约定不变。**Admin / agent-app** 作为 Resource Server：业务成功（如 Ping）使用带 **`code: 0`** 的约定；**401 / 403** 等安全拒绝走 **`HttpMessageBody`**，含 **`code`**（与 **`ErrorCode`** 一致）与 **i18n message**；**Bearer 无效**时另带 **`WWW-Authenticate: Bearer error="invalid_token"`**（详见 [**阶段4H.0**](../../docs/website-services/设计文档/认证与安全/阶段4H.0-请求链路日志与Token错误响应完善说明.md)）。
+**响应信封**：**Auth** Login/Refresh/Logout 成功路径仍为 **`HttpMessageBody`**，`code` **省略**（Jackson 不传 `null`），**message = "success"** 约定不变。**Admin / agent-app** 作为 Resource Server：业务成功（如 Ping）使用带 **`code: 0`** 的约定；**401 / 403** 等安全拒绝走 **`HttpMessageBody`**，含 **`code`**（与 **`ErrorCode`** 一致）与 **i18n message**；**Bearer 无效**时另带 **`WWW-Authenticate: Bearer error="invalid_token"`**（详见 **阶段4H.0**）。
 
 ---
 
@@ -35,21 +37,21 @@
 | 阶段 4F（Auth 单服务收敛 + 主链路上提） | **已完成** |
 | 文档体系重整（`docs/website-services` 分类与总览） | **已完成** |
 | 阶段 4G（RS256 + JWKS） | **已完成** |
-| **阶段 4H.0**（请求链路日志 + **`X-Request-Id`** + Resource Server **401** JSON / **invalid_token**） | **已完成**（[**说明**](../../docs/website-services/设计文档/认证与安全/阶段4H.0-请求链路日志与Token错误响应完善说明.md)） |
+| **阶段 4H.0**（请求链路日志 + **`X-Request-Id`** + Resource Server **401** JSON / **invalid_token**） | **已完成**（**说明**） |
 | 阶段 4H（Gateway 全链路真实联调） | **已完成** |
-| 阶段 4I（认证阶段收口：4H 尾巴、删兼容路径、Cookie/i18n/边界） | **已完成**（见 [**阶段4I 说明**](../../docs/archive/website-services/联调说明/阶段4I-迁移清理收口.md)） |
+| 阶段 4I（认证阶段收口：4H 尾巴、删兼容路径、Cookie/i18n/边界） | **已完成**（阶段 4I 说明已于 2026-10-29 随历史文档移除，见 git 历史） |
 | **认证契约现行版**（`/api/auth/*` + `/api/*/auth/me`，文档/网关一致） | **已完成**（2026-05；见本文 §认证 HTTP 契约） |
-| 阶段 5A（Admin RBAC 权限体系详细设计） | **已完成**（见 [**阶段5A 说明**](../../docs/website-services/设计文档/权限与后台管理/阶段5A-Admin-RBAC权限体系详细设计.md)） |
-| 阶段 5B（RBAC 权限校验底座） | **已完成**（`AdminPermissionChecker`、真实 `/auth/me`；Method Security 验证见 test `RbacTestController`；见 [**5B 说明**](../../docs/website-services/设计文档/权限与后台管理/阶段5B-Admin-RBAC权限校验底座落地说明.md) §7/§10） |
-| 阶段 5C（角色与权限管理） | **已完成**（`/api/admin/roles`、`/api/admin/permissions`、角色-权限绑定、`V2` 种子；见 [**5C 说明**](../../docs/website-services/设计文档/权限与后台管理/阶段5C-角色与权限管理接口落地说明.md)） |
-| 阶段 5C.1（RBAC 种子 PG 验证） | **已完成**（`my_website_rbac_seed_verify` + `AdminRbacSeedVerifyPgTest`；见 [**5C.1 说明**](../../docs/archive/website-services/数据文档-核验/阶段5C.1-RBAC种子真实PostgreSQL迁移验证.md)） |
+| 阶段 5A（Admin RBAC 权限体系详细设计） | **已完成**（见 **阶段5A 说明**） |
+| 阶段 5B（RBAC 权限校验底座） | **已完成**（`AdminPermissionChecker`、真实 `/auth/me`；Method Security 验证见 test `RbacTestController`；见 **5B 说明** §7/§10） |
+| 阶段 5C（角色与权限管理） | **已完成**（`/api/admin/roles`、`/api/admin/permissions`、角色-权限绑定、`V2` 种子；见 **5C 说明**） |
+| 阶段 5C.1（RBAC 种子 PG 验证） | **已完成**（`my_website_rbac_seed_verify` + `AdminRbacSeedVerifyPgTest`；5C.1 说明已于 2026-10-29 随历史文档移除，见 git 历史） |
 | 阶段 5C.2（清理测试探针权限） | **已完成**（生产 `V2` 不含 `admin:rbac:check`；16 条生产权限） |
-| 阶段 5D（管理员与角色绑定） | **已完成**（`/api/admin/users/{id}/roles`；见 [**5D 说明**](../../docs/website-services/设计文档/权限与后台管理/阶段5D-管理员与角色绑定接口落地说明.md)） |
-| 阶段 5D.1（Admin 包结构 / 命名 / RBAC 链路审查收敛） | **已完成**（见 [**5D.1 综合说明**](../../docs/archive/website-services/作業検査/阶段5D.1-Admin模块包结构命名与RBAC链路综合审查收敛.md)） |
-| **单模块文件结构与 AI 开发约束规则 V1** | **已完成**（**仅文档**；见 [**结构规则 V1**](../../docs/website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md)） |
+| 阶段 5D（管理员与角色绑定） | **已完成**（`/api/admin/users/{id}/roles`；见 **5D 说明**） |
+| 阶段 5D.1（Admin 包结构 / 命名 / RBAC 链路审查收敛） | **已完成**（5D.1 综合说明已于 2026-10-29 随历史文档移除，见 git 历史） |
+| **单模块文件结构与 AI 开发约束规则 V1** | **已完成**（**仅文档**；见 **结构规则 V1**） |
 | 阶段 5E（菜单导航） | **待开始**（须遵守结构规则 V1） |
 
-**勿在仓库另建第二份「后端 TODO 清单」。** 完整阶段史、产出与下一步：**[`docs/website-services/总览/后端开发路线图与阶段状态.md`](../../docs/website-services/总览/后端开发路线图与阶段状态.md)**；文档总导航：**[`docs/website-services/README.md`](../../docs/website-services/README.md)**。
+**勿在仓库另建第二份「后端 TODO 清单」。** 完整阶段史、产出与下一步：**`docs/website-services/总览/后端开发路线图与阶段状态.md`**；文档总导航：**[`docs/website-services/README.md`](../../docs/website-services/README.md)**。
 
 ## 快速理解
 
@@ -87,12 +89,12 @@ website-services/
 - 端口：`8080`
 - **`/api/auth/**`** → `http://localhost:8083`（Auth）；**`/api/admin/**`** → `http://localhost:8081`（Admin）；**`/api/agent/**`** → `http://localhost:8082`（Agent）
 - 提供本地开发 CORS 配置
-- **`X-Request-Id`**：网关未带则生成 UUID，写入**下游转发请求**与**响应头**（见 [**阶段4H.0**](../../docs/website-services/设计文档/认证与安全/阶段4H.0-请求链路日志与Token错误响应完善说明.md)）。
+- **`X-Request-Id`**：网关未带则生成 UUID，写入**下游转发请求**与**响应头**（见 **阶段4H.0**）。
 - 访问日志：**`RequestIdGatewayFilter`** 在请求结束时 **INFO** 输出 `gateway access requestId=… method=… path=… route=… status=… costMs=…`（不写 body、Authorization、Cookie、Token）。
 - 不承载业务逻辑
 - 不直连 PostgreSQL / Redis / MinIO
 - **不**在网关校验 JWT（业务服务各自 Resource Server）
-- **阶段 4H**：经 **:8080** 与 **Auth/Admin 多进程** 的真实联调结论见 [**阶段4H 联调说明**](../../docs/archive/website-services/联调说明/阶段4H-Gateway唯一入口全链路真实联调.md)；路由 YAML 内注释强调 **`/api/auth/**` 必须在 `/api/admin/**`、`/api/agent/**` 之前**。
+- **阶段 4H**：经 **:8080** 与 **Auth/Admin 多进程** 的真实联调结论原见阶段 4H 联调说明（已于 2026-10-29 随历史文档移除，见 git 历史）；路由 YAML 内注释强调 **`/api/auth/**` 必须在 `/api/admin/**`、`/api/agent/**` 之前**。
 
 ### admin
 
@@ -105,9 +107,9 @@ website-services/
 - **`/api/admin/**`（业务）**：默认需要 **`Authorization: Bearer <accessToken>`**（Swagger **`adminBearer`**）；JWT 经 **`spring.security.oauth2.resourceserver.jwt.jwk-set-uri`**（**`AUTH_JWKS_URI`**）验签，**不持有**签名密钥。
 - `AdminSecurityConfig`、`AdminAuthenticationEntryPoint`、`AdminAccessDeniedHandler`、`AuthContextSynchronizingFilter` 保留。
 - 健康探测：`GET /api/admin/ping`（需 Bearer）
-- **阶段 3B**：首批后台 **`AdminUserEntity` 等** Mapper（见 [`Java 持久层设计 V1`](../../docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md)）
+- **阶段 3B**：首批后台 **`AdminUserEntity` 等** Mapper（见 `Java 持久层设计 V1`）
 - **阶段 4C 脚本**：`scripts/local/run-4c-http-verify.ps1` 已区分 **`$AuthBase`（默认 8083）** 与 **`$AdminBase`**；认证 HTTP 打 Auth，Ping 仍打 Admin。
-- **阶段 4D～4G 路线图**：见 [**阶段4D 文档**](../../docs/website-services/设计文档/认证与安全/阶段4D-Auth独立认证服务架构回归设计与迁移方案.md)。
+- **阶段 4D～4G 路线图**：见 **阶段4D 文档**。
 
 ### agent
 
@@ -123,17 +125,17 @@ website-services/
 - `agent/agent-core`
   - 前台站点公共核心能力
   - 承载当前站点上下文、站点配置读取能力
-  - **阶段 3B**：首批站点域 **`AgentEntity` / `AgentUserEntity` / `AgentUserProfileEntity`** 及对应 **`Mapper`**（原 Site* 命名，V33/PR #108 改名）（依赖 **`infra`** 基类；见 [`Java 持久层设计 V1`](../../docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md)）
+  - **阶段 3B**：首批站点域 **`AgentEntity` / `AgentUserEntity` / `AgentUserProfileEntity`** 及对应 **`Mapper`**（原 Site* 命名，V33/PR #108 改名）（依赖 **`infra`** 基类；见 `Java 持久层设计 V1`）
 
 ### common
 
-通用基础模块（详见 [`后端包结构与命名规范 V1`](../../docs/website-services/设计文档/基础架构/后端包结构与命名规范V1.md) §1）。
+通用基础模块（详见 `后端包结构与命名规范 V1` §1）。
 
 仅承载跨模块共用 **协议外壳与基础模型**：
 
 - `ApiResponse`
 - `ErrorCode`
-- `BusinessException`（`messageKey` + `messageArgs`；由各应用 Handler + `LocalizedMessageService` 解析为自然语言，见 [后端多语言支持策略设计 V1](../../docs/website-services/设计文档/认证与安全/后端多语言支持策略设计V1.md)）
+- `BusinessException`（`messageKey` + `messageArgs`；由各应用 Handler + `LocalizedMessageService` 解析为自然语言，见 后端多语言支持策略设计 V1）
 - `PageResult`（通用分页载荷；新业务若引入 `PageRequest` 须经多模块复用评估后再落 common）
 - **`com.mywebsite.common.security`**：`JwtClaimConstants`、`SubjectType`、`SubjectCodes`、`TokenAudience`、`AuthenticatedUser`、`AuthContext`、`AuthenticatedUserUtils`（Resource Server 与网关侧共享身份契约）
 - 通用常量
@@ -144,11 +146,11 @@ website-services/
 
 基础设施接入模块。
 
-- **国际化（阶段 4B.5）**：`Accept-Language`（BCP 47）解析、默认 **`ja-JP`**、`LocalizedMessageService`、成功响应 `ApiResponse` 写出前本地化；定案见 [`后端多语言支持策略设计 V1`](../../docs/website-services/设计文档/认证与安全/后端多语言支持策略设计V1.md)。
+- **国际化（阶段 4B.5）**：`Accept-Language`（BCP 47）解析、默认 **`ja-JP`**、`LocalizedMessageService`、成功响应 `ApiResponse` 写出前本地化；定案见 `后端多语言支持策略设计 V1`。
 - PostgreSQL：通过 Spring Boot DataSource 自动配置
 - Redis：通过 Spring Data Redis 自动配置
 - MinIO / S3：提供 `MinioClient` Bean
-- MyBatis-Plus：全局插件与基类（见 [`Java 持久层设计 V1`](../../docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md)）
+- MyBatis-Plus：全局插件与基类（见 `Java 持久层设计 V1`）
   - **`com.mywebsite.infra.entity.AbstractAuditableEntity`**（`@TableLogic`、`@Version`、公共审计列）
   - **`MybatisPlusInterceptor`** + **`OptimisticLockerInnerInterceptor`**（**`MybatisPlusInfraConfig`**）
   - **`AuditMetaObjectHandler`**（仅 `createdBy` / `updatedBy`；**`infra.handler`**）
@@ -214,7 +216,7 @@ admin         -> common, infra, agent
 
 约定：
 
-- **企业级约定（基类、逻辑删除、乐观锁、审计填充、8 表归属）**：见 **[`Java 持久层设计 V1`](../../docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md)**。**阶段 3B** 已落地首批 **8 表 `entity` + `mapper`**（无业务 CRUD、无 XML）。
+- **企业级约定（基类、逻辑删除、乐观锁、审计填充、8 表归属）**：见 **`Java 持久层设计 V1`**。**阶段 3B** 已落地首批 **8 表 `entity` + `mapper`**（无业务 CRUD、无 XML）。
 - 默认 Mapper 放在各业务模块的 **`mapper`** 包下，并使用 `@Mapper` 标注。
 - 复杂查询允许使用自定义 Mapper 方法与 XML SQL。
 - XML Mapper 默认扫描 `classpath*:/mapper/**/*.xml`。
@@ -226,11 +228,11 @@ Flyway 是唯一数据库结构迁移机制。后续任何表结构变更必须�
 **执行策略（阶段 2B 起）：**
 
 - **脚本目录（唯一来源）**：`infra/src/main/resources/db/migration`
-- **`agent-app` 默认不执行 Flyway**（环境变量 `SITE_APP_FLYWAY_ENABLED`，默认 `false`），避免与 `admin` 共用同一库时出现重复 migration / `flyway_schema_history` 冲突。
+- **`agent-app` 默认不执行 Flyway**（环境变量 `AGENT_APP_FLYWAY_ENABLED`，默认 `false`），避免与 `admin` 共用同一库时出现重复 migration / `flyway_schema_history` 冲突。
 - 本地联调建议：**先启动 `admin`** 完成迁移，再启动 `agent-app`。说明见 `agent/agent-app/src/main/resources/db/README.md`。
 - `admin` 侧开关：`FLYWAY_ENABLED`（默认 `true`）。
 
-首批已落地脚本：`V1__init_platform_core_tables.sql`（其后另有 V2–V15+）。执行策略与设计边界见 [`数据库模型设计V1`](../../docs/website-services/设计文档/数据与持久层/数据库模型设计V1.md)；**字段级定义见 [`数据字典`](../../docs/website-services/数据字典/)**。当前完成度：[`docs/overview/CURRENT_STATE.md`](../../docs/overview/CURRENT_STATE.md)。
+首批已落地脚本：`V1__init_platform_core_tables.sql`（其后另有 V2–V15+）。执行策略与设计边界见 `数据库模型设计V1`；**字段级定义见 [`数据字典`](../../docs/website-services/数据字典/)**。当前完成度：[`docs/overview/CURRENT_STATE.md`](../../docs/overview/CURRENT_STATE.md)。
 
 migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 
@@ -253,7 +255,7 @@ migration 命名使用 Flyway 标准格式：`V{version}__{description}.sql`。
 
 ### 模块内 Java 包结构
 
-**Maven 边界 + 业务模块标准树 + AI 约束（必读）**：[单模块文件结构与AI开发约束规则V1](../../docs/website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md)。**命名后缀**见 [后端包结构与命名规范V1](../../docs/website-services/设计文档/基础架构/后端包结构与命名规范V1.md)。
+**Maven 边界 + 业务模块标准树 + AI 约束（必读）**：单模块文件结构与AI开发约束规则V1。**命名后缀**见 后端包结构与命名规范V1。
 
 业务模块（admin、auth、agent-core、agent-app）按需使用：`config`、`constant`、`controller`、`dto`（**单层**，`XxxRequestDto` / `XxxResponseDto`）、`entity`、`mapper`、`properties`、`security`、`service` / `service.impl`、`handler`、`utils`。**禁止** `dto/request` 等子目录、`admin.rbac.*`、默认新增 manager/processor/facade 等中间层。gateway / common / infra / agent **不套用**上述业务树。
 
@@ -288,14 +290,14 @@ cp .env.example .env
 - **`AUTH_JWT_PRIVATE_KEY_PATH`**、**`AUTH_JWT_PUBLIC_KEY_PATH`**、**`AUTH_JWT_KEY_ID`**（Auth **RS256**）
 - **`AUTH_JWKS_URI`**（Admin Resource Server 拉取 JWKS；默认 `http://localhost:8083/.well-known/jwks.json`）
 - **`SECURITY_REFRESH_COOKIE_SECURE`**（Refresh Cookie）
-- `FLYWAY_ENABLED`、`SITE_APP_FLYWAY_ENABLED`
+- `FLYWAY_ENABLED`、`AGENT_APP_FLYWAY_ENABLED`
 
-在 `services/website-services/` 目录创建 `.env`（已在仓库根 `.gitignore` 中忽略 **`.env`**，**勿提交**）。本地可从 **`services/website-services`**、各应用子目录 **或仓库根目录 `my-website`** 启动：`LocalDotenvSupport` 会在 **`user.dir`** 及其祖先中查找 **`.env`**，或在每层尝试 **`services/website-services/.env`**（根目录启动时常用）。更多说明见 [`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](../../docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md) §3。
+在 `services/website-services/` 目录创建 `.env`（已在仓库根 `.gitignore` 中忽略 **`.env`**，**勿提交**）。本地可从 **`services/website-services`**、各应用子目录 **或仓库根目录 `my-website`** 启动：`LocalDotenvSupport` 会在 **`user.dir`** 及其祖先中查找 **`.env`**，或在每层尝试 **`services/website-services/.env`**（根目录启动时常用）。更多说明见 `docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md` §3。
 
 Flyway 相关：
 
 - `FLYWAY_ENABLED`：是否由 **admin** 执行迁移（默认 `true`）。
-- `SITE_APP_FLYWAY_ENABLED`：是否由 **agent-app** 执行迁移（默认 `false`，建议保持关闭）。
+- `AGENT_APP_FLYWAY_ENABLED`：是否由 **agent-app** 执行迁移（默认 `false`，建议保持关闭）。
 
 若日志出现 **`database "my_website_dev" does not exist`**：需在 **当前连接的 Postgres 实例**上手动 `CREATE DATABASE`，或调整 **local-stack** 初始化逻辑（取决于你如何创建库）；步骤见 [`scripts/README.md`](./scripts/README.md)。
 
@@ -319,7 +321,7 @@ mvn test
 
 ### 持久层真实 PostgreSQL 回归验证（可选）
 
-在变更 Flyway、首批 Entity/Mapper 或持久层约定后，可在本地 Postgres **专用验证库**上运行 Mapper + Flyway 联通性回归（详见 **[持久层真实 PostgreSQL 验证说明](../../docs/website-services/数据文档/持久层真实PostgreSQL验证说明.md)**）。
+在变更 Flyway、首批 Entity/Mapper 或持久层约定后，可在本地 Postgres **专用验证库**上运行 Mapper + Flyway 联通性回归（详见 **持久层真实 PostgreSQL 验证说明**）。
 
 ```bash
 mvn clean test -Ppersistence-verify-pg -pl admin,agent/agent-app -am
@@ -426,22 +428,22 @@ mvn clean install -DskipTests
 
 ### 文档归档约定（必读）
 
-后端说明文档：**设计类正文**权威路径为 **`docs/website-services/设计文档/`**；**总导航**见 **[`docs/website-services/README.md`](../../docs/website-services/README.md)**；**当前完成度**见 [`docs/overview/CURRENT_STATE.md`](../../docs/overview/CURRENT_STATE.md)。数据字典权威路径：**`docs/website-services/数据字典/`**（顶层 `docs/数据字典/` 仅为跳转）。
+后端说明文档：**设计类正文**以 **`docs/website-services/` 根层各域摘要与 `docs/contracts/`** 为准（原 `设计文档/` 已于 2026-10-29 移除，见 git 历史）；**总导航**见 **[`docs/website-services/README.md`](../../docs/website-services/README.md)**；**当前完成度**见 [`docs/overview/CURRENT_STATE.md`](../../docs/overview/CURRENT_STATE.md)。数据字典权威路径：**`docs/website-services/数据字典/`**（顶层 `docs/数据字典/` 仅为跳转）。
 
 ### Java 持久层（阶段 3A / 3B）
 
 | 文档 | 职责 |
 | --- | --- |
-| [Java 持久层设计 V1](../../docs/website-services/设计文档/数据与持久层/Java持久层设计V1.md) | **`XxxEntity`** 命名、**`AbstractAuditableEntity`**、MyBatis-Plus、审计/逻辑删除/乐观锁、Mapper 边界、8 表归属、包结构（**`entity` / `mapper` / `config` / `handler`**） |
+| Java 持久层设计 V1 | **`XxxEntity`** 命名、**`AbstractAuditableEntity`**、MyBatis-Plus、审计/逻辑删除/乐观锁、Mapper 边界、8 表归属、包结构（**`entity` / `mapper` / `config` / `handler`**） |
 
-### 数据库与数据文档
+### 数据库与数据字典
 
 数据库相关维护 **双线**：
 
 | 文档 | 职责 |
 | --- | --- |
-| [数据库模型设计 V1](../../docs/website-services/设计文档/数据与持久层/数据库模型设计V1.md) | 规范、蓝图、多站点与 RBAC 边界 |
-| [持久层真实 PostgreSQL 验证说明](../../docs/website-services/数据文档/持久层真实PostgreSQL验证说明.md) | Flyway + Mapper / `persistence-verify-pg` |
+| 数据库模型设计 V1 | 规范、蓝图、多站点与 RBAC 边界 |
+| 持久层真实 PostgreSQL 验证说明 | Flyway + Mapper / `persistence-verify-pg` |
 | [数据字典索引](../../docs/website-services/数据字典/README.md) | 已落地表字段 / 索引 / 约束手册 |
 
 数据字典分册：
@@ -450,10 +452,10 @@ mvn clean install -DskipTests
 - [Admin 认证授权](../../docs/website-services/数据字典/Admin认证授权数据字典.md)
 - [Site 用户](../../docs/website-services/数据字典/Site用户数据字典.md)
 
-**约定**：表结构变更必须同步更新 [`数据字典`](../../docs/website-services/数据字典/) 与模型设计文档；冲突时以 Flyway schema 为准。
+**约定**：表结构变更必须同步更新 [`数据字典`](../../docs/website-services/数据字典/)；冲突时以 Flyway schema 为准（原模型设计文档已于 2026-10-29 移除）。
 
 ### 其他
 
-- 总体架构：[整体架构说明](../../docs/website-services/设计文档/基础架构/整体架构说明.md)
-- 后端架构：[架构设计](../../docs/website-services/设计文档/基础架构/架构设计.md)
-- WSL/Docker：[WSL 与 Docker 环境配置说明](../../docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)
+- 总体架构：整体架构说明
+- 后端架构：架构设计
+- WSL/Docker：WSL 与 Docker 环境配置说明

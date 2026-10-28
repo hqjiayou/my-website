@@ -4,14 +4,14 @@ export function apiUrl(path: string): string {
   return `${base}${path}`
 }
 
-const SITE_ID_PATTERN = /^[1-9]\d*$/
+const AGENT_ID_PATTERN = /^[1-9]\d*$/
 
 export type PortalAgentId = { ok: true; agentId: string } | { ok: false; message: string }
 
 /** AI 路徑用的數字站點 ID。登入用的 agentCode 不在這裡。 */
 export function readPortalAgentId(): PortalAgentId {
   const raw = import.meta.env.VITE_PORTAL_AGENT_ID?.trim() ?? ''
-  if (!SITE_ID_PATTERN.test(raw)) {
+  if (!AGENT_ID_PATTERN.test(raw)) {
     return {
       ok: false,
       message: '未設定有效的 VITE_PORTAL_AGENT_ID。它必須是正整數站點 ID，用於 /api/agent/{agentId}/ai/**。',
@@ -22,7 +22,7 @@ export function readPortalAgentId(): PortalAgentId {
 
 /** 優先使用會話 agentId（轉成字串），沒有時後備 readPortalAgentId。 */
 export function resolvePortalAgentId(sessionAgentId: number | null | undefined): PortalAgentId {
-  if (sessionAgentId != null && Number.isSafeInteger(sessionAgentId) && SITE_ID_PATTERN.test(String(sessionAgentId))) {
+  if (sessionAgentId != null && Number.isSafeInteger(sessionAgentId) && AGENT_ID_PATTERN.test(String(sessionAgentId))) {
     return { ok: true, agentId: String(sessionAgentId) }
   }
   const fromEnv = readPortalAgentId()
@@ -34,16 +34,16 @@ export function resolvePortalAgentId(sessionAgentId: number | null | undefined):
   }
 }
 
-/** 只讀 JWT payload 的 site_id，不驗簽。存取控制以伺服器端為準。 */
+/** 只讀 JWT payload 的 agent_id，不驗簽。存取控制以伺服器端為準。 */
 export function readAccessTokenAgentId(token: string | null): string | null {
   if (!token) return null
   const part = token.split('.')[1]
   if (!part) return null
   try {
-    const json = JSON.parse(decodeBase64Url(part)) as { site_id?: unknown }
-    const value = json.site_id
+    const json = JSON.parse(decodeBase64Url(part)) as { agent_id?: unknown }
+    const value = json.agent_id
     if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return String(value)
-    if (typeof value === 'string' && SITE_ID_PATTERN.test(value)) return value
+    if (typeof value === 'string' && AGENT_ID_PATTERN.test(value)) return value
     return null
   } catch {
     return null

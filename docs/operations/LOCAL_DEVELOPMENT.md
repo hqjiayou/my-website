@@ -74,7 +74,7 @@ mvn -pl gateway -am spring-boot:run        # gateway：8080
 | agent-app | 8082 | `agent/agent-app/src/main/resources/application.yml` |
 | auth | 8083（`AUTH_APP_PORT` 可覆盖） | `auth/src/main/resources/application.yml` |
 
-Flyway：表结构只由 **admin** 执行（`FLYWAY_ENABLED` 默认 `true`，当前迁移至 **V35**）。agent-app 默认不跑（代码里变量名仍是历史名 `SITE_APP_FLYWAY_ENABLED`，默认 `false`）；auth 的 local profile 关闭。所以先起 admin 把迁移跑完，再起其余服务。改 `.env` 后必须重启对应进程。
+Flyway：表结构只由 **admin** 执行（`FLYWAY_ENABLED` 默认 `true`，当前迁移至 **V35**）。agent-app 默认不跑（代码里变量名仍是历史名 `AGENT_APP_FLYWAY_ENABLED`，默认 `false`）；auth 的 local profile 关闭。所以先起 admin 把迁移跑完，再起其余服务。改 `.env` 后必须重启对应进程。
 
 gateway 路由（`gateway/src/main/resources/application.yml`，顺序敏感）：`/api/auth/**` → auth:8083、`/api/admin/**` → admin:8081、`/api/agent/**` → agent-app:8082。
 
@@ -149,4 +149,4 @@ AGENT_PYTHON_CONTRACT_IT=true mvn -pl agent/agent-core test -Dtest=HttpAgentClie
 
 浏览器 E2E（Playwright，独立一次性栈）：见 [`../testing/E2E_GOLDEN_PATHS.md`](../testing/E2E_GOLDEN_PATHS.md) 与 `apps/admin-web/e2e/`。
 
-WSL / Docker 细节：[`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](../website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。
+WSL / Docker 细节以本篇与 `docker-compose.yml` 为准（原 WSL 专项文档已于 2026-10-29 移除，见 git 历史）。

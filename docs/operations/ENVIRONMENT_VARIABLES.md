@@ -46,7 +46,7 @@ last_verified: 2026-10-28
 | 变量 | 必填 | 代码默认 | 说明 |
 |------|------|----------|------|
 | `FLYWAY_ENABLED` | 否 | `true` | admin 执行迁移（当前至 V35）；auth 的 local profile 关闭 |
-| `SITE_APP_FLYWAY_ENABLED` | 否 | `false` | **agent-app 读的仍是这个历史变量名**（`agent/agent-app/src/main/resources/application.yml`）。注意根 compose 里另设的 `AGENT_APP_FLYWAY_ENABLED` 目前没有代码消费者，不要靠它控制 agent-app |
+| `AGENT_APP_FLYWAY_ENABLED` | 否 | `false` | **agent-app 读的仍是这个历史变量名**（`agent/agent-app/src/main/resources/application.yml`）。注意根 compose 里另设的 `AGENT_APP_FLYWAY_ENABLED` 目前没有代码消费者，不要靠它控制 agent-app |
 
 ## 4. Java：对象存储 MinIO
 

@@ -29,4 +29,4 @@ Agent 执行任务时的阅读顺序见 [`../README.md`](../README.md)。
 | 系统现在是什么 | `docs/overview/CURRENT_STATE.md` + 代码 |
 | 未完成工程工作 | **GitHub Issues** |
 | 为什么这样设计 | `docs/decisions/` |
-| 某次历史做过什么 | `docs/implementation-history/` |
+| 某次历史做过什么 | git 历史（原 `docs/implementation-history/` 已于 2026-10-29 移除） |
