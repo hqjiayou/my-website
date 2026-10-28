@@ -8,7 +8,7 @@ import java.time.OffsetDateTime;
 @TableName("media_file")
 public class AdminMediaEntity extends AbstractAuditableEntity {
 
-    private Long siteId;
+    private Long agentId;
     private String bucket;
     private String objectKey;
     private String originalFilename;
@@ -21,12 +21,12 @@ public class AdminMediaEntity extends AbstractAuditableEntity {
     /** 对象存储已清理时间；非空表示不再进入 orphan 候选。 */
     private OffsetDateTime objectPurgedAt;
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public String getBucket() {

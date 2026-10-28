@@ -14,7 +14,7 @@ public final class AdminContentDtos {
 
     public record AdminContentListItemDto(
             Long id,
-            Long siteId,
+            Long agentId,
             String type,
             String title,
             String body,
@@ -28,7 +28,7 @@ public final class AdminContentDtos {
 
     public record AdminContentDetailDto(
             Long id,
-            Long siteId,
+            Long agentId,
             String type,
             String title,
             String body,

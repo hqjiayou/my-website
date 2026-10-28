@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api/admin/sites/{siteId}/media")
+@RequestMapping("/api/admin/sites/{agentId}/media")
 @Tag(name = "Admin · Media")
 @SecurityRequirement(name = "adminBearer")
 public class AdminMediaController {
@@ -40,12 +40,12 @@ public class AdminMediaController {
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:list')")
     @Operation(summary = "站点媒体分页列表")
     public ResponseEntity<HttpMessageBody<PageResult<AdminMediaListItemDto>>> list(
-            @PathVariable long siteId,
+            @PathVariable long agentId,
             @RequestParam(required = false) Integer pageNum,
             @RequestParam(required = false) Integer pageSize,
             @RequestParam(required = false) String contentTypePrefix) {
         PageResult<AdminMediaListItemDto> data =
-                adminMediaService.listMedia(siteId, new AdminMediaListQuery(pageNum, pageSize, contentTypePrefix));
+                adminMediaService.listMedia(agentId, new AdminMediaListQuery(pageNum, pageSize, contentTypePrefix));
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, data));
     }
 
@@ -53,35 +53,35 @@ public class AdminMediaController {
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:upload')")
     @Operation(summary = "上传站点媒体")
     public ResponseEntity<HttpMessageBody<AdminMediaDetailDto>> upload(
-            @PathVariable long siteId, @RequestPart("file") MultipartFile file) {
+            @PathVariable long agentId, @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(
-                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminMediaService.upload(siteId, file)));
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminMediaService.upload(agentId, file)));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:list')")
     @Operation(summary = "站点媒体详情")
     public ResponseEntity<HttpMessageBody<AdminMediaDetailDto>> get(
-            @PathVariable long siteId, @PathVariable("id") long id) {
+            @PathVariable long agentId, @PathVariable("id") long id) {
         return ResponseEntity.ok(
-                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminMediaService.getMedia(siteId, id)));
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminMediaService.getMedia(agentId, id)));
     }
 
     @GetMapping("/{id}/preview")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:download')")
     @Operation(summary = "站点媒体预览（短时 presigned URL）")
     public ResponseEntity<HttpMessageBody<AdminMediaPreviewDto>> preview(
-            @PathVariable long siteId, @PathVariable("id") long id) {
+            @PathVariable long agentId, @PathVariable("id") long id) {
         return ResponseEntity.ok(
-                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminMediaService.preview(siteId, id)));
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminMediaService.preview(agentId, id)));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:delete')")
     @Operation(summary = "删除站点媒体（软删 + 触发对象清理）")
     public ResponseEntity<HttpMessageBody<Void>> delete(
-            @PathVariable long siteId, @PathVariable("id") long id) {
-        adminMediaService.deleteMedia(siteId, id);
+            @PathVariable long agentId, @PathVariable("id") long id) {
+        adminMediaService.deleteMedia(agentId, id);
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
     }
 }

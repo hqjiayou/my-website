@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/sites/{siteId}/ai/prompt-profile")
+@RequestMapping("/api/admin/sites/{agentId}/ai/prompt-profile")
 @Tag(name = "Admin · AI Prompt")
 @SecurityRequirement(name = "adminBearer")
 public class AdminAiPromptController {
@@ -33,17 +33,17 @@ public class AdminAiPromptController {
     @GetMapping
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:read')")
     @Operation(summary = "查看站点 AI Prompt 配置")
-    public ResponseEntity<HttpMessageBody<AdminAiPromptProfileDto>> get(@PathVariable long siteId) {
+    public ResponseEntity<HttpMessageBody<AdminAiPromptProfileDto>> get(@PathVariable long agentId) {
         return ResponseEntity.ok(new HttpMessageBody<>(
-                ResponseMessages.SUCCESS, adminAiPromptService.getPromptProfile(siteId)));
+                ResponseMessages.SUCCESS, adminAiPromptService.getPromptProfile(agentId)));
     }
 
     @PutMapping
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:update')")
     @Operation(summary = "更新站点 AI Prompt 配置（不存在则创建）")
     public ResponseEntity<HttpMessageBody<AdminAiPromptProfileDto>> upsert(
-            @PathVariable long siteId, @Valid @RequestBody AdminAiPromptProfileUpdateRequest request) {
+            @PathVariable long agentId, @Valid @RequestBody AdminAiPromptProfileUpdateRequest request) {
         return ResponseEntity.ok(new HttpMessageBody<>(
-                ResponseMessages.SUCCESS, adminAiPromptService.upsertPromptProfile(siteId, request)));
+                ResponseMessages.SUCCESS, adminAiPromptService.upsertPromptProfile(agentId, request)));
     }
 }

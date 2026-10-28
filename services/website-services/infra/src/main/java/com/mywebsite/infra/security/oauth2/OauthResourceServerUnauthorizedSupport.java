@@ -7,7 +7,7 @@ import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.jwt.JwtException;
 
 /**
- * Admin / Site 等 Servlet Resource Server 共用：识别「Bearer 令牌无效」与生成 {@code WWW-Authenticate} 挑战串。
+ * Admin / Agent 等 Servlet Resource Server 共用：识别「Bearer 令牌无效」与生成 {@code WWW-Authenticate} 挑战串。
  */
 public final class OauthResourceServerUnauthorizedSupport {
 

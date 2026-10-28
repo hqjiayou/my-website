@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/sites/{siteId}/ai/conversations")
+@RequestMapping("/api/admin/sites/{agentId}/ai/conversations")
 @Tag(name = "Admin · AI Conversation")
 @SecurityRequirement(name = "adminBearer")
 public class AdminAiConversationController {
@@ -35,11 +35,11 @@ public class AdminAiConversationController {
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-conversation:list')")
     @Operation(summary = "站点 AI 会话分页列表（只读）")
     public ResponseEntity<HttpMessageBody<PageResult<AdminAiConversationListItemDto>>> list(
-            @PathVariable long siteId,
+            @PathVariable long agentId,
             @RequestParam(required = false) Integer pageNum,
             @RequestParam(required = false) Integer pageSize) {
         PageResult<AdminAiConversationListItemDto> data = adminAiConversationService.listConversations(
-                siteId, new AdminAiConversationListQuery(pageNum, pageSize));
+                agentId, new AdminAiConversationListQuery(pageNum, pageSize));
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, data));
     }
 
@@ -47,8 +47,8 @@ public class AdminAiConversationController {
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-conversation:list')")
     @Operation(summary = "站点 AI 会话消息列表（只读）")
     public ResponseEntity<HttpMessageBody<List<AdminAiMessageDto>>> messages(
-            @PathVariable long siteId, @PathVariable long conversationId) {
+            @PathVariable long agentId, @PathVariable long conversationId) {
         return ResponseEntity.ok(new HttpMessageBody<>(
-                ResponseMessages.SUCCESS, adminAiConversationService.listMessages(siteId, conversationId)));
+                ResponseMessages.SUCCESS, adminAiConversationService.listMessages(agentId, conversationId)));
     }
 }

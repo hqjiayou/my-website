@@ -10,19 +10,19 @@ import com.mywebsite.common.page.PageResult;
 
 public interface AdminContentService {
 
-    PageResult<AdminContentListItemDto> listContents(long siteId, AdminContentListQuery query);
+    PageResult<AdminContentListItemDto> listContents(long agentId, AdminContentListQuery query);
 
-    AdminContentDetailDto getContent(long siteId, long contentId);
+    AdminContentDetailDto getContent(long agentId, long contentId);
 
-    AdminContentDetailDto createContent(long siteId, AdminContentCreateRequest request);
+    AdminContentDetailDto createContent(long agentId, AdminContentCreateRequest request);
 
-    AdminContentDetailDto updateContent(long siteId, long contentId, AdminContentUpdateRequest request);
+    AdminContentDetailDto updateContent(long agentId, long contentId, AdminContentUpdateRequest request);
 
     AdminContentDetailDto updateStatus(
-            long siteId, long contentId, AdminContentStatusUpdateRequest request);
+            long agentId, long contentId, AdminContentStatusUpdateRequest request);
 
-    void deleteContent(long siteId, long contentId);
+    void deleteContent(long agentId, long contentId);
 
     /** 站点软删联动：软删该站点全部内容。 */
-    void softDeleteBySiteId(long siteId);
+    void softDeleteByAgentId(long agentId);
 }

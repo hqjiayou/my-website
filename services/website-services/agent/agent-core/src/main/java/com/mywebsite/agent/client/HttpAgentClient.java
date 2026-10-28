@@ -177,7 +177,7 @@ public class HttpAgentClient implements AgentClient {
     @Override
     public AgentChatResponse chat(AgentChatRequest request) {
         if (request == null
-                || !StringUtils.hasText(request.siteId())
+                || !StringUtils.hasText(request.agentId())
                 || !StringUtils.hasText(request.message())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
@@ -276,7 +276,7 @@ public class HttpAgentClient implements AgentClient {
     @Override
     public void upsertRetrievalDocument(AgentRetrievalDocument document) {
         if (document == null
-                || !StringUtils.hasText(document.siteId())
+                || !StringUtils.hasText(document.agentId())
                 || !StringUtils.hasText(document.sourceId())
                 || !StringUtils.hasText(document.content())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
@@ -328,13 +328,13 @@ public class HttpAgentClient implements AgentClient {
     }
 
     @Override
-    public void deleteRetrievalDocument(String siteId, String sourceId) {
-        if (!StringUtils.hasText(siteId) || !StringUtils.hasText(sourceId)) {
+    public void deleteRetrievalDocument(String agentId, String sourceId) {
+        if (!StringUtils.hasText(agentId) || !StringUtils.hasText(sourceId)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         ensureTokenConfigured();
-        String path = "/internal/v1/retrieval/documents?siteId="
-                + java.net.URLEncoder.encode(siteId, StandardCharsets.UTF_8)
+        String path = "/internal/v1/retrieval/documents?agentId="
+                + java.net.URLEncoder.encode(agentId, StandardCharsets.UTF_8)
                 + "&sourceId="
                 + java.net.URLEncoder.encode(sourceId, StandardCharsets.UTF_8);
         exchangeWithRetry("DELETE", path, null);
@@ -342,7 +342,7 @@ public class HttpAgentClient implements AgentClient {
 
     @Override
     public AgentRetrievalSearchResult searchRetrieval(AgentRetrievalSearchRequest request) {
-        if (request == null || !StringUtils.hasText(request.siteId()) || !StringUtils.hasText(request.query())) {
+        if (request == null || !StringUtils.hasText(request.agentId()) || !StringUtils.hasText(request.query())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         ensureTokenConfigured();
@@ -361,7 +361,7 @@ public class HttpAgentClient implements AgentClient {
     @Override
     public void chatStream(AgentChatRequest request, AgentStreamListener listener) {
         if (request == null
-                || !StringUtils.hasText(request.siteId())
+                || !StringUtils.hasText(request.agentId())
                 || !StringUtils.hasText(request.message())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }

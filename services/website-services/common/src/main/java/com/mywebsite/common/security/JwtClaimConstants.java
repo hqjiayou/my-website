@@ -3,11 +3,11 @@ package com.mywebsite.common.security;
 /** Registered JWT claim names used across issuance and parsing. */
 public final class JwtClaimConstants {
 
-    /** Access JWT：{@link com.mywebsite.common.security.SubjectType} 名称（ADMIN / SITE）。 */
+    /** Access JWT：{@link com.mywebsite.common.security.SubjectType} 名称（ADMIN / AGENT）。 */
     public static final String SUBJECT_TYPE = "subject_type";
 
     /**
-     * SITE Access JWT：所属站点主键（数值）。ADMIN 令牌不得写入此声明。
+     * AGENT Access JWT：所属站点主键（数值）。ADMIN 令牌不得写入此声明。
      */
     public static final String SITE_ID = "site_id";
 

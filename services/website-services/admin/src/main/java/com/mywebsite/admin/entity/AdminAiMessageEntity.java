@@ -11,10 +11,10 @@ public class AdminAiMessageEntity extends AbstractAuditableEntity {
     public static final String ROLE_ASSISTANT = "ASSISTANT";
 
     private Long conversationId;
-    private Long siteId;
+    private Long agentId;
     private String role;
     private String content;
-    /** Agent 运行元数据 JSON（V21，site-app 写入，后台只读）。 */
+    /** Agent 运行元数据 JSON（V21，agent-app 写入，后台只读）。 */
     private String agentMeta;
 
     public Long getConversationId() {
@@ -25,12 +25,12 @@ public class AdminAiMessageEntity extends AbstractAuditableEntity {
         this.conversationId = conversationId;
     }
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public String getRole() {

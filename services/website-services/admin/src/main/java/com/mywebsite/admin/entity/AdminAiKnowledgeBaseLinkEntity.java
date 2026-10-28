@@ -14,7 +14,7 @@ public class AdminAiKnowledgeBaseLinkEntity implements Serializable {
     private Long id;
 
     private Long baseId;
-    private Long siteId;
+    private Long agentId;
     private OffsetDateTime createdAt;
 
     public Long getId() {
@@ -33,12 +33,12 @@ public class AdminAiKnowledgeBaseLinkEntity implements Serializable {
         this.baseId = baseId;
     }
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public OffsetDateTime getCreatedAt() {

@@ -8,7 +8,7 @@ import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerIntercept
 import com.mywebsite.admin.mapper.AdminPermissionMapper;
 import com.mywebsite.admin.mapper.AdminRoleMapper;
 import com.mywebsite.admin.mapper.AdminRolePermissionMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.mapper.AdminUserMapper;
 import com.mywebsite.admin.mapper.AdminUserRoleMapper;
 import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
@@ -37,6 +37,6 @@ class AdminApplicationSmokeTest extends AbstractAdminSpringBootTest {
         assertThat(applicationContext.getBean(AdminPermissionMapper.class)).isNotNull();
         assertThat(applicationContext.getBean(AdminUserRoleMapper.class)).isNotNull();
         assertThat(applicationContext.getBean(AdminRolePermissionMapper.class)).isNotNull();
-        assertThat(applicationContext.getBean(AdminSiteMapper.class)).isNotNull();
+        assertThat(applicationContext.getBean(AdminAgentMapper.class)).isNotNull();
     }
 }

@@ -9,8 +9,8 @@ public final class AdminAiConversationDtos {
 
     public record AdminAiConversationListItemDto(
             Long id,
-            Long siteId,
-            Long siteUserId,
+            Long agentId,
+            Long agentUserId,
             String title,
             OffsetDateTime lastMessageAt,
             OffsetDateTime createdAt) {}

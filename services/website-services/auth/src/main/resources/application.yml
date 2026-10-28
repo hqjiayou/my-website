@@ -15,11 +15,11 @@ mywebsite:
       refresh-token-expire-seconds: 604800
       refresh-cookie-name: MYWEBSITE_REFRESH_TOKEN
       refresh-cookie-path: /api/auth/admin
-      site-refresh-cookie-name: MYWEBSITE_SITE_REFRESH_TOKEN
-      site-refresh-cookie-path: /api/auth/site
+      agent-refresh-cookie-name: MYWEBSITE_SITE_REFRESH_TOKEN
+      agent-refresh-cookie-path: /api/auth/agent
       refresh-cookie-secure: ${SECURITY_REFRESH_COOKIE_SECURE:true}
       refresh-cookie-http-only: true
-      refresh-cookie-same-site: Lax
+      refresh-cookie-same-agent: Lax
 
 app:
   i18n:
@@ -59,7 +59,7 @@ security:
   jwt:
     issuer: my-website
     audience: ADMIN
-    site-audience: SITE
+    agent-audience: AGENT
   auth:
     admin-login-max-password-length: 128
     admin-register-min-password-length: 8
@@ -82,16 +82,16 @@ security:
     # 刷新：仅失败按 IP 计
     admin-refresh-ip-failure-threshold: 30
     admin-refresh-ip-window-seconds: 600
-  site-auth:
-    site-login-max-password-length: 128
-    site-rate-limit-enabled: true
-    # 登录：IP+siteCode+username / siteCode+username / siteCode+IP（仅计失败；成功清前两维）
-    site-login-ip-site-user-failure-threshold: 5
-    site-login-ip-site-user-window-seconds: 300
-    site-login-site-user-failure-threshold: 10
-    site-login-site-user-window-seconds: 900
-    site-login-site-ip-failure-threshold: 20
-    site-login-site-ip-window-seconds: 900
+  agent-auth:
+    agent-login-max-password-length: 128
+    agent-rate-limit-enabled: true
+    # 登录：IP+agentCode+username / agentCode+username / agentCode+IP（仅计失败；成功清前两维）
+    agent-login-ip-agent-user-failure-threshold: 5
+    agent-login-ip-agent-user-window-seconds: 300
+    agent-login-agent-user-failure-threshold: 10
+    agent-login-agent-user-window-seconds: 900
+    agent-login-agent-ip-failure-threshold: 20
+    agent-login-agent-ip-window-seconds: 900
     # 刷新：仅失败按 IP 计
-    site-refresh-ip-failure-threshold: 30
-    site-refresh-ip-window-seconds: 600
+    agent-refresh-ip-failure-threshold: 30
+    agent-refresh-ip-window-seconds: 600

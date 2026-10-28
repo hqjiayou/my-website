@@ -370,7 +370,7 @@ class HttpAgentClientTest {
                 write(exchange, 401, "{\"ok\":false,\"errorCode\":\"UNAUTHORIZED\"}");
                 return;
             }
-            byte[] body = ("event: START\ndata: {\"siteId\":\"10\"}\n\n"
+            byte[] body = ("event: START\ndata: {\"agentId\":\"10\"}\n\n"
                             + "event: TEXT_DELTA\ndata: {\"text\":\"he\"}\n\n"
                             + "event: TEXT_DELTA\ndata: {\"text\":\"llo\"}\n\n"
                             + "event: DONE\ndata: {\"reply\":\"hello\",\"providerStatus\":\"LIVE\"}\n\n")
@@ -387,7 +387,7 @@ class HttpAgentClientTest {
 
         assertThat(events)
                 .containsExactly(
-                        "START|{\"siteId\":\"10\"}",
+                        "START|{\"agentId\":\"10\"}",
                         "TEXT_DELTA|{\"text\":\"he\"}",
                         "TEXT_DELTA|{\"text\":\"llo\"}",
                         "DONE|{\"reply\":\"hello\",\"providerStatus\":\"LIVE\"}");

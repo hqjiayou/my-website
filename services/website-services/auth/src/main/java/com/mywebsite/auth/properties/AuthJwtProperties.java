@@ -11,8 +11,8 @@ public class AuthJwtProperties {
     /** JWT {@code aud} — Admin Access Token */
     private String audience = "ADMIN";
 
-    /** JWT {@code aud} — Site Access Token */
-    private String siteAudience = "SITE";
+    /** JWT {@code aud} — Agent Access Token */
+    private String agentAudience = "AGENT";
 
     public String getIssuer() {
         return issuer;
@@ -30,11 +30,11 @@ public class AuthJwtProperties {
         this.audience = audience;
     }
 
-    public String getSiteAudience() {
-        return siteAudience;
+    public String getAgentAudience() {
+        return agentAudience;
     }
 
-    public void setSiteAudience(String siteAudience) {
-        this.siteAudience = siteAudience;
+    public void setAgentAudience(String agentAudience) {
+        this.agentAudience = agentAudience;
     }
 }

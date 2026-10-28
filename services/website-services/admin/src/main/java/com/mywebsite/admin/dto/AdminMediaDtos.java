@@ -11,7 +11,7 @@ public final class AdminMediaDtos {
 
     public record AdminMediaListItemDto(
             Long id,
-            Long siteId,
+            Long agentId,
             String originalFilename,
             String contentType,
             String extension,
@@ -22,7 +22,7 @@ public final class AdminMediaDtos {
 
     public record AdminMediaDetailDto(
             Long id,
-            Long siteId,
+            Long agentId,
             String originalFilename,
             String contentType,
             String extension,

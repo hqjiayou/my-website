@@ -15,10 +15,10 @@ public class TokenProperties {
 
     private String refreshCookiePath = "/api/auth/admin";
 
-    /** Site 前台 Refresh Cookie（与 Admin 完全隔离）。 */
-    private String siteRefreshCookieName = "MYWEBSITE_SITE_REFRESH_TOKEN";
+    /** Agent 前台 Refresh Cookie（与 Admin 完全隔离）。 */
+    private String agentRefreshCookieName = "MYWEBSITE_SITE_REFRESH_TOKEN";
 
-    private String siteRefreshCookiePath = "/api/auth/site";
+    private String agentRefreshCookiePath = "/api/auth/agent";
 
     private boolean refreshCookieSecure = true;
 
@@ -67,20 +67,20 @@ public class TokenProperties {
         this.refreshCookiePath = refreshCookiePath;
     }
 
-    public String getSiteRefreshCookieName() {
-        return siteRefreshCookieName;
+    public String getAgentRefreshCookieName() {
+        return agentRefreshCookieName;
     }
 
-    public void setSiteRefreshCookieName(String siteRefreshCookieName) {
-        this.siteRefreshCookieName = siteRefreshCookieName;
+    public void setAgentRefreshCookieName(String agentRefreshCookieName) {
+        this.agentRefreshCookieName = agentRefreshCookieName;
     }
 
-    public String getSiteRefreshCookiePath() {
-        return siteRefreshCookiePath;
+    public String getAgentRefreshCookiePath() {
+        return agentRefreshCookiePath;
     }
 
-    public void setSiteRefreshCookiePath(String siteRefreshCookiePath) {
-        this.siteRefreshCookiePath = siteRefreshCookiePath;
+    public void setAgentRefreshCookiePath(String agentRefreshCookiePath) {
+        this.agentRefreshCookiePath = agentRefreshCookiePath;
     }
 
     public boolean isRefreshCookieSecure() {

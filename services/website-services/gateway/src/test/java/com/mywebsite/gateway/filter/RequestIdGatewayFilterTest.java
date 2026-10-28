@@ -44,7 +44,7 @@ class RequestIdGatewayFilterTest {
     @Test
     void generatesUuidWhenInboundHeaderAbsent() {
         MockServerHttpRequest req =
-                MockServerHttpRequest.method(HttpMethod.GET, "http://localhost/api/site/ping").build();
+                MockServerHttpRequest.method(HttpMethod.GET, "http://localhost/api/agent/ping").build();
         ServerWebExchange incoming = MockServerWebExchange.from(req);
 
         AtomicReference<ServerWebExchange> chained = new AtomicReference<>();

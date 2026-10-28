@@ -10,7 +10,7 @@ public class AdminAiKnowledgeBaseEntity extends AbstractAuditableEntity {
 
     public static final String STATUS_ACTIVE = "ACTIVE";
 
-    private Long siteId;
+    private Long agentId;
     private String name;
 
     @TableField("is_default")
@@ -18,12 +18,12 @@ public class AdminAiKnowledgeBaseEntity extends AbstractAuditableEntity {
 
     private String status;
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public String getName() {

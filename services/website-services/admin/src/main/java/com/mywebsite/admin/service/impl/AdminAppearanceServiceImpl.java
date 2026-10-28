@@ -5,14 +5,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.admin.constant.AdminAppearanceConstants;
 import com.mywebsite.admin.constant.AdminAppearanceMessageKeys;
-import com.mywebsite.admin.constant.AdminSiteMessageKeys;
+import com.mywebsite.admin.constant.AdminAgentMessageKeys;
 import com.mywebsite.admin.dto.AdminAppearanceDtos.AdminAppearanceConfigV1Dto;
 import com.mywebsite.admin.dto.AdminAppearanceDtos.AdminAppearanceDetailDto;
 import com.mywebsite.admin.dto.AdminAppearanceDtos.AdminAppearancePutRequest;
 import com.mywebsite.admin.entity.AdminAppearanceEntity;
-import com.mywebsite.admin.entity.AdminSiteEntity;
+import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminAppearanceMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAppearanceService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -25,39 +25,39 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminAppearanceServiceImpl implements AdminAppearanceService {
 
     private final AdminAppearanceMapper adminAppearanceMapper;
-    private final AdminSiteMapper adminSiteMapper;
+    private final AdminAgentMapper adminAgentMapper;
     private final ObjectMapper objectMapper;
 
     public AdminAppearanceServiceImpl(
             AdminAppearanceMapper adminAppearanceMapper,
-            AdminSiteMapper adminSiteMapper,
+            AdminAgentMapper adminAgentMapper,
             ObjectMapper objectMapper) {
         this.adminAppearanceMapper = adminAppearanceMapper;
-        this.adminSiteMapper = adminSiteMapper;
+        this.adminAgentMapper = adminAgentMapper;
         this.objectMapper = objectMapper;
     }
 
     @Override
-    public AdminAppearanceDetailDto getAppearance(long siteId) {
-        requireSite(siteId);
-        return toDetail(requireAppearance(siteId));
+    public AdminAppearanceDetailDto getAppearance(long agentId) {
+        requireSite(agentId);
+        return toDetail(requireAppearance(agentId));
     }
 
     @Override
     @Transactional
-    public AdminAppearanceDetailDto putAppearance(long siteId, AdminAppearancePutRequest request) {
-        requireSite(siteId);
+    public AdminAppearanceDetailDto putAppearance(long agentId, AdminAppearancePutRequest request) {
+        requireSite(agentId);
         requireSchemaVersionV1(request.schemaVersion());
         requireValidConfigV1(request.config());
 
-        AdminAppearanceEntity existing = findBySiteId(siteId);
+        AdminAppearanceEntity existing = findByAgentId(agentId);
         if (existing == null) {
             if (request.version() == null || request.version() != 0) {
                 throw new BusinessException(
                         ErrorCode.CONFLICT.getCode(), AdminAppearanceMessageKeys.APPEARANCE_VERSION_CONFLICT);
             }
-            insertForSite(siteId, request.config());
-            return toDetail(requireAppearance(siteId));
+            insertForSite(agentId, request.config());
+            return toDetail(requireAppearance(agentId));
         }
 
         existing.setSchemaVersion(AdminAppearanceConstants.SCHEMA_VERSION_V1);
@@ -68,22 +68,22 @@ public class AdminAppearanceServiceImpl implements AdminAppearanceService {
             throw new BusinessException(
                     ErrorCode.CONFLICT.getCode(), AdminAppearanceMessageKeys.APPEARANCE_VERSION_CONFLICT);
         }
-        return toDetail(requireAppearance(siteId));
+        return toDetail(requireAppearance(agentId));
     }
 
     @Override
-    public void insertForSite(long siteId, AdminAppearanceConfigV1Dto config) {
+    public void insertForSite(long agentId, AdminAppearanceConfigV1Dto config) {
         requireValidConfigV1(config);
         AdminAppearanceEntity entity = new AdminAppearanceEntity();
-        entity.setSiteId(siteId);
+        entity.setAgentId(agentId);
         entity.setSchemaVersion(AdminAppearanceConstants.SCHEMA_VERSION_V1);
         entity.setConfigJson(writeConfigJson(config));
         adminAppearanceMapper.insert(entity);
     }
 
     @Override
-    public void softDeleteBySiteId(long siteId) {
-        AdminAppearanceEntity existing = findBySiteId(siteId);
+    public void softDeleteByAgentId(long agentId) {
+        AdminAppearanceEntity existing = findByAgentId(agentId);
         if (existing != null) {
             existing.setDeletedAt(OffsetDateTime.now(ZoneOffset.UTC));
             adminAppearanceMapper.updateById(existing);
@@ -118,16 +118,16 @@ public class AdminAppearanceServiceImpl implements AdminAppearanceService {
         }
     }
 
-    private AdminSiteEntity requireSite(long siteId) {
-        AdminSiteEntity site = adminSiteMapper.selectById(siteId);
-        if (site == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminSiteMessageKeys.SITE_NOT_FOUND);
+    private AdminAgentEntity requireSite(long agentId) {
+        AdminAgentEntity agent = adminAgentMapper.selectById(agentId);
+        if (agent == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.SITE_NOT_FOUND);
         }
-        return site;
+        return agent;
     }
 
-    private AdminAppearanceEntity requireAppearance(long siteId) {
-        AdminAppearanceEntity entity = findBySiteId(siteId);
+    private AdminAppearanceEntity requireAppearance(long agentId) {
+        AdminAppearanceEntity entity = findByAgentId(agentId);
         if (entity == null) {
             throw new BusinessException(
                     ErrorCode.NOT_FOUND.getCode(), AdminAppearanceMessageKeys.APPEARANCE_NOT_FOUND);
@@ -135,10 +135,10 @@ public class AdminAppearanceServiceImpl implements AdminAppearanceService {
         return entity;
     }
 
-    private AdminAppearanceEntity findBySiteId(long siteId) {
+    private AdminAppearanceEntity findByAgentId(long agentId) {
         return adminAppearanceMapper.selectOne(
                 new LambdaQueryWrapper<AdminAppearanceEntity>()
-                        .eq(AdminAppearanceEntity::getSiteId, siteId));
+                        .eq(AdminAppearanceEntity::getAgentId, agentId));
     }
 
     private AdminAppearanceDetailDto toDetail(AdminAppearanceEntity entity) {

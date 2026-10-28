@@ -5,7 +5,7 @@ import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AgentChatRequest(
-        String siteId,
+        String agentId,
         String message,
         String locale,
         String conversationId,
@@ -25,7 +25,7 @@ public record AgentChatRequest(
         List<AgentDocumentContext> documents) {
 
     public AgentChatRequest(
-            String siteId,
+            String agentId,
             String message,
             String locale,
             String conversationId,
@@ -41,7 +41,7 @@ public record AgentChatRequest(
             Boolean memoryEnabled,
             List<AgentModelSelection> fallbackModels) {
         this(
-                siteId,
+                agentId,
                 message,
                 locale,
                 conversationId,
@@ -60,7 +60,7 @@ public record AgentChatRequest(
     }
 
     public AgentChatRequest(
-            String siteId,
+            String agentId,
             String message,
             String locale,
             String conversationId,
@@ -73,7 +73,7 @@ public record AgentChatRequest(
             List<String> knowledgeContext,
             List<AgentAttachmentDto> attachments) {
         this(
-                siteId,
+                agentId,
                 message,
                 locale,
                 conversationId,
@@ -92,7 +92,7 @@ public record AgentChatRequest(
     }
 
     public AgentChatRequest(
-            String siteId,
+            String agentId,
             String message,
             String locale,
             String conversationId,
@@ -104,7 +104,7 @@ public record AgentChatRequest(
             String businessApiBaseUrl,
             List<String> knowledgeContext) {
         this(
-                siteId,
+                agentId,
                 message,
                 locale,
                 conversationId,
@@ -119,7 +119,7 @@ public record AgentChatRequest(
     }
 
     public AgentChatRequest(
-            String siteId,
+            String agentId,
             String message,
             String locale,
             String conversationId,
@@ -128,11 +128,11 @@ public record AgentChatRequest(
             List<String> skills,
             List<AgentTodoItem> todos,
             AgentModelSelection model) {
-        this(siteId, message, locale, conversationId, promptProfile, history, skills, todos, model, null, null);
+        this(agentId, message, locale, conversationId, promptProfile, history, skills, todos, model, null, null);
     }
 
     public AgentChatRequest(
-            String siteId,
+            String agentId,
             String message,
             String locale,
             String conversationId,
@@ -140,29 +140,29 @@ public record AgentChatRequest(
             List<AgentChatHistoryMessage> history,
             List<String> skills,
             List<AgentTodoItem> todos) {
-        this(siteId, message, locale, conversationId, promptProfile, history, skills, todos, null);
+        this(agentId, message, locale, conversationId, promptProfile, history, skills, todos, null);
     }
 
-    public AgentChatRequest(String siteId, String message) {
-        this(siteId, message, null, null, null, null, null, null);
+    public AgentChatRequest(String agentId, String message) {
+        this(agentId, message, null, null, null, null, null, null);
     }
 
     public AgentChatRequest(
-            String siteId,
+            String agentId,
             String message,
             String locale,
             String conversationId,
             AgentPromptProfile promptProfile) {
-        this(siteId, message, locale, conversationId, promptProfile, null, null, null);
+        this(agentId, message, locale, conversationId, promptProfile, null, null, null);
     }
 
     public AgentChatRequest(
-            String siteId,
+            String agentId,
             String message,
             String locale,
             String conversationId,
             AgentPromptProfile promptProfile,
             List<AgentChatHistoryMessage> history) {
-        this(siteId, message, locale, conversationId, promptProfile, history, null, null);
+        this(agentId, message, locale, conversationId, promptProfile, history, null, null);
     }
 }

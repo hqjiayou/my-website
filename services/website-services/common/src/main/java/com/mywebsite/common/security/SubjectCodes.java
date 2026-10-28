@@ -18,11 +18,11 @@ public final class SubjectCodes {
         return parseSuffix(subject, ADMIN_PREFIX);
     }
 
-    public static String formatSiteUserSubject(long siteUserId) {
-        return SITE_USER_PREFIX + String.format("%06d", siteUserId);
+    public static String formatAgentUserSubject(long agentUserId) {
+        return SITE_USER_PREFIX + String.format("%06d", agentUserId);
     }
 
-    public static Optional<Long> parseSiteUserId(String subject) {
+    public static Optional<Long> parseAgentUserId(String subject) {
         return parseSuffix(subject, SITE_USER_PREFIX);
     }
 

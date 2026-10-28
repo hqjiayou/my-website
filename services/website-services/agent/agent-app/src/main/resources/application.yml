@@ -1,6 +1,6 @@
 spring:
   application:
-    name: site-service
+    name: agent-service
   profiles:
     default: local
   flyway:
@@ -44,7 +44,7 @@ app:
 security:
   jwt:
     issuer: my-website
-    audience: SITE
+    audience: AGENT
 
 mywebsite:
   agent:
@@ -53,7 +53,7 @@ mywebsite:
     read-timeout-ms: ${AGENT_READ_TIMEOUT_MS:120000}
     internal-service-token: ${AGENT_INTERNAL_SERVICE_TOKEN:}
     retry-max-attempts: ${AGENT_RETRY_MAX_ATTEMPTS:1}
-  site:
+  agent:
     ai:
       rate-limit-enabled: true
       rate-limit-per-minute: 30

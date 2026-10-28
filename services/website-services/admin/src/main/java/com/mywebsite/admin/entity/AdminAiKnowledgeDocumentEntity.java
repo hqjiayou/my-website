@@ -16,7 +16,7 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     public static final String INDEX_STATUS_INDEXED = "INDEXED";
     public static final String INDEX_STATUS_FAILED = "FAILED";
 
-    private Long siteId;
+    private Long agentId;
     private String title;
     private String content;
     private String status;
@@ -39,12 +39,12 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
         this.baseId = baseId;
     }
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public String getTitle() {

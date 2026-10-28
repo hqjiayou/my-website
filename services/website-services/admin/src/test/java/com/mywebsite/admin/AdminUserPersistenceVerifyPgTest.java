@@ -18,7 +18,7 @@ import org.springframework.test.context.ActiveProfiles;
  * 持久层真实 PostgreSQL 回归验证：校验 {@link AdminUserEntity} / {@link AdminUserMapper} 与 Flyway、PostgreSQL 的基础联通性（插入查询、约束、乐观锁等）。
  *
  * <p>默认 {@code mvn test} 不执行（Surefire 排除 {@code verifyPg}）；显式验证：
- * {@code mvn clean test -Ppersistence-verify-pg -pl admin,site/site-app -am}
+ * {@code mvn clean test -Ppersistence-verify-pg -pl admin,agent/agent-app -am}
  *
  * <p>类名使用 {@code *Test} 后缀以便由 Surefire 发现（{@code *IT} 默认划归 Failsafe）。
  */

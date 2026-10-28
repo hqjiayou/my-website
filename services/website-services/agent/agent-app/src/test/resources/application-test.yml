@@ -1,5 +1,5 @@
 # 测试 Profile：内存 H2，仅用于 Spring 与 MyBatis-Plus / Mapper Bean 冒烟；不执行 Flyway、不跑真实 CRUD 用例。
-# JWKS 由集成测试类 AbstractSiteSpringBootTest 动态注册。
+# JWKS 由集成测试类 AbstractAgentSpringBootTest 动态注册。
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
@@ -7,7 +7,7 @@ mybatis-plus:
 security:
   jwt:
     issuer: test-issuer
-    audience: SITE
+    audience: AGENT
 
 spring:
   autoconfigure:
@@ -48,10 +48,10 @@ storage:
 
 mywebsite:
   agent:
-    # 由 AbstractSiteSpringBootTest DynamicPropertySource 覆盖为进程内 stub
+    # 由 AbstractAgentSpringBootTest DynamicPropertySource 覆盖为进程内 stub
     base-url: http://127.0.0.1:9
     internal-service-token: unused-until-overridden
-  site:
+  agent:
     ai:
       rate-limit-enabled: true
       rate-limit-per-minute: 100

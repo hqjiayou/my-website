@@ -11,25 +11,25 @@ mywebsite:
       refresh-token-expire-seconds: 604800
       refresh-cookie-name: MYWEBSITE_REFRESH_TOKEN
       refresh-cookie-path: /api/auth/admin
-      site-refresh-cookie-name: MYWEBSITE_SITE_REFRESH_TOKEN
-      site-refresh-cookie-path: /api/auth/site
+      agent-refresh-cookie-name: MYWEBSITE_SITE_REFRESH_TOKEN
+      agent-refresh-cookie-path: /api/auth/agent
       refresh-cookie-secure: false
       refresh-cookie-http-only: true
-      refresh-cookie-same-site: Lax
+      refresh-cookie-same-agent: Lax
 
 security:
   jwt:
     issuer: test-issuer
     audience: ADMIN
-    site-audience: SITE
+    agent-audience: AGENT
   auth:
     admin-login-max-password-length: 128
     admin-register-min-password-length: 8
     admin-bootstrap-registration-enabled: true
     admin-open-registration-enabled: false
-  site-auth:
-    site-login-max-password-length: 128
-    site-rate-limit-enabled: true
+  agent-auth:
+    agent-login-max-password-length: 128
+    agent-rate-limit-enabled: true
 
 mybatis-plus:
   configuration:

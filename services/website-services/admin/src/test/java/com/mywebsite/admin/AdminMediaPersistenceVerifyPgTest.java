@@ -3,9 +3,9 @@ package com.mywebsite.admin;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.mywebsite.admin.entity.AdminMediaEntity;
-import com.mywebsite.admin.entity.AdminSiteEntity;
+import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminMediaMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Tag;
@@ -34,7 +34,7 @@ import org.springframework.test.context.ActiveProfiles;
 class AdminMediaPersistenceVerifyPgTest {
 
     @Autowired
-    private AdminSiteMapper adminSiteMapper;
+    private AdminAgentMapper adminAgentMapper;
 
     @Autowired
     private AdminMediaMapper adminMediaMapper;
@@ -45,17 +45,17 @@ class AdminMediaPersistenceVerifyPgTest {
     @Test
     void mediaFileRoundTripAndSoftDelete() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
-        AdminSiteEntity site = new AdminSiteEntity();
-        site.setSiteCode("pg_md_" + suffix);
-        site.setSiteName("PG Media");
-        site.setSiteType("CAKE");
-        site.setStatus("ACTIVE");
-        adminSiteMapper.insert(site);
-        assertThat(site.getId()).isNotNull();
+        AdminAgentEntity agent = new AdminAgentEntity();
+        agent.setAgentCode("pg_md_" + suffix);
+        agent.setAgentName("PG Media");
+        agent.setAgentType("CAKE");
+        agent.setStatus("ACTIVE");
+        adminAgentMapper.insert(agent);
+        assertThat(agent.getId()).isNotNull();
 
-        String objectKey = "sites/" + site.getId() + "/2026/08/" + UUID.randomUUID() + ".jpg";
+        String objectKey = "sites/" + agent.getId() + "/2026/08/" + UUID.randomUUID() + ".jpg";
         AdminMediaEntity media = new AdminMediaEntity();
-        media.setSiteId(site.getId());
+        media.setAgentId(agent.getId());
         media.setBucket("uploads");
         media.setObjectKey(objectKey);
         media.setOriginalFilename("photo.jpg");
@@ -74,7 +74,7 @@ class AdminMediaPersistenceVerifyPgTest {
                 FROM media_file WHERE id = ?
                 """,
                 media.getId());
-        assertThat(row.get("site_id")).isEqualTo(site.getId());
+        assertThat(row.get("site_id")).isEqualTo(agent.getId());
         assertThat(row.get("object_key")).isEqualTo(objectKey);
         assertThat(row.get("content_type")).isEqualTo("image/jpeg");
         assertThat(row.get("status")).isEqualTo("READY");

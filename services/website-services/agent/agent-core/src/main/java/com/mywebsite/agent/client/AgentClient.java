@@ -49,7 +49,7 @@ public interface AgentClient {
     AgentReembedPrepareResult prepareReembed(AgentModelSelection selection, boolean confirmRecreate);
 
     /** 从派生索引移除文档。 */
-    void deleteRetrievalDocument(String siteId, String sourceId);
+    void deleteRetrievalDocument(String agentId, String sourceId);
 
     /** 知识检索。检索未配置时抛 BusinessException（EXTERNAL_DEPENDENCY_BLOCKED，与 upsert 相同）。 */
     AgentRetrievalSearchResult searchRetrieval(AgentRetrievalSearchRequest request);

@@ -8,16 +8,16 @@ import java.math.BigDecimal;
 @TableName("site_ai_prompt_profile")
 public class AdminAiPromptProfileEntity extends AbstractAuditableEntity {
 
-    private Long siteId;
+    private Long agentId;
     private String systemPrompt;
     private BigDecimal temperature;
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public String getSystemPrompt() {

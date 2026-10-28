@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/admin/sites/{id}/appearance")
-@Tag(name = "Admin · Site Appearance")
+@Tag(name = "Admin · Agent Appearance")
 @SecurityRequirement(name = "adminBearer")
 public class AdminAppearanceController {
 
@@ -31,19 +31,19 @@ public class AdminAppearanceController {
     }
 
     @GetMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:site:detail')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:detail')")
     @Operation(summary = "站点外观详情")
-    public ResponseEntity<HttpMessageBody<AdminAppearanceDetailDto>> get(@PathVariable("id") long siteId) {
+    public ResponseEntity<HttpMessageBody<AdminAppearanceDetailDto>> get(@PathVariable("id") long agentId) {
         return ResponseEntity.ok(
-                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAppearanceService.getAppearance(siteId)));
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAppearanceService.getAppearance(agentId)));
     }
 
     @PutMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:site:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:update')")
     @Operation(summary = "整份替换站点外观")
     public ResponseEntity<HttpMessageBody<AdminAppearanceDetailDto>> put(
-            @PathVariable("id") long siteId, @Valid @RequestBody AdminAppearancePutRequest request) {
+            @PathVariable("id") long agentId, @Valid @RequestBody AdminAppearancePutRequest request) {
         return ResponseEntity.ok(new HttpMessageBody<>(
-                ResponseMessages.SUCCESS, adminAppearanceService.putAppearance(siteId, request)));
+                ResponseMessages.SUCCESS, adminAppearanceService.putAppearance(agentId, request)));
     }
 }

@@ -18,7 +18,7 @@ public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
     private String baseUrl;
 
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
-    private Long siteId;
+    private Long agentId;
 
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String embeddingSpec;
@@ -59,12 +59,12 @@ public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
         this.baseUrl = baseUrl;
     }
 
-    public Long getSiteId() {
-        return siteId;
+    public Long getAgentId() {
+        return agentId;
     }
 
-    public void setSiteId(Long siteId) {
-        this.siteId = siteId;
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 
     public String getEmbeddingSpec() {

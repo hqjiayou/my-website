@@ -2,7 +2,7 @@ package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.mywebsite.admin.constant.AdminSiteMessageKeys;
+import com.mywebsite.admin.constant.AdminAgentMessageKeys;
 import com.mywebsite.admin.dto.AdminAiConversationDtos.AdminAiConversationListItemDto;
 import com.mywebsite.admin.dto.AdminAiConversationDtos.AdminAiConversationListQuery;
 import com.mywebsite.admin.dto.AdminAiConversationDtos.AdminAiMessageDto;
@@ -10,7 +10,7 @@ import com.mywebsite.admin.entity.AdminAiConversationEntity;
 import com.mywebsite.admin.entity.AdminAiMessageEntity;
 import com.mywebsite.admin.mapper.AdminAiConversationMapper;
 import com.mywebsite.admin.mapper.AdminAiMessageMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -39,24 +39,24 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
 
     private final AdminAiConversationMapper conversationMapper;
     private final AdminAiMessageMapper messageMapper;
-    private final AdminSiteMapper adminSiteMapper;
+    private final AdminAgentMapper adminAgentMapper;
     private final ObjectMapper objectMapper;
 
     public AdminAiConversationServiceImpl(
             AdminAiConversationMapper conversationMapper,
             AdminAiMessageMapper messageMapper,
-            AdminSiteMapper adminSiteMapper,
+            AdminAgentMapper adminAgentMapper,
             ObjectMapper objectMapper) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
-        this.adminSiteMapper = adminSiteMapper;
+        this.adminAgentMapper = adminAgentMapper;
         this.objectMapper = objectMapper;
     }
 
     @Override
     public PageResult<AdminAiConversationListItemDto> listConversations(
-            long siteId, AdminAiConversationListQuery query) {
-        requireSite(siteId);
+            long agentId, AdminAiConversationListQuery query) {
+        requireSite(agentId);
         int pageNum = query != null && query.pageNum() != null ? query.pageNum() : DEFAULT_PAGE_NUM;
         int pageSize = query != null && query.pageSize() != null
                 ? Math.min(query.pageSize(), MAX_PAGE_SIZE)
@@ -64,7 +64,7 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
 
         LambdaQueryWrapper<AdminAiConversationEntity> wrapper =
                 new LambdaQueryWrapper<AdminAiConversationEntity>()
-                        .eq(AdminAiConversationEntity::getSiteId, siteId)
+                        .eq(AdminAiConversationEntity::getAgentId, agentId)
                         .orderByDesc(AdminAiConversationEntity::getLastMessageAt)
                         .orderByDesc(AdminAiConversationEntity::getId);
         Page<AdminAiConversationEntity> page =
@@ -77,16 +77,16 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
     }
 
     @Override
-    public List<AdminAiMessageDto> listMessages(long siteId, long conversationId) {
-        requireSite(siteId);
+    public List<AdminAiMessageDto> listMessages(long agentId, long conversationId) {
+        requireSite(agentId);
         AdminAiConversationEntity conversation = conversationMapper.selectById(conversationId);
-        if (conversation == null || !Long.valueOf(siteId).equals(conversation.getSiteId())) {
+        if (conversation == null || !Long.valueOf(agentId).equals(conversation.getAgentId())) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         return messageMapper
                 .selectList(new LambdaQueryWrapper<AdminAiMessageEntity>()
                         .eq(AdminAiMessageEntity::getConversationId, conversationId)
-                        .eq(AdminAiMessageEntity::getSiteId, siteId)
+                        .eq(AdminAiMessageEntity::getAgentId, agentId)
                         .orderByAsc(AdminAiMessageEntity::getId))
                 .stream()
                 .map(this::toMessage)
@@ -95,10 +95,10 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
 
     @Override
     @Transactional
-    public void softDeleteBySiteId(long siteId) {
+    public void softDeleteByAgentId(long agentId) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         List<AdminAiMessageEntity> messages = messageMapper.selectList(
-                new LambdaQueryWrapper<AdminAiMessageEntity>().eq(AdminAiMessageEntity::getSiteId, siteId));
+                new LambdaQueryWrapper<AdminAiMessageEntity>().eq(AdminAiMessageEntity::getAgentId, agentId));
         for (AdminAiMessageEntity message : messages) {
             message.setDeletedAt(now);
             messageMapper.updateById(message);
@@ -106,7 +106,7 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
         }
         List<AdminAiConversationEntity> conversations = conversationMapper.selectList(
                 new LambdaQueryWrapper<AdminAiConversationEntity>()
-                        .eq(AdminAiConversationEntity::getSiteId, siteId));
+                        .eq(AdminAiConversationEntity::getAgentId, agentId));
         for (AdminAiConversationEntity conversation : conversations) {
             conversation.setDeletedAt(now);
             conversationMapper.updateById(conversation);
@@ -114,17 +114,17 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
         }
     }
 
-    private void requireSite(long siteId) {
-        if (adminSiteMapper.selectById(siteId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminSiteMessageKeys.SITE_NOT_FOUND);
+    private void requireSite(long agentId) {
+        if (adminAgentMapper.selectById(agentId) == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.SITE_NOT_FOUND);
         }
     }
 
     private static AdminAiConversationListItemDto toListItem(AdminAiConversationEntity entity) {
         return new AdminAiConversationListItemDto(
                 entity.getId(),
-                entity.getSiteId(),
-                entity.getSiteUserId(),
+                entity.getAgentId(),
+                entity.getAgentUserId(),
                 entity.getTitle(),
                 entity.getLastMessageAt(),
                 entity.getCreatedAt());

@@ -13,7 +13,7 @@ import static org.mockito.Mockito.when;
 
 import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
-import com.mywebsite.admin.mapper.AdminSiteMapper;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiKnowledgeService.ReembedConflictException;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.agent.client.AgentClient;
@@ -43,7 +43,7 @@ class AdminAiKnowledgeServiceImplTest {
     private AdminAiKnowledgeDocumentMapper knowledgeMapper;
 
     @Mock
-    private AdminSiteMapper adminSiteMapper;
+    private AdminAgentMapper adminAgentMapper;
 
     @Mock
     private AgentClient agentClient;
@@ -63,7 +63,7 @@ class AdminAiKnowledgeServiceImplTest {
     void setUp() {
         service = new AdminAiKnowledgeServiceImpl(
                 knowledgeMapper,
-                adminSiteMapper,
+                adminAgentMapper,
                 agentClient,
                 modelEntryService,
                 org.mockito.Mockito.mock(com.mywebsite.infra.service.ObjectStorageService.class),
@@ -114,7 +114,7 @@ class AdminAiKnowledgeServiceImplTest {
         assertThatThrownBy(() -> service.reembedAll())
                 .isInstanceOf(ReembedConflictException.class)
                 .satisfies(ex -> assertThat(((ReembedConflictException) ex).conflicts())
-                        .extracting(conflict -> conflict.siteId() + ":" + conflict.dimensions())
+                        .extracting(conflict -> conflict.agentId() + ":" + conflict.dimensions())
                         .containsExactly("1:3", "2:4"));
         verify(agentClient, never()).prepareReembed(any(), eq(true));
         verify(agentClient, never()).upsertRetrievalDocument(any());
@@ -167,7 +167,7 @@ class AdminAiKnowledgeServiceImplTest {
         assertThat(result.documents()).isEqualTo(2);
         assertThat(result.status()).isEqualTo("PARTIAL");
         assertThat(result.failed()).hasSize(1);
-        assertThat(result.failed().getFirst().siteId()).isEqualTo(1L);
+        assertThat(result.failed().getFirst().agentId()).isEqualTo(1L);
         assertThat(result.failed().getFirst().sourceId()).isEqualTo("kb:22");
         assertThat(result.failed().getFirst().error())
                 .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getMessageKey());
@@ -189,13 +189,13 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity pendingDoc = document(2L, 21L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         pendingDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING);
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(indexedDoc, failedDoc, pendingDoc));
-        com.mywebsite.admin.entity.AdminSiteEntity site1 = new com.mywebsite.admin.entity.AdminSiteEntity();
+        com.mywebsite.admin.entity.AdminAgentEntity site1 = new com.mywebsite.admin.entity.AdminAgentEntity();
         site1.setId(1L);
-        site1.setSiteName("Site One");
-        com.mywebsite.admin.entity.AdminSiteEntity site2 = new com.mywebsite.admin.entity.AdminSiteEntity();
+        site1.setAgentName("Agent One");
+        com.mywebsite.admin.entity.AdminAgentEntity site2 = new com.mywebsite.admin.entity.AdminAgentEntity();
         site2.setId(2L);
-        site2.setSiteName("Site Two");
-        when(adminSiteMapper.selectList(any())).thenReturn(List.of(site1, site2));
+        site2.setAgentName("Agent Two");
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of(site1, site2));
 
         var overview = service.knowledgeOverview();
 
@@ -205,7 +205,7 @@ class AdminAiKnowledgeServiceImplTest {
         assertThat(overview.pendingDocuments()).isEqualTo(1);
         assertThat(overview.originalBytes()).isEqualTo(150L);
         assertThat(overview.sites()).hasSize(2);
-        assertThat(overview.sites().get(0).siteName()).isEqualTo("Site One");
+        assertThat(overview.sites().get(0).agentName()).isEqualTo("Agent One");
         assertThat(overview.sites().get(0).failedDocuments()).isEqualTo(1);
         assertThat(overview.recentFailures()).hasSize(1);
         assertThat(overview.recentFailures().get(0).indexError()).isEqualTo("boom");
@@ -234,11 +234,11 @@ class AdminAiKnowledgeServiceImplTest {
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         base.setId(9L);
-        base.setSiteId(1L);
+        base.setAgentId(1L);
         when(baseMapper.selectById(9L)).thenReturn(base);
-        com.mywebsite.admin.entity.AdminSiteEntity target = new com.mywebsite.admin.entity.AdminSiteEntity();
+        com.mywebsite.admin.entity.AdminAgentEntity target = new com.mywebsite.admin.entity.AdminAgentEntity();
         target.setId(2L);
-        when(adminSiteMapper.selectById(2L)).thenReturn(target);
+        when(adminAgentMapper.selectById(2L)).thenReturn(target);
         when(linkMapper.selectOne(any())).thenReturn(null);
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         doc.setBaseId(9L);
@@ -250,7 +250,7 @@ class AdminAiKnowledgeServiceImplTest {
         verify(linkMapper).insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity.class));
         var captor = org.mockito.ArgumentCaptor.forClass(AgentRetrievalDocument.class);
         verify(agentClient).upsertRetrievalDocument(captor.capture());
-        assertThat(captor.getValue().siteId()).isEqualTo("2");
+        assertThat(captor.getValue().agentId()).isEqualTo("2");
     }
 
     @Test
@@ -258,9 +258,9 @@ class AdminAiKnowledgeServiceImplTest {
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity defaultBase =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         defaultBase.setId(9L);
-        defaultBase.setSiteId(1L);
+        defaultBase.setAgentId(1L);
         defaultBase.setIsDefault(true);
-        when(adminSiteMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminSiteEntity());
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(baseMapper.selectOne(any())).thenReturn(defaultBase);
         when(knowledgeMapper.insert(any(AdminAiKnowledgeDocumentEntity.class)))
                 .thenAnswer(invocation -> {
@@ -274,7 +274,7 @@ class AdminAiKnowledgeServiceImplTest {
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
         link.setBaseId(9L);
-        link.setSiteId(3L);
+        link.setAgentId(3L);
         when(linkMapper.selectList(any())).thenReturn(List.of(link));
         when(modelEntryService.currentSelection(1L)).thenReturn(selection("openai:embed-a"));
         when(modelEntryService.currentSelection(3L)).thenReturn(selection("openai:embed-a"));
@@ -287,7 +287,7 @@ class AdminAiKnowledgeServiceImplTest {
         var captor = org.mockito.ArgumentCaptor.forClass(AgentRetrievalDocument.class);
         verify(agentClient, times(2)).upsertRetrievalDocument(captor.capture());
         assertThat(captor.getAllValues())
-                .extracting(AgentRetrievalDocument::siteId)
+                .extracting(AgentRetrievalDocument::agentId)
                 .containsExactlyInAnyOrder("1", "3");
     }
 
@@ -296,9 +296,9 @@ class AdminAiKnowledgeServiceImplTest {
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         base.setId(9L);
-        base.setSiteId(1L);
+        base.setAgentId(1L);
         base.setIsDefault(false);
-        when(adminSiteMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminSiteEntity());
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(baseMapper.selectById(9L)).thenReturn(base);
         when(knowledgeMapper.selectCount(any())).thenReturn(2L);
 
@@ -378,10 +378,10 @@ class AdminAiKnowledgeServiceImplTest {
         assertThat(service.transcribeScannedPdf(7L, new byte[] {1})).isEmpty();
     }
 
-    private static AdminAiKnowledgeDocumentEntity document(long siteId, long id, String status) {
+    private static AdminAiKnowledgeDocumentEntity document(long agentId, long id, String status) {
         AdminAiKnowledgeDocumentEntity entity = new AdminAiKnowledgeDocumentEntity();
         entity.setId(id);
-        entity.setSiteId(siteId);
+        entity.setAgentId(agentId);
         entity.setTitle("title-" + id);
         entity.setContent("content-" + id);
         entity.setStatus(status);

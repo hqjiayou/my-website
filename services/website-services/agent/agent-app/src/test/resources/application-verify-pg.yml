@@ -1,4 +1,4 @@
-# 持久层真实 PostgreSQL 回归验证：与 admin 共用 infra 内 Flyway 脚本（classpath:db/migration），验证 site / site_user Mapper（FK/触发器/乐观锁）。
+# 持久层真实 PostgreSQL 回归验证：与 admin 共用 infra 内 Flyway 脚本（classpath:db/migration），验证 agent / site_user Mapper（FK/触发器/乐观锁）。
 # 默认由 Testcontainers 自举一次性容器；指向外部 PG：VERIFY_PG_URL + VERIFY_PG_DRIVER=org.postgresql.Driver + VERIFY_PG_USER/PASSWORD。
 spring:
   datasource:

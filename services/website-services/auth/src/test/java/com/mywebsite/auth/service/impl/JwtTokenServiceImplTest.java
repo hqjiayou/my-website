@@ -38,7 +38,7 @@ import org.springframework.test.context.TestPropertySource;
             "mywebsite.auth.jwt.keyId=auth-test-rs256-key-1",
             "security.jwt.issuer=test-issuer",
             "security.jwt.audience=ADMIN",
-            "security.jwt.site-audience=SITE",
+            "security.jwt.agent-audience=AGENT",
             "mywebsite.security.token.access-token-expire-seconds=900"
         })
 class JwtTokenServiceImplTest {
@@ -77,25 +77,25 @@ class JwtTokenServiceImplTest {
     }
 
     @Test
-    void siteAccessTokenCarriesSiteIdAndRejectsCrossAudienceParse() throws Exception {
+    void agentAccessTokenCarriesAgentIdAndRejectsCrossAudienceParse() throws Exception {
         String jwt = tokenService.createAccessToken(
-                new IssuedAccessTokenDto(TokenAudience.SITE, "200", "site_it", "sid-s1", 10L, Set.of()));
+                new IssuedAccessTokenDto(TokenAudience.AGENT, "200", "site_it", "sid-s1", 10L, Set.of()));
 
         Jwt decoded = jwtDecoder.decode(jwt);
-        assertThat(decoded.getSubject()).isEqualTo(SubjectCodes.formatSiteUserSubject(200L));
-        assertThat(decoded.getAudience()).contains("SITE");
-        assertThat(decoded.getClaimAsString(JwtClaimConstants.SUBJECT_TYPE)).isEqualTo("SITE");
+        assertThat(decoded.getSubject()).isEqualTo(SubjectCodes.formatAgentUserSubject(200L));
+        assertThat(decoded.getAudience()).contains("AGENT");
+        assertThat(decoded.getClaimAsString(JwtClaimConstants.SUBJECT_TYPE)).isEqualTo("AGENT");
         assertThat(((Number) decoded.getClaim(JwtClaimConstants.SITE_ID)).longValue()).isEqualTo(10L);
 
-        assertThat(tokenService.parseToken(jwt, TokenAudience.SITE)).isPresent();
+        assertThat(tokenService.parseToken(jwt, TokenAudience.AGENT)).isPresent();
         assertThat(tokenService.parseToken(jwt, TokenAudience.ADMIN)).isEmpty();
     }
 
     @Test
-    void adminIssuedAccessTokenRejectsSiteAudienceParse() {
+    void adminIssuedAccessTokenRejectsAgentAudienceParse() {
         String jwt = tokenService.createAccessToken(
                 new IssuedAccessTokenDto(TokenAudience.ADMIN, "1", "u", "s", null, Set.of()));
-        assertThat(tokenService.parseToken(jwt, TokenAudience.SITE)).isEmpty();
+        assertThat(tokenService.parseToken(jwt, TokenAudience.AGENT)).isEmpty();
     }
 
     @Test

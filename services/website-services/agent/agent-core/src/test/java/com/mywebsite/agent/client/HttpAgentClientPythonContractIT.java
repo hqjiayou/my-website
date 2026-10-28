@@ -200,7 +200,7 @@ class HttpAgentClientPythonContractIT {
         connection.setDoOutput(true);
         connection.setRequestProperty("Content-Type", "application/json");
         connection.setRequestProperty("X-Internal-Service-Token", TOKEN);
-        byte[] body = "{\"siteId\":\"1\",\"message\":\"hello\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] body = "{\"agentId\":\"1\",\"message\":\"hello\"}".getBytes(StandardCharsets.UTF_8);
         connection.getOutputStream().write(body);
 
         assertThat(connection.getResponseCode()).isEqualTo(200);
@@ -264,7 +264,7 @@ class HttpAgentClientPythonContractIT {
         connection.setDoOutput(true);
         connection.setRequestProperty("Content-Type", "application/json");
         connection.setRequestProperty("X-Internal-Service-Token", TOKEN);
-        byte[] body = "{\"siteId\":\"42\",\"message\":\"hello\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] body = "{\"agentId\":\"42\",\"message\":\"hello\"}".getBytes(StandardCharsets.UTF_8);
         connection.getOutputStream().write(body);
         int status = connection.getResponseCode();
         var stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
