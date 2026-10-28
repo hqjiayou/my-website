@@ -1,6 +1,7 @@
 package com.mywebsite.admin.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
@@ -9,6 +10,7 @@ import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.infra.crypto.ModelEntryCipher;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -139,5 +141,19 @@ class AdminAiModelEntryServiceImplTest {
 
         assertThat(specs(service.selectionChain(10L)))
                 .containsExactly("google:agent-default", "google:global-default");
+    }
+
+    @Test
+    void normalizeModeDefaultsToKeyAndAcceptsCli() {
+        assertThat(AdminAiModelEntryServiceImpl.normalizeMode(null)).isEqualTo("KEY");
+        assertThat(AdminAiModelEntryServiceImpl.normalizeMode(" ")).isEqualTo("KEY");
+        assertThat(AdminAiModelEntryServiceImpl.normalizeMode(" cli ")).isEqualTo("CLI");
+        assertThat(AdminAiModelEntryServiceImpl.normalizeMode("key")).isEqualTo("KEY");
+    }
+
+    @Test
+    void normalizeModeRejectsUnknown() {
+        assertThatThrownBy(() -> AdminAiModelEntryServiceImpl.normalizeMode("BOGUS"))
+                .isInstanceOf(BusinessException.class);
     }
 }

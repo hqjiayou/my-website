@@ -1,6 +1,7 @@
 package com.mywebsite.agent.service;
 
 import com.mywebsite.agent.dto.AgentAiChatRequestDto;
+import com.mywebsite.agent.dto.AgentAiModelModesDto;
 import com.mywebsite.agent.dto.AgentAiChatResponseDto;
 import com.mywebsite.agent.dto.AgentKnowledgeDocumentDtos;
 import com.mywebsite.agent.dto.AgentKnowledgeSearchRequestDto;
@@ -15,6 +16,8 @@ public interface AgentAiService {
     SseEmitter chatStream(long agentId, AgentAiChatRequestDto request);
 
     AgentKnowledgeSearchResponseDto searchKnowledge(long agentId, AgentKnowledgeSearchRequestDto request);
+
+    AgentAiModelModesDto modelModes(long agentId);
 
     /** 本站 ACTIVE 知识文档列表（只读浏览，不含正文）。 */
     List<AgentKnowledgeDocumentDtos.ListItem> listKnowledgeDocuments(long agentId);

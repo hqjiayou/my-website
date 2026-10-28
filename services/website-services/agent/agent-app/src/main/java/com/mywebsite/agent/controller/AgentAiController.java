@@ -7,6 +7,7 @@ import com.mywebsite.common.security.AuthContext;
 import com.mywebsite.common.security.AuthenticatedUser;
 import com.mywebsite.common.security.SubjectCodes;
 import com.mywebsite.agent.dto.AgentAiChatRequestDto;
+import com.mywebsite.agent.dto.AgentAiModelModesDto;
 import com.mywebsite.agent.dto.AgentAiChatResponseDto;
 import com.mywebsite.agent.dto.AgentAiConversationDto;
 import com.mywebsite.agent.dto.AgentAiConversationRenameRequestDto;
@@ -62,6 +63,11 @@ public class AgentAiController {
     public SseEmitter chatStream(
             @PathVariable("agentId") long agentId, @RequestBody AgentAiChatRequestDto request) {
         return agentAiService.chatStream(agentId, request);
+    }
+
+    @GetMapping("/{agentId}/ai/model-modes")
+    public ApiResponse<AgentAiModelModesDto> modelModes(@PathVariable("agentId") long agentId) {
+        return ApiResponse.success(agentAiService.modelModes(agentId));
     }
 
     @PostMapping("/{agentId}/ai/knowledge/search")
