@@ -3,13 +3,13 @@ import { useTranslation } from 'react-i18next'
 import { useOutletContext } from 'react-router-dom'
 
 import { appearanceApi } from '@/api'
-import { SiteAppearancePreview } from '@/pages/apps/style/siteAppearancePreview'
+import { AgentAppearancePreview } from '@/pages/apps/style/agentAppearancePreview'
 
-import type { SiteWorkspaceOutletContext } from './siteWorkspaceLayout'
+import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
 
-export function SiteThemePage() {
+export function AgentThemePage() {
   const { t } = useTranslation('sites')
-  const { site } = useOutletContext<SiteWorkspaceOutletContext>()
+  const { site } = useOutletContext<AgentWorkspaceOutletContext>()
 
   const appearanceQuery = useQuery({
     queryKey: ['appearances', site.id],
@@ -83,7 +83,7 @@ export function SiteThemePage() {
       </div>
 
       <div className="mt-4">
-        <SiteAppearancePreview siteName={site.siteName} config={config} previewMode="desktop" />
+        <AgentAppearancePreview agentName={site.agentName} config={config} previewMode="desktop" />
       </div>
     </article>
   )

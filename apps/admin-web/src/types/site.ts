@@ -3,9 +3,9 @@
 import type { AppearanceConfigV1 } from '@/types/appearance'
 
 /** 站点用途标签：自由字符串（预设见 SITE_TYPE_PRESETS，亦可自订），不再是行业闭集。 */
-export type SiteType = string
+export type AgentType = string
 
-export type SiteStatus = 'ACTIVE' | 'DISABLED'
+export type AgentStatus = 'ACTIVE' | 'DISABLED'
 
 export const SITE_TYPE_PRESETS: string[] = ['PERSONAL', 'PORTFOLIO', 'BLOG', 'KNOWLEDGE', 'TOOL', 'OTHER']
 
@@ -15,7 +15,7 @@ export const SITE_TYPE_VALUES: string[] = SITE_TYPE_PRESETS
 /** 与后端 SITE_TAG_PATTERN 对齐：1–32 字符，字母/数字开头。 */
 export const SITE_TAG_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_\- ]{0,31}$/
 
-export const SITE_STATUS_VALUES: SiteStatus[] = ['ACTIVE', 'DISABLED']
+export const SITE_STATUS_VALUES: AgentStatus[] = ['ACTIVE', 'DISABLED']
 
 export const SITE_STATUS = {
   ACTIVE: 'ACTIVE',
@@ -32,18 +32,18 @@ export interface PageResult<T> {
   pageSize: number
 }
 
-export interface SiteListQuery {
+export interface AgentListQuery {
   pageNum?: number
   pageSize?: number
   status?: string
-  siteType?: string
+  agentType?: string
 }
 
-export interface SiteListItem {
+export interface AgentListItem {
   id: number
-  siteCode: string
-  siteName: string
-  siteType: string
+  agentCode: string
+  agentName: string
+  agentType: string
   status: string
   defaultDomain: string | null
   version: number
@@ -51,11 +51,11 @@ export interface SiteListItem {
   updatedAt: string
 }
 
-export interface SiteDetail {
+export interface AgentDetail {
   id: number
-  siteCode: string
-  siteName: string
-  siteType: string
+  agentCode: string
+  agentName: string
+  agentType: string
   status: string
   defaultDomain: string | null
   description: string | null
@@ -65,27 +65,27 @@ export interface SiteDetail {
 }
 
 /** Workspace / 详情页统一使用的 Site Core 详情别名。 */
-export type Site = SiteDetail
+export type Site = AgentDetail
 
 /** Create 加法：`appearance` 可选；向导给出时同事务写入 site + site_appearance。 */
-export interface CreateSiteInput {
-  siteCode: string
-  siteName: string
-  siteType: string
+export interface CreateAgentInput {
+  agentCode: string
+  agentName: string
+  agentType: string
   defaultDomain?: string
   description?: string
   appearance?: AppearanceConfigV1
 }
 
-export interface UpdateSiteInput {
-  siteName: string
-  siteType?: string
+export interface UpdateAgentInput {
+  agentName: string
+  agentType?: string
   defaultDomain?: string
   description?: string
   version: number
 }
 
-export interface UpdateSiteStatusInput {
+export interface UpdateAgentStatusInput {
   status: string
   version: number
 }
@@ -94,7 +94,7 @@ export interface UpdateSiteStatusInput {
  * runtime-status 由现有 REAL API 推导；独立端点尚未提供。
  * 放在 types 仅供类型共享。
  */
-export interface SitePublishChecklist {
+export interface AgentPublishChecklist {
   basicInfo: boolean
   theme: boolean
   domain: boolean
@@ -102,11 +102,11 @@ export interface SitePublishChecklist {
   aiConfig: boolean
 }
 
-export interface SiteRuntimeStatus {
-  siteId: number
+export interface AgentRuntimeStatus {
+  agentId: number
   /** 暂无 analytics 后端时为 null，UI 应展示「未接入」而非 0。 */
   visitCountToday: number | null
   /** 暂无 AI 统计后端时为 null。 */
   aiConversationCountToday: number | null
-  publishChecklist: SitePublishChecklist
+  publishChecklist: AgentPublishChecklist
 }

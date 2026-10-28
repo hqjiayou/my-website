@@ -18,15 +18,15 @@ import { Suspense, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, Outlet, useParams } from 'react-router-dom'
 
-import { siteApi, SITE_STATUS, type Site, type SiteStatus } from '@/api'
+import { agentApi, SITE_STATUS, type Site, type AgentStatus } from '@/api'
 import { RouteFallback } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
-import { siteWebUrl } from '@/utils/siteWebUrl'
+import { agentWebUrl } from '@/utils/agentWebUrl'
 
-export interface SiteWorkspaceOutletContext {
+export interface AgentWorkspaceOutletContext {
   site: Site
 }
 
@@ -48,10 +48,10 @@ interface WorkspaceNavGroup {
   items: WorkspaceNavItem[]
 }
 
-export function SiteWorkspaceLayout() {
+export function AgentWorkspaceLayout() {
   const { t } = useTranslation('sites')
-  const { siteId } = useParams()
-  const parsedId = Number(siteId)
+  const { agentId } = useParams()
+  const parsedId = Number(agentId)
   const canListContent = useHasPermission(PERMISSION_CODES.contentList)
   const canListMedia = useHasPermission(PERMISSION_CODES.mediaList)
   const canPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
@@ -61,7 +61,7 @@ export function SiteWorkspaceLayout() {
 
   const { data: site, isPending, isError, error } = useQuery({
     queryKey: ['sites', parsedId],
-    queryFn: () => siteApi.getSite(parsedId),
+    queryFn: () => agentApi.getSite(parsedId),
     enabled: Number.isFinite(parsedId),
   })
 
@@ -71,36 +71,36 @@ export function SiteWorkspaceLayout() {
 
     if (canAi) {
       const agentItems: WorkspaceNavItem[] = [
-        { key: 'agentOverview', path: ROUTES.apps.siteAgent(site.id), icon: Bot, end: true },
+        { key: 'agentOverview', path: ROUTES.apps.agent(site.id), icon: Bot, end: true },
       ]
       if (canPrompt) {
         agentItems.push(
-          { key: 'agentPreview', path: ROUTES.apps.siteAgentPreview(site.id), icon: MessageSquare },
-          { key: 'agentPrompt', path: ROUTES.apps.siteAgentPrompt(site.id), icon: Braces },
+          { key: 'agentPreview', path: ROUTES.apps.agentPreview(site.id), icon: MessageSquare },
+          { key: 'agentPrompt', path: ROUTES.apps.agentPrompt(site.id), icon: Braces },
         )
       }
       if (canKnowledge) {
-        agentItems.push({ key: 'agentKnowledge', path: ROUTES.apps.siteAgentKnowledge(site.id), icon: BookOpen })
+        agentItems.push({ key: 'agentKnowledge', path: ROUTES.apps.agentKnowledge(site.id), icon: BookOpen })
       }
       if (canConversations) {
         agentItems.push({
           key: 'agentConversations',
-          path: ROUTES.apps.siteAgentConversations(site.id),
+          path: ROUTES.apps.agentConversations(site.id),
           icon: MessagesSquare,
         })
       }
       if (canPrompt) {
-        agentItems.push({ key: 'agentRuntime', path: ROUTES.apps.siteAgentRuntime(site.id), icon: Activity })
+        agentItems.push({ key: 'agentRuntime', path: ROUTES.apps.agentRuntime(site.id), icon: Activity })
       }
       groups.push({ key: 'agent', items: agentItems })
     }
 
     const materialItems: WorkspaceNavItem[] = []
     if (canListContent) {
-      materialItems.push({ key: 'contents', path: ROUTES.apps.siteContents(site.id), icon: FileText })
+      materialItems.push({ key: 'contents', path: ROUTES.apps.agentContents(site.id), icon: FileText })
     }
     if (canListMedia) {
-      materialItems.push({ key: 'files', path: ROUTES.apps.siteFiles(site.id), icon: FolderOpen })
+      materialItems.push({ key: 'files', path: ROUTES.apps.agentFiles(site.id), icon: FolderOpen })
     }
     if (materialItems.length > 0) {
       groups.push({ key: 'materials', items: materialItems })
@@ -109,9 +109,9 @@ export function SiteWorkspaceLayout() {
     groups.push({
       key: 'settings',
       items: [
-        { key: 'basic', path: ROUTES.apps.siteBasic(site.id), icon: SlidersHorizontal },
-        { key: 'theme', path: ROUTES.apps.siteTheme(site.id), icon: Palette },
-        { key: 'domain', path: ROUTES.apps.siteDomain(site.id), icon: Globe },
+        { key: 'basic', path: ROUTES.apps.agentBasic(site.id), icon: SlidersHorizontal },
+        { key: 'theme', path: ROUTES.apps.agentTheme(site.id), icon: Palette },
+        { key: 'domain', path: ROUTES.apps.agentDomain(site.id), icon: Globe },
       ],
     })
     return groups
@@ -157,24 +157,24 @@ export function SiteWorkspaceLayout() {
     )
   }
 
-  const visitUrl = siteWebUrl(site.siteCode)
+  const visitUrl = agentWebUrl(site.agentCode)
 
   return (
     <section className="space-y-4">
       <article className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h1 className="text-xl font-semibold text-slate-900">{site.siteName}</h1>
+            <h1 className="text-xl font-semibold text-slate-900">{site.agentName}</h1>
             <span
               className={cn(
                 'inline-flex rounded-md border px-2 py-0.5 text-xs font-medium',
-                statusClassName(site.status as SiteStatus),
+                statusClassName(site.status as AgentStatus),
               )}
             >
               {t(`status.${site.status}`, { defaultValue: site.status })}
             </span>
             <p className="text-sm text-slate-500">
-              {site.siteCode} · {t(`siteType.${site.siteType}`, { defaultValue: site.siteType })}
+              {site.agentCode} · {t(`agentType.${site.agentType}`, { defaultValue: site.agentType })}
               {site.defaultDomain ? ` · ${site.defaultDomain}` : ''}
             </p>
           </div>
@@ -231,7 +231,7 @@ export function SiteWorkspaceLayout() {
 
         <div className="min-w-0 flex-1">
           <Suspense fallback={<RouteFallback />}>
-            <Outlet context={{ site } satisfies SiteWorkspaceOutletContext} />
+            <Outlet context={{ site } satisfies AgentWorkspaceOutletContext} />
           </Suspense>
         </div>
       </div>

@@ -77,7 +77,7 @@ export function resolveRoutePermission(pathname: string): string | undefined {
 
   // 站点 Workspace（含子页）需 detail；create 已在 ROUTE_PERMISSIONS 精确登记
   if (/^\/apps\/sites\/\d+(\/.*)?$/.test(pathname)) {
-    return PERMISSION_CODES.siteDetail
+    return PERMISSION_CODES.agentDetail
   }
 
   return undefined

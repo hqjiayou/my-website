@@ -3,15 +3,15 @@ import { ArrowUpRight, CheckCircle2, Circle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, useOutletContext } from 'react-router-dom'
 
-import { aiApi, siteApi } from '@/api'
+import { aiApi, agentApi } from '@/api'
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
-import { siteWebUrl } from '@/utils/siteWebUrl'
+import { agentWebUrl } from '@/utils/agentWebUrl'
 
-import type { SiteWorkspaceOutletContext } from './siteWorkspaceLayout'
+import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
 
 function StatusCard({
   label,
@@ -42,9 +42,9 @@ function StatusCard({
 }
 
 /** Agent 总览：站点工作台落地页。一屏看清这个 agent 的健康（模型链 / Prompt / 知识库 / 对话）与发布清单。 */
-export function SiteAgentOverviewPage() {
+export function AgentOverviewPage() {
   const { t } = useTranslation('sites')
-  const { site } = useOutletContext<SiteWorkspaceOutletContext>()
+  const { site } = useOutletContext<AgentWorkspaceOutletContext>()
   const canPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
   const canKnowledge = useHasPermission(PERMISSION_CODES.aiKbList)
   const canConversations = useHasPermission(PERMISSION_CODES.aiConversationList)
@@ -72,7 +72,7 @@ export function SiteAgentOverviewPage() {
   })
   const checklistQuery = useQuery({
     queryKey: ['sites', site.id, 'runtime-status'],
-    queryFn: () => siteApi.getSiteRuntimeStatus(site.id),
+    queryFn: () => agentApi.getAgentRuntimeStatus(site.id),
   })
 
   const runtime = runtimeQuery.data
@@ -89,7 +89,7 @@ export function SiteAgentOverviewPage() {
     { key: 'homeContent', done: checklist?.homeContent ?? false },
     { key: 'aiConfig', done: checklist?.aiConfig ?? false },
   ] as const
-  const visitUrl = siteWebUrl(site.siteCode)
+  const visitUrl = agentWebUrl(site.agentCode)
 
   return (
     <section>
@@ -98,7 +98,7 @@ export function SiteAgentOverviewPage() {
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <StatusCard
           label={t('agentOverview.cards.modelChain')}
-          to={ROUTES.apps.siteAgentRuntime(site.id)}
+          to={ROUTES.apps.agentRuntime(site.id)}
           linkLabel={t('agentOverview.actions.openRuntime')}
         >
           {!canPrompt || runtimeQuery.isPending ? (
@@ -123,7 +123,7 @@ export function SiteAgentOverviewPage() {
 
         <StatusCard
           label={t('agentOverview.cards.prompt')}
-          to={ROUTES.apps.siteAgentPrompt(site.id)}
+          to={ROUTES.apps.agentPrompt(site.id)}
           linkLabel={t('agentOverview.actions.openPrompt')}
         >
           {!canPrompt || promptQuery.isPending ? (
@@ -140,7 +140,7 @@ export function SiteAgentOverviewPage() {
 
         <StatusCard
           label={t('agentOverview.cards.knowledge')}
-          to={ROUTES.apps.siteAgentKnowledge(site.id)}
+          to={ROUTES.apps.agentKnowledge(site.id)}
           linkLabel={t('agentOverview.actions.openKnowledge')}
         >
           {!canKnowledge || knowledgeQuery.isPending ? (
@@ -164,7 +164,7 @@ export function SiteAgentOverviewPage() {
 
         <StatusCard
           label={t('agentOverview.cards.conversations')}
-          to={ROUTES.apps.siteAgentConversations(site.id)}
+          to={ROUTES.apps.agentConversations(site.id)}
           linkLabel={t('agentOverview.actions.openConversations')}
         >
           {!canConversations || conversationsQuery.isPending ? (
@@ -188,7 +188,7 @@ export function SiteAgentOverviewPage() {
             <h2 className="text-base font-semibold text-slate-900">{t('agentOverview.recent.title')}</h2>
             <div className="flex gap-2">
               <Link
-                to={ROUTES.apps.siteAgentPreview(site.id)}
+                to={ROUTES.apps.agentPreview(site.id)}
                 className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800"
               >
                 {t('agentOverview.actions.openPreview')}

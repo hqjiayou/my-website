@@ -27,47 +27,47 @@ const PermissionListPage = lazyNamed(
 const MenuTreePage = lazyNamed(() => import('@/pages/menus/menuTreePage'), 'MenuTreePage')
 
 const SitesPage = lazyNamed(() => import('@/pages/apps/sites/sitesPage'), 'SitesPage')
-const SiteCreatePage = lazyNamed(() => import('@/pages/apps/sites/siteCreatePage'), 'SiteCreatePage')
-const SiteWorkspaceLayout = lazyNamed(
-  () => import('@/pages/apps/sites/siteWorkspaceLayout'),
-  'SiteWorkspaceLayout',
+const AgentCreatePage = lazyNamed(() => import('@/pages/apps/sites/agentCreatePage'), 'AgentCreatePage')
+const AgentWorkspaceLayout = lazyNamed(
+  () => import('@/pages/apps/sites/agentWorkspaceLayout'),
+  'AgentWorkspaceLayout',
 )
-const RedirectToSiteAgent = lazyNamed(
-  () => import('@/pages/apps/sites/siteAgentRedirect'),
-  'RedirectToSiteAgent',
+const RedirectToAgent = lazyNamed(
+  () => import('@/pages/apps/sites/agentRedirect'),
+  'RedirectToAgent',
 )
-const SiteAgentOverviewPage = lazyNamed(
-  () => import('@/pages/apps/sites/siteAgentOverviewPage'),
-  'SiteAgentOverviewPage',
+const AgentOverviewPage = lazyNamed(
+  () => import('@/pages/apps/sites/agentOverviewPage'),
+  'AgentOverviewPage',
 )
-const SiteAgentPromptPage = lazyNamed(
-  () => import('@/pages/apps/sites/siteAgentPages'),
-  'SiteAgentPromptPage',
+const AgentPromptPage = lazyNamed(
+  () => import('@/pages/apps/sites/agentPages'),
+  'AgentPromptPage',
 )
-const SiteAgentKnowledgePage = lazyNamed(
-  () => import('@/pages/apps/sites/siteAgentPages'),
-  'SiteAgentKnowledgePage',
+const AgentKnowledgePage = lazyNamed(
+  () => import('@/pages/apps/sites/agentPages'),
+  'AgentKnowledgePage',
 )
-const SiteAgentConversationsPage = lazyNamed(
-  () => import('@/pages/apps/sites/siteAgentPages'),
-  'SiteAgentConversationsPage',
+const AgentConversationsPage = lazyNamed(
+  () => import('@/pages/apps/sites/agentPages'),
+  'AgentConversationsPage',
 )
-const SiteAgentPreviewPage = lazyNamed(
-  () => import('@/pages/apps/sites/siteAgentPages'),
-  'SiteAgentPreviewPage',
+const AgentPreviewPage = lazyNamed(
+  () => import('@/pages/apps/sites/agentPages'),
+  'AgentPreviewPage',
 )
-const SiteAgentRuntimePage = lazyNamed(
-  () => import('@/pages/apps/sites/siteAgentPages'),
-  'SiteAgentRuntimePage',
+const AgentRuntimePage = lazyNamed(
+  () => import('@/pages/apps/sites/agentPages'),
+  'AgentRuntimePage',
 )
-const SiteBasicPage = lazyNamed(() => import('@/pages/apps/sites/siteBasicPage'), 'SiteBasicPage')
-const SiteThemePage = lazyNamed(() => import('@/pages/apps/sites/siteThemePage'), 'SiteThemePage')
-const SiteDomainPage = lazyNamed(() => import('@/pages/apps/sites/siteDomainPage'), 'SiteDomainPage')
-const SiteContentsPage = lazyNamed(
-  () => import('@/pages/apps/sites/siteContentsPage'),
-  'SiteContentsPage',
+const AgentBasicPage = lazyNamed(() => import('@/pages/apps/sites/agentBasicPage'), 'AgentBasicPage')
+const AgentThemePage = lazyNamed(() => import('@/pages/apps/sites/agentThemePage'), 'AgentThemePage')
+const AgentDomainPage = lazyNamed(() => import('@/pages/apps/sites/agentDomainPage'), 'AgentDomainPage')
+const AgentContentsPage = lazyNamed(
+  () => import('@/pages/apps/sites/agentContentsPage'),
+  'AgentContentsPage',
 )
-const SiteFilesPage = lazyNamed(() => import('@/pages/apps/sites/siteFilesPage'), 'SiteFilesPage')
+const AgentFilesPage = lazyNamed(() => import('@/pages/apps/sites/agentFilesPage'), 'AgentFilesPage')
 
 const StyleSettingsPage = lazyNamed(
   () => import('@/pages/apps/styleSettingsPage'),
@@ -124,22 +124,22 @@ export const adminRoutes = (
     <Route path={ROUTES.system.menus} element={<MenuTreePage />} />
 
     <Route path={ROUTES.apps.sites} element={<SitesPage />} />
-    <Route path={ROUTES.apps.siteCreate} element={<SiteCreatePage />} />
-    <Route path={ROUTES.apps.siteDetailPattern} element={<SiteWorkspaceLayout />}>
+    <Route path={ROUTES.apps.agentCreate} element={<AgentCreatePage />} />
+    <Route path={ROUTES.apps.agentDetailPattern} element={<AgentWorkspaceLayout />}>
       <Route index element={<Navigate to="agent" replace />} />
-      <Route path="overview" element={<RedirectToSiteAgent />} />
-      <Route path="basic" element={<SiteBasicPage />} />
-      <Route path="theme" element={<SiteThemePage />} />
-      <Route path="domain" element={<SiteDomainPage />} />
-      <Route path="contents" element={<SiteContentsPage />} />
-      <Route path="ai" element={<RedirectToSiteAgent />} />
-      <Route path="agent" element={<SiteAgentOverviewPage />} />
-      <Route path="agent/prompt" element={<SiteAgentPromptPage />} />
-      <Route path="agent/knowledge" element={<SiteAgentKnowledgePage />} />
-      <Route path="agent/conversations" element={<SiteAgentConversationsPage />} />
-      <Route path="agent/preview" element={<SiteAgentPreviewPage />} />
-      <Route path="agent/runtime" element={<SiteAgentRuntimePage />} />
-      <Route path="files" element={<SiteFilesPage />} />
+      <Route path="overview" element={<RedirectToAgent />} />
+      <Route path="basic" element={<AgentBasicPage />} />
+      <Route path="theme" element={<AgentThemePage />} />
+      <Route path="domain" element={<AgentDomainPage />} />
+      <Route path="contents" element={<AgentContentsPage />} />
+      <Route path="ai" element={<RedirectToAgent />} />
+      <Route path="agent" element={<AgentOverviewPage />} />
+      <Route path="agent/prompt" element={<AgentPromptPage />} />
+      <Route path="agent/knowledge" element={<AgentKnowledgePage />} />
+      <Route path="agent/conversations" element={<AgentConversationsPage />} />
+      <Route path="agent/preview" element={<AgentPreviewPage />} />
+      <Route path="agent/runtime" element={<AgentRuntimePage />} />
+      <Route path="files" element={<AgentFilesPage />} />
     </Route>
     <Route path={ROUTES.apps.style} element={<StyleSettingsPage />} />
 

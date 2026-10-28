@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/cn'
 import type { AppearanceConfigV1, ButtonStyle, HeroLayout } from '@/types/appearance'
 
-interface SiteAppearancePreviewProps {
-  siteName: string
+interface AgentAppearancePreviewProps {
+  agentName: string
   config: AppearanceConfigV1
   previewMode: 'desktop' | 'mobile'
 }
@@ -21,7 +21,7 @@ function heroLayoutClass(layout: HeroLayout) {
   return ''
 }
 
-export function SiteAppearancePreview({ siteName, config, previewMode }: SiteAppearancePreviewProps) {
+export function AgentAppearancePreview({ agentName, config, previewMode }: AgentAppearancePreviewProps) {
   const { t } = useTranslation('styleSettings')
   const buttonClass = buttonRadiusClass(config.buttonStyle)
 
@@ -32,7 +32,7 @@ export function SiteAppearancePreview({ siteName, config, previewMode }: SiteApp
           className="mb-3 flex items-center justify-between rounded-xl px-3 py-2 text-xs text-white"
           style={{ backgroundColor: config.primaryColor }}
         >
-          <span className="font-semibold">{siteName}</span>
+          <span className="font-semibold">{agentName}</span>
           <span className="text-white/80">{t('preview.headerMenu')}</span>
         </div>
 

@@ -6,36 +6,36 @@ export function apiUrl(path: string): string {
 
 const SITE_ID_PATTERN = /^[1-9]\d*$/
 
-export type PortalSiteId = { ok: true; siteId: string } | { ok: false; message: string }
+export type PortalAgentId = { ok: true; agentId: string } | { ok: false; message: string }
 
-/** AI 路徑用的數字站點 ID。登入用的 siteCode 不在這裡。 */
-export function readPortalSiteId(): PortalSiteId {
-  const raw = import.meta.env.VITE_PORTAL_SITE_ID?.trim() ?? ''
+/** AI 路徑用的數字站點 ID。登入用的 agentCode 不在這裡。 */
+export function readPortalAgentId(): PortalAgentId {
+  const raw = import.meta.env.VITE_PORTAL_AGENT_ID?.trim() ?? ''
   if (!SITE_ID_PATTERN.test(raw)) {
     return {
       ok: false,
-      message: '未設定有效的 VITE_PORTAL_SITE_ID。它必須是正整數站點 ID，用於 /api/site/{siteId}/ai/**。',
+      message: '未設定有效的 VITE_PORTAL_AGENT_ID。它必須是正整數站點 ID，用於 /api/agent/{agentId}/ai/**。',
     }
   }
-  return { ok: true, siteId: raw }
+  return { ok: true, agentId: raw }
 }
 
-/** 優先使用會話 siteId（轉成字串），沒有時後備 readPortalSiteId。 */
-export function resolvePortalSiteId(sessionSiteId: number | null | undefined): PortalSiteId {
-  if (sessionSiteId != null && Number.isSafeInteger(sessionSiteId) && SITE_ID_PATTERN.test(String(sessionSiteId))) {
-    return { ok: true, siteId: String(sessionSiteId) }
+/** 優先使用會話 agentId（轉成字串），沒有時後備 readPortalAgentId。 */
+export function resolvePortalAgentId(sessionAgentId: number | null | undefined): PortalAgentId {
+  if (sessionAgentId != null && Number.isSafeInteger(sessionAgentId) && SITE_ID_PATTERN.test(String(sessionAgentId))) {
+    return { ok: true, agentId: String(sessionAgentId) }
   }
-  const fromEnv = readPortalSiteId()
+  const fromEnv = readPortalAgentId()
   if (fromEnv.ok) return fromEnv
   return {
     ok: false,
     message:
-      '未取得站點資訊。請重新登入以取得目前站點，或設定正整數環境變數 VITE_PORTAL_SITE_ID 作為後備，用於 /api/site/{siteId}/ai/**。',
+      '未取得站點資訊。請重新登入以取得目前站點，或設定正整數環境變數 VITE_PORTAL_AGENT_ID 作為後備，用於 /api/agent/{agentId}/ai/**。',
   }
 }
 
 /** 只讀 JWT payload 的 site_id，不驗簽。存取控制以伺服器端為準。 */
-export function readAccessTokenSiteId(token: string | null): string | null {
+export function readAccessTokenAgentId(token: string | null): string | null {
   if (!token) return null
   const part = token.split('.')[1]
   if (!part) return null

@@ -4,7 +4,7 @@ export default {
   error: 'Failed to load',
   retry: 'Retry',
   noSites: 'No sites yet. Create a site first.',
-  siteLabel: 'Site',
+  agentLabel: 'Site',
   settings: {
     title: 'Model entries',
     description: 'Keep model specs and API keys in one list. Chat and preview use the enabled default entry.',
@@ -22,7 +22,7 @@ export default {
     spec: 'Model spec',
     specHint: 'For example google:gemini-3-flash-preview or openai:gpt-4o-mini',
     site: 'Site',
-    sitePlatform: 'All sites',
+    agentPlatform: 'All sites',
     embeddingSpec: 'Embedding spec',
     embeddingSpecHint: 'Optional. For example google:gemini-embedding-001, using the same key',
     apiKey: 'API key',

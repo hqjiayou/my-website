@@ -1,7 +1,7 @@
 /**
  * 运营「文件中心」API。
  *
- * 无专用跨站后端；通过 fan-out 站点级 REAL API 聚合（`/admin/sites/{siteId}/media`）。
+ * 无专用跨站后端；通过 fan-out 站点级 REAL API 聚合（`/admin/agents/{agentId}/media`）。
  */
 import { mediaApi } from '@/api/apps/mediaApi'
 import type { MediaListItem } from '@/types/media'
@@ -13,9 +13,9 @@ import { listAllSitesForAggregation, paginateClient } from './aggregateSites'
 export const OPERATION_FILES_CONNECTED = true
 
 export interface OperationMediaRow extends MediaListItem {
-  siteId: number
-  siteCode: string
-  siteName: string
+  agentId: number
+  agentCode: string
+  agentName: string
 }
 
 export interface OperationMediaListQuery {
@@ -44,9 +44,9 @@ export async function listOperationMedia(
       for (const item of page.records) {
         rows.push({
           ...item,
-          siteId: site.id,
-          siteCode: site.siteCode,
-          siteName: site.siteName,
+          agentId: site.id,
+          agentCode: site.agentCode,
+          agentName: site.agentName,
         })
       }
     }),

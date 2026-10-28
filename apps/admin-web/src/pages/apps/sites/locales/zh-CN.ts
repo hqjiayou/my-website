@@ -6,8 +6,8 @@ export default {
     empty: '暂无站点',
     permissionHint: '按钮可见性由当前账号 permissions 控制，最终以后端鉴权为准。',
     columns: {
-      siteName: '站点名称',
-      siteType: '站点类型',
+      agentName: '站点名称',
+      agentType: '站点类型',
       industry: '行业类型',
       domain: '默认域名',
       status: '站点状态',
@@ -16,7 +16,7 @@ export default {
     },
     filters: {
       allStatus: '全部状态',
-      allSiteType: '全部类型',
+      allAgentType: '全部类型',
       search: '查询',
       reset: '重置',
     },
@@ -44,14 +44,14 @@ export default {
       confirm: '确认创建',
     },
     fields: {
-      siteName: '站点名称',
-      siteCode: '站点编码',
-      siteType: '站点类型',
-      customSiteType: '自定义标签',
+      agentName: '站点名称',
+      agentCode: '站点编码',
+      agentType: '站点类型',
+      customAgentType: '自定义标签',
       industry: '行业类型',
       domain: '域名',
       defaultDomain: '默认域名',
-      siteDescription: '站点描述',
+      agentDescription: '站点描述',
       phone: '联系电话',
       address: '地址',
       businessHours: '营业时间',
@@ -61,11 +61,11 @@ export default {
       heroLayout: 'Hero 布局',
     },
     placeholders: {
-      customSiteType: '例如：My-Docs',
-      siteName: '例如：示例站点',
-      siteCode: '例如：demo-site',
+      customAgentType: '例如：My-Docs',
+      agentName: '例如：示例站点',
+      agentCode: '例如：demo-site',
       domain: '例如：demo.example.com',
-      siteDescription: '请输入站点定位与业务简介',
+      agentDescription: '请输入站点定位与业务简介',
       phone: '例如：03-1111-2200',
       address: '请输入营业地址',
       businessHours: '例如：09:00 - 18:00',
@@ -106,8 +106,8 @@ export default {
     },
     messages: {
       requiredFields: '请填写必填项',
-      invalidSiteCode: '站点编码须匹配 ^[a-z][a-z0-9_-]{1,63}$',
-      invalidSiteType: '标签须为 1–32 字符，以字母或数字开头，可含字母、数字、底线、连字符与空格',
+      invalidAgentCode: '站点编码须匹配 ^[a-z][a-z0-9_-]{1,63}$',
+      invalidAgentType: '标签须为 1–32 字符，以字母或数字开头，可含字母、数字、底线、连字符与空格',
       invalidPrimaryColor: '主题色须为 #RRGGBB',
       createdSuccess: '站点创建成功',
     },
@@ -132,7 +132,7 @@ export default {
     loading: '站点数据加载中...',
     labels: {
       industry: '行业类型',
-      siteType: '站点类型',
+      agentType: '站点类型',
       status: '站点状态',
       domain: '默认域名',
       primaryColor: '主题色',
@@ -150,7 +150,7 @@ export default {
     backToList: '返回站点列表',
     notFound: {
       title: '未找到站点',
-      description: '当前 siteId 对应的站点不存在，请返回站点列表重新选择。',
+      description: '当前 agentId 对应的站点不存在，请返回站点列表重新选择。',
     },
     theme: {
       description: '只读展示已持久化的站点外观（schema v1）。',
@@ -241,12 +241,12 @@ export default {
     visitSite: '访问站点',
     notFound: {
       title: '未找到站点',
-      description: '当前 siteId 对应的站点不存在，请返回站点列表重新选择。',
+      description: '当前 agentId 对应的站点不存在，请返回站点列表重新选择。',
     },
     placeholderNotice: '当前为占位页面，后续将接入 site-service / agent-service',
   },
   placeholderPages: {
-    currentSiteLabel: '当前站点',
+    currentAgentLabel: '当前站点',
     contents: {
       description: '用于维护当前站点的首页、服务项目、案例、FAQ、Banner 与公告。',
     },
@@ -363,7 +363,7 @@ export default {
     draft: '草稿',
     inactive: '停用',
   },
-  siteType: {
+  agentType: {
     PERSONAL: '个人网站',
     PORTFOLIO: '作品集',
     BLOG: '博客',
@@ -451,7 +451,7 @@ export default {
       view: '查看',
       columns: {
         title: '标题',
-        siteUserId: '站点用户',
+        agentUserId: '站点用户',
         lastMessageAt: '最后消息',
         actions: '操作',
       },

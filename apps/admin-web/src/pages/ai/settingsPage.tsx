@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { siteApi } from '@/api/apps/siteApi'
+import { agentApi } from '@/api/apps/agentApi'
 import { PageHeader } from '@/components/page'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import type { AiModelEntry, AiModelEntryWriteInput } from '@/types/ai'
@@ -16,7 +16,7 @@ type Draft = {
   modelSpec: string
   apiKey: string
   baseUrl: string
-  siteId: string
+  agentId: string
   embeddingSpec: string
   enabled: boolean
   defaultEntry: boolean
@@ -31,7 +31,7 @@ function emptyDraft(makeDefault: boolean): Draft {
     modelSpec: '',
     apiKey: '',
     baseUrl: '',
-    siteId: '',
+    agentId: '',
     embeddingSpec: '',
     enabled: true,
     defaultEntry: makeDefault,
@@ -44,12 +44,12 @@ function emptyDraft(makeDefault: boolean): Draft {
  * 生效链（与 Java selectionChain 同规则）：作用域预设为主用，其后同作用域其他启用入口、
  * 再全站其余启用入口（各组内默认在前、id 升序）。没有默认入口时整链不启用。
  */
-function computeChain(entries: AiModelEntry[], scopeSiteId: number | null): AiModelEntry[] {
+function computeChain(entries: AiModelEntry[], scopeAgentId: number | null): AiModelEntry[] {
   const enabledIn = (scope: number | null) =>
     entries
-      .filter((entry) => entry.enabled && (scope == null ? entry.siteId == null : entry.siteId === scope))
+      .filter((entry) => entry.enabled && (scope == null ? entry.agentId == null : entry.agentId === scope))
       .sort((a, b) => Number(b.defaultEntry) - Number(a.defaultEntry) || a.id - b.id)
-  const scoped = scopeSiteId == null ? [] : enabledIn(scopeSiteId)
+  const scoped = scopeAgentId == null ? [] : enabledIn(scopeAgentId)
   const global = enabledIn(null)
   const primary = scoped.find((entry) => entry.defaultEntry) ?? global.find((entry) => entry.defaultEntry)
   if (!primary) return []
@@ -67,7 +67,7 @@ function draftFromEntry(entry: AiModelEntry): Draft {
     modelSpec: entry.modelSpec,
     apiKey: '',
     baseUrl: entry.baseUrl ?? '',
-    siteId: entry.siteId == null ? '' : String(entry.siteId),
+    agentId: entry.agentId == null ? '' : String(entry.agentId),
     embeddingSpec: entry.embeddingSpec ?? '',
     enabled: entry.enabled,
     defaultEntry: entry.defaultEntry,
@@ -89,7 +89,7 @@ export function AiSettingsPage() {
   })
   const sitesQuery = useQuery({
     queryKey: ['sites', 'model-entry-options'],
-    queryFn: () => siteApi.listSites({ pageNum: 1, pageSize: 100 }),
+    queryFn: () => agentApi.listSites({ pageNum: 1, pageSize: 100 }),
   })
 
   const saveMutation = useMutation({
@@ -111,7 +111,7 @@ export function AiSettingsPage() {
         displayName: entry.displayName,
         modelSpec: entry.modelSpec,
         baseUrl: entry.baseUrl,
-        siteId: entry.siteId,
+        agentId: entry.agentId,
         embeddingSpec: entry.embeddingSpec,
         enabled: true,
         defaultEntry: true,
@@ -162,7 +162,7 @@ export function AiSettingsPage() {
       displayName: draft.displayName.trim(),
       modelSpec: draft.modelSpec.trim(),
       baseUrl: draft.baseUrl.trim() || null,
-      siteId: draft.siteId.trim() === '' ? null : Number(draft.siteId),
+      agentId: draft.agentId.trim() === '' ? null : Number(draft.agentId),
       embeddingSpec: draft.embeddingSpec.trim() || null,
       enabled: draft.enabled,
       defaultEntry: draft.defaultEntry,
@@ -229,10 +229,10 @@ export function AiSettingsPage() {
               value={chainScope}
               onChange={(event) => setChainScope(event.target.value)}
             >
-              <option value="">{t('settings.sitePlatform')}</option>
+              <option value="">{t('settings.agentPlatform')}</option>
               {(sitesQuery.data?.records ?? []).map((site) => (
                 <option key={site.id} value={site.id}>
-                  {site.siteName}
+                  {site.agentName}
                 </option>
               ))}
             </select>
@@ -256,7 +256,7 @@ export function AiSettingsPage() {
                   <span className="font-medium text-slate-900">{entry.displayName}</span>
                   <span className="text-slate-500">{entry.modelSpec}</span>
                   <span className="text-xs text-slate-400">
-                    {entry.siteId == null ? t('settings.sitePlatform') : null}
+                    {entry.agentId == null ? t('settings.agentPlatform') : null}
                   </span>
                 </li>
               ))}
@@ -312,14 +312,14 @@ export function AiSettingsPage() {
               <span className="text-sm font-medium text-slate-800">{t('settings.site')}</span>
               <select
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                value={draft.siteId}
+                value={draft.agentId}
                 disabled={!canUpdate}
-                onChange={(event) => setDraft({ ...draft, siteId: event.target.value })}
+                onChange={(event) => setDraft({ ...draft, agentId: event.target.value })}
               >
-                <option value="">{t('settings.sitePlatform')}</option>
+                <option value="">{t('settings.agentPlatform')}</option>
                 {(sitesQuery.data?.records ?? []).map((site) => (
                   <option key={site.id} value={site.id}>
-                    {site.siteName}
+                    {site.agentName}
                   </option>
                 ))}
               </select>

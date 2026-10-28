@@ -12,11 +12,11 @@ const LIMIT_KEYS: Array<keyof AiRuntimeLimits> = [
   'historyMaxChars',
 ]
 
-function McpReadyProbe({ siteId }: { siteId: number }) {
+function McpReadyProbe({ agentId }: { agentId: number }) {
   const { t } = useTranslation('sites')
   const probeQuery = useQuery({
-    queryKey: ['sites', siteId, 'ai', 'mcp-ready'],
-    queryFn: () => aiApi.probeMcp(siteId),
+    queryKey: ['sites', agentId, 'ai', 'mcp-ready'],
+    queryFn: () => aiApi.probeMcp(agentId),
     enabled: false,
   })
   const probe = probeQuery.data
@@ -67,15 +67,15 @@ function statusClass(status: string | null) {
 }
 
 /** Agent 运行时只读面板：Provider / Fallback / MCP / Skills / 预算（不含凭证）。 */
-export function SiteAiRuntimePanel({ siteId }: { siteId: number }) {
+export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
   const { t } = useTranslation('sites')
   const runtimeQuery = useQuery({
-    queryKey: ['sites', siteId, 'ai', 'runtime'],
-    queryFn: () => aiApi.getRuntime(siteId),
+    queryKey: ['sites', agentId, 'ai', 'runtime'],
+    queryFn: () => aiApi.getRuntime(agentId),
   })
   const skillsQuery = useQuery({
-    queryKey: ['sites', siteId, 'ai', 'preview', 'skills'],
-    queryFn: () => aiApi.listPreviewSkills(siteId),
+    queryKey: ['sites', agentId, 'ai', 'preview', 'skills'],
+    queryFn: () => aiApi.listPreviewSkills(agentId),
     enabled: runtimeQuery.data?.reachable === true,
   })
 
@@ -167,7 +167,7 @@ export function SiteAiRuntimePanel({ siteId }: { siteId: number }) {
               </dd>
             ))
           )}
-          <McpReadyProbe siteId={siteId} />
+          <McpReadyProbe agentId={agentId} />
         </div>
 
         <div className="rounded-xl border border-slate-200 p-3">

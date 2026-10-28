@@ -1,14 +1,14 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 
-import type { HttpMessageBody, SiteTokenResponse } from '@/types/api'
+import type { HttpMessageBody, AgentTokenResponse } from '@/types/api'
 import { apiUrl } from '@/config/env'
 import { clearAccessToken, getAccessToken, setAccessToken } from '@/utils/token'
 
 import { ApiError } from './apiError'
 import { unwrapData } from './unwrap'
 
-const AUTH_LOGIN_PATH = '/api/auth/site/login'
-const AUTH_REFRESH_PATH = '/api/auth/site/refresh'
+const AUTH_LOGIN_PATH = '/api/auth/agent/login'
+const AUTH_REFRESH_PATH = '/api/auth/agent/refresh'
 
 type SessionExpiredHandler = () => void
 
@@ -97,7 +97,7 @@ axiosClient.interceptors.response.use(
 export function refreshAccessToken(): Promise<string> {
   if (refreshInFlight) return refreshInFlight
   refreshInFlight = axiosClient
-    .post<HttpMessageBody<SiteTokenResponse>>(AUTH_REFRESH_PATH)
+    .post<HttpMessageBody<AgentTokenResponse>>(AUTH_REFRESH_PATH)
     .then((response) => {
       const token = unwrapData(response.data).accessToken
       if (!token) {

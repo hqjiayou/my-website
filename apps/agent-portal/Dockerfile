@@ -11,8 +11,8 @@ RUN npm install -g pnpm@10.15.0
 COPY apps/agent-portal/package.json apps/agent-portal/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY apps/agent-portal/ ./
-ARG VITE_PORTAL_SITE_ID=
-ENV VITE_PORTAL_SITE_ID=${VITE_PORTAL_SITE_ID}
+ARG VITE_PORTAL_AGENT_ID=
+ENV VITE_PORTAL_AGENT_ID=${VITE_PORTAL_AGENT_ID}
 RUN pnpm build
 
 FROM node:22 AS admin-build

@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next'
 
 import { PageHeader } from '@/components/page'
-import { SiteAiConversationsPanel } from '@/pages/apps/sites/siteAiConversationsPanel'
+import { AgentAiConversationsPanel } from '@/pages/apps/sites/agentAiConversationsPanel'
 
-import { AiSiteScope } from './aiSiteScope'
+import { AiAgentScope } from './aiAgentScope'
 
 export function AiConversationsPage() {
   const { t } = useTranslation('aiAdmin')
@@ -12,7 +12,7 @@ export function AiConversationsPage() {
     <section>
       <PageHeader title={t('conversations.title')} description={t('conversations.description')} />
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <AiSiteScope>{(siteId) => <SiteAiConversationsPanel siteId={siteId} />}</AiSiteScope>
+        <AiAgentScope>{(agentId) => <AgentAiConversationsPanel agentId={agentId} />}</AiAgentScope>
       </article>
     </section>
   )

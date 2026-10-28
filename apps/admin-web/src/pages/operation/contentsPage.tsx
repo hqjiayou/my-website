@@ -56,8 +56,8 @@ export function OperationContentsPage() {
         header: t('contents.columns.site'),
         cell: (item) => (
           <div>
-            <p className="font-medium text-slate-900">{item.siteName}</p>
-            <p className="mt-1 text-xs text-slate-500">{item.siteCode}</p>
+            <p className="font-medium text-slate-900">{item.agentName}</p>
+            <p className="mt-1 text-xs text-slate-500">{item.agentCode}</p>
           </div>
         ),
       },
@@ -95,7 +95,7 @@ export function OperationContentsPage() {
         header: t('contents.columns.actions'),
         cell: (item) => (
           <Link
-            to={ROUTES.apps.siteContents(item.siteId)}
+            to={ROUTES.apps.agentContents(item.agentId)}
             className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline"
           >
             {t('contents.actions.manage')}
@@ -177,7 +177,7 @@ export function OperationContentsPage() {
       <DataTable
         columns={columns}
         data={records}
-        rowKey={(item) => `${item.siteId}-${item.id}`}
+        rowKey={(item) => `${item.agentId}-${item.id}`}
         isLoading={isPending}
         isError={isError}
         errorMessage={error instanceof Error ? error.message : undefined}

@@ -6,11 +6,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import {
-  siteApi,
+  agentApi,
   SITE_STATUS,
   SITE_TYPE_PRESETS,
-  type SiteListItem,
-  type SiteListQuery,
+  type AgentListItem,
+  type AgentListQuery,
 } from '@/api'
 import { DataTable, type DataTableColumn } from '@/components/admin'
 import { PageHeader } from '@/components/page'
@@ -29,16 +29,16 @@ export function SitesPage() {
   const { t } = useTranslation('sites')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const canCreate = useHasPermission(PERMISSION_CODES.siteCreate)
-  const canDelete = useHasPermission(PERMISSION_CODES.siteDelete)
-  const canStatus = useHasPermission(PERMISSION_CODES.siteStatus)
+  const canCreate = useHasPermission(PERMISSION_CODES.agentCreate)
+  const canDelete = useHasPermission(PERMISSION_CODES.agentDelete)
+  const canStatus = useHasPermission(PERMISSION_CODES.agentStatus)
 
-  const [filters, setFilters] = useState<SiteListQuery>({ pageNum: 1, pageSize: 20 })
-  const [draft, setDraft] = useState<{ status?: string; siteType?: string }>({})
+  const [filters, setFilters] = useState<AgentListQuery>({ pageNum: 1, pageSize: 20 })
+  const [draft, setDraft] = useState<{ status?: string; agentType?: string }>({})
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['sites', filters],
-    queryFn: () => siteApi.listSites(filters),
+    queryFn: () => agentApi.listSites(filters),
   })
 
   const records = data?.records ?? []
@@ -46,7 +46,7 @@ export function SitesPage() {
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status, version }: { id: number; status: string; version: number }) =>
-      siteApi.updateSiteStatus(id, { status, version }),
+      agentApi.updateAgentStatus(id, { status, version }),
     onSuccess: () => {
       toast.success(t('list.messages.statusUpdated'))
       void queryClient.invalidateQueries({ queryKey: ['sites'] })
@@ -60,7 +60,7 @@ export function SitesPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => siteApi.deleteSite(id),
+    mutationFn: (id: number) => agentApi.deleteSite(id),
     onSuccess: () => {
       toast.success(t('list.messages.deleted'))
       void queryClient.invalidateQueries({ queryKey: ['sites'] })
@@ -73,7 +73,7 @@ export function SitesPage() {
       ...prev,
       pageNum: 1,
       status: draft.status,
-      siteType: draft.siteType,
+      agentType: draft.agentType,
     }))
   }
 
@@ -82,22 +82,22 @@ export function SitesPage() {
     setFilters({ pageNum: 1, pageSize: filters.pageSize ?? 20 })
   }
 
-  const columns = useMemo<DataTableColumn<SiteListItem>[]>(
+  const columns = useMemo<DataTableColumn<AgentListItem>[]>(
     () => [
       {
-        id: 'siteName',
-        header: t('list.columns.siteName'),
+        id: 'agentName',
+        header: t('list.columns.agentName'),
         cell: (site) => (
           <div>
-            <p className="font-medium text-slate-900">{site.siteName}</p>
-            <p className="mt-1 text-xs text-slate-500">{site.siteCode}</p>
+            <p className="font-medium text-slate-900">{site.agentName}</p>
+            <p className="mt-1 text-xs text-slate-500">{site.agentCode}</p>
           </div>
         ),
       },
       {
-        id: 'siteType',
-        header: t('list.columns.siteType'),
-        cell: (site) => t(`siteType.${site.siteType}`, { defaultValue: site.siteType }),
+        id: 'agentType',
+        header: t('list.columns.agentType'),
+        cell: (site) => t(`agentType.${site.agentType}`, { defaultValue: site.agentType }),
       },
       {
         id: 'domain',
@@ -124,13 +124,13 @@ export function SitesPage() {
         cell: (site) => (
           <div className="flex flex-wrap gap-2">
             <Link
-              to={ROUTES.apps.siteAgent(site.id)}
+              to={ROUTES.apps.agent(site.id)}
               className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
             >
               {t('list.actions.openWorkspace')}
             </Link>
             <Link
-              to={ROUTES.apps.siteBasic(site.id)}
+              to={ROUTES.apps.agentBasic(site.id)}
               className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
             >
               {t('list.actions.basicInfo')}
@@ -154,7 +154,7 @@ export function SitesPage() {
               <button
                 type="button"
                 onClick={() => {
-                  if (!window.confirm(t('list.messages.confirmDelete', { name: site.siteName }))) return
+                  if (!window.confirm(t('list.messages.confirmDelete', { name: site.agentName }))) return
                   deleteMutation.mutate(site.id)
                 }}
                 className="rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-50"
@@ -175,10 +175,10 @@ export function SitesPage() {
         title={t('list.title')}
         description={t('list.description')}
         action={
-          <PermissionGate code={PERMISSION_CODES.siteCreate}>
+          <PermissionGate code={PERMISSION_CODES.agentCreate}>
             <button
               type="button"
-              onClick={() => navigate(ROUTES.apps.siteCreate)}
+              onClick={() => navigate(ROUTES.apps.agentCreate)}
               className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
             >
               <Plus className="h-4 w-4" />
@@ -201,13 +201,13 @@ export function SitesPage() {
           </select>
           <select
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-            value={draft.siteType ?? ''}
-            onChange={(event) => setDraft((prev) => ({ ...prev, siteType: event.target.value || undefined }))}
+            value={draft.agentType ?? ''}
+            onChange={(event) => setDraft((prev) => ({ ...prev, agentType: event.target.value || undefined }))}
           >
-            <option value="">{t('list.filters.allSiteType')}</option>
+            <option value="">{t('list.filters.allAgentType')}</option>
             {SITE_TYPE_PRESETS.map((value) => (
               <option key={value} value={value}>
-                {t(`siteType.${value}`, { defaultValue: value })}
+                {t(`agentType.${value}`, { defaultValue: value })}
               </option>
             ))}
           </select>

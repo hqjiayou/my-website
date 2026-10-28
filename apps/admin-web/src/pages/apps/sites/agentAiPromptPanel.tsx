@@ -7,14 +7,14 @@ import { aiApi } from '@/api/apps/aiApi'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
-export function SiteAiPromptPanel({ siteId }: { siteId: number }) {
+export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
   const { t } = useTranslation('sites')
   const queryClient = useQueryClient()
   const canUpdate = useHasPermission(PERMISSION_CODES.aiPromptUpdate)
 
   const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: ['sites', siteId, 'ai', 'prompt'],
-    queryFn: () => aiApi.getPromptProfile(siteId),
+    queryKey: ['sites', agentId, 'ai', 'prompt'],
+    queryFn: () => aiApi.getPromptProfile(agentId),
   })
 
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null)
@@ -26,7 +26,7 @@ export function SiteAiPromptPanel({ siteId }: { siteId: number }) {
 
   const saveMutation = useMutation({
     mutationFn: () =>
-      aiApi.upsertPromptProfile(siteId, {
+      aiApi.upsertPromptProfile(agentId, {
         systemPrompt: promptValue.trim() || null,
         temperature: temperatureValue.trim() === '' ? null : Number(temperatureValue),
         version: data?.version ?? undefined,
@@ -35,7 +35,7 @@ export function SiteAiPromptPanel({ siteId }: { siteId: number }) {
       toast.success(t('aiWorkspace.prompt.saved'))
       setSystemPrompt(null)
       setTemperature(null)
-      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'prompt'] })
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'prompt'] })
     },
   })
 

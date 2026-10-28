@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { FileText, ImageIcon } from 'lucide-react'
 
-import { siteAiApi } from '@/api/siteAiApi'
+import { agentAiApi } from '@/api/agentAiApi'
 import { MarkdownText } from '@/components/markdown'
 import type { SharedConversation } from '@/types/api'
 
@@ -15,7 +15,7 @@ export function SharePage() {
   useEffect(() => {
     if (!token) return
     let cancelled = false
-    siteAiApi
+    agentAiApi
       .getSharedConversation(token)
       .then((data) => {
         if (!cancelled) setShared(data)

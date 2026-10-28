@@ -6,8 +6,8 @@ export default {
     empty: 'サイトがありません',
     permissionHint: 'ボタン表示は permissions で制御され、最終権限はバックエンドが判断します。',
     columns: {
-      siteName: 'サイト名',
-      siteType: 'サイト種別',
+      agentName: 'サイト名',
+      agentType: 'サイト種別',
       industry: '業種',
       domain: 'デフォルトドメイン',
       status: 'ステータス',
@@ -16,7 +16,7 @@ export default {
     },
     filters: {
       allStatus: 'すべてのステータス',
-      allSiteType: 'すべての種別',
+      allAgentType: 'すべての種別',
       search: '検索',
       reset: 'リセット',
     },
@@ -44,14 +44,14 @@ export default {
       confirm: '作成確認',
     },
     fields: {
-      siteName: 'サイト名',
-      siteCode: 'サイトコード',
-      siteType: 'サイト種別',
-      customSiteType: 'カスタムタグ',
+      agentName: 'サイト名',
+      agentCode: 'サイトコード',
+      agentType: 'サイト種別',
+      customAgentType: 'カスタムタグ',
       industry: '業種',
       domain: 'ドメイン設定',
       defaultDomain: 'デフォルトドメイン',
-      siteDescription: 'サイト説明',
+      agentDescription: 'サイト説明',
       phone: '電話番号',
       address: '住所',
       businessHours: '営業時間',
@@ -61,11 +61,11 @@ export default {
       heroLayout: 'Hero レイアウト',
     },
     placeholders: {
-      customSiteType: '例：My-Docs',
-      siteName: '例: サンプルサイト',
-      siteCode: '例: demo-site',
+      customAgentType: '例：My-Docs',
+      agentName: '例: サンプルサイト',
+      agentCode: '例: demo-site',
       domain: '例: demo.example.com',
-      siteDescription: 'サイトの位置付けとサービス内容を入力してください',
+      agentDescription: 'サイトの位置付けとサービス内容を入力してください',
       phone: '例: 03-1111-2200',
       address: '営業住所を入力してください',
       businessHours: '例: 09:00 - 18:00',
@@ -106,8 +106,8 @@ export default {
     },
     messages: {
       requiredFields: '必須項目を入力してください',
-      invalidSiteCode: 'サイトコードは ^[a-z][a-z0-9_-]{1,63}$ に一致する必要があります',
-      invalidSiteType: 'タグは1–32文字で、英数字で始まり、英数字・_・-・スペースのみ使用できます',
+      invalidAgentCode: 'サイトコードは ^[a-z][a-z0-9_-]{1,63}$ に一致する必要があります',
+      invalidAgentType: 'タグは1–32文字で、英数字で始まり、英数字・_・-・スペースのみ使用できます',
       invalidPrimaryColor: 'テーマカラーは #RRGGBB 形式である必要があります',
       createdSuccess: 'サイトを作成しました',
     },
@@ -132,7 +132,7 @@ export default {
     loading: 'サイトデータを読み込み中...',
     labels: {
       industry: '業種',
-      siteType: 'サイト種別',
+      agentType: 'サイト種別',
       status: 'ステータス',
       domain: 'デフォルトドメイン',
       primaryColor: 'テーマカラー',
@@ -150,7 +150,7 @@ export default {
     backToList: 'サイト一覧へ戻る',
     notFound: {
       title: 'サイトが見つかりません',
-      description: '指定した siteId に対応するサイトが存在しません。一覧から再度選択してください。',
+      description: '指定した agentId に対応するサイトが存在しません。一覧から再度選択してください。',
     },
     theme: {
       description: '永続化されたサイト外観（schema v1）を読み取り専用で表示します。',
@@ -241,12 +241,12 @@ export default {
     visitSite: 'サイトを開く',
     notFound: {
       title: 'サイトが見つかりません',
-      description: '指定した siteId に対応するサイトが存在しません。一覧から再度選択してください。',
+      description: '指定した agentId に対応するサイトが存在しません。一覧から再度選択してください。',
     },
     placeholderNotice: '現在はプレースホルダー画面です。今後 site-service / agent-service と連携します。',
   },
   placeholderPages: {
-    currentSiteLabel: '現在のサイト',
+    currentAgentLabel: '現在のサイト',
     contents: {
       description:
         '現在のサイトのホームページ、サービス項目、事例、FAQ、バナー、お知らせを管理するためのページです。',
@@ -365,7 +365,7 @@ export default {
     draft: '下書き',
     inactive: '無効',
   },
-  siteType: {
+  agentType: {
     PERSONAL: '個人サイト',
     PORTFOLIO: 'ポートフォリオ',
     BLOG: 'ブログ',
@@ -454,7 +454,7 @@ export default {
       view: '表示',
       columns: {
         title: 'タイトル',
-        siteUserId: 'サイトユーザー',
+        agentUserId: 'サイトユーザー',
         lastMessageAt: '最終メッセージ',
         actions: '操作',
       },

@@ -3,16 +3,16 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { siteApi } from '@/api'
+import { agentApi } from '@/api'
 import { aiApi } from '@/api/apps/aiApi'
 import { PageHeader } from '@/components/page'
-import { SiteAiKnowledgePanel } from '@/pages/apps/sites/siteAiKnowledgePanel'
+import { AgentAiKnowledgePanel } from '@/pages/apps/sites/agentAiKnowledgePanel'
 import { PermissionGate } from '@/router/permission'
 import type { AiKnowledgeReembedConflict, AiKnowledgeReembedResult } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 import { isApiError } from '@/utils/http/apiError'
 
-import { AiSiteScope } from './aiSiteScope'
+import { AiAgentScope } from './aiAgentScope'
 
 export function AiKnowledgeBasesPage() {
   const { t } = useTranslation('aiAdmin')
@@ -66,8 +66,8 @@ export function AiKnowledgeBasesPage() {
           <p>{t('knowledgeBases.reembed.conflicts')}</p>
           <ul className="mt-2 list-disc pl-5">
             {conflicts.map((conflict) => (
-              <li key={conflict.siteId}>
-                {conflict.siteId}: {conflict.dimensions}
+              <li key={conflict.agentId}>
+                {conflict.agentId}: {conflict.dimensions}
               </li>
             ))}
           </ul>
@@ -92,8 +92,8 @@ export function AiKnowledgeBasesPage() {
               <p>{t('knowledgeBases.reembed.failed')}</p>
               <ul className="mt-1 list-disc pl-5">
                 {result.failed.map((failure) => (
-                  <li key={`${failure.siteId}-${failure.sourceId}`}>
-                    {failure.siteId} / {failure.sourceId}: {failure.error}
+                  <li key={`${failure.agentId}-${failure.sourceId}`}>
+                    {failure.agentId} / {failure.sourceId}: {failure.error}
                   </li>
                 ))}
               </ul>
@@ -104,7 +104,7 @@ export function AiKnowledgeBasesPage() {
       <KnowledgeOverviewSection />
       <KnowledgeBasesAdminSection />
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <AiSiteScope>{(siteId) => <SiteAiKnowledgePanel siteId={siteId} />}</AiSiteScope>
+        <AiAgentScope>{(agentId) => <AgentAiKnowledgePanel agentId={agentId} />}</AiAgentScope>
       </article>
     </section>
   )
@@ -120,19 +120,19 @@ function KnowledgeBasesAdminSection() {
   })
   const sitesQuery = useQuery({
     queryKey: ['sites', { pageNum: 1, pageSize: 100 }],
-    queryFn: () => siteApi.listSites({ pageNum: 1, pageSize: 100 }),
+    queryFn: () => agentApi.listSites({ pageNum: 1, pageSize: 100 }),
   })
   const sites = sitesQuery.data?.records ?? []
-  const siteName = (siteId: number) =>
-    sites.find((site) => site.id === siteId)?.siteName ?? `#${siteId}`
+  const agentName = (agentId: number) =>
+    sites.find((site) => site.id === agentId)?.agentName ?? `#${agentId}`
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['ai-knowledge-bases-all'] })
     void queryClient.invalidateQueries({ queryKey: ['ai-knowledge-overview'] })
   }
   const linkMutation = useMutation({
-    mutationFn: (input: { baseId: number; targetSiteId: number }) =>
-      aiApi.linkKnowledgeBase(input.baseId, input.targetSiteId),
+    mutationFn: (input: { baseId: number; targetAgentId: number }) =>
+      aiApi.linkKnowledgeBase(input.baseId, input.targetAgentId),
     onSuccess: () => {
       toast.success(t('knowledgeBases.bases.linked'))
       invalidate()
@@ -140,8 +140,8 @@ function KnowledgeBasesAdminSection() {
     onError: (error: Error) => toast.error(error.message),
   })
   const unlinkMutation = useMutation({
-    mutationFn: (input: { baseId: number; targetSiteId: number }) =>
-      aiApi.unlinkKnowledgeBase(input.baseId, input.targetSiteId),
+    mutationFn: (input: { baseId: number; targetAgentId: number }) =>
+      aiApi.unlinkKnowledgeBase(input.baseId, input.targetAgentId),
     onSuccess: () => {
       toast.success(t('knowledgeBases.bases.unlinked'))
       invalidate()
@@ -160,7 +160,7 @@ function KnowledgeBasesAdminSection() {
       <div className="mt-3 space-y-3">
         {bases.map((base) => {
           const candidates = sites.filter(
-            (site) => site.id !== base.siteId && !base.linkedSiteIds.includes(site.id),
+            (site) => site.id !== base.agentId && !base.linkedAgentIds.includes(site.id),
           )
           const chosen = linkTargets[base.id] ?? (candidates[0] ? String(candidates[0].id) : '')
           return (
@@ -173,29 +173,29 @@ function KnowledgeBasesAdminSection() {
                   </span>
                 ) : null}
                 <span className="text-xs text-slate-500">
-                  {t('knowledgeBases.bases.owner')} {base.ownerSiteName ?? `#${base.siteId}`}
+                  {t('knowledgeBases.bases.owner')} {base.ownerAgentName ?? `#${base.agentId}`}
                   {' · '}
                   {t('knowledgeBases.bases.documents')} {base.documentCount}
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="text-xs text-slate-500">{t('knowledgeBases.bases.sharedWith')}</span>
-                {base.linkedSiteIds.length === 0 ? (
+                {base.linkedAgentIds.length === 0 ? (
                   <span className="text-xs text-slate-400">{t('knowledgeBases.bases.none')}</span>
                 ) : (
-                  base.linkedSiteIds.map((linkedSiteId) => (
+                  base.linkedAgentIds.map((linkedAgentId) => (
                     <span
-                      key={linkedSiteId}
+                      key={linkedAgentId}
                       className="flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-800"
                     >
-                      {siteName(linkedSiteId)}
+                      {agentName(linkedAgentId)}
                       <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
                         <button
                           type="button"
                           className="text-blue-600"
                           title={t('knowledgeBases.bases.unlink')}
                           onClick={() =>
-                            unlinkMutation.mutate({ baseId: base.id, targetSiteId: linkedSiteId })
+                            unlinkMutation.mutate({ baseId: base.id, targetAgentId: linkedAgentId })
                           }
                         >
                           ×
@@ -216,7 +216,7 @@ function KnowledgeBasesAdminSection() {
                       >
                         {candidates.map((site) => (
                           <option key={site.id} value={site.id}>
-                            {site.siteName}
+                            {site.agentName}
                           </option>
                         ))}
                       </select>
@@ -225,7 +225,7 @@ function KnowledgeBasesAdminSection() {
                         className="rounded-lg border border-slate-300 px-2 py-1 text-xs disabled:opacity-50"
                         disabled={linkMutation.isPending || !chosen}
                         onClick={() =>
-                          linkMutation.mutate({ baseId: base.id, targetSiteId: Number(chosen) })
+                          linkMutation.mutate({ baseId: base.id, targetAgentId: Number(chosen) })
                         }
                       >
                         {t('knowledgeBases.bases.link')}
@@ -301,8 +301,8 @@ function KnowledgeOverviewSection() {
           </thead>
           <tbody>
             {overview.sites.map((site) => (
-              <tr key={site.siteId} className="border-t border-slate-100">
-                <td className="py-1.5 pr-3">{site.siteName ?? `#${site.siteId}`}</td>
+              <tr key={site.agentId} className="border-t border-slate-100">
+                <td className="py-1.5 pr-3">{site.agentName ?? `#${site.agentId}`}</td>
                 <td className="py-1.5 pr-3">{site.totalDocuments}</td>
                 <td className="py-1.5 pr-3">{site.indexedDocuments}</td>
                 <td className="py-1.5 pr-3">{site.failedDocuments}</td>
@@ -341,7 +341,7 @@ function KnowledgeOverviewSection() {
                 <span className="font-medium">{failure.title}</span>
                 <span className="text-slate-500">
                   {' · '}
-                  {failure.siteName ?? `#${failure.siteId}`}
+                  {failure.agentName ?? `#${failure.agentId}`}
                 </span>
                 {failure.indexError ? (
                   <span className="block truncate text-xs text-red-600" title={failure.indexError}>

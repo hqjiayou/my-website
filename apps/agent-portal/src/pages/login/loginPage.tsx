@@ -15,7 +15,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const establishSession = useAuthStore((state) => state.establishSession)
-  const [siteCode, setSiteCode] = useState('')
+  const [agentCode, setAgentCode] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -24,9 +24,9 @@ export function LoginPage() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const nextSiteCode = siteCode.trim()
+    const nextAgentCode = agentCode.trim()
     const nextUsername = username.trim()
-    if (!nextSiteCode || !nextUsername || !password) {
+    if (!nextAgentCode || !nextUsername || !password) {
       setFormError('請填寫站點編碼、使用者名稱和密碼')
       return
     }
@@ -34,7 +34,7 @@ export function LoginPage() {
     setFormError(null)
     try {
       const { accessToken } = await authApi.login({
-        siteCode: nextSiteCode,
+        agentCode: nextAgentCode,
         username: nextUsername,
         password,
       })
@@ -61,7 +61,7 @@ export function LoginPage() {
           <p className="mt-4 text-xs font-medium tracking-widest text-gpt-muted">SITE</p>
           <h1 className="mt-2 text-2xl font-semibold">Agent Portal</h1>
           <p className="mt-2 max-w-xs text-sm leading-6 text-gpt-muted">
-            使用站點帳號登入。站點編碼是登入 API 的 siteCode，不是數字站點 ID。
+            使用站點帳號登入。站點編碼是登入 API 的 agentCode，不是數字站點 ID。
           </p>
         </div>
 
@@ -69,11 +69,11 @@ export function LoginPage() {
           <Field label="站點編碼" id="site-code">
             <input
               id="site-code"
-              name="siteCode"
+              name="agentCode"
               autoComplete="organization"
               maxLength={SITE_CODE_MAX}
-              value={siteCode}
-              onChange={(event) => setSiteCode(event.target.value)}
+              value={agentCode}
+              onChange={(event) => setAgentCode(event.target.value)}
               className={inputClass}
             />
           </Field>

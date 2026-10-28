@@ -18,8 +18,8 @@ import type {
   AiSearchSummary,
 } from '@/types/ai'
 
-import { createJavaPreviewAdapter } from './siteAiPreviewAdapter'
-import { AiRunUsageLine } from './siteAiRunMeta'
+import { createJavaPreviewAdapter } from './agentAiPreviewAdapter'
+import { AiRunUsageLine } from './agentAiRunMeta'
 
 interface ToolCallTrace {
   toolCallId: string
@@ -118,7 +118,7 @@ function applyAgentEvent(trace: RunTrace, event: AiPreviewAgentEvent): RunTrace 
   }
 }
 
-export function SiteAiPreviewChat({ siteId }: { siteId: number }) {
+export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   const { t } = useTranslation('sites')
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
   const [todos, setTodos] = useState<AiPreviewTodoItem[]>([])
@@ -144,7 +144,7 @@ export function SiteAiPreviewChat({ siteId }: { siteId: number }) {
 
   const adapter = useMemo(
     () =>
-      createJavaPreviewAdapter(siteId, {
+      createJavaPreviewAdapter(agentId, {
         getSkills: selection.getSkills,
         getTodos: selection.getTodos,
         onAgentEvent: (event) => {
@@ -157,13 +157,13 @@ export function SiteAiPreviewChat({ siteId }: { siteId: number }) {
           setTrace((current) => applyAgentEvent(current, event))
         },
       }),
-    [siteId, selection, updateTodos],
+    [agentId, selection, updateTodos],
   )
   const runtime = useLocalRuntime(adapter)
 
   const skillsQuery = useQuery({
-    queryKey: ['sites', siteId, 'ai', 'preview', 'skills'],
-    queryFn: () => aiApi.listPreviewSkills(siteId),
+    queryKey: ['sites', agentId, 'ai', 'preview', 'skills'],
+    queryFn: () => aiApi.listPreviewSkills(agentId),
   })
 
   return (

@@ -1,11 +1,11 @@
 import { useTranslation } from 'react-i18next'
 import { useOutletContext } from 'react-router-dom'
 
-import type { SiteWorkspaceOutletContext } from './siteWorkspaceLayout'
+import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
 
-export function SiteDomainPage() {
+export function AgentDomainPage() {
   const { t } = useTranslation('sites')
-  const { site } = useOutletContext<SiteWorkspaceOutletContext>()
+  const { site } = useOutletContext<AgentWorkspaceOutletContext>()
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

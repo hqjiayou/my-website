@@ -19,7 +19,7 @@ import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
-import type { SiteWorkspaceOutletContext } from './siteWorkspaceLayout'
+import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
 
 function formatFileSize(bytes: number) {
   if (!Number.isFinite(bytes) || bytes < 0) return '—'
@@ -34,9 +34,9 @@ function statusClassName(status: string) {
   return 'border-amber-200 bg-amber-50 text-amber-700'
 }
 
-export function SiteFilesPage() {
+export function AgentFilesPage() {
   const { t } = useTranslation('sites')
-  const { site } = useOutletContext<SiteWorkspaceOutletContext>()
+  const { site } = useOutletContext<AgentWorkspaceOutletContext>()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
 

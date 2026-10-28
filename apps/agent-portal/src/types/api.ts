@@ -4,12 +4,12 @@ export interface HttpMessageBody<T> {
   data: T
 }
 
-export interface SiteTokenResponse {
+export interface AgentTokenResponse {
   accessToken: string
   accessTokenExpiresIn: number
 }
 
-export interface SiteAuthUser {
+export interface AgentAuthUser {
   userCode: string
   username: string
   displayName: string
@@ -17,46 +17,46 @@ export interface SiteAuthUser {
   status: string
 }
 
-export interface SiteAuthMe {
-  user: SiteAuthUser
+export interface AgentAuthMe {
+  user: AgentAuthUser
   roles: string[]
   permissions: string[]
-  menus: SiteMenuNode[]
+  menus: AgentMenuNode[]
   site?: {
-    siteId: number
-    siteCode: string
-    siteName: string
+    agentId: number
+    agentCode: string
+    agentName: string
   } | null
 }
 
-export interface SiteMenuNode {
+export interface AgentMenuNode {
   menuCode: string
   menuName: string
   path: string
   icon: string
   sort: number
-  children: SiteMenuNode[]
+  children: AgentMenuNode[]
 }
 
-export interface SiteLoginInput {
-  siteCode: string
+export interface AgentLoginInput {
+  agentCode: string
   username: string
   password: string
 }
 
-export interface SiteAiConversation {
+export interface AgentAiConversation {
   id: number
   title: string | null
   lastMessageAt: string | null
   createdAt: string | null
 }
 
-export interface SiteAiShare {
+export interface AgentAiShare {
   token: string
 }
 
 /** 跨對話全文搜尋的一條命中。 */
-export interface SiteAiSearchHit {
+export interface AgentAiSearchHit {
   conversationId: number
   conversationTitle: string
   messageId: number
@@ -80,7 +80,7 @@ export interface SharedConversation {
   messages: SharedConversationMessage[]
 }
 
-export interface SiteAiAttachment {
+export interface AgentAiAttachment {
   mediaType: string
   /** 文件項（kind=DOCUMENT）只有描述、無原文，data 為 null。 */
   data: string | null
@@ -89,78 +89,78 @@ export interface SiteAiAttachment {
 }
 
 /** 本輪上傳文件（原文 base64）。站點層抽取文本後才給模型，原文不落庫。 */
-export interface SiteAiDocument {
+export interface AgentAiDocument {
   fileName: string
   mediaType: string
   data: string
 }
 
 /** 历史消息的过程摘要（服务端自 agent_meta 回放）：工具名与成败、搜索查询词与命中数。 */
-export interface SiteAiMessageProcess {
+export interface AgentAiMessageProcess {
   tools: { name: string; ok: boolean }[]
   searches: { query: string; hitCount: number }[]
 }
 
-export interface SiteAiMessage {
+export interface AgentAiMessage {
   id: number
   role: string
   content: string
   createdAt: string | null
-  attachments?: SiteAiAttachment[] | null
+  attachments?: AgentAiAttachment[] | null
   /** 僅 ASSISTANT。無引用時為 null。 */
-  citations?: SiteAiCitation[] | null
+  citations?: AgentAiCitation[] | null
   /** 僅 ASSISTANT。無過程記錄時為 null。 */
-  process?: SiteAiMessageProcess | null
+  process?: AgentAiMessageProcess | null
 }
 
-export interface SiteAiChatRequest {
+export interface AgentAiChatRequest {
   message: string
   conversationId?: string
-  attachments?: SiteAiAttachment[]
-  documents?: SiteAiDocument[]
+  attachments?: AgentAiAttachment[]
+  documents?: AgentAiDocument[]
 }
 
 /** 本輪實際採用的知識庫引用。歷史訊息的 ASSISTANT 項也帶回這個欄位。 */
-export interface SiteAiCitation {
+export interface AgentAiCitation {
   sourceId: string
   chunkIndex: number
   score: number
 }
 
 /** 知识搜索工具的安全摘要（TOOL_RESULT 事件携带）：只有查询词、命中数与来源标识，不含片段正文。 */
-export interface SiteSearchSummary {
+export interface AgentSearchSummary {
   query: string
   hitCount: number
-  sources: SiteAiCitation[]
+  sources: AgentAiCitation[]
 }
 
-export interface SiteKnowledgeHit {
+export interface AgentKnowledgeHit {
   sourceId: string
   chunkIndex: number
   score: number
   content: string
 }
 
-export interface SiteKnowledgeSearchResult {
-  hits: SiteKnowledgeHit[]
+export interface AgentKnowledgeSearchResult {
+  hits: AgentKnowledgeHit[]
   degraded: boolean
   rerankApplied?: boolean
 }
 
-export interface SiteKnowledgeDocumentListItem {
+export interface AgentKnowledgeDocumentListItem {
   id: number
   title: string
   updatedAt: string | null
 }
 
-export interface SiteKnowledgeDocumentDetail {
+export interface AgentKnowledgeDocumentDetail {
   id: number
   title: string
   content: string
   updatedAt: string | null
 }
 
-export interface SiteUserMemory {
+export interface AgentUserMemory {
   id: number
   content: string
   createdAt: string | null

@@ -1,14 +1,14 @@
-import { siteApi } from '@/api/apps/siteApi'
-import type { PageResult, SiteListItem } from '@/types/site'
+import { agentApi } from '@/api/apps/agentApi'
+import type { PageResult, AgentListItem } from '@/types/site'
 
 const MAX_SITE_PAGES = 10
 const SITE_PAGE_SIZE = 100
 
 /** 跨站聚合：拉取当前账号可见的全部站点（有页数上限，避免无限 fan-out）。 */
-export async function listAllSitesForAggregation(): Promise<SiteListItem[]> {
-  const sites: SiteListItem[] = []
+export async function listAllSitesForAggregation(): Promise<AgentListItem[]> {
+  const sites: AgentListItem[] = []
   for (let pageNum = 1; pageNum <= MAX_SITE_PAGES; pageNum++) {
-    const page = await siteApi.listSites({ pageNum, pageSize: SITE_PAGE_SIZE })
+    const page = await agentApi.listSites({ pageNum, pageSize: SITE_PAGE_SIZE })
     sites.push(...page.records)
     if (sites.length >= page.total || page.records.length === 0) break
   }

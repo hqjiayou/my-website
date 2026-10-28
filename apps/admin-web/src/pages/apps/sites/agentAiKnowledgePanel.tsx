@@ -69,7 +69,7 @@ function uploadFieldError(file: File): UploadDialogState['fieldError'] {
   return null
 }
 
-export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
+export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
   const { t } = useTranslation('sites')
   const queryClient = useQueryClient()
   const [filters, setFilters] = useState<{ pageNum: number; pageSize: number; status: AiKnowledgeStatus | '' }>({
@@ -84,8 +84,8 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
   const [newBaseName, setNewBaseName] = useState<string | null>(null)
 
   const basesQuery = useQuery({
-    queryKey: ['sites', siteId, 'ai', 'knowledge-bases'],
-    queryFn: () => aiApi.listKnowledgeBases(siteId),
+    queryKey: ['sites', agentId, 'ai', 'knowledge-bases'],
+    queryFn: () => aiApi.listKnowledgeBases(agentId),
   })
   const bases = basesQuery.data ?? []
   const selectedBase = selectedBaseId == null ? null : (bases.find((base) => base.id === selectedBaseId) ?? null)
@@ -93,31 +93,31 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
   const writableBaseId = selectedBase != null && selectedBase.owned ? selectedBase.id : null
 
   const createBaseMutation = useMutation({
-    mutationFn: (name: string) => aiApi.createKnowledgeBase(siteId, name),
+    mutationFn: (name: string) => aiApi.createKnowledgeBase(agentId, name),
     onSuccess: (base) => {
       toast.success(t('aiWorkspace.knowledge.baseCreated'))
       setNewBaseName(null)
       setSelectedBaseId(base.id)
-      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge-bases'] })
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge-bases'] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
 
   const deleteBaseMutation = useMutation({
-    mutationFn: (baseId: number) => aiApi.deleteKnowledgeBase(siteId, baseId),
+    mutationFn: (baseId: number) => aiApi.deleteKnowledgeBase(agentId, baseId),
     onSuccess: () => {
       toast.success(t('aiWorkspace.knowledge.baseDeleted'))
       setSelectedBaseId(null)
-      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge-bases'] })
-      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge-bases'] })
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
 
   const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: ['sites', siteId, 'ai', 'knowledge', filters, selectedBaseId],
+    queryKey: ['sites', agentId, 'ai', 'knowledge', filters, selectedBaseId],
     queryFn: () =>
-      aiApi.listKnowledgeDocuments(siteId, {
+      aiApi.listKnowledgeDocuments(agentId, {
         pageNum: filters.pageNum,
         pageSize: filters.pageSize,
         status: filters.status || undefined,
@@ -127,7 +127,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
 
   const createMutation = useMutation({
     mutationFn: () =>
-      aiApi.createKnowledgeDocument(siteId, {
+      aiApi.createKnowledgeDocument(agentId, {
         title: editor!.title.trim(),
         content: editor!.content,
         baseId: writableBaseId,
@@ -135,13 +135,13 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
     onSuccess: () => {
       toast.success(t('aiWorkspace.knowledge.created'))
       setEditor(null)
-      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
     },
   })
 
   const updateMutation = useMutation({
     mutationFn: () =>
-      aiApi.updateKnowledgeDocument(siteId, editor!.id!, {
+      aiApi.updateKnowledgeDocument(agentId, editor!.id!, {
         title: editor!.title.trim(),
         content: editor!.content,
         status: editor!.status,
@@ -150,29 +150,29 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
     onSuccess: () => {
       toast.success(t('aiWorkspace.knowledge.updated'))
       setEditor(null)
-      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
     },
   })
 
   const uploadMutation = useMutation({
     mutationFn: (input: { file: File; title?: string }) =>
-      aiApi.uploadKnowledgeDocument(siteId, input.file, input.title, writableBaseId),
+      aiApi.uploadKnowledgeDocument(agentId, input.file, input.title, writableBaseId),
     onSuccess: (detail) => {
       if (detail.indexStatus === 'INDEXED') toast.success(t('aiWorkspace.knowledge.uploadedIndexed'))
       else if (detail.indexStatus === 'FAILED')
         toast.warning(t('aiWorkspace.knowledge.uploadedIndexFailed'))
       else toast.success(t('aiWorkspace.knowledge.uploaded'))
       setUploadDialog(null)
-      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
     },
   })
 
   const reindexMutation = useMutation({
-    mutationFn: (id: number) => aiApi.reindexKnowledgeDocument(siteId, id),
+    mutationFn: (id: number) => aiApi.reindexKnowledgeDocument(agentId, id),
     onSuccess: (detail) => {
       if (detail.indexStatus === 'INDEXED') toast.success(t('aiWorkspace.knowledge.reindexed'))
       else toast.warning(t('aiWorkspace.knowledge.reindexFailed', { error: detail.indexError ?? '' }))
-      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -196,7 +196,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
           }
           try {
             if (knowledgeFileExtension(file.name) === 'zip') {
-              const result = await aiApi.uploadKnowledgeArchive(siteId, file, writableBaseId)
+              const result = await aiApi.uploadKnowledgeArchive(agentId, file, writableBaseId)
               for (const detail of result.documents) {
                 if (detail.indexStatus === 'FAILED') indexFailed++
                 else indexed++
@@ -204,7 +204,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
               rejected += result.failures.length
               if (result.createdCount === 0 && result.failures.length === 0) rejected++
             } else {
-              const detail = await aiApi.uploadKnowledgeDocument(siteId, file, undefined, writableBaseId)
+              const detail = await aiApi.uploadKnowledgeDocument(agentId, file, undefined, writableBaseId)
               if (detail.indexStatus === 'INDEXED') indexed++
               else if (detail.indexStatus === 'FAILED') indexFailed++
               else indexed++
@@ -216,19 +216,19 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
         toast.success(
           t('aiWorkspace.knowledge.batchResult', { indexed, indexFailed, rejected }),
         )
-        void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
+        void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
       } finally {
         setBatchUploading(false)
       }
     },
-    [batchUploading, queryClient, siteId, t, viewingShared, writableBaseId],
+    [batchUploading, queryClient, agentId, t, viewingShared, writableBaseId],
   )
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => aiApi.deleteKnowledgeDocument(siteId, id),
+    mutationFn: (id: number) => aiApi.deleteKnowledgeDocument(agentId, id),
     onSuccess: () => {
       toast.success(t('aiWorkspace.knowledge.deleted'))
-      void queryClient.invalidateQueries({ queryKey: ['sites', siteId, 'ai', 'knowledge'] })
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
     },
   })
 
@@ -280,7 +280,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
   }
 
   const openEditor = useCallback(async (id: number) => {
-    const detail = await aiApi.getKnowledgeDocument(siteId, id)
+    const detail = await aiApi.getKnowledgeDocument(agentId, id)
     setEditor({
       mode: 'edit',
       id: detail.id,
@@ -289,7 +289,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
       content: detail.content,
       status: detail.status,
     })
-  }, [siteId])
+  }, [agentId])
 
   const columns = useMemo<DataTableColumn<AiKnowledgeListItem>[]>(
     () => [
@@ -363,7 +363,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
                 className="text-sm underline"
                 onClick={() => {
                   void aiApi
-                    .getKnowledgeDocumentFile(siteId, item.id)
+                    .getKnowledgeDocumentFile(agentId, item.id)
                     .then((file) => window.open(file.url, '_blank', 'noopener'))
                     .catch((error: Error) => toast.error(error.message))
                 }}
@@ -402,7 +402,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
         ),
       },
     ],
-    [deleteMutation, openEditor, reindexMutation, siteId, t],
+    [deleteMutation, openEditor, reindexMutation, agentId, t],
   )
 
   const records = data?.records ?? []
@@ -443,7 +443,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
                 {base.owned
                   ? ''
                   : ` · ${t('aiWorkspace.knowledge.sharedBadge')}${
-                      base.ownerSiteName ? ` · ${base.ownerSiteName}` : ''
+                      base.ownerAgentName ? ` · ${base.ownerAgentName}` : ''
                     }`}
               </option>
             ))}

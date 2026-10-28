@@ -14,42 +14,42 @@ import {
   SITE_TAG_PATTERN,
   SITE_TYPE_PRESETS,
   createDefaultAppearanceConfig,
-  siteApi,
+  agentApi,
   type AppearanceConfigV1,
   type ButtonStyle,
   type HeroLayout,
-  type SiteFontStyle,
-  type SiteType,
+  type AgentFontStyle,
+  type AgentType,
 } from '@/api'
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { PERMISSION_CODES } from '@/types/rbac'
 import { PermissionGate } from '@/router/permission'
-import { SiteAppearancePreview } from '@/pages/apps/style/siteAppearancePreview'
+import { AgentAppearancePreview } from '@/pages/apps/style/agentAppearancePreview'
 
 const CREATE_SITE_STEPS = ['basicInfo', 'configureAppearance', 'confirm'] as const
-type CreateSiteStep = (typeof CREATE_SITE_STEPS)[number]
+type CreateAgentStep = (typeof CREATE_SITE_STEPS)[number]
 
-interface SiteCreateFormState {
-  siteName: string
-  siteCode: string
-  siteType: SiteType
+interface AgentCreateFormState {
+  agentName: string
+  agentCode: string
+  agentType: AgentType
   defaultDomain: string
   description: string
   appearance: AppearanceConfigV1
 }
 
-export function SiteCreatePage() {
+export function AgentCreatePage() {
   const { t } = useTranslation('sites')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [step, setStep] = useState<CreateSiteStep>('basicInfo')
+  const [step, setStep] = useState<CreateAgentStep>('basicInfo')
   const [customType, setCustomType] = useState(false)
-  const [form, setForm] = useState<SiteCreateFormState>({
-    siteName: '',
-    siteCode: '',
-    siteType: SITE_TYPE_PRESETS[0],
+  const [form, setForm] = useState<AgentCreateFormState>({
+    agentName: '',
+    agentCode: '',
+    agentType: SITE_TYPE_PRESETS[0],
     defaultDomain: '',
     description: '',
     appearance: createDefaultAppearanceConfig(),
@@ -58,16 +58,16 @@ export function SiteCreatePage() {
   const currentStepIndex = CREATE_SITE_STEPS.indexOf(step)
 
   const createMutation = useMutation({
-    mutationFn: siteApi.createSite,
+    mutationFn: agentApi.createSite,
     onSuccess: async (createdSite) => {
       await queryClient.invalidateQueries({ queryKey: ['sites'] })
       toast.success(t('create.messages.createdSuccess'))
-      navigate(ROUTES.apps.siteAgent(createdSite.id))
+      navigate(ROUTES.apps.agent(createdSite.id))
     },
     onError: (error: Error) => toast.error(error.message),
   })
 
-  function updateField<K extends keyof SiteCreateFormState>(field: K, value: SiteCreateFormState[K]) {
+  function updateField<K extends keyof AgentCreateFormState>(field: K, value: AgentCreateFormState[K]) {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -79,16 +79,16 @@ export function SiteCreatePage() {
   }
 
   function validateBasicInfo() {
-    if (!form.siteName.trim() || !form.siteCode.trim() || !form.siteType.trim()) {
+    if (!form.agentName.trim() || !form.agentCode.trim() || !form.agentType.trim()) {
       toast.warning(t('create.messages.requiredFields'))
       return false
     }
-    if (!SITE_CODE_PATTERN.test(form.siteCode.trim())) {
-      toast.warning(t('create.messages.invalidSiteCode'))
+    if (!SITE_CODE_PATTERN.test(form.agentCode.trim())) {
+      toast.warning(t('create.messages.invalidAgentCode'))
       return false
     }
-    if (!SITE_TAG_PATTERN.test(form.siteType.trim())) {
-      toast.warning(t('create.messages.invalidSiteType'))
+    if (!SITE_TAG_PATTERN.test(form.agentType.trim())) {
+      toast.warning(t('create.messages.invalidAgentType'))
       return false
     }
     return true
@@ -119,18 +119,18 @@ export function SiteCreatePage() {
     else if (step === 'confirm') setStep('configureAppearance')
   }
 
-  function handleSiteTypeChange(siteType: SiteType) {
-    setForm((prev) => ({ ...prev, siteType }))
+  function handleAgentTypeChange(agentType: AgentType) {
+    setForm((prev) => ({ ...prev, agentType }))
   }
 
   function handleTypeSelect(value: string) {
     if (value === '__CUSTOM__') {
       setCustomType(true)
-      handleSiteTypeChange('')
+      handleAgentTypeChange('')
       return
     }
     setCustomType(false)
-    handleSiteTypeChange(value)
+    handleAgentTypeChange(value)
   }
 
   function handleCreateSite() {
@@ -145,9 +145,9 @@ export function SiteCreatePage() {
     if (createMutation.isPending) return
 
     createMutation.mutate({
-      siteCode: form.siteCode.trim(),
-      siteName: form.siteName.trim(),
-      siteType: form.siteType.trim(),
+      agentCode: form.agentCode.trim(),
+      agentName: form.agentName.trim(),
+      agentType: form.agentType.trim(),
       defaultDomain: form.defaultDomain.trim() || undefined,
       description: form.description.trim() || undefined,
       appearance: { ...form.appearance },
@@ -205,45 +205,45 @@ export function SiteCreatePage() {
           {step === 'basicInfo' ? (
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-1.5 text-sm">
-                <span className="font-medium text-slate-700">{t('create.fields.siteName')}</span>
+                <span className="font-medium text-slate-700">{t('create.fields.agentName')}</span>
                 <input
-                  value={form.siteName}
-                  onChange={(event) => updateField('siteName', event.target.value)}
+                  value={form.agentName}
+                  onChange={(event) => updateField('agentName', event.target.value)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-                  placeholder={t('create.placeholders.siteName')}
+                  placeholder={t('create.placeholders.agentName')}
                 />
               </label>
 
               <label className="space-y-1.5 text-sm">
-                <span className="font-medium text-slate-700">{t('create.fields.siteCode')}</span>
+                <span className="font-medium text-slate-700">{t('create.fields.agentCode')}</span>
                 <input
-                  value={form.siteCode}
-                  onChange={(event) => updateField('siteCode', event.target.value)}
+                  value={form.agentCode}
+                  onChange={(event) => updateField('agentCode', event.target.value)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-                  placeholder={t('create.placeholders.siteCode')}
+                  placeholder={t('create.placeholders.agentCode')}
                 />
               </label>
 
               <label className="space-y-1.5 text-sm">
-                <span className="font-medium text-slate-700">{t('create.fields.siteType')}</span>
+                <span className="font-medium text-slate-700">{t('create.fields.agentType')}</span>
                 <select
-                  value={customType ? '__CUSTOM__' : form.siteType}
+                  value={customType ? '__CUSTOM__' : form.agentType}
                   onChange={(event) => handleTypeSelect(event.target.value)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
                 >
                   {SITE_TYPE_PRESETS.map((value) => (
                     <option key={value} value={value}>
-                      {t(`siteType.${value}`)}
+                      {t(`agentType.${value}`)}
                     </option>
                   ))}
-                  <option value="__CUSTOM__">{t('create.fields.customSiteType')}</option>
+                  <option value="__CUSTOM__">{t('create.fields.customAgentType')}</option>
                 </select>
                 {customType ? (
                   <input
-                    value={form.siteType}
-                    onChange={(event) => handleSiteTypeChange(event.target.value)}
+                    value={form.agentType}
+                    onChange={(event) => handleAgentTypeChange(event.target.value)}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-                    placeholder={t('create.placeholders.customSiteType')}
+                    placeholder={t('create.placeholders.customAgentType')}
                   />
                 ) : null}
               </label>
@@ -259,13 +259,13 @@ export function SiteCreatePage() {
               </label>
 
               <label className="space-y-1.5 text-sm md:col-span-2">
-                <span className="font-medium text-slate-700">{t('create.fields.siteDescription')}</span>
+                <span className="font-medium text-slate-700">{t('create.fields.agentDescription')}</span>
                 <textarea
                   value={form.description}
                   onChange={(event) => updateField('description', event.target.value)}
                   rows={4}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
-                  placeholder={t('create.placeholders.siteDescription')}
+                  placeholder={t('create.placeholders.agentDescription')}
                 />
               </label>
             </div>
@@ -294,7 +294,7 @@ export function SiteCreatePage() {
                 <span className="font-medium text-slate-700">{t('create.fields.fontStyle')}</span>
                 <select
                   value={form.appearance.fontStyle}
-                  onChange={(event) => updateAppearance('fontStyle', event.target.value as SiteFontStyle)}
+                  onChange={(event) => updateAppearance('fontStyle', event.target.value as AgentFontStyle)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
                 >
                   {FONT_STYLE_VALUES.map((value) => (
@@ -341,14 +341,14 @@ export function SiteCreatePage() {
             <div className="space-y-3">
               <h3 className="text-base font-semibold text-slate-900">{t('create.confirmation.title')}</h3>
               <div className="grid gap-3 md:grid-cols-2">
-                {renderConfirmationItem(t('create.fields.siteName'), form.siteName)}
-                {renderConfirmationItem(t('create.fields.siteCode'), form.siteCode)}
+                {renderConfirmationItem(t('create.fields.agentName'), form.agentName)}
+                {renderConfirmationItem(t('create.fields.agentCode'), form.agentCode)}
                 {renderConfirmationItem(
-                  t('create.fields.siteType'),
-                  t(`siteType.${form.siteType}`, { defaultValue: form.siteType }),
+                  t('create.fields.agentType'),
+                  t(`agentType.${form.agentType}`, { defaultValue: form.agentType }),
                 )}
                 {renderConfirmationItem(t('create.fields.defaultDomain'), form.defaultDomain || '—')}
-                {renderConfirmationItem(t('create.fields.siteDescription'), form.description || '—')}
+                {renderConfirmationItem(t('create.fields.agentDescription'), form.description || '—')}
                 {renderConfirmationItem(t('create.fields.primaryColor'), form.appearance.primaryColor)}
                 {renderConfirmationItem(
                   t('create.fields.fontStyle'),
@@ -394,7 +394,7 @@ export function SiteCreatePage() {
                   {t('create.actions.next')}
                 </button>
               ) : (
-                <PermissionGate code={PERMISSION_CODES.siteCreate}>
+                <PermissionGate code={PERMISSION_CODES.agentCreate}>
                   <button
                     type="button"
                     onClick={handleCreateSite}
@@ -414,13 +414,13 @@ export function SiteCreatePage() {
             <h3 className="text-base font-semibold text-slate-900">{t('create.preview.title')}</h3>
             <div className="mt-3 space-y-2">
               <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                <p className="text-xs text-slate-500">{t('create.fields.siteName')}</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">{form.siteName || '—'}</p>
+                <p className="text-xs text-slate-500">{t('create.fields.agentName')}</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">{form.agentName || '—'}</p>
               </div>
               {(step === 'configureAppearance' || step === 'confirm') && (
                 <div className="pt-2">
-                  <SiteAppearancePreview
-                    siteName={form.siteName || t('create.preview.title')}
+                  <AgentAppearancePreview
+                    agentName={form.agentName || t('create.preview.title')}
                     config={form.appearance}
                     previewMode="desktop"
                   />

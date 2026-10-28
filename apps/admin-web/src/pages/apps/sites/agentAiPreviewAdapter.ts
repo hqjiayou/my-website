@@ -108,7 +108,7 @@ export interface PreviewAdapterOptions {
 }
 
 export function createJavaPreviewAdapter(
-  siteId: number,
+  agentId: number,
   options: PreviewAdapterOptions,
 ): ChatModelAdapter {
   return {
@@ -135,7 +135,7 @@ export function createJavaPreviewAdapter(
       const todos = options.getTodos()
 
       const response = await streamPreviewChat(
-        siteId,
+        agentId,
         {
           message,
           history: history.length ? history : undefined,

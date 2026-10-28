@@ -26,7 +26,7 @@ import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
-import type { SiteWorkspaceOutletContext } from './siteWorkspaceLayout'
+import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
 
 type EditorMode = 'create' | 'edit'
 
@@ -82,9 +82,9 @@ function parseSortOrder(value: string): number {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : 0
 }
 
-export function SiteContentsPage() {
+export function AgentContentsPage() {
   const { t } = useTranslation('sites')
-  const { site } = useOutletContext<SiteWorkspaceOutletContext>()
+  const { site } = useOutletContext<AgentWorkspaceOutletContext>()
   const queryClient = useQueryClient()
 
   const canCreate = useHasPermission(PERMISSION_CODES.contentCreate)

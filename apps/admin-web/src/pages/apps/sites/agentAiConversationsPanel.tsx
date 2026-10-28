@@ -6,21 +6,21 @@ import { aiApi } from '@/api/apps/aiApi'
 import { DataTable, type DataTableColumn } from '@/components/admin'
 import type { AiConversationListItem } from '@/types/ai'
 
-import { AiRunMetaSummary } from './siteAiRunMeta'
+import { AiRunMetaSummary } from './agentAiRunMeta'
 
-export function SiteAiConversationsPanel({ siteId }: { siteId: number }) {
+export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
   const { t } = useTranslation('sites')
   const [pageNum, setPageNum] = useState(1)
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: ['sites', siteId, 'ai', 'conversations', pageNum],
-    queryFn: () => aiApi.listConversations(siteId, { pageNum, pageSize: 20 }),
+    queryKey: ['sites', agentId, 'ai', 'conversations', pageNum],
+    queryFn: () => aiApi.listConversations(agentId, { pageNum, pageSize: 20 }),
   })
 
   const { data: messages, isPending: messagesPending } = useQuery({
-    queryKey: ['sites', siteId, 'ai', 'conversations', selectedId, 'messages'],
-    queryFn: () => aiApi.listConversationMessages(siteId, selectedId!),
+    queryKey: ['sites', agentId, 'ai', 'conversations', selectedId, 'messages'],
+    queryFn: () => aiApi.listConversationMessages(agentId, selectedId!),
     enabled: selectedId != null,
   })
 
@@ -32,9 +32,9 @@ export function SiteAiConversationsPanel({ siteId }: { siteId: number }) {
         cell: (item) => item.title || t('aiWorkspace.conversations.untitled'),
       },
       {
-        id: 'siteUserId',
-        header: t('aiWorkspace.conversations.columns.siteUserId'),
-        cell: (item) => String(item.siteUserId),
+        id: 'agentUserId',
+        header: t('aiWorkspace.conversations.columns.agentUserId'),
+        cell: (item) => String(item.agentUserId),
       },
       {
         id: 'lastMessageAt',

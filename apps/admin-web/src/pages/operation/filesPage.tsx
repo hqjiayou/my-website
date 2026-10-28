@@ -46,8 +46,8 @@ export function OperationFilesPage() {
         header: t('files.columns.site'),
         cell: (item) => (
           <div>
-            <p className="font-medium text-slate-900">{item.siteName}</p>
-            <p className="mt-1 text-xs text-slate-500">{item.siteCode}</p>
+            <p className="font-medium text-slate-900">{item.agentName}</p>
+            <p className="mt-1 text-xs text-slate-500">{item.agentCode}</p>
           </div>
         ),
       },
@@ -90,7 +90,7 @@ export function OperationFilesPage() {
         header: t('files.columns.actions'),
         cell: (item) => (
           <Link
-            to={ROUTES.apps.siteFiles(item.siteId)}
+            to={ROUTES.apps.agentFiles(item.agentId)}
             className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline"
           >
             {t('files.actions.manage')}
@@ -110,7 +110,7 @@ export function OperationFilesPage() {
       <DataTable
         columns={columns}
         data={records}
-        rowKey={(item) => `${item.siteId}-${item.id}`}
+        rowKey={(item) => `${item.agentId}-${item.id}`}
         isLoading={isPending}
         isError={isError}
         errorMessage={error instanceof Error ? error.message : undefined}
