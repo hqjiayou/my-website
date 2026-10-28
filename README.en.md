@@ -7,7 +7,7 @@ A centrally controlled collection of websites. One admin console (`apps/admin-we
 ## What this repo is
 
 - One admin console controls every site in the collection.
-- This workspace contains the admin console only. Visitor-facing sites are not in the tree. Site APIs live in the Java `site-app`.
+- This workspace contains the admin console only. Visitor-facing sites are not in the tree. Site APIs live in the Java `agent-app`.
 - `apps/admin-web` is that admin console: platform control and per-site control.
 - `services/website-services` is the Java service: a **shared gateway**, a **standalone auth service (`auth`)**, admin APIs, site APIs, and infrastructure. **JWT is RS256 + JWKS** (Auth signs; business services verify via JWKS).
 - `services/agent-services` is the **Python 3.13 + FastAPI + Pydantic AI 2.54** AI Execution Runtime (internal only; it is not published through the gateway). Java owns business truth. Python only executes AI (ADR-0005). With no `AI_MODEL` the process still starts, and calls fail honestly (ADR-0004).
@@ -33,7 +33,7 @@ my-website/
 This workspace has no visitor-facing site app (`apps/site-web/` is not in the tree).
 
 Site APIs are reached through `website-services/gateway`.  
-**Site Auth: the backend is done** (`/api/auth/site/**` for login / refresh / logout; `GET /api/site/auth/me` on site-app). **The frontend is not wired** (see [`docs/site-web/CURRENT_STATE.md`](docs/site-web/CURRENT_STATE.md)).
+**Site Auth: the backend is done** (`/api/auth/agent/**` for login / refresh / logout; `GET /api/agent/auth/me` on agent-app). **The frontend is not wired** (see [`docs/site-web/CURRENT_STATE.md`](docs/site-web/CURRENT_STATE.md)).
 
 ### apps/admin-web
 
@@ -54,14 +54,14 @@ Running modules:
 - `gateway`: shared API gateway, port `8080`
 - `auth`: **shared authentication** (admin login / refresh / logout, JWT issuance), port `8083`
 - `admin`: admin APIs (OAuth2 Resource Server plus business), port `8081`
-- `site/site-app`: site APIs, port `8082`
+- `site/agent-app`: site APIs, port `8082`
 
 Shared and reserved modules:
 
 - `common`: response envelope, error codes, exceptions, pagination; **`common.security`** is the lightweight JWT / identity contract
 - `infra`: PostgreSQL, Redis, MinIO / S3, MyBatis-Plus, Flyway, **system-message i18n**
 - `agent`: `HttpAgentClient` and the Java↔Python contract DTOs; it does not orchestrate business flows
-- `site/site-core`: shared site entities and mappers (users, content, reservations, site AI)
+- `site/agent-core`: shared site entities and mappers (users, content, reservations, site AI)
 - `site/site-car`, `site/site-cake`: empty modules (`pom.xml` only), no business code
 
 Docs:
@@ -96,15 +96,15 @@ Preferred request path:
 ```text
 admin-web ──> website-services/gateway:8080 ──> /api/auth/**   → auth:8083
                                               ──> /api/admin/**  → admin:8081 (includes GET /api/admin/auth/me)
-                                              └──> /api/site/**   → site-app:8082 (includes GET /api/site/auth/me)
+                                              └──> /api/agent/**   → agent-app:8082 (includes GET /api/agent/auth/me)
 ```
 
-Every request uses the same gateway. Login lives on auth: `/api/auth/admin/**` and `/api/auth/site/**`. `/me` lives on the matching business service, on admin or site-app.
+Every request uses the same gateway. Login lives on auth: `/api/auth/admin/**` and `/api/auth/agent/**`. `/me` lives on the matching business service, on admin or agent-app.
 
 Maven dependencies inside the build (this is not the HTTP topology):
 
 ```text
-admin / site-app / auth
+admin / agent-app / auth
   ├── infra  -> PostgreSQL / Redis / MinIO
   └── agent (when needed) -> services/agent-services
 ```
@@ -124,7 +124,7 @@ cd services/website-services
 mvn clean install -DskipTests
 mvn -pl auth -am spring-boot:run
 mvn -pl admin -am spring-boot:run
-mvn -pl site/site-app -am spring-boot:run
+mvn -pl site/agent-app -am spring-boot:run
 mvn -pl gateway spring-boot:run
 ```
 

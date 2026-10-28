@@ -13,7 +13,7 @@ last_verified: 2026-10-10
 | Audience | 路径前缀 | Cookie path（refresh） |
 |----------|----------|------------------------|
 | ADMIN | `/api/auth/admin/**` | `/api/auth/admin` |
-| SITE | `/api/auth/site/**` | `/api/auth/site`（以实现为准） |
+| SITE | `/api/auth/agent/**` | `/api/auth/agent`（以实现为准） |
 
 直连 auth:8083 仅限运维/烟测；产品流量走 gateway。
 
@@ -32,10 +32,10 @@ last_verified: 2026-10-10
 
 ## Site 关键 endpoints（BACKEND_COMPLETE）
 
-- `POST /api/auth/site/login`  
-- `POST /api/auth/site/refresh`  
-- `POST /api/auth/site/logout`  
-- `GET /api/site/auth/me`（`SiteAuthMeController`，在 site-app）
+- `POST /api/auth/agent/login`  
+- `POST /api/auth/agent/refresh`  
+- `POST /api/auth/agent/logout`  
+- `GET /api/agent/auth/me`（`SiteAuthMeController`，在 agent-app）
 
 **工作区没有 site-web 前台应用**，这些接口还没有产品页面。
 

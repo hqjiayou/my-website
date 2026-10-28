@@ -18,7 +18,7 @@ x-java-db: &java-db
   AUTH_JWKS_URI: "http://auth:8083/.well-known/jwks.json"
   SECURITY_REFRESH_COOKIE_SECURE: "${SECURITY_REFRESH_COOKIE_SECURE:-false}"
   FLYWAY_ENABLED: "${FLYWAY_ENABLED:-true}"
-  SITE_APP_FLYWAY_ENABLED: "${SITE_APP_FLYWAY_ENABLED:-false}"
+  AGENT_APP_FLYWAY_ENABLED: "${AGENT_APP_FLYWAY_ENABLED:-false}"
 
 x-java-health: &java-health
   interval: 15s
@@ -70,7 +70,7 @@ services:
   admin:
     build:
       context: .
-      dockerfile: services/website-services/Dockerfile
+      dockerfile: services/webagent-services/Dockerfile
       args:
         MODULE: admin
         JAR_GLOB: admin/target/admin-*.jar
@@ -78,7 +78,7 @@ services:
     restart: unless-stopped
     environment:
       <<: *java-db
-      AGENT_BUSINESS_API_BASE_URL: "http://site:8082"
+      AGENT_BUSINESS_API_BASE_URL: "http://agent-service:8082"
       AI_MODEL_ENTRY_SECRET: "${AI_MODEL_ENTRY_SECRET:-local-dev-model-entry-secret}"
     depends_on:
       postgres:
@@ -90,7 +90,7 @@ services:
   auth:
     build:
       context: .
-      dockerfile: services/website-services/Dockerfile
+      dockerfile: services/webagent-services/Dockerfile
       args:
         MODULE: auth
         JAR_GLOB: auth/target/auth-*.jar
@@ -112,7 +112,7 @@ services:
       AUTH_JWT_PUBLIC_KEY_PATH: "${AUTH_JWT_PUBLIC_KEY_PATH}"
       AUTH_JWT_KEY_ID: "${AUTH_JWT_KEY_ID:-auth-local-rs256-key-1}"
     volumes:
-      - ./services/website-services/secrets/local:/secrets:ro
+      - ./services/webagent-services/secrets/local:/secrets:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -124,13 +124,13 @@ services:
       <<: *java-health
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8083/actuator/health >/dev/null"]
 
-  site:
+  agent-service:
     build:
       context: .
-      dockerfile: services/website-services/Dockerfile
+      dockerfile: services/webagent-services/Dockerfile
       args:
-        MODULE: site/site-app
-        JAR_GLOB: site/site-app/target/site-app-*.jar
+        MODULE: agent/agent-app
+        JAR_GLOB: agent/agent-app/target/agent-app-*.jar
         EXPOSE_PORT: "8082"
     restart: unless-stopped
     environment:
@@ -138,7 +138,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: "${REDIS_PASSWORD}"
-      AGENT_BUSINESS_API_BASE_URL: "http://site:8082"
+      AGENT_BUSINESS_API_BASE_URL: "http://agent-service:8082"
       AI_MODEL_ENTRY_SECRET: "${AI_MODEL_ENTRY_SECRET:-local-dev-model-entry-secret}"
     depends_on:
       postgres:
@@ -154,7 +154,7 @@ services:
   gateway:
     build:
       context: .
-      dockerfile: services/website-services/Dockerfile
+      dockerfile: services/webagent-services/Dockerfile
       args:
         MODULE: gateway
         JAR_GLOB: gateway/target/gateway-*.jar
@@ -163,20 +163,20 @@ services:
     environment:
       JAVA_OPTS: "-Xmx384m"
       # application.yml 里上游写死 localhost。这里用环境变量覆盖，不改那份文件。
-      # 顺序保持 auth → admin → site。本机没有 Docker，绑定是否生效要在目标主机上看启动日志。
+      # 顺序保持 auth → admin → agent-service。本机没有 Docker，绑定是否生效要在目标主机上看启动日志。
       SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_0_ID: auth-service-api
       SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_0_URI: "http://auth:8083"
       SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_0_PREDICATES_0: "Path=/api/auth/**"
       SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_1_ID: admin-service
       SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_1_URI: "http://admin:8081"
       SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_1_PREDICATES_0: "Path=/api/admin/**"
-      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_2_ID: site-service
-      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_2_URI: "http://site:8082"
-      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_2_PREDICATES_0: "Path=/api/site/**"
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_2_ID: agent-service
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_2_URI: "http://agent-service:8082"
+      SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_ROUTES_2_PREDICATES_0: "Path=/api/agent/**"
     depends_on:
       auth:
         condition: service_healthy
-      site:
+      agent-service:
         condition: service_healthy
       admin:
         condition: service_healthy
@@ -199,7 +199,7 @@ services:
       RETRIEVAL_DATABASE_URL: "postgresql://${AGENT_RETRIEVAL_USER}:${AGENT_RETRIEVAL_PASSWORD}@postgres:5432/${AGENT_RETRIEVAL_DB}"
       AI_EMBEDDING_MODEL: "${AI_EMBEDDING_MODEL:-}"
       AI_EMBEDDING_DIMENSIONS: "${AI_EMBEDDING_DIMENSIONS:-1536}"
-      BUSINESS_API_BASE_URL: "http://site:8082"
+      BUSINESS_API_BASE_URL: "http://agent-service:8082"
       AGENT_SKILLS_DIR: /app/skills
     depends_on:
       postgres:
@@ -216,7 +216,7 @@ services:
       context: .
       dockerfile: apps/agent-portal/Dockerfile
       args:
-        VITE_PORTAL_SITE_ID: "${VITE_PORTAL_SITE_ID:-}"
+        VITE_PORTAL_AGENT_ID: "${VITE_PORTAL_AGENT_ID:-}"
     restart: unless-stopped
     ports:
       - "80:8080"

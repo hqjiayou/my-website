@@ -30,7 +30,7 @@
 | gateway | 路由 / CORS / RequestId；不做业务与鉴权业务 |
 | auth | 登录 / 刷新 / JWT 签发 / JWKS |
 | admin | 后台 API、RBAC、Resource Server 验签；**AI 业务主数据**（Prompt/KB/Conversation） |
-| site-app | 站点业务 API；站点 AI chat / internal tools |
+| agent-app | 站点业务 API；站点 AI chat / internal tools |
 | agent | `HttpAgentClient` 与 Java↔Python 契约 DTO |
 | agent-services | Python AI Execution（internal only，经 Java 调用） |
 | common / infra | 横切契约与基础设施；不放单模块业务 |

@@ -20,7 +20,7 @@ description: my-website website-services 后端实现专家，重点负责 admin
 - `admin` 模块 API / RBAC / 安全校验
 - Admin AI：`AdminAi*Controller` / Service / Entity / Flyway 权限（业务真相在 Java）
 - 与 admin 数据变更直接相关的 `infra` Flyway migration
-- **site-app** 站点 AI chat / internal tools（任务明确涉及站点侧 AI 时）
+- **agent-app** 站点 AI chat / internal tools（任务明确涉及站点侧 AI 时）
 - `agent` 模块 **仅** `HttpAgentClient` / DTO 契约对齐（不塞业务编排）
 - 相关测试、OpenAPI；数据字典仅在任务明确要求时
 

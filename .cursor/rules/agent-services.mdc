@@ -34,7 +34,7 @@ alwaysApply: false
 | `agent/prompt_builder.py` | system prompt 组装（含 skills / todos 注入） |
 | `agent/harness.py` + `harness/*.md` | 一次请求的 background、护栏、技能、工具说明、MCP 服务器名 |
 | `agent/toolset_factory.py` | business + todo + MCP 工具合并 |
-| `agent/business_tools.py` `tools/business_api.py` | 回调 Java site-app internal |
+| `agent/business_tools.py` `tools/business_api.py` | 回调 Java agent-app internal |
 | `agent/skills.py` + `skills/*/SKILL.md` | skill 加载 / frontmatter / catalog；未知策略 |
 | `agent/todo_tools.py` `schemas/todo.py` | 单次 run 内 todo 编排 |
 | `agent/mcp_tools.py` | `MCP_SERVERS_JSON` 解析与注册；health `mcpStatus` |

@@ -1,4 +1,4 @@
-# SITE_API_CONTRACT
+# AGENT_API_CONTRACT
 
 ```yaml
 artifact_type: CONTRACT
@@ -6,7 +6,7 @@ status: CURRENT
 last_verified: 2026-10-26
 ```
 
-前缀：`/api/site/**`（业务）+ `/api/auth/site/**`（认证）。
+前缀：`/api/agent/**`（业务）+ `/api/auth/agent/**`（认证）。
 
 | 能力 | 状态 |
 |------|------|
@@ -19,22 +19,22 @@ Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之
 
 ### Site AI 会话
 
-与 `GET /api/site/{siteId}/ai/conversations` 同级。不存在或不属于当前站点用户时为 NOT_FOUND，且不删除任何数据。
+与 `GET /api/agent/{siteId}/ai/conversations` 同级。不存在或不属于当前站点用户时为 NOT_FOUND，且不删除任何数据。
 
 | 方法 | 路径 | 请求 / 响应 |
 |------|------|-------------|
-| PATCH | `/api/site/{siteId}/ai/conversations/{conversationId}` | 请求体 `title`（非空白，最长 60）；成功返回更新后的会话 |
-| DELETE | `/api/site/{siteId}/ai/conversations/{conversationId}` | 无请求体；成功时 `data` 为 null |
-| DELETE | `/api/site/{siteId}/ai/conversations/{conversationId}/messages/{messageId}` | 硬删该消息及其之后全部消息（编辑/重新生成的真截断）；会话或消息不存在/非本人为 NOT_FOUND；截断后 `lastMessageAt` 回退、Todo 快照清空；成功时 `data` 为 null |
-| POST | `/api/site/{siteId}/ai/conversations/{conversationId}/share` | 创建或刷新分享（每会话至多一条；已有则复用 token 并把快照更新为当前内容）；快照只含消息正文与附件计数/文件名，不含图片数据、引用与过程；返回 `token` |
-| GET | `/api/site/{siteId}/ai/conversations/{conversationId}/share` | 当前分享的 `token`；未分享时 `data` 为 null |
-| DELETE | `/api/site/{siteId}/ai/conversations/{conversationId}/share` | 撤销分享（物理删行，token 立即失效）；成功时 `data` 为 null |
-| GET | `/api/site/public/ai/shares/{token}` | **公开**（permitAll，仅 GET）：凭 token 读分享快照（`title`/`sharedAt`/`messages[]{role,content,createdAt,imageCount,documentNames}`）；token 不存在为 NOT_FOUND。会话硬删时分享行级联删除、链接失效 |
-| GET | `/api/site/{siteId}/ai/search?q=` | 跨会话全文搜索（本站点＋本人作用域）：消息正文 ILIKE 匹配（`%`/`_` 已转义），按消息 id 倒序最多 30 条；每条含 `conversationId`/`conversationTitle`/`messageId`/`role`/`snippet`（命中词 ±30 字）/`createdAt`；空白查询返回空数组 |
+| PATCH | `/api/agent/{siteId}/ai/conversations/{conversationId}` | 请求体 `title`（非空白，最长 60）；成功返回更新后的会话 |
+| DELETE | `/api/agent/{siteId}/ai/conversations/{conversationId}` | 无请求体；成功时 `data` 为 null |
+| DELETE | `/api/agent/{siteId}/ai/conversations/{conversationId}/messages/{messageId}` | 硬删该消息及其之后全部消息（编辑/重新生成的真截断）；会话或消息不存在/非本人为 NOT_FOUND；截断后 `lastMessageAt` 回退、Todo 快照清空；成功时 `data` 为 null |
+| POST | `/api/agent/{siteId}/ai/conversations/{conversationId}/share` | 创建或刷新分享（每会话至多一条；已有则复用 token 并把快照更新为当前内容）；快照只含消息正文与附件计数/文件名，不含图片数据、引用与过程；返回 `token` |
+| GET | `/api/agent/{siteId}/ai/conversations/{conversationId}/share` | 当前分享的 `token`；未分享时 `data` 为 null |
+| DELETE | `/api/agent/{siteId}/ai/conversations/{conversationId}/share` | 撤销分享（物理删行，token 立即失效）；成功时 `data` 为 null |
+| GET | `/api/agent/public/ai/shares/{token}` | **公开**（permitAll，仅 GET）：凭 token 读分享快照（`title`/`sharedAt`/`messages[]{role,content,createdAt,imageCount,documentNames}`）；token 不存在为 NOT_FOUND。会话硬删时分享行级联删除、链接失效 |
+| GET | `/api/agent/{siteId}/ai/search?q=` | 跨会话全文搜索（本站点＋本人作用域）：消息正文 ILIKE 匹配（`%`/`_` 已转义），按消息 id 倒序最多 30 条；每条含 `conversationId`/`conversationTitle`/`messageId`/`role`/`snippet`（命中词 ±30 字）/`createdAt`；空白查询返回空数组 |
 
 ### Site AI 记忆
 
-`GET /api/site/{siteId}/ai/memories` 返回当前用户记忆（`id`、`content`、`createdAt`，时间倒序）；`DELETE /api/site/{siteId}/ai/memories/{memoryId}` 删除自己的一条（非本人 NOT_FOUND，成功 `data` 为 null）；`DELETE /api/site/{siteId}/ai/memories` 清空自己的（成功 `data` 为 null）。每用户最多 50 条，超出时先删最旧再写入。
+`GET /api/agent/{siteId}/ai/memories` 返回当前用户记忆（`id`、`content`、`createdAt`，时间倒序）；`DELETE /api/agent/{siteId}/ai/memories/{memoryId}` 删除自己的一条（非本人 NOT_FOUND，成功 `data` 为 null）；`DELETE /api/agent/{siteId}/ai/memories` 清空自己的（成功 `data` 为 null）。每用户最多 50 条，超出时先删最旧再写入。
 
 站点 chat 与 chat/stream：服务端注入该用户最近 20 条记忆，并在成功回复后把本轮抽取结果去重落库；抽取为空或缺失时不写入。终端 SSE 不下发抽取结果。
 
@@ -44,6 +44,6 @@ Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/site/public/{siteCode}` | 匿名。站点摘要：siteCode、siteName、siteType、description |
-| GET | `/api/site/public/{siteCode}/contents` | 匿名。只回 PUBLISHED 列表：id、type、title、coverMediaId、publishedAt（不含 body） |
-| GET | `/api/site/public/{siteCode}/contents/{contentId}` | 匿名。只回该站 PUBLISHED 详情（含 body） |
+| GET | `/api/agent/public/{siteCode}` | 匿名。站点摘要：siteCode、siteName、siteType、description |
+| GET | `/api/agent/public/{siteCode}/contents` | 匿名。只回 PUBLISHED 列表：id、type、title、coverMediaId、publishedAt（不含 body） |
+| GET | `/api/agent/public/{siteCode}/contents/{contentId}` | 匿名。只回该站 PUBLISHED 详情（含 body） |

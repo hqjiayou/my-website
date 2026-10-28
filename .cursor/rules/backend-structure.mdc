@@ -20,7 +20,7 @@ alwaysApply: false
 | infra | Redis、MyBatis、i18n、OAuth2 RS 辅助；Flyway 脚本宿主 | 业务流程、业务 Entity/Mapper |
 | agent | `HttpAgentClient`、Agent DTO 契约 | 业务编排、Prompt/Conversation 持久化 |
 
-## 业务模块包树（admin / auth / site-core / site-app）
+## 业务模块包树（admin / auth / agent-core / agent-app）
 
 按需使用，不建空包：`config` `constant` `controller` `dto` `entity` `mapper` `properties` `security` `service`+`service.impl` `handler` `utils`。
 
@@ -64,9 +64,9 @@ alwaysApply: false
 
 ## AI 域（摘要）
 
-- **业务真相在 Java**（admin Prompt/KB/Conversation、site-app chat）；Python 仅 execution（见 `agent-services.mdc`、`ai-domain.mdc`）。
+- **业务真相在 Java**（admin Prompt/KB/Conversation、agent-app chat）；Python 仅 execution（见 `agent-services.mdc`、`ai-domain.mdc`）。
 - Admin AI：`AdminAi*Controller` / `Service` / `Entity` / Flyway 权限在 **admin**。
-- 站点 AI 与 internal tools：**site-app**；调用 Python 经 **agent** 模块 `HttpAgentClient`。
+- 站点 AI 与 internal tools：**agent-app**；调用 Python 经 **agent** 模块 `HttpAgentClient`。
 - 禁止在 agent 模块写业务 CRUD；禁止 Python 直连业务库。
 
 ## 已知例外（勿扩散）
