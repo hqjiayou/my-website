@@ -199,6 +199,26 @@ class AdminRbacSeedVerifyPgTest {
     }
 
     @Test
+    void everySoftDeleteTableCarriesDeletedAtColumn() {
+        // 类级守卫（泛化 knowledgeBaseTableCarriesDeletedAtColumn 的教训）：凡是带
+        // deleted 软删标志的表，AbstractAuditableEntity 都要求 deleted_at 同时存在；
+        // 再有迁移漏列，这里一次性全抓，不用等运行时查询爆 500。
+        List<String> offenders = jdbcTemplate.queryForList(
+                """
+                SELECT c.table_name FROM information_schema.columns c
+                WHERE c.table_schema = 'public' AND c.column_name = 'deleted'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM information_schema.columns d
+                      WHERE d.table_schema = 'public'
+                        AND d.table_name = c.table_name
+                        AND d.column_name = 'deleted_at')
+                ORDER BY c.table_name
+                """,
+                String.class);
+        assertThat(offenders).isEmpty();
+    }
+
+    @Test
     void flywaySchemaRemainsStableOnSecondContextRefresh() {
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history", Integer.class);
         assertThat(count).isEqualTo(EXPECTED_FLYWAY_VERSION_COUNT);

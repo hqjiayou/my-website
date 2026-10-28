@@ -1,4 +1,4 @@
-package com.mywebsite.admin.service;
+package com.mywebsite.infra.knowledge;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,14 +14,15 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.Test;
 
-import com.mywebsite.admin.service.AdminAiKnowledgeTextExtractor.ExtractionException;
+import com.mywebsite.infra.knowledge.KnowledgeTextExtractor.ExtractionException;
 
-/** PDF 文字层抽取（其余格式归一化见 {@link AdminAiKnowledgeContentConverterTest}）。 */
-class AdminAiKnowledgeTextExtractorTest {
+
+/** PDF 文字层抽取（其余格式归一化见 {@link KnowledgeContentConverterTest}）。 */
+class KnowledgeTextExtractorTest {
 
     @Test
     void extractsPdfTextLayer() throws IOException {
-        String text = AdminAiKnowledgeTextExtractor.extractText("pdf", pdfWithText("Hello KB PDF"));
+        String text = KnowledgeTextExtractor.extractText("pdf", pdfWithText("Hello KB PDF"));
         assertThat(text).contains("Hello KB PDF");
     }
 
@@ -29,20 +30,20 @@ class AdminAiKnowledgeTextExtractorTest {
     void blankPdfExtractsToEmptyText() throws IOException {
         try (PDDocument document = new PDDocument()) {
             document.addPage(new PDPage());
-            assertThat(AdminAiKnowledgeTextExtractor.extractText("pdf", toBytes(document))).isBlank();
+            assertThat(KnowledgeTextExtractor.extractText("pdf", toBytes(document))).isBlank();
         }
     }
 
     @Test
     void corruptPdfThrowsExtractionException() {
-        assertThatThrownBy(() -> AdminAiKnowledgeTextExtractor.extractText(
+        assertThatThrownBy(() -> KnowledgeTextExtractor.extractText(
                 "pdf", "not a pdf".getBytes(StandardCharsets.UTF_8)))
                 .isInstanceOf(ExtractionException.class);
     }
 
     @Test
     void unsupportedExtensionThrowsExtractionException() {
-        assertThatThrownBy(() -> AdminAiKnowledgeTextExtractor.extractText("exe", new byte[] {1, 2}))
+        assertThatThrownBy(() -> KnowledgeTextExtractor.extractText("exe", new byte[] {1, 2}))
                 .isInstanceOf(ExtractionException.class);
     }
 

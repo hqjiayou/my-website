@@ -58,6 +58,15 @@ public final class AdminAiKnowledgeDtos {
     /** 原档下载（短时 presigned URL）。 */
     public record AdminAiKnowledgeFileDto(String url, String filename, String sourceFormat) {}
 
+    /** zip 批量导入中单个条目的失败（文件名＋原因 messageKey，与单文件上传的报错口径一致）。 */
+    public record AdminAiKnowledgeArchiveFailureDto(String fileName, String reason) {}
+
+    /** zip 批量导入结果：成功创建的文档明细＋逐条失败清单（部分成功是常态，不整批回滚）。 */
+    public record AdminAiKnowledgeArchiveResultDto(
+            int createdCount,
+            java.util.List<AdminAiKnowledgeDetailDto> documents,
+            java.util.List<AdminAiKnowledgeArchiveFailureDto> failures) {}
+
     /** 知识中心总览：全平台聚合 + 分站点统计 + 最近索引失败。 */
     public record AdminAiKnowledgeOverviewDto(
             long totalDocuments,
