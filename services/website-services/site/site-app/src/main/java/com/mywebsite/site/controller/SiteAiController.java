@@ -107,6 +107,15 @@ public class SiteAiController {
         return ApiResponse.success();
     }
 
+    @DeleteMapping("/{siteId}/ai/conversations/{conversationId}/messages/{messageId}")
+    public ApiResponse<Void> truncateMessages(
+            @PathVariable("siteId") long siteId,
+            @PathVariable("conversationId") long conversationId,
+            @PathVariable("messageId") long messageId) {
+        conversationService.truncateMessages(siteId, requireSiteUserId(siteId), conversationId, messageId);
+        return ApiResponse.success();
+    }
+
     @GetMapping("/{siteId}/ai/memories")
     public ApiResponse<List<SiteUserMemoryDto>> listMemories(@PathVariable("siteId") long siteId) {
         long siteUserId = requireSiteUserId(siteId);

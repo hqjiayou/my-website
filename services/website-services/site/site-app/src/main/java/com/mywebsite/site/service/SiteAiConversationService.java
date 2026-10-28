@@ -66,6 +66,14 @@ public interface SiteAiConversationService {
      */
     void deleteConversation(long siteId, long siteUserId, long conversationId);
 
+    /**
+     * 硬删该会话中 {@code fromMessageId} 及其之后全部消息（供前端「编辑消息」与「重新生成」做真截断，
+     * 避免被截断的旧轮次在刷新后复活、或进入后续历史）。会话或目标消息不存在/非本人为 NOT_FOUND；
+     * 截断后刷新 {@code lastMessageAt} 为剩余最新消息时间（无剩余时回退会话创建时间），
+     * 并清空 Todo 快照（它属于被截断的较新轮次，下一轮会重写）。
+     */
+    void truncateMessages(long siteId, long siteUserId, long conversationId, long fromMessageId);
+
     record ChatPreparation(
             SiteAiConversationEntity conversation,
             List<AgentChatHistoryMessage> history,
