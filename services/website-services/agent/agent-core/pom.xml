@@ -6,12 +6,12 @@
 
     <parent>
         <groupId>com.mywebsite</groupId>
-        <artifactId>site</artifactId>
+        <artifactId>agent</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>site-core</artifactId>
-    <name>site-core</name>
+    <artifactId>agent-core</artifactId>
+    <name>agent-core</name>
     <packaging>jar</packaging>
 
     <dependencies>
@@ -24,6 +24,23 @@
             <groupId>com.mywebsite</groupId>
             <artifactId>infra</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-json</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>

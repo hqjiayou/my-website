@@ -6,12 +6,12 @@
 
     <parent>
         <groupId>com.mywebsite</groupId>
-        <artifactId>site</artifactId>
+        <artifactId>agent</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>site-app</artifactId>
-    <name>site-app</name>
+    <artifactId>agent-app</artifactId>
+    <name>agent-app</name>
     <packaging>jar</packaging>
 
     <dependencies>
@@ -27,22 +27,7 @@
         </dependency>
         <dependency>
             <groupId>com.mywebsite</groupId>
-            <artifactId>agent</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.mywebsite</groupId>
-            <artifactId>site-core</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.mywebsite</groupId>
-            <artifactId>site-car</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.mywebsite</groupId>
-            <artifactId>site-cake</artifactId>
+            <artifactId>agent-core</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
