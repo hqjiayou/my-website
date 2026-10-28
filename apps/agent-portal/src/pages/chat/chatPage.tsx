@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, Copy, Ellipsis, FileText, ImagePlus, Pencil, Plus, RotateCcw, Square, SquarePen, Trash } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, Ellipsis, FileText, ImagePlus, Pencil, Plus, RotateCcw, Square, SquarePen, Trash, X } from 'lucide-react'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
 import { MarkdownText } from '@/components/markdown'
@@ -195,6 +195,7 @@ export function ChatPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [attachMenuOpen, setAttachMenuOpen] = useState(false)
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
   const [headerConfirm, setHeaderConfirm] = useState(false)
   const [headerNotice, setHeaderNotice] = useState<string | null>(null)
@@ -807,7 +808,9 @@ export function ChatPage() {
           <ul className="mb-2 flex flex-wrap gap-2">
             {pending.map((image) => (
               <li key={image.id} className="relative">
-                <img src={imageSrc(image)} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                <button type="button" onClick={() => setLightboxSrc(imageSrc(image))} aria-label="放大圖片" className="cursor-zoom-in">
+                  <img src={imageSrc(image)} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                </button>
                 <button
                   type="button"
                   aria-label="移除圖片"
@@ -816,9 +819,9 @@ export function ChatPage() {
                     setPending((current) => current.filter((item) => item.id !== image.id))
                     setAttachError(null)
                   }}
-                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gpt-ink text-[10px] text-gpt-canvas disabled:opacity-30"
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas disabled:opacity-30"
                 >
-                  ×
+                  <X size={11} />
                 </button>
               </li>
             ))}
@@ -842,9 +845,9 @@ export function ChatPage() {
                     setPendingDocs((current) => current.filter((item) => item.id !== doc.id))
                     setAttachError(null)
                   }}
-                  className="absolute right-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-gpt-ink text-[10px] text-gpt-canvas disabled:opacity-30"
+                  className="absolute right-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-gpt-ink text-gpt-canvas disabled:opacity-30"
                 >
-                  ×
+                  <X size={11} />
                 </button>
               </li>
             ))}
@@ -1168,12 +1171,19 @@ export function ChatPage() {
                     {hasImages ? (
                       <div className={message.content ? 'mb-2 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
                         {message.images?.map((image, index) => (
-                          <img
+                          <button
                             key={`${message.id}-${index}`}
-                            src={imageSrc(image)}
-                            alt="附件圖片"
-                            className="max-h-48 max-w-full rounded-xl"
-                          />
+                            type="button"
+                            onClick={() => setLightboxSrc(imageSrc(image))}
+                            aria-label="放大圖片"
+                            className="cursor-zoom-in"
+                          >
+                            <img
+                              src={imageSrc(image)}
+                              alt="附件圖片"
+                              className="max-h-48 max-w-full rounded-xl"
+                            />
+                          </button>
                         ))}
                       </div>
                     ) : null}
@@ -1197,10 +1207,16 @@ export function ChatPage() {
                         </p>
                       ) : (
                         <div>
-                          <MarkdownText>{message.content}</MarkdownText>
-                          {message.pending ? (
-                            <span className="ml-1 inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-gpt-ink align-middle" />
-                          ) : null}
+                          {message.pending && !message.content && !hasProcess ? (
+                            <p className="animate-pulse text-base text-gpt-muted">正在思考…</p>
+                          ) : (
+                            <>
+                              <MarkdownText>{message.content}</MarkdownText>
+                              {message.pending ? (
+                                <span className="ml-1 inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-gpt-ink align-middle" />
+                              ) : null}
+                            </>
+                          )}
                         </div>
                       )
                     ) : null}
@@ -1302,6 +1318,23 @@ export function ChatPage() {
       </div>
 
       {!showEmpty ? <div className="safe-x shrink-0 px-4 pb-4">{composer}</div> : null}
+      {lightboxSrc ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+          role="dialog"
+          aria-label="圖片預覽"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <img src={lightboxSrc} alt="附件圖片大圖" className="max-h-full max-w-full rounded-xl object-contain" />
+          <button
+            type="button"
+            aria-label="關閉預覽"
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+          >
+            <X size={19} />
+          </button>
+        </div>
+      ) : null}
     </section>
   )
 }

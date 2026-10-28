@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Trash } from 'lucide-react'
 
 import { siteAiApi } from '@/api/siteAiApi'
 import { Screen } from '@/components/screen'
@@ -121,7 +122,12 @@ export function MemoriesPage() {
             )}
           </div>
         ) : null}
-        {loading ? <p className="text-sm text-gpt-muted">正在載入…</p> : null}
+        {loading ? (
+          <div className="flex flex-col gap-stack" aria-label="載入中">
+            <span className="h-24 animate-pulse rounded-2xl bg-gpt-hover" />
+            <span className="h-24 animate-pulse rounded-2xl bg-gpt-hover" />
+          </div>
+        ) : null}
         {!loading && error ? (
           <p className="rounded-control bg-danger-soft px-3 py-2 text-sm text-danger" role="alert">
             {error}
@@ -167,9 +173,11 @@ export function MemoriesPage() {
                         setConfirmClear(false)
                         setConfirmId(id)
                       }}
-                      className="mt-3 h-8 px-1.5 text-xs text-danger disabled:opacity-60"
+                      aria-label="刪除此記憶"
+                      title="刪除"
+                      className="mt-3 flex h-8 w-8 items-center justify-center rounded-lg text-danger transition hover:bg-gpt-hover disabled:opacity-60"
                     >
-                      刪除
+                      <Trash size={15} />
                     </button>
                   )}
                 </li>

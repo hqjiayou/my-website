@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ArrowRight, FileText, MessageSquare } from 'lucide-react'
 
 import { siteAiApi } from '@/api/siteAiApi'
 import { Card, CardTitle } from '@/components/card'
@@ -77,8 +78,13 @@ export function HomePage() {
           onClick={() => navigate(ROUTES.chat)}
           className="mt-section rounded-panel bg-primary p-4 text-left text-primary-foreground shadow-raised disabled:opacity-60"
         >
-          <span className="block text-lg font-semibold">開始 AI 對話</span>
-          <span className="mt-1 block text-sm leading-6 opacity-80">串流回覆，可傳圖，並會參考這個站點的知識庫</span>
+          <span className="flex items-center gap-3">
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-semibold">開始 AI 對話</span>
+              <span className="mt-1 block text-sm leading-6 opacity-80">串流回覆，可傳圖，並會參考這個站點的知識庫</span>
+            </span>
+            <ArrowRight size={20} className="shrink-0 opacity-80" />
+          </span>
         </button>
 
         {site.ok ? (
@@ -98,7 +104,14 @@ export function HomePage() {
                 最近對話
               </CardTitle>
               {conversations === null ? (
-                <p className="mt-3 text-sm text-gpt-muted">{modulesError ? '載入失敗，請稍後重試' : '載入中…'}</p>
+                modulesError ? (
+                <p className="mt-3 text-sm text-gpt-muted">載入失敗，請稍後重試</p>
+              ) : (
+                <div className="mt-3 flex flex-col gap-2.5" aria-label="載入中">
+                  <span className="h-4 w-3/4 animate-pulse rounded bg-gpt-hover" />
+                  <span className="h-4 w-1/2 animate-pulse rounded bg-gpt-hover" />
+                </div>
+              )
               ) : conversations.length === 0 ? (
                 <p className="mt-3 text-sm leading-6 text-gpt-muted">尚無對話，點上方開始第一場。</p>
               ) : (
@@ -110,7 +123,8 @@ export function HomePage() {
                         onClick={() => navigate(`${ROUTES.chat}/${conversation.id}`)}
                         className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-gpt-hover"
                       >
-                        <span className="min-w-0 truncate text-sm font-medium">
+                        <MessageSquare size={16} className="shrink-0 text-gpt-muted" />
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
                           {conversation.title?.trim() || '未命名對話'}
                         </span>
                         <span className="shrink-0 text-xs text-gpt-muted">
@@ -138,7 +152,14 @@ export function HomePage() {
                 知識庫{documents !== null ? `（${documents.length} 篇）` : ''}
               </CardTitle>
               {documents === null ? (
-                <p className="mt-3 text-sm text-gpt-muted">{modulesError ? '載入失敗，請稍後重試' : '載入中…'}</p>
+                modulesError ? (
+                <p className="mt-3 text-sm text-gpt-muted">載入失敗，請稍後重試</p>
+              ) : (
+                <div className="mt-3 flex flex-col gap-2.5" aria-label="載入中">
+                  <span className="h-4 w-3/4 animate-pulse rounded bg-gpt-hover" />
+                  <span className="h-4 w-1/2 animate-pulse rounded bg-gpt-hover" />
+                </div>
+              )
               ) : documents.length === 0 ? (
                 <p className="mt-3 text-sm leading-6 text-gpt-muted">這個站點尚無知識文件。</p>
               ) : (
@@ -150,7 +171,8 @@ export function HomePage() {
                         onClick={() => navigate(ROUTES.knowledge)}
                         className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-gpt-hover"
                       >
-                        <span className="min-w-0 truncate text-sm font-medium">{document.title}</span>
+                        <FileText size={16} className="shrink-0 text-gpt-muted" />
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{document.title}</span>
                         <span className="shrink-0 text-xs text-gpt-muted">{formatWhen(document.updatedAt)}</span>
                       </button>
                     </li>
@@ -174,7 +196,14 @@ export function HomePage() {
                 我的記憶{memories !== null ? `（${memories.length} 條）` : ''}
               </CardTitle>
               {memories === null ? (
-                <p className="mt-3 text-sm text-gpt-muted">{modulesError ? '載入失敗，請稍後重試' : '載入中…'}</p>
+                modulesError ? (
+                <p className="mt-3 text-sm text-gpt-muted">載入失敗，請稍後重試</p>
+              ) : (
+                <div className="mt-3 flex flex-col gap-2.5" aria-label="載入中">
+                  <span className="h-4 w-3/4 animate-pulse rounded bg-gpt-hover" />
+                  <span className="h-4 w-1/2 animate-pulse rounded bg-gpt-hover" />
+                </div>
+              )
               ) : memories.length === 0 ? (
                 <p className="mt-3 text-sm leading-6 text-gpt-muted">尚無記住的內容，對話裡提到的偏好會記在這裡。</p>
               ) : (
