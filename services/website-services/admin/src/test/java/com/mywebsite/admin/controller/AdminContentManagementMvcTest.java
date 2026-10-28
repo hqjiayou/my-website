@@ -72,7 +72,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         create.put("status", "DRAFT");
         create.put("sortOrder", 10);
 
-        MvcResult created = mockMvc.perform(post("/api/admin/sites/" + agentId + "/contents")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents/" + agentId + "/contents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(create)))
@@ -91,19 +91,19 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         news.put("title", "News");
         news.put("body", "n");
         news.put("status", "PUBLISHED");
-        mockMvc.perform(post("/api/admin/sites/" + agentId + "/contents")
+        mockMvc.perform(post("/api/admin/agents/" + agentId + "/contents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(news)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.publishedAt").isNotEmpty());
 
-        mockMvc.perform(get("/api/admin/sites/" + agentId + "/contents")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/contents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total").value(2));
 
-        mockMvc.perform(get("/api/admin/sites/" + agentId + "/contents")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/contents")
                         .param("type", "hero")
                         .param("status", "DRAFT")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -111,7 +111,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.records[0].id").value((int) contentId));
 
-        mockMvc.perform(get("/api/admin/sites/" + agentId + "/contents/" + contentId)
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/contents/" + contentId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.title").value("Welcome"));
@@ -122,7 +122,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         update.put("body", "Hello body 2");
         update.put("sortOrder", 5);
         update.put("version", 0);
-        mockMvc.perform(put("/api/admin/sites/" + agentId + "/contents/" + contentId)
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/contents/" + contentId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(update)))
@@ -134,7 +134,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         ObjectNode statusBody = MAPPER.createObjectNode();
         statusBody.put("status", "PUBLISHED");
         statusBody.put("version", 1);
-        mockMvc.perform(patch("/api/admin/sites/" + agentId + "/contents/" + contentId + "/status")
+        mockMvc.perform(patch("/api/admin/agents/" + agentId + "/contents/" + contentId + "/status")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(statusBody)))
@@ -143,11 +143,11 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.publishedAt").isNotEmpty())
                 .andExpect(jsonPath("$.data.version").value(2));
 
-        mockMvc.perform(delete("/api/admin/sites/" + agentId + "/contents/" + contentId)
+        mockMvc.perform(delete("/api/admin/agents/" + agentId + "/contents/" + contentId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/admin/sites/" + agentId + "/contents/" + contentId)
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/contents/" + contentId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
@@ -160,7 +160,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         body.put("type", "faq");
         body.put("title", "Q");
         body.put("status", "DRAFT");
-        mockMvc.perform(post("/api/admin/sites/" + agentId + "/contents")
+        mockMvc.perform(post("/api/admin/agents/" + agentId + "/contents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))
@@ -177,7 +177,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         update.put("type", "hero");
         update.put("title", "B");
         update.put("version", 0);
-        mockMvc.perform(put("/api/admin/sites/" + agentId + "/contents/" + contentId)
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/contents/" + contentId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(update)))
@@ -186,7 +186,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
 
         update.put("title", "C");
         update.put("version", 0);
-        mockMvc.perform(put("/api/admin/sites/" + agentId + "/contents/" + contentId)
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/contents/" + contentId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(update)))
@@ -204,7 +204,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         badType.put("type", "banner");
         badType.put("title", "X");
         badType.put("status", "DRAFT");
-        mockMvc.perform(post("/api/admin/sites/" + agentA + "/contents")
+        mockMvc.perform(post("/api/admin/agents/" + agentA + "/contents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(badType)))
@@ -215,7 +215,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         crossCover.put("title", "About");
         crossCover.put("status", "DRAFT");
         crossCover.put("coverMediaId", mediaOnB);
-        mockMvc.perform(post("/api/admin/sites/" + agentA + "/contents")
+        mockMvc.perform(post("/api/admin/agents/" + agentA + "/contents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(crossCover)))
@@ -233,14 +233,14 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         create.put("title", "CTA");
         create.put("status", "DRAFT");
         create.put("coverMediaId", mediaId);
-        mockMvc.perform(post("/api/admin/sites/" + agentId + "/contents")
+        mockMvc.perform(post("/api/admin/agents/" + agentId + "/contents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(create)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.coverMediaId").value((int) mediaId));
 
-        mockMvc.perform(delete("/api/admin/sites/" + agentId + "/media/" + mediaId)
+        mockMvc.perform(delete("/api/admin/agents/" + agentId + "/media/" + mediaId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isConflict());
     }
@@ -257,7 +257,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         create.put("body", "with cover");
         create.put("status", "DRAFT");
         create.put("coverMediaId", mediaId);
-        MvcResult created = mockMvc.perform(post("/api/admin/sites/" + agentId + "/contents")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents/" + agentId + "/contents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(create)))
@@ -274,7 +274,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         clear.putNull("body");
         clear.putNull("coverMediaId");
         clear.put("version", 0);
-        mockMvc.perform(put("/api/admin/sites/" + agentId + "/contents/" + contentId)
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/contents/" + contentId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(clear)))
@@ -283,7 +283,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.body").doesNotExist())
                 .andExpect(jsonPath("$.data.version").value(1));
 
-        mockMvc.perform(delete("/api/admin/sites/" + agentId + "/media/" + mediaId)
+        mockMvc.perform(delete("/api/admin/agents/" + agentId + "/media/" + mediaId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
     }
@@ -295,11 +295,11 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         long agentB = createSite(token);
         long contentId = createDraft(token, agentA, "service", "Svc");
 
-        mockMvc.perform(get("/api/admin/sites/" + agentB + "/contents/" + contentId)
+        mockMvc.perform(get("/api/admin/agents/" + agentB + "/contents/" + contentId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(delete("/api/admin/sites/" + agentB + "/contents/" + contentId)
+        mockMvc.perform(delete("/api/admin/agents/" + agentB + "/contents/" + contentId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
@@ -310,10 +310,10 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         long agentId = createSite(token);
         long contentId = createDraft(token, agentId, "case", "Case");
 
-        mockMvc.perform(delete("/api/admin/sites/" + agentId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(delete("/api/admin/agents/" + agentId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/admin/sites/" + agentId + "/contents/" + contentId)
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/contents/" + contentId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
@@ -323,7 +323,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         body.put("agentCode", "c_" + Long.toHexString(System.nanoTime()));
         body.put("agentName", "Content Agent");
         body.put("agentType", "CAKE");
-        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))
@@ -337,7 +337,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
         create.put("type", type);
         create.put("title", title);
         create.put("status", "DRAFT");
-        MvcResult created = mockMvc.perform(post("/api/admin/sites/" + agentId + "/contents")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents/" + agentId + "/contents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(create)))
@@ -349,7 +349,7 @@ class AdminContentManagementMvcTest extends AbstractAdminSpringBootTest {
     private long uploadMedia(String token, long agentId) throws Exception {
         MockMultipartFile file =
                 new MockMultipartFile("file", "photo.jpg", "image/jpeg", minimalJpeg());
-        MvcResult uploaded = mockMvc.perform(multipart("/api/admin/sites/" + agentId + "/media")
+        MvcResult uploaded = mockMvc.perform(multipart("/api/admin/agents/" + agentId + "/media")
                         .file(file)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())

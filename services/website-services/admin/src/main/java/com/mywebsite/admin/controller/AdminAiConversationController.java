@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/sites/{agentId}/ai/conversations")
+@RequestMapping("/api/admin/agents/{agentId}/ai/conversations")
 @Tag(name = "Admin · AI Conversation")
 @SecurityRequirement(name = "adminBearer")
 public class AdminAiConversationController {

@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Hidden
 @RestController
-@RequestMapping("/internal/agent/v1/sites/{agentId}")
+@RequestMapping("/internal/agent/v1/agents/{agentId}")
 public class AgentInternalController {
 
     private final AgentInternalService agentInternalService;

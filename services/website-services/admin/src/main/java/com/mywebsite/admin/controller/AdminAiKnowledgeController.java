@@ -47,7 +47,7 @@ import org.springframework.web.multipart.MultipartFile;
 @SecurityRequirement(name = "adminBearer")
 public class AdminAiKnowledgeController {
 
-    private static final String DOCUMENTS = "/api/admin/sites/{agentId}/ai/knowledge-documents";
+    private static final String DOCUMENTS = "/api/admin/agents/{agentId}/ai/knowledge-documents";
     private static final int MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
     /** zip 批量导入上限：条目数与解压后总字节（防 zip 炸弹与整批拖垮请求）。 */
@@ -121,7 +121,7 @@ public class AdminAiKnowledgeController {
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, data));
     }
 
-    private static final String BASES = "/api/admin/sites/{agentId}/ai/knowledge-bases";
+    private static final String BASES = "/api/admin/agents/{agentId}/ai/knowledge-bases";
 
     @GetMapping(BASES)
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")

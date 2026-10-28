@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/sites/{agentId}/ai/prompt-profile")
+@RequestMapping("/api/admin/agents/{agentId}/ai/prompt-profile")
 @Tag(name = "Admin · AI Prompt")
 @SecurityRequirement(name = "adminBearer")
 public class AdminAiPromptController {

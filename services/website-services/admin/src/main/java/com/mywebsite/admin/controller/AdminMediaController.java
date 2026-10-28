@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api/admin/sites/{agentId}/media")
+@RequestMapping("/api/admin/agents/{agentId}/media")
 @Tag(name = "Admin · Media")
 @SecurityRequirement(name = "adminBearer")
 public class AdminMediaController {

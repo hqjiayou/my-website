@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
-@RequestMapping("/api/admin/sites/{agentId}/ai")
+@RequestMapping("/api/admin/agents/{agentId}/ai")
 @Tag(name = "Admin · AI Preview")
 @SecurityRequirement(name = "adminBearer")
 public class AdminAiPreviewController {

@@ -54,7 +54,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
                 MAPPER.valueToTree(new AdminAppearanceConfigV1Dto(
                         "#B91C1C", "modern", "rounded", "left-text-right-visual")));
 
-        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))
@@ -64,7 +64,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
 
         long agentId = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        mockMvc.perform(get("/api/admin/sites/" + agentId + "/appearance")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.schemaVersion").value(1))
@@ -81,7 +81,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
                 "config",
                 new AdminAppearanceConfigV1Dto("#2563EB", "classic", "pill", "centered"));
 
-        mockMvc.perform(put("/api/admin/sites/" + agentId + "/appearance")
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(put)))
@@ -100,7 +100,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
         body.put("agentName", "Core Only");
         body.put("agentType", "PERSONAL");
 
-        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))
@@ -110,7 +110,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
         JsonNode detail = MAPPER.readTree(created.getResponse().getContentAsString()).path("data");
         long agentId = detail.path("id").asLong();
 
-        mockMvc.perform(get("/api/admin/sites/" + agentId + "/appearance")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
@@ -126,7 +126,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
                   "primaryColor":"#2563EB","fontStyle":"modern","buttonStyle":"rounded",
                   "heroLayout":"centered","logo":"x.png"}}
                 """;
-        mockMvc.perform(put("/api/admin/sites/" + agentId + "/appearance")
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(body))
@@ -137,7 +137,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
     void rejectInvalidJsonBody() throws Exception {
         String token = tokenFor(500L);
         long agentId = createCoreSite(token, "PERSONAL");
-        mockMvc.perform(put("/api/admin/sites/" + agentId + "/appearance")
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content("{not-json"))
@@ -154,7 +154,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
         put.put(
                 "config",
                 new AdminAppearanceConfigV1Dto("#2563EB", "modern", "rounded", "centered"));
-        mockMvc.perform(put("/api/admin/sites/" + agentId + "/appearance")
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(put)))
@@ -171,7 +171,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
         put.put(
                 "config",
                 new AdminAppearanceConfigV1Dto("#GG0000", "modern", "rounded", "centered"));
-        mockMvc.perform(put("/api/admin/sites/" + agentId + "/appearance")
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(put)))
@@ -180,7 +180,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
         put.put(
                 "config",
                 new AdminAppearanceConfigV1Dto("#2563EB", "comic", "rounded", "centered"));
-        mockMvc.perform(put("/api/admin/sites/" + agentId + "/appearance")
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(put)))
@@ -200,7 +200,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
                 MAPPER.valueToTree(new AdminAppearanceConfigV1Dto(
                         "#B91C1C", "soft", "square", "full-bleed")));
 
-        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))
@@ -208,17 +208,17 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andReturn();
         long agentId = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        mockMvc.perform(delete("/api/admin/sites/" + agentId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(delete("/api/admin/agents/" + agentId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/admin/sites/" + agentId + "/appearance")
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void appearanceForbiddenWithoutPermission() throws Exception {
-        mockMvc.perform(get("/api/admin/sites/1/appearance")
+        mockMvc.perform(get("/api/admin/agents/1/appearance")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(300L)))
                 .andExpect(status().isForbidden());
     }
@@ -228,7 +228,7 @@ class AdminAppearanceManagementMvcTest extends AbstractAdminSpringBootTest {
         body.put("agentCode", "c_" + Long.toHexString(System.nanoTime()));
         body.put("agentName", "Core");
         body.put("agentType", agentType);
-        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(body)))

@@ -51,12 +51,12 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
 
     @Test
     void listSitesWithoutBearerIs401() throws Exception {
-        mockMvc.perform(get("/api/admin/sites")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/agents")).andExpect(status().isUnauthorized());
     }
 
     @Test
     void listSitesForbiddenWithoutPermission() throws Exception {
-        mockMvc.perform(get("/api/admin/sites").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(300L)))
+        mockMvc.perform(get("/api/admin/agents").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(300L)))
                 .andExpect(status().isForbidden());
     }
 
@@ -67,7 +67,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         String createBody = MAPPER.writeValueAsString(new AdminAgentCreateRequest(
                 agentCode, "Demo Agent", "CAR_REPAIR", "demo.example.com", "desc", null));
 
-        MvcResult createResult = mockMvc.perform(post("/api/admin/sites")
+        MvcResult createResult = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(createBody))
@@ -79,7 +79,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
 
         long id = MAPPER.readTree(createResult.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        mockMvc.perform(get("/api/admin/sites").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+        mockMvc.perform(get("/api/admin/agents").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .param("pageNum", "1")
                         .param("pageSize", "20")
                         .param("agentType", "CAR_REPAIR"))
@@ -88,14 +88,14 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.pageNum").value(1))
                 .andExpect(jsonPath("$.data.pageSize").value(20));
 
-        mockMvc.perform(get("/api/admin/sites/" + id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(get("/api/admin/agents/" + id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.agentName").value("Demo Agent"))
                 .andExpect(jsonPath("$.data.description").value("desc"));
 
         String updateBody = MAPPER.writeValueAsString(
                 new AdminAgentUpdateRequest("Demo Agent Renamed", "SALON", null, "updated", 0));
-        mockMvc.perform(put("/api/admin/sites/" + id)
+        mockMvc.perform(put("/api/admin/agents/" + id)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(updateBody))
@@ -105,7 +105,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.version").value(1));
 
         String statusBody = MAPPER.writeValueAsString(new AdminAgentStatusUpdateRequest("DISABLED", 1));
-        mockMvc.perform(patch("/api/admin/sites/" + id + "/status")
+        mockMvc.perform(patch("/api/admin/agents/" + id + "/status")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(statusBody))
@@ -113,13 +113,13 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.status").value("DISABLED"))
                 .andExpect(jsonPath("$.data.version").value(2));
 
-        mockMvc.perform(delete("/api/admin/sites/" + id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(delete("/api/admin/agents/" + id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/admin/sites/" + id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(get("/api/admin/agents/" + id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(get("/api/admin/sites").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(get("/api/admin/agents").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.records[?(@.agentCode == '%s')]".formatted(agentCode)).doesNotExist());
     }
@@ -131,13 +131,13 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         String body = MAPPER.writeValueAsString(
                 new AdminAgentCreateRequest(agentCode, "One", "CAKE", null, null, null));
 
-        mockMvc.perform(post("/api/admin/sites")
+        mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/admin/sites")
+        mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(body))
@@ -148,7 +148,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
     void optimisticConflictOnStaleVersion() throws Exception {
         String token = tokenFor(500L);
         String agentCode = "olv_" + Long.toHexString(System.nanoTime());
-        MvcResult createResult = mockMvc.perform(post("/api/admin/sites")
+        MvcResult createResult = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
@@ -158,7 +158,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         JsonNode data = MAPPER.readTree(createResult.getResponse().getContentAsString()).path("data");
         long id = data.path("id").asLong();
 
-        mockMvc.perform(put("/api/admin/sites/" + id)
+        mockMvc.perform(put("/api/admin/agents/" + id)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
@@ -166,7 +166,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.version").value(1));
 
-        mockMvc.perform(put("/api/admin/sites/" + id)
+        mockMvc.perform(put("/api/admin/agents/" + id)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
@@ -178,14 +178,14 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
     void validationRejectsInvalidAgentCodeAndType() throws Exception {
         String token = tokenFor(500L);
 
-        mockMvc.perform(post("/api/admin/sites")
+        mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
                                 new AdminAgentCreateRequest("BadCode", "n", "CAR_REPAIR", null, null, null))))
                 .andExpect(status().isBadRequest());
 
-        mockMvc.perform(post("/api/admin/sites")
+        mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
@@ -199,7 +199,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         String presetCode = "tag_p_" + Long.toHexString(System.nanoTime());
         String customCode = "tag_c_" + Long.toHexString(System.nanoTime());
 
-        mockMvc.perform(post("/api/admin/sites")
+        mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
@@ -207,7 +207,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.agentType").value("PERSONAL"));
 
-        mockMvc.perform(post("/api/admin/sites")
+        mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
@@ -222,7 +222,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         String agentCode = "app_" + Long.toHexString(System.nanoTime());
 
         // 模板下架后 appearance 独立给出即可创建，与站点标签无关。
-        mockMvc.perform(post("/api/admin/sites")
+        mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(new AdminAgentCreateRequest(
@@ -240,7 +240,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
     @Test
     void createForbiddenWithoutCreatePermission() throws Exception {
         // editor 仅有 role/list/detail 等，无 agent:create
-        mockMvc.perform(post("/api/admin/sites")
+        mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(100L))
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
@@ -250,7 +250,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
 
     @Test
     void detailNotFound() throws Exception {
-        mockMvc.perform(get("/api/admin/sites/999999").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(500L)))
+        mockMvc.perform(get("/api/admin/agents/999999").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(500L)))
                 .andExpect(status().isNotFound());
     }
 
@@ -260,7 +260,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         String activeCode = "act_" + Long.toHexString(System.nanoTime());
         String disabledCode = "dis_" + Long.toHexString(System.nanoTime());
 
-        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
@@ -270,20 +270,20 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         long disabledId =
                 MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        mockMvc.perform(post("/api/admin/sites")
+        mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
                                 new AdminAgentCreateRequest(activeCode, "Act", "USED_CAR", null, null, null))))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(patch("/api/admin/sites/" + disabledId + "/status")
+        mockMvc.perform(patch("/api/admin/agents/" + disabledId + "/status")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(new AdminAgentStatusUpdateRequest("DISABLED", 0))))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/admin/sites")
+        mockMvc.perform(get("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .param("status", "DISABLED")
                         .param("agentType", "USED_CAR"))
@@ -296,7 +296,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
     void softDeletedAgentCodeCanBeReused() throws Exception {
         String token = tokenFor(500L);
         String agentCode = "reuse_" + Long.toHexString(System.nanoTime());
-        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(new AdminAgentCreateRequest(
@@ -305,10 +305,10 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andReturn();
         long id = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        mockMvc.perform(delete("/api/admin/sites/" + id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(delete("/api/admin/agents/" + id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/admin/sites")
+        mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(new AdminAgentCreateRequest(
@@ -321,7 +321,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
     void softDeleteAgentWithAppearanceSetsDeletedAt() throws Exception {
         String token = tokenFor(500L);
         String agentCode = "sda_" + Long.toHexString(System.nanoTime());
-        MvcResult created = mockMvc.perform(post("/api/admin/sites")
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(new AdminAgentCreateRequest(
@@ -336,7 +336,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andReturn();
         long agentId = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        mockMvc.perform(delete("/api/admin/sites/" + agentId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+        mockMvc.perform(delete("/api/admin/agents/" + agentId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
         Map<String, Object> agent = jdbcTemplate.queryForMap(
@@ -351,7 +351,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
 
     @Test
     void emptyListReturnsPageShape() throws Exception {
-        mockMvc.perform(get("/api/admin/sites").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(500L)))
+        mockMvc.perform(get("/api/admin/agents").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(500L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.records", hasSize(0)))
                 .andExpect(jsonPath("$.data.total").value(0));

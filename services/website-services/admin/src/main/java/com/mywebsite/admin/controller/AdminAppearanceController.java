@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/sites/{id}/appearance")
+@RequestMapping("/api/admin/agents/{id}/appearance")
 @Tag(name = "Admin · Agent Appearance")
 @SecurityRequirement(name = "adminBearer")
 public class AdminAppearanceController {

@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/sites/{agentId}/contents")
+@RequestMapping("/api/admin/agents/{agentId}/contents")
 @Tag(name = "Admin · Content")
 @SecurityRequirement(name = "adminBearer")
 public class AdminContentController {
