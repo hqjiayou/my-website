@@ -53,6 +53,9 @@ jobs:
           mkdir -p e2e/secrets
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out e2e/secrets/auth-private.pem
           openssl rsa -pubout -in e2e/secrets/auth-private.pem -out e2e/secrets/auth-public.pem
+          # Services run as a non-root user in the container; the throwaway
+          # keys must be readable by it (disposable stack only).
+          chmod 644 e2e/secrets/auth-private.pem e2e/secrets/auth-public.pem
 
       - name: Start E2E stack
         run: docker compose -f e2e/docker-compose.e2e.yml up -d --build --wait --wait-timeout 1200 postgres redis seaweedfs admin auth gateway admin-web

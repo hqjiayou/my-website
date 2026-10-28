@@ -24,6 +24,9 @@ mkdir -p e2e/secrets
 if [ ! -f e2e/secrets/auth-private.pem ]; then
   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out e2e/secrets/auth-private.pem
   openssl rsa -pubout -in e2e/secrets/auth-private.pem -out e2e/secrets/auth-public.pem
+  # Services run as a non-root user in the container; the throwaway
+  # keys must be readable by it (disposable stack only).
+  chmod 644 e2e/secrets/auth-private.pem e2e/secrets/auth-public.pem
 fi
 
 # 2. Stack up (admin runs Flyway; --wait blocks on healthchecks).
