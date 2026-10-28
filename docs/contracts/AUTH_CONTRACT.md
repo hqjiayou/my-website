@@ -37,7 +37,7 @@ last_verified: 2026-10-10
 - `POST /api/auth/agent/logout`  
 - `GET /api/agent/auth/me`（`SiteAuthMeController`，在 agent-app）
 
-**工作区没有 site-web 前台应用**，这些接口还没有产品页面。
+**站点用户端是 `apps/agent-portal`**，这些接口（更名后为 `/api/auth/agent/**`）已由它对接；`apps/site-web` 已于 2026-10-28 移除。
 
 ## 限流与 Client IP
 

@@ -13,6 +13,6 @@ last_verified: 2026-10-10
 | [`AUTH_CONTRACT.md`](./AUTH_CONTRACT.md) | Admin/Site 认证、JWT、Cookie |
 | [`ADMIN_API_CONTRACT.md`](./ADMIN_API_CONTRACT.md) | 后台资源路径摘要 |
 | [`AGENT_API_CONTRACT.md`](./AGENT_API_CONTRACT.md) | 前台 API / Site Auth |
-| [`STATUS_ENUMS.md`](./STATUS_ENUMS.md) | 状态枚举（Reservation DONE 等） |
+| [`STATUS_ENUMS.md`](./STATUS_ENUMS.md) | 状态枚举（Reservation 段已标注下架，仅作历史） |
 | [`ERROR_CONTRACT.md`](./ERROR_CONTRACT.md) | ApiResponse / 错误码 |
 | [`PAGINATION_CONTRACT.md`](./PAGINATION_CONTRACT.md) | PageResult |

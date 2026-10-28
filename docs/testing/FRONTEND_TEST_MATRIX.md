@@ -8,7 +8,7 @@ last_verified: 2026-10-10
 
 | Check | Command | Notes |
 |-------|---------|-------|
-| lint | `cd apps/admin-web && pnpm lint` | 工作区没有 site-web 应用 |
+| lint | `cd apps/admin-web && pnpm lint` | 站点用户端在 `apps/agent-portal`（另有 agent-portal-ci） |
 | build | `pnpm build` | 同上，在 admin-web 目录 |
 | imports | `node scripts/check-imports.mjs` | |
 | import casing | `node scripts/check-import-casing.mjs` | |

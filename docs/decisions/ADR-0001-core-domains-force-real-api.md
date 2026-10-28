@@ -6,6 +6,8 @@ status: ACCEPTED
 date: 2026-08-08
 ```
 
+> **2026-10-28 更新注记（不改原决策）**：文中 Template、Reservation 两域已于 2026-10-27 整包删除（PR #72 及同批清理），Site 域已于 2026-10-28 改名 Agent（PR #108）；其余域的强制 REAL 决策不变。
+
 ## Context
 
 admin-web 曾用统一 `USE_MOCK` 门控业务 API，导致「页面有数据」被误判为后端完成。

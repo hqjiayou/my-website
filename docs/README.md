@@ -4,7 +4,7 @@
 artifact_type: REFERENCE
 status: CURRENT
 owner: docs-governance
-last_verified: 2026-10-10
+last_verified: 2026-10-28
 ```
 
 代码、Flyway、测试优先于文档。未完成的工作只记在 GitHub Issues。
@@ -26,14 +26,14 @@ last_verified: 2026-10-10
 | 问题 | 正文 |
 |------|------|
 | 全栈做到哪 | [`overview/CURRENT_STATE.md`](./overview/CURRENT_STATE.md) |
-| 功能 × 端（后端 / 库 / admin-web / site-web） | [`overview/FEATURE_MATRIX.md`](./overview/FEATURE_MATRIX.md) |
-| 进程怎么连（gateway、auth、admin、site-app、agent） | [`overview/SYSTEM_ARCHITECTURE.md`](./overview/SYSTEM_ARCHITECTURE.md) |
+| 功能 × 端（后端 / 库 / admin-web / agent-portal） | [`overview/FEATURE_MATRIX.md`](./overview/FEATURE_MATRIX.md) |
+| 进程怎么连（gateway、auth、admin、agent-app、agent-services） | [`overview/SYSTEM_ARCHITECTURE.md`](./overview/SYSTEM_ARCHITECTURE.md) |
 | 还没做 / 明确延期 | [`overview/ROADMAP.md`](./overview/ROADMAP.md)（只有 Issue 号；细节在 GitHub） |
 | 管理后台做到哪 | [`admin-web/CURRENT_STATE.md`](./admin-web/CURRENT_STATE.md) |
-| 前台站点做到哪 | [`site-web/CURRENT_STATE.md`](./site-web/CURRENT_STATE.md) |
+| 站点用户端做到哪 | 全栈 [`overview/CURRENT_STATE.md`](./overview/CURRENT_STATE.md) 的 AI／Admin Web 行（`apps/agent-portal` 无独立 CURRENT_STATE 分册） |
 | Java 后端做到哪 | [`website-services/CURRENT_STATE.md`](./website-services/CURRENT_STATE.md) |
 
-后端域摘要是这格的分册，不另起完成度：[`AUTH.md`](./website-services/AUTH.md)、[`RBAC.md`](./website-services/RBAC.md)、[`SITE.md`](./website-services/SITE.md)、[`MEDIA.md`](./website-services/MEDIA.md)、[`CONTENT.md`](./website-services/CONTENT.md)、[`RESERVATION.md`](./website-services/RESERVATION.md)、[`PERSISTENCE.md`](./website-services/PERSISTENCE.md)。
+后端域摘要是这格的分册，不另起完成度：[`AUTH.md`](./website-services/AUTH.md)、[`RBAC.md`](./website-services/RBAC.md)、[`AGENT.md`](./website-services/AGENT.md)、[`MEDIA.md`](./website-services/MEDIA.md)、[`CONTENT.md`](./website-services/CONTENT.md)（Reservation 已于 2026-10-27 删除，其规格已归档至 [`archive/website-services/RESERVATION.md`](./archive/website-services/RESERVATION.md)）、[`PERSISTENCE.md`](./website-services/PERSISTENCE.md)。
 
 不要从这些文件读「现在」：`总览/当前功能完成度总览.md`、`总览/后端开发路线图与阶段状态.md`、`总览/后端整体架构总览.md`、`设计文档/基础架构/整体架构说明.md`、`audit/`、`implementation-history/`、`archive/`。它们只跳转或保留当时文字。
 
@@ -59,7 +59,7 @@ last_verified: 2026-10-10
 |------|------|
 | 登录 / JWT / Cookie | [`contracts/AUTH_CONTRACT.md`](./contracts/AUTH_CONTRACT.md)。决策：[`ADR-0002`](./decisions/ADR-0002-admin-site-jwt-audience-isolation.md) |
 | 后台 API 路径 | [`contracts/ADMIN_API_CONTRACT.md`](./contracts/ADMIN_API_CONTRACT.md) |
-| 前台 API | [`contracts/SITE_API_CONTRACT.md`](./contracts/SITE_API_CONTRACT.md) |
+| 站点（Agent）API | [`contracts/AGENT_API_CONTRACT.md`](./contracts/AGENT_API_CONTRACT.md) |
 | 状态枚举 | [`contracts/STATUS_ENUMS.md`](./contracts/STATUS_ENUMS.md) |
 | 错误体 | [`contracts/ERROR_CONTRACT.md`](./contracts/ERROR_CONTRACT.md) |
 | 分页 | [`contracts/PAGINATION_CONTRACT.md`](./contracts/PAGINATION_CONTRACT.md) |
@@ -82,11 +82,11 @@ last_verified: 2026-10-10
 | 部署 | [`operations/DEPLOYMENT.md`](./operations/DEPLOYMENT.md) |
 | 安全边界 | [`operations/SECURITY.md`](./operations/SECURITY.md) |
 | WSL / Docker 只谈基础设施 | [`website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](./website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。启动命令以本地开发那篇为准 |
-| 测试策略 | [`testing/TEST_STRATEGY.md`](./testing/TEST_STRATEGY.md)。浏览器 E2E 未做，见 ROADMAP |
+| 测试策略 | [`testing/TEST_STRATEGY.md`](./testing/TEST_STRATEGY.md)。浏览器 E2E 已落地（PR #111），细则见 [`testing/E2E_GOLDEN_PATHS.md`](./testing/E2E_GOLDEN_PATHS.md) |
 | 文档状态词、事实优先级、废弃 | [`rules/DOCUMENT_LIFECYCLE.md`](./rules/DOCUMENT_LIFECYCLE.md)、[`rules/SOURCE_OF_TRUTH.md`](./rules/SOURCE_OF_TRUTH.md)、[`rules/DEPRECATION_POLICY.md`](./rules/DEPRECATION_POLICY.md)、[`rules/API_CHANGE_POLICY.md`](./rules/API_CHANGE_POLICY.md) |
 | 可复用任务模板 | [`workflows/instructions/templates/`](./workflows/instructions/templates/) |
 
-管理端分册（不重复完成度）：[`ROUTING.md`](./admin-web/ROUTING.md)、[`API_INTEGRATION.md`](./admin-web/API_INTEGRATION.md)、[`STATE_AND_QUERY.md`](./admin-web/STATE_AND_QUERY.md)、[`TESTING.md`](./admin-web/TESTING.md)。前台分册：[`site-web/`](./site-web/)。
+管理端分册（不重复完成度）：[`ROUTING.md`](./admin-web/ROUTING.md)、[`API_INTEGRATION.md`](./admin-web/API_INTEGRATION.md)、[`STATE_AND_QUERY.md`](./admin-web/STATE_AND_QUERY.md)、[`TESTING.md`](./admin-web/TESTING.md)。站点用户端（`apps/agent-portal`）无 docs 分册，现状回全栈 CURRENT_STATE、契约回 `contracts/`。
 
 ---
 
@@ -110,7 +110,7 @@ last_verified: 2026-10-10
 | 项目 | 代码 | 现在看 | 规格看 |
 |------|------|--------|--------|
 | admin-web | `apps/admin-web` | `admin-web/CURRENT_STATE.md` | `admin-web/开发规范.md` |
-| site-web | `apps/site-web`（工作区无访客前台） | `site-web/CURRENT_STATE.md` | `contracts/SITE_API_CONTRACT.md`、`contracts/AUTH_CONTRACT.md` |
+| agent-portal | `apps/agent-portal`（站点用户端；`apps/site-web` 已于 2026-10-28 移除） | 全栈 `overview/CURRENT_STATE.md` | `contracts/AGENT_API_CONTRACT.md`、`contracts/AUTH_CONTRACT.md` |
 | website-services | `services/website-services` | `website-services/CURRENT_STATE.md` | 上表「平台与模块边界」+ `contracts/` |
 | agent-services | `services/agent-services` | 全栈 `CURRENT_STATE` 的 AI 行 | ADR-0004、ADR-0005、Agent 设计 V1 |
 

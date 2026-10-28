@@ -15,7 +15,7 @@ last_verified: 2026-10-10
 | Admin | `POST /api/auth/admin/login`、`/refresh`、`/logout`、`/register` | `AuthAdmin*Controller`、`AuthLogoutController` |
 | Site | `POST /api/auth/site/login`、`/refresh`、`/logout` | `AuthSiteLoginController`、`AuthSiteRefreshController`、`AuthSiteLogoutController` |
 | 公钥 | `GET /.well-known/jwks.json` | `AuthJwksWellKnownController` |
-| 我是谁 | `GET /api/admin/auth/me`、`GET /api/site/auth/me` | 在 admin / site-app，不在 auth |
+| 我是谁 | `GET /api/admin/auth/me`、`GET /api/agent/auth/me` | 在 admin / agent-app，不在 auth |
 
 auth 不跑 Flyway，不依赖 admin jar。Refresh 在 Redis。JWT 为 RS256。
 

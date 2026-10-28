@@ -3,24 +3,40 @@
 ```yaml
 artifact_type: RUNBOOK
 status: CURRENT
-last_verified: 2026-10-10
+last_verified: 2026-10-28
 ```
 
-本地一次拉起全栈的入口。端口、模块边界以仓库根 [`README.md`](../../README.md) 与代码为准。细节环境变量见 [`ENVIRONMENT_VARIABLES.md`](./ENVIRONMENT_VARIABLES.md)。
+本地全栈启动的**单一权威**。命令、端口、参数默认值都以当前代码为准（出处见文末对照）；环境变量全表见 [`ENVIRONMENT_VARIABLES.md`](./ENVIRONMENT_VARIABLES.md)，本文不复制默认值。自架部署（根 `docker-compose.yml`）不是本地开发路径，见 [`SELF_HOSTING.md`](./SELF_HOSTING.md)。
 
-## 1. 基础设施
+## 0. 前置要求
 
-PostgreSQL、Redis、MinIO / AIStor 由仓库外的 **local-stack** 提供。本仓库不再附带第二套 Compose。
+| 工具 | 版本 | 出处 |
+|------|------|------|
+| JDK | 21 | `services/website-services/pom.xml` 的 `java.version`；`services/website-services/Dockerfile` builder 为 `maven:3.9-eclipse-temurin-21` |
+| Maven | 3.9 | 同上 Dockerfile |
+| Node | 22 | `.github/workflows/*-ci.yml` 的 `setup-node` |
+| pnpm | 10 | 同上 `pnpm/action-setup` 的 `version: 10` |
+| Python | 3.13（`>=3.13,<3.14`） | `services/agent-services/pyproject.toml` 的 `requires-python` |
+| uv | 任意新版 | Python 依赖与运行入口 |
+| Docker | — | 只给仓库外 local-stack 基础设施与 E2E 栈用；Java/Python/前端进程都跑在宿主机 |
+
+## 1. 基础设施（仓库外 local-stack）
+
+PostgreSQL、Redis、MinIO 由仓库外的 **local-stack** 提供，本仓库不附带本地 infra Compose（根 `docker-compose.yml` 是自架部署栈，不要拿来当本地开发栈）。
+
+当前环境（compose 项目 `local-dev`）的容器与宿主机端点：
 
 | 容器 | 宿主机 |
 |------|--------|
-| `local-postgres` | `localhost:5432`，库名以容器 `POSTGRES_DB` 为准（常见 `my_website_dev`） |
-| `local-redis` | `localhost:6379` |
-| `local-aistor` | API `http://localhost:9000` |
+| `local-dev-postgres-1` | `localhost:5432`，库名以容器 `POSTGRES_DB` 为准（常见 `my_website_dev`） |
+| `local-dev-redis-1` | `localhost:6379` |
+| `local-dev-minio-1` | API `http://localhost:9000` |
 
-先确认 `local-postgres`、`local-redis` 在跑。账号以**正在运行的容器环境变量**为准（`POSTGRES_USER` / `POSTGRES_PASSWORD` / `REDIS_PASSWORD` / MinIO root），不要假设 `.env.example` 里的 `mywebsite` / `CHANGE_ME` 能登录。对不上时，`admin` / `site-app` 会在 Flyway 失败：`password authentication failed`。
+> ⚠️ 旧文档与种子脚本里的默认容器名 `local-postgres` / `local-redis` 与当前环境对不上。用到容器名的地方（尤其种子脚本，见 §6）必须显式指定 `local-dev-postgres-1`，见 §6 的正确用法。
 
-`local-aistor` 若因挂载失败起不来，下面四个 Java 进程仍可启动；对象存储功能不可用。
+先确认三个容器在跑。账号以**正在运行的容器环境变量**为准（`POSTGRES_USER` / `POSTGRES_PASSWORD` / `REDIS_PASSWORD` / MinIO root），不要假设 `.env.example` 里的 `mywebsite` / `CHANGE_ME` 能登录。对不上时 Java 服务会在 Flyway / 连接阶段报 `password authentication failed`。
+
+MinIO 起不来时四个 Java 进程仍可启动，只是对象存储功能不可用。
 
 ## 2. 两份 `.env`（互不读取）
 
@@ -29,11 +45,40 @@ PostgreSQL、Redis、MinIO / AIStor 由仓库外的 **local-stack** 提供。本
 | `services/website-services/.env` | Java（`LocalDotenvSupport`，从 `user.dir` 向上找） | `POSTGRES_*`、`REDIS_PASSWORD`、`MINIO_*` 与 local-stack 一致。`AGENT_INTERNAL_SERVICE_TOKEN` 与 Python 相同 |
 | `services/agent-services/.env` | Python（cwd 下的 `.env`） | **不**读 Java 那份。缺 `AGENT_INTERNAL_SERVICE_TOKEN` 则进程拒绝启动 |
 
-Java 侧：`cp services/website-services/.env.example .env` 后，把数据库 / Redis / MinIO 改成与容器一致。
+Java 侧：`cp services/website-services/.env.example services/website-services/.env` 后，把数据库 / Redis / MinIO 改成与容器一致。
 
 JWT：`application-local.yml` 默认 `./secrets/local/auth-private.pem` 与 `auth-public.pem`（相对 `auth` 模块目录，找不到时再试父目录 `services/website-services/secrets/local/`）。`.env` 里不要把 `AUTH_JWT_PRIVATE_KEY_PATH` / `AUTH_JWT_PUBLIC_KEY_PATH` 写成 `CHANGE_ME`，否则 auth 报 `RSA key file not found`。未设置这两项即用默认路径。
 
-Python 侧：
+## 3. Java 后端（四个进程）
+
+在 `services/website-services` 下执行。首次或模块变更后先构建一次：
+
+```bash
+cd services/website-services
+mvn clean install -DskipTests
+```
+
+四个终端分别启动（建议顺序 auth → admin → agent-app → gateway）：
+
+```bash
+mvn -pl auth -am spring-boot:run           # auth：8083
+mvn -pl admin -am spring-boot:run          # admin：8081
+mvn -pl agent/agent-app -am spring-boot:run # agent-app：8082
+mvn -pl gateway -am spring-boot:run        # gateway：8080
+```
+
+| 服务 | 端口 | 出处 |
+|------|------|------|
+| gateway | 8080 | `gateway/src/main/resources/application.yml` |
+| admin | 8081 | `admin/src/main/resources/application.yml` |
+| agent-app | 8082 | `agent/agent-app/src/main/resources/application.yml` |
+| auth | 8083（`AUTH_APP_PORT` 可覆盖） | `auth/src/main/resources/application.yml` |
+
+Flyway：表结构只由 **admin** 执行（`FLYWAY_ENABLED` 默认 `true`，当前迁移至 **V35**）。agent-app 默认不跑（代码里变量名仍是历史名 `SITE_APP_FLYWAY_ENABLED`，默认 `false`）；auth 的 local profile 关闭。所以先起 admin 把迁移跑完，再起其余服务。改 `.env` 后必须重启对应进程。
+
+gateway 路由（`gateway/src/main/resources/application.yml`，顺序敏感）：`/api/auth/**` → auth:8083、`/api/admin/**` → admin:8081、`/api/agent/**` → agent-app:8082。
+
+## 4. Python agent-services
 
 ```bash
 cd services/agent-services
@@ -43,50 +88,65 @@ cp .env.example .env
 uv run agent-services
 ```
 
-无 `AI_MODEL` 时进程可起，health 为 BLOCKED，chat 返回 503（ADR-0004）。
+入口是 `agent_services.main:run`（`pyproject.toml` 的 `[project.scripts]`），默认端口 `3001`（`PORT` 可改，`UVICORN_WORKERS` 默认 1）。无 `AI_MODEL` 且 Java 也没给模型入口时进程可起，health 为 BLOCKED，chat 返回 503（ADR-0004）。
 
-## 3. 启动顺序
-
-四个 Java 进程分四个终端，在 `services/website-services` 下执行。首次或模块变更后先 `mvn clean install -DskipTests`。
+## 5. 前端（两个）
 
 ```bash
-mvn -pl auth -am spring-boot:run          # 8083
-mvn -pl admin -am spring-boot:run         # 8081
-mvn -pl site/site-app -am spring-boot:run # 8082
-mvn -pl gateway -am spring-boot:run       # 8080
+cd apps/admin-web && pnpm install && pnpm dev    # http://localhost:5173
+cd apps/agent-portal && pnpm install && pnpm dev # http://localhost:5174
 ```
 
-建议先 auth、admin、site-app，再 gateway。改 `.env` 后必须重启对应进程。
+| 前端 | 端口 | 出处 |
+|------|------|------|
+| admin-web | 5173（Vite 默认，`vite.config.ts` 未设 `server.port`） | `apps/admin-web/vite.config.ts`（proxy `/api` → `http://localhost:8080`） |
+| agent-portal | 5174（`vite.config.ts` 显式设置） | `apps/agent-portal/vite.config.ts`（proxy `/api` → `http://localhost:8080`） |
 
-前端：
+两边开发时都经 proxy 走 gateway `:8080`，不直连后端。agent-portal 优先用登录会话里的站点信息调 `/api/agent/{agentId}/ai/**`；`VITE_PORTAL_AGENT_ID` 只是会话缺失时的后备（正整数），见 [`ENVIRONMENT_VARIABLES.md`](./ENVIRONMENT_VARIABLES.md)。
+
+## 6. 种子（初始管理员）
+
+在 `services/website-services` 下执行。**必须显式指定当前环境的容器名**（脚本默认值 `local-postgres` 是错的）：
+
+```powershell
+# Windows PowerShell
+.\scripts\local\run-seed-admin-hqjiayou-super.ps1 -Container local-dev-postgres-1
+```
 
 ```bash
-cd apps/admin-web && pnpm install && pnpm dev
+# bash / WSL
+POSTGRES_CONTAINER=local-dev-postgres-1 ./scripts/local/run-seed-admin-hqjiayou-super.sh
 ```
 
-admin-web 走 gateway `:8080`，不读取 `VITE_USE_MOCK`。工作区没有访客前台。
+成功后可用 `hqjiayou` / `123456` 登录管理端（super_admin，**仅本地**，首次登录后应改密码）。另有演示站点种子 `scripts/local/run-seed-site-demo.ps1` / `.sh`，容器参数指定方式相同。脚本细节见 [`services/website-services/scripts/README.md`](../../services/website-services/scripts/README.md)。
 
-## 4. 验收
+## 7. 验收（活着的检查）
 
 ```text
 GET http://localhost:8083/actuator/health   # auth：db、redis UP
 GET http://localhost:8081/actuator/health   # admin：db UP
-GET http://localhost:8082/actuator/health   # site-app：db、redis UP
+GET http://localhost:8082/actuator/health   # agent-app：db、redis UP
 GET http://localhost:8080/actuator/health   # gateway UP（无注册中心时 discoveryClient 为 UNKNOWN，整体仍可 UP）
-GET http://localhost:3001/health            # agent-services 进程存活
+GET http://localhost:3001/health            # agent-services 进程存活（无鉴权）
+GET http://localhost:3001/internal/v1/health # 需请求头 X-Internal-Service-Token；看 providerStatus / retrieval 状态
+GET http://localhost:8082/api/agent/ping    # agent-app 直连探活（gateway 经 http://localhost:8080/api/agent/ping）
 ```
 
-## 5. 可选（agent 联调）
+## 8. 停止 / 清理
 
-- `RETRIEVAL_DATABASE_URL`：独立 `agent_retrieval` 库（专用 DB 用户，禁止读 Java 业务表）
-- `AI_EMBEDDING_MODEL`：嵌入模型 spec
-- `BUSINESS_API_BASE_URL`：site-app internal，如 `http://127.0.0.1:8082`，不经 gateway
+- 四个 Java 进程、Python、两个前端：在各自终端 `Ctrl-C`。
+- local-stack：用它自己的 compose 停止（不在本仓库）。
+- 需要重建 Java 产物时：`mvn clean`（在 `services/website-services`）。
 
-契约集成测试（可选，需 uv）：
+## 9. 可选联调
+
+契约集成测试（需先起 Python，见 §4）：
 
 ```bash
 cd services/website-services
-AGENT_PYTHON_CONTRACT_IT=true mvn -pl agent test -Dtest=HttpAgentClientPythonContractIT
+AGENT_PYTHON_CONTRACT_IT=true mvn -pl agent/agent-core test -Dtest=HttpAgentClientPythonContractIT
 ```
+
+浏览器 E2E（Playwright，独立一次性栈）：见 [`../testing/E2E_GOLDEN_PATHS.md`](../testing/E2E_GOLDEN_PATHS.md) 与 `apps/admin-web/e2e/`。
 
 WSL / Docker 细节：[`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](../website-services/设计文档/基础架构/WSL与Docker环境配置说明.md)。

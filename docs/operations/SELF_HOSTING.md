@@ -39,7 +39,7 @@ cp .env.example .env
 | `AGENT_INTERNAL_SERVICE_TOKEN` | `openssl rand -hex 32` |
 | `AI_PROVIDER_API_KEY` | Google AI Studio 的 Gemini key |
 | `AI_MODEL` | 保持 `google:gemini-3-flash-preview`，除非明确改 provider |
-| `VITE_PORTAL_SITE_ID` | 先留空。管理后台建好站点后填数字 ID，然后重建 `web` |
+| `VITE_PORTAL_AGENT_ID` | 先留空。管理后台建好站点后填数字 ID，然后重建 `web` |
 
 口令用十六进制。`$`、`@`、`:` 和空格会截断 Compose 替换或检索库 URL。
 
@@ -97,9 +97,9 @@ docker compose up -d --build
 docker compose ps
 ```
 
-第一次会拉镜像并做 Maven / pnpm 构建，时间很长。等 `docker compose ps` 里 postgres、redis、admin、auth、site、gateway、agent、web 都是 healthy（web 没有健康检查，Up 即可）。
+第一次会拉镜像并做 Maven / pnpm 构建，时间很长。等 `docker compose ps` 里 postgres、redis、admin、auth、agent-service、gateway、agent、web 都是 healthy（web 没有健康检查，Up 即可）。
 
-平台表结构只由 **admin** 在启动时跑 Flyway。auth 的本地配置把 Flyway 关掉了，site-app 默认也不跑。所以 auth 和 site 会等 admin 健康之后才启动。不要为了“每个 Java 进程都迁移”去改配置。
+平台表结构只由 **admin** 在启动时跑 Flyway。auth 的本地配置把 Flyway 关掉了，agent-app 默认也不跑。所以 auth 和 agent-service 会等 admin 健康之后才启动。不要为了“每个 Java 进程都迁移”去改配置。
 
 看某个服务：
 
@@ -122,13 +122,13 @@ docker compose exec -T postgres \
   < services/website-services/scripts/local/seed-admin-hqjiayou-super.sql
 ```
 
-然后用浏览器打开管理后台（见下一节的第二个地址），用 `hqjiayou` / `123456` 登录，**第一件事就是在使用者管理里把這個預設密碼改掉**（在改密碼之前不要執行後面的 `tailscale serve` 發佈步驟），再建自己的站点。记下站点的数字 ID，写入 `.env` 的 `VITE_PORTAL_SITE_ID`，再重建 web：
+然后用浏览器打开管理后台（见下一节的第二个地址），用 `hqjiayou` / `123456` 登录，**第一件事就是在使用者管理里把這個預設密碼改掉**（在改密碼之前不要執行後面的 `tailscale serve` 發佈步驟），再建自己的站点。记下站点的数字 ID，写入 `.env` 的 `VITE_PORTAL_AGENT_ID`，再重建 web：
 
 ```bash
 docker compose up -d --build web
 ```
 
-Agent Portal 登录框要的是站点的 `siteCode`。`VITE_PORTAL_SITE_ID` 只给 `/api/site/{siteId}/ai/**` 用。改这个值必须重建镜像，重启容器不会改已经打进静态文件的值。
+Agent Portal 登录框要的是站点的 code（原 siteCode，改名后 agent code）。`VITE_PORTAL_AGENT_ID` 只给 `/api/agent/{agentId}/ai/**` 用，且只是登录会话缺失时的后备。改这个值必须重建镜像，重启容器不会改已经打进静态文件的值。
 
 ## 6. 检索库（问答不依赖这一步）
 
@@ -210,7 +210,7 @@ git pull
 docker compose up -d --build
 ```
 
-改了 `VITE_PORTAL_SITE_ID` 时，这一步会重建 web 镜像。看日志：`docker compose logs -f gateway`。
+改了 `VITE_PORTAL_AGENT_ID` 时，这一步会重建 web 镜像。看日志：`docker compose logs -f gateway`。
 
 ## 10. 故障对照
 
@@ -221,7 +221,7 @@ docker compose up -d --build
 | 检索不可用，问答仍可以 | `AI_EMBEDDING_MODEL` 为空，或第 6 节的库还没建 |
 | auth 日志 `RSA key file not found` | PEM 不在挂载目录、路径被写成 `CHANGE_ME`，或文件不是容器用户可读 |
 | Flyway / `password authentication failed` | `.env` 的 `POSTGRES_*` 和已经初始化的卷不一致。卷一旦用旧口令初始化，只改 `.env` 不会改库内口令 |
-| gateway 日志仍在连 `localhost:8081` 等 | 环境变量没有盖掉 `application.yml` 里的上游。这是未在编写环境跑过的风险点。看 gateway 启动日志里的 route URI 是不是 `http://auth:8083`、`http://admin:8081`、`http://site:8082` |
+| gateway 日志仍在连 `localhost:8081` 等 | 环境变量没有盖掉 `application.yml` 里的上游。这是未在编写环境跑过的风险点。看 gateway 启动日志里的 route URI 是不是 `http://auth:8083`、`http://admin:8081`、`http://agent-service:8082` |
 | 宿主 80 绑定失败 | 已经有程序占用 80。先停掉那个程序再 `docker compose up -d web` |
 | 管理后台打开后接口 404，页面在 `/admin/` 下 | 不要把 admin-web 挂到子路径。用第 7 节的 8443 端口 |
 | 上传失败 | 这套堆叠没有 MinIO |

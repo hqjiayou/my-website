@@ -10,9 +10,9 @@ last_verified: 2026-10-10
 
 | 层 | 现状 |
 |----|------|
-| Backend unit/MVC | 有（auth/admin/site-app） |
+| Backend unit/MVC | 有（auth/admin/agent-app） |
 | Persistence PG (Testcontainers) | 有（`-Ppersistence-verify-pg`） |
-| Frontend lint/build/import checks | 有（仅 `apps/admin-web`；工作区没有 site-web 应用） |
+| Frontend lint/build/import checks | 有（`apps/admin-web`、`apps/agent-portal` 均有 CI） |
 | Contract/vertical（UI+API+DB 手工/MVC） | 有 |
 | **Browser E2E** | **NOT_IMPLEMENTED** |
 
