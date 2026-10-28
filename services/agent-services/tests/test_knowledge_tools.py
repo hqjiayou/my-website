@@ -98,6 +98,8 @@ def test_prompt_parts_mention_knowledge_tool_only_when_available() -> None:
     assert "documents or facts" in with_tool
     # 站点专属值优先于通识：看似通识的问题也必须先查（防凭参数知识绕过工具）
     assert "takes precedence over general knowledge" in with_tool
+    # 复合问题逐点分开检索（单条混合查询的向量会稀释各分话题，真嵌入探针实测）
+    assert "separate search for each part" in with_tool
     assert "search_site_knowledge" not in without_tool
 
 
