@@ -88,7 +88,7 @@ class AdminContentPersistenceVerifyPgTest {
                 FROM site_content WHERE id = ?
                 """,
                 content.getId());
-        assertThat(row.get("agent_id")).isEqualTo(agent.getId());
+        assertThat(row.get("site_id")).isEqualTo(agent.getId());
         assertThat(row.get("type")).isEqualTo("hero");
         assertThat(row.get("status")).isEqualTo("DRAFT");
         assertThat(row.get("cover_media_id")).isEqualTo(media.getId());
