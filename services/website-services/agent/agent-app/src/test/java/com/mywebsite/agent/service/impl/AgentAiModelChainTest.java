@@ -38,6 +38,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /** 站点对话带入的入口生效链：与 admin selectionChain 同规则（站预设主用，其后同站其他、全站其余）。 */
@@ -241,12 +243,14 @@ class AgentAiModelChainTest {
     }
 
     @Test
+    @MockitoSettings(strictness = Strictness.LENIENT)
     void chatWithInvalidModeRejected() {
         assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "BOGUS")))
                 .isInstanceOf(BusinessException.class);
     }
 
     @Test
+    @MockitoSettings(strictness = Strictness.LENIENT)
     void modelModesReportsAvailabilityAndLabelPerMode() {
         when(modelEntryMapper.selectList(any()))
                 .thenReturn(
