@@ -2,7 +2,7 @@ name: backend-ci
 
 # Java 服务 services/website-services（gateway / auth / admin / site-app）。
 # - pull_request：按指向 dev / main 的整个 PR 改动触发，不只看最后一次 push。
-# - push：按本次 push 改到的路径触发（含尚未开 PR 的功能分支）。
+# - push：仅 dev / main 分支按本次 push 改到的路径触发（功能分支 push 不再触发，避免与 PR 重复跑）。
 # - fast-tests：默认快速层（unit + Mockito + H2），Surefire 排除 verifyPg，不依赖 Docker。
 # - pg-contract-tests：PostgreSQL 契约层（profile persistence-verify-pg），Testcontainers 自举真实 PG 跑 Flyway/约束/触发器/种子。
 # GitHub 托管 ubuntu runner 预装 Docker，Testcontainers 可直接运行。
@@ -14,6 +14,7 @@ on:
       - 'services/website-services/**'
       - '.github/workflows/backend-ci.yml'
   push:
+    branches: [dev, main]
     paths:
       - 'services/website-services/**'
       - '.github/workflows/backend-ci.yml'

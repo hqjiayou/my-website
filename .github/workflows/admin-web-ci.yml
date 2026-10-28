@@ -2,7 +2,7 @@ name: admin-web-ci
 
 # 后台总控 apps/admin-web。
 # - pull_request：按指向 dev / main 的整个 PR 改动触发，不只看最后一次 push。
-# - push：按本次 push 改到的路径触发（含尚未开 PR 的功能分支）。
+# - push：仅 dev / main 分支按本次 push 改到的路径触发（功能分支 push 不再触发，避免与 PR 重复跑）。
 # lint / 导入检查 / build 不是浏览器 E2E。
 
 on:
@@ -12,6 +12,7 @@ on:
       - 'apps/admin-web/**'
       - '.github/workflows/admin-web-ci.yml'
   push:
+    branches: [dev, main]
     paths:
       - 'apps/admin-web/**'
       - '.github/workflows/admin-web-ci.yml'
