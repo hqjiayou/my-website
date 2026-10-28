@@ -76,7 +76,7 @@ export function HomePage() {
           type="button"
           disabled={!site.ok}
           onClick={() => navigate(ROUTES.chat)}
-          className="mt-section rounded-panel bg-primary p-4 text-left text-primary-foreground shadow-raised disabled:opacity-60"
+          className="mt-section rounded-panel bg-primary p-4 text-left text-primary-foreground shadow-raised transition hover:brightness-105 active:scale-[0.99] disabled:opacity-60"
         >
           <span className="flex items-center gap-3">
             <span className="min-w-0 flex-1">
@@ -121,7 +121,7 @@ export function HomePage() {
                       <button
                         type="button"
                         onClick={() => navigate(`${ROUTES.chat}/${conversation.id}`)}
-                        className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-gpt-hover"
+                        className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-gpt-hover"
                       >
                         <MessageSquare size={16} className="shrink-0 text-gpt-muted" />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium">
@@ -169,7 +169,7 @@ export function HomePage() {
                       <button
                         type="button"
                         onClick={() => navigate(ROUTES.knowledge)}
-                        className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-gpt-hover"
+                        className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-gpt-hover"
                       >
                         <FileText size={16} className="shrink-0 text-gpt-muted" />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium">{document.title}</span>
