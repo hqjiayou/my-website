@@ -7,6 +7,7 @@ import type { HttpMessageBody } from '@/types/rbac'
 import type {
   AiConversationListItem,
   AiConversationListQuery,
+  AiKnowledgeArchiveResult,
   AiKnowledgeDetail,
   AiKnowledgeListItem,
   AiKnowledgeListQuery,
@@ -142,6 +143,25 @@ export const aiApi = {
     return httpClient
       .post<HttpMessageBody<AiKnowledgeDetail>, FormData>(
         `${aiBase(siteId)}/knowledge-documents/upload`,
+        form,
+        { timeout: UPLOAD_TIMEOUT_MS },
+      )
+      .then(unwrapData)
+  },
+
+  uploadKnowledgeArchive(
+    siteId: number,
+    file: File,
+    baseId?: number | null,
+  ): Promise<AiKnowledgeArchiveResult> {
+    const form = new FormData()
+    form.append('file', file)
+    if (baseId != null) {
+      form.append('baseId', String(baseId))
+    }
+    return httpClient
+      .post<HttpMessageBody<AiKnowledgeArchiveResult>, FormData>(
+        `${aiBase(siteId)}/knowledge-documents/upload-archive`,
         form,
         { timeout: UPLOAD_TIMEOUT_MS },
       )

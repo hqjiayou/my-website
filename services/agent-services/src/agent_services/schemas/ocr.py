@@ -27,3 +27,36 @@ class OcrPdfResponse(BaseModel):
     model_spec: str = Field(alias="modelSpec")
 
     model_config = {"populate_by_name": True}
+
+
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 与 Java 上传上限对齐
+MAX_IMAGE_BASE64_CHARS = ((MAX_IMAGE_BYTES + 2) // 3) * 4 + 4
+
+# 知识库图片上传支持的媒体类型（与 Java 侧图片扩展名一一对应）
+OCR_IMAGE_MEDIA_TYPES = (
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+    "image/bmp",
+    "image/heic",
+    "image/heif",
+)
+
+
+class OcrImageRequest(BaseModel):
+    content_base64: str = Field(alias="contentBase64", min_length=4, max_length=MAX_IMAGE_BASE64_CHARS)
+    media_type: str = Field(alias="mediaType")
+    model_selection: ModelSelection | None = Field(default=None, alias="model")
+    fallback_models: list[ModelSelection] = Field(
+        default_factory=list, alias="fallbackModels", max_length=8
+    )
+
+    model_config = {"populate_by_name": True}
+
+
+class OcrImageResponse(BaseModel):
+    text: str
+    model_spec: str = Field(alias="modelSpec")
+
+    model_config = {"populate_by_name": True}
