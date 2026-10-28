@@ -118,6 +118,19 @@ export interface AgentAiChatRequest {
   conversationId?: string
   attachments?: AgentAiAttachment[]
   documents?: AgentAiDocument[]
+  /** 雙模式：KEY 直連 / CLI 代理池。缺省時服務端按整鏈（舊行為）。 */
+  mode?: string
+}
+
+/** Portal 雙模式可用性（GET /ai/model-modes）：available=false 表示該模式尚未配置入口。 */
+export interface AgentAiModelModeOption {
+  mode: string
+  available: boolean
+  label: string | null
+}
+
+export interface AgentAiModelModes {
+  modes: AgentAiModelModeOption[]
 }
 
 /** 本輪實際採用的知識庫引用。歷史訊息的 ASSISTANT 項也帶回這個欄位。 */
