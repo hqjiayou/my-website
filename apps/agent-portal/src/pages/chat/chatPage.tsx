@@ -22,7 +22,20 @@ const MAX_IMAGE_EDGE = 1600
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
 const MAX_DOCUMENTS = 3
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
-const DOCUMENT_EXTENSIONS = ['pdf', 'docx', 'xlsx', 'pptx', 'txt', 'md']
+// 与后端 SiteAiServiceImpl.DOCUMENT_MEDIA_TYPES 及知识库支持集合一致（共享转换器可路由的非图片格式）
+const DOCUMENT_EXTENSIONS = [
+  'pdf', 'docx', 'docm', 'doc', 'xlsx', 'xlsm', 'xls', 'pptx', 'pptm', 'ppt',
+  'html', 'htm', 'epub', 'odt', 'ods', 'odp', 'rtf', 'csv', 'tsv',
+  'txt', 'md', 'markdown', 'text', 'rst', 'adoc', 'asciidoc', 'org', 'tex',
+  'json', 'jsonl', 'ndjson', 'xml', 'yaml', 'yml', 'toml', 'ini', 'log',
+  'properties', 'conf', 'cfg', 'env', 'diff', 'patch',
+  'py', 'java', 'js', 'ts', 'tsx', 'jsx', 'css', 'scss', 'sql', 'sh',
+  'bash', 'zsh', 'ps1', 'mjs', 'cjs',
+  'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt', 'kts',
+  'scala', 'pl', 'r', 'lua', 'vue', 'svelte', 'dart', 'groovy', 'gradle',
+  'hs', 'ex', 'exs', 'tf', 'proto',
+]
+const DOCUMENT_ACCEPT = DOCUMENT_EXTENSIONS.map((ext) => `.${ext}`).join(',')
 
 interface ChatImage {
   mediaType: string
@@ -835,7 +848,7 @@ export function ChatPage() {
         <input
           ref={docFileRef}
           type="file"
-          accept=".pdf,.docx,.xlsx,.pptx,.txt,.md"
+          accept={DOCUMENT_ACCEPT}
           multiple
           className="sr-only"
           disabled={sending}

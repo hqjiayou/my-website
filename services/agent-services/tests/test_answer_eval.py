@@ -183,6 +183,18 @@ def test_aggregate_skips_missing_metrics_and_groups_categories() -> None:
     assert summary["byCategory"]["unanswerable"]["citation_precision"] is None
 
 
+def test_distractors_are_valid_and_disjoint_from_corpus() -> None:
+    from agent_services.evals.run_answer_eval import load_distractors
+
+    corpus_ids = {doc.source_id for doc in load_corpus()}
+    distractors = load_distractors()
+    assert distractors, "distractor layer must not be empty"
+    distractor_ids = {doc.source_id for doc in distractors}
+    assert len(distractor_ids) == len(distractors)
+    assert distractor_ids.isdisjoint(corpus_ids)
+    assert all(doc.content.strip() for doc in distractors)
+
+
 def test_golden_set_matches_the_corpus() -> None:
     corpus = load_corpus()
     cases = load_cases()

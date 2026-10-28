@@ -40,6 +40,12 @@ public interface AdminAiKnowledgeService {
      */
     String transcribeScannedPdf(long siteId, byte[] pdfBytes);
 
+    /**
+     * 图片转写：图片上传（截图/扫描件/照片）经站点生效模型链做视觉转写。
+     * 失败语义同 {@link #transcribeScannedPdf}：一律回空串，上传侧维持诚实拒绝。
+     */
+    String transcribeImage(long siteId, byte[] imageBytes, String mediaType);
+
     AdminAiKnowledgeDetailDto updateDocument(
             long siteId, long documentId, AdminAiKnowledgeUpdateRequest request);
 
