@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, Copy, Ellipsis, FileText, ImagePlus, Mic, Pencil, Plus, RotateCcw, Share2, Square, SquarePen, Trash, Unlink, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, Download, Ellipsis, FileText, ImagePlus, Mic, Pencil, Plus, RotateCcw, Share2, Square, SquarePen, Trash, Unlink, Volume2, VolumeX, X } from 'lucide-react'
 
 import { siteAiApi, sseErrorText } from '@/api/siteAiApi'
 import { MarkdownText } from '@/components/markdown'
@@ -69,6 +69,7 @@ interface ChatTurn {
   id: string
   role: string
   content: string
+  createdAt?: string | null
   images?: ChatImage[]
   documents?: ChatDocumentRef[]
   pending?: boolean
@@ -132,6 +133,7 @@ function toStoredTurns(
       id: String(item.id),
       role: item.role,
       content: item.content,
+      createdAt: item.createdAt ?? null,
       images: imageAttachments?.length
         ? imageAttachments.map((attachment) => ({ mediaType: attachment.mediaType, data: attachment.data ?? '' }))
         : undefined,
@@ -166,6 +168,37 @@ interface SendFailure {
   retryDocuments: SiteAiDocument[]
   userId: string
   assistantId: string
+}
+
+function speechText(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, '（代碼片段）')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/[*_>~|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function speechLang(text: string): string {
+  if (/[\u3040-\u30ff]/.test(text)) return 'ja-JP'
+  if (/[\uac00-\ud7af]/.test(text)) return 'ko-KR'
+  return 'zh-TW'
+}
+
+function formatTurnTime(value: string | null | undefined): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const now = new Date()
+  const time = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' }).format(date)
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  return sameDay ? time : `${date.getMonth() + 1}/${date.getDate()} ${time}`
 }
 
 export function ChatPage() {
@@ -454,7 +487,13 @@ export function ChatPage() {
     setSending(false)
   }
 
+  function stopSpeaking() {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+    setSpeakingId(null)
+  }
+
   function startNewChat() {
+    stopSpeaking()
     leaveStreaming()
     setEditingId(null)
     loadToken.current += 1
@@ -471,6 +510,7 @@ export function ChatPage() {
   }
 
   function openConversation(conversationId: string) {
+    stopSpeaking()
     if (!site.ok) return
     closeDrawer()
     if (conversationId === routeId) return
@@ -486,6 +526,10 @@ export function ChatPage() {
   async function onPickFiles(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
+    await takeImages(files)
+  }
+
+  async function takeImages(files: File[]) {
     if (files.length === 0 || sendingRef.current || compressingRef.current) return
     if (pending.length >= MAX_IMAGES) {
       setAttachError('最多附加 3 張圖片')
@@ -525,6 +569,10 @@ export function ChatPage() {
   async function onPickDocuments(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
+    await takeDocuments(files)
+  }
+
+  async function takeDocuments(files: File[]) {
     if (files.length === 0 || sendingRef.current) return
     if (pendingDocs.length >= MAX_DOCUMENTS) {
       setAttachError('最多附加 3 份文件')
@@ -614,10 +662,11 @@ export function ChatPage() {
           id: userId,
           role: 'USER',
           content: trimmed,
+          createdAt: new Date().toISOString(),
           images: images.length ? images : undefined,
           documents: documents.length ? documents.map((doc) => ({ fileName: doc.fileName })) : undefined,
         },
-        { id: assistantId, role: 'ASSISTANT', content: '', pending: true },
+        { id: assistantId, role: 'ASSISTANT', content: '', pending: true, createdAt: new Date().toISOString() },
       ]
     })
 
@@ -851,6 +900,69 @@ export function ChatPage() {
     window.setTimeout(() => setHeaderNotice(null), 3000)
   }
 
+  function onPasteFiles(event: ReactClipboardEvent<HTMLTextAreaElement>) {
+    if (sendingRef.current || compressingRef.current) return
+    const files = Array.from(event.clipboardData?.files ?? [])
+    if (files.length === 0) return
+    const images = files.filter((file) => file.type.startsWith('image/'))
+    const others = files.filter((file) => !file.type.startsWith('image/'))
+    event.preventDefault()
+    if (images.length > 0) void takeImages(images)
+    if (others.length > 0) void takeDocuments(others)
+  }
+
+  const [speakingId, setSpeakingId] = useState<string | null>(null)
+  const [speechSupported] = useState(
+    () => typeof window !== 'undefined' && 'speechSynthesis' in window,
+  )
+
+  useEffect(() => {
+    return () => {
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+    }
+  }, [])
+
+  function toggleSpeak(turn: ChatTurn) {
+    if (!speechSupported) return
+    if (speakingId === turn.id) {
+      window.speechSynthesis.cancel()
+      setSpeakingId(null)
+      return
+    }
+    window.speechSynthesis.cancel()
+    const text = speechText(turn.content)
+    if (!text) return
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = speechLang(text)
+    utterance.onend = () => setSpeakingId((current) => (current === turn.id ? null : current))
+    utterance.onerror = () => setSpeakingId((current) => (current === turn.id ? null : current))
+    setSpeakingId(turn.id)
+    window.speechSynthesis.speak(utterance)
+  }
+
+  function exportConversation() {
+    setHeaderMenuOpen(false)
+    const lines: string[] = [`# ${activeTitle}`, '']
+    for (const message of visibleMessages) {
+      const attachmentNames = [
+        ...(message.images?.length ? [`圖片 ×${message.images.length}`] : []),
+        ...(message.documents?.map((doc) => doc.fileName) ?? []),
+      ]
+      if (!message.content && attachmentNames.length === 0) continue
+      lines.push(message.role === 'USER' ? '## 我' : '## AI')
+      if (attachmentNames.length > 0) lines.push(`（附件：${attachmentNames.join('、')}）`)
+      if (message.content) lines.push(message.content)
+      lines.push('')
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${(activeTitle || 'conversation').replace(/[\\/:*?"<>|]/g, '_')}.md`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function deleteFromHeader() {
     if (!selectedId) return
     setHeaderMenuOpen(false)
@@ -1027,6 +1139,7 @@ export function ChatPage() {
           enterKeyHint="send"
           placeholder="傳訊息給 Agent Portal"
           onChange={(event) => setDraft(event.target.value)}
+          onPaste={onPasteFiles}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
@@ -1154,6 +1267,16 @@ export function ChatPage() {
                     </div>
                   ) : (
                     <>
+                      {selectedId && messages.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={exportConversation}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm hover:bg-gpt-hover"
+                        >
+                          <Download size={15} />
+                          下載此對話（Markdown）
+                        </button>
+                      ) : null}
                       {selectedId && messages.length > 0 ? (
                         <button
                           type="button"
@@ -1384,6 +1507,17 @@ export function ChatPage() {
                       >
                         {copiedId === message.id ? <Check size={16} /> : <Copy size={16} />}
                       </button>
+                      {!isUser && speechSupported ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleSpeak(message)}
+                          aria-label={speakingId === message.id ? '停止朗讀' : '朗讀回覆'}
+                          title={speakingId === message.id ? '停止朗讀' : '朗讀'}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink"
+                        >
+                          {speakingId === message.id ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                        </button>
+                      ) : null}
                       {isUser ? (
                         <button
                           type="button"
@@ -1407,6 +1541,9 @@ export function ChatPage() {
                         >
                           <RotateCcw size={16} />
                         </button>
+                      ) : null}
+                      {formatTurnTime(message.createdAt) ? (
+                        <span className="ml-1.5 text-xs text-gpt-muted">{formatTurnTime(message.createdAt)}</span>
                       ) : null}
                     </div>
                   ) : null}
