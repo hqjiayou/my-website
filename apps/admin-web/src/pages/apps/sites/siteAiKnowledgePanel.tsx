@@ -10,12 +10,20 @@ import { PermissionGate } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
 const KB_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+// 与后端 AdminAiKnowledgeController.SUPPORTED_EXTENSIONS 保持一致（增删格式时三处同改：
+// 控制器集合、AdminAiKnowledgeContentConverter 的 switch、本列表）
 const KB_UPLOAD_EXTENSIONS = [
-  'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'log',
+  'txt', 'md', 'markdown', 'text', 'rst', 'adoc', 'asciidoc', 'org', 'tex',
+  'csv', 'tsv', 'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'log',
+  'jsonl', 'ndjson', 'properties', 'conf', 'cfg', 'env', 'diff', 'patch',
   'py', 'java', 'js', 'ts', 'tsx', 'jsx', 'css', 'scss', 'sql', 'sh',
-  'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt',
-  'scala', 'pl', 'r', 'lua', 'vue',
-  'pdf', 'docx', 'html', 'htm', 'xlsx', 'pptx', 'epub', 'odt', 'ods', 'odp', 'rtf',
+  'bash', 'zsh', 'ps1', 'mjs', 'cjs',
+  'go', 'rs', 'c', 'h', 'cpp', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt', 'kts',
+  'scala', 'pl', 'r', 'lua', 'vue', 'svelte', 'dart', 'groovy', 'gradle',
+  'hs', 'ex', 'exs', 'tf', 'proto',
+  'pdf', 'docx', 'docm', 'doc', 'html', 'htm', 'xlsx', 'xlsm', 'xls',
+  'pptx', 'pptm', 'ppt', 'epub', 'odt', 'ods', 'odp', 'rtf',
+  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'heic', 'heif',
 ]
 const KB_UPLOAD_ACCEPT = KB_UPLOAD_EXTENSIONS.map((ext) => `.${ext}`).join(',')
 
@@ -55,7 +63,8 @@ function formatFileSize(bytes: number) {
 
 function uploadFieldError(file: File): UploadDialogState['fieldError'] {
   const extension = knowledgeFileExtension(file.name)
-  if (!KB_UPLOAD_EXTENSIONS.includes(extension)) return 'extension'
+  // zip 是批量导入容器，走 upload-archive 端点，不在单文档格式集合内
+  if (extension !== 'zip' && !KB_UPLOAD_EXTENSIONS.includes(extension)) return 'extension'
   if (file.size > KB_UPLOAD_MAX_BYTES) return 'size'
   return null
 }
@@ -186,10 +195,20 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
             continue
           }
           try {
-            const detail = await aiApi.uploadKnowledgeDocument(siteId, file, undefined, writableBaseId)
-            if (detail.indexStatus === 'INDEXED') indexed++
-            else if (detail.indexStatus === 'FAILED') indexFailed++
-            else indexed++
+            if (knowledgeFileExtension(file.name) === 'zip') {
+              const result = await aiApi.uploadKnowledgeArchive(siteId, file, writableBaseId)
+              for (const detail of result.documents) {
+                if (detail.indexStatus === 'FAILED') indexFailed++
+                else indexed++
+              }
+              rejected += result.failures.length
+              if (result.createdCount === 0 && result.failures.length === 0) rejected++
+            } else {
+              const detail = await aiApi.uploadKnowledgeDocument(siteId, file, undefined, writableBaseId)
+              if (detail.indexStatus === 'INDEXED') indexed++
+              else if (detail.indexStatus === 'FAILED') indexFailed++
+              else indexed++
+            }
           } catch {
             rejected++
           }
@@ -232,6 +251,12 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
       return
     }
     const file = files[0]
+    // zip 不进单文件对话框（无标题可填）：直接走批量导入路径
+    if (knowledgeFileExtension(file.name) === 'zip' && !uploadFieldError(file)) {
+      setUploadDialog(null)
+      void uploadFilesBatch([file])
+      return
+    }
     setUploadDialog({
       file,
       title: titleFromFilename(file.name),
@@ -619,7 +644,7 @@ export function SiteAiKnowledgePanel({ siteId }: { siteId: number }) {
             <input
               ref={uploadInputRef}
               type="file"
-              accept={KB_UPLOAD_ACCEPT}
+              accept={`${KB_UPLOAD_ACCEPT},.zip`}
               multiple
               className="hidden"
               onChange={onPickUploadFile}

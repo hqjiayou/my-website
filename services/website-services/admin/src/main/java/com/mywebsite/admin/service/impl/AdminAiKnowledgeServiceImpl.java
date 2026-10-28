@@ -35,6 +35,7 @@ import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.client.AgentDimensionChangeRequiredException;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.dto.AgentOcrImageRequest;
 import com.mywebsite.agent.dto.AgentOcrPdfRequest;
 import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
@@ -777,6 +778,37 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             return text;
         } catch (RuntimeException ex) {
             log.warn("KB OCR failed for site {}: {}", siteId, ex.getMessage());
+            return "";
+        }
+    }
+
+    @Override
+    public String transcribeImage(long siteId, byte[] imageBytes, String mediaType) {
+        if (imageBytes == null || imageBytes.length == 0 || mediaType == null || mediaType.isBlank()) {
+            return "";
+        }
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(siteId);
+        if (chain.isEmpty()) {
+            log.info("KB image OCR skipped for site {}: no usable model entry chain", siteId);
+            return "";
+        }
+        try {
+            AgentOcrPdfResult result =
+                    agentClient.ocrImage(
+                            new AgentOcrImageRequest(
+                                    chain.get(0),
+                                    chain.size() > 1 ? chain.subList(1, chain.size()) : List.of(),
+                                    java.util.Base64.getEncoder().encodeToString(imageBytes),
+                                    mediaType));
+            String text = result == null || result.text() == null ? "" : result.text().trim();
+            log.info(
+                    "KB image OCR for site {} via {} produced {} chars",
+                    siteId,
+                    result == null ? null : result.modelSpec(),
+                    text.length());
+            return text;
+        } catch (RuntimeException ex) {
+            log.warn("KB image OCR failed for site {}: {}", siteId, ex.getMessage());
             return "";
         }
     }
