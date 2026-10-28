@@ -1,4 +1,4 @@
-package com.mywebsite.admin.service;
+package com.mywebsite.infra.knowledge;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -17,7 +17,7 @@ import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.junit.jupiter.api.Test;
 
 /** 上传内容归一化：各格式转 Markdown 标准形（标题/表格/围栏）、编码回退、CSV 表格化。 */
-class AdminAiKnowledgeContentConverterTest {
+class KnowledgeContentConverterTest {
 
     @Test
     void docxBecomesMarkdownWithHeadingsAndTables() throws IOException {
@@ -35,7 +35,7 @@ class AdminAiKnowledgeContentConverterTest {
             document.write(out);
             bytes = out.toByteArray();
         }
-        String markdown = AdminAiKnowledgeContentConverter.toStoredContent("docx", bytes);
+        String markdown = KnowledgeContentConverter.toStoredContent("docx", bytes);
         assertThat(markdown).contains("Docx body text").contains("| cell-a | cell-b |");
     }
 
@@ -50,8 +50,66 @@ class AdminAiKnowledgeContentConverterTest {
             workbook.write(out);
             bytes = out.toByteArray();
         }
-        String markdown = AdminAiKnowledgeContentConverter.toStoredContent("xlsx", bytes);
+        String markdown = KnowledgeContentConverter.toStoredContent("xlsx", bytes);
         assertThat(markdown).contains("## Hours").contains("| Day | 9:00-18:00 |").contains("| --- | --- |");
+    }
+
+    @Test
+    void xlsLegacyBecomesMarkdownTablePerSheet() throws IOException {
+        byte[] bytes;
+        try (org.apache.poi.hssf.usermodel.HSSFWorkbook workbook =
+                new org.apache.poi.hssf.usermodel.HSSFWorkbook()) {
+            var row = workbook.createSheet("Prices").createRow(0);
+            row.createCell(0).setCellValue("Item");
+            row.createCell(1).setCellValue("1200");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            bytes = out.toByteArray();
+        }
+        String markdown = KnowledgeContentConverter.toStoredContent("xls", bytes);
+        assertThat(markdown).contains("## Prices").contains("| Item | 1200 |");
+    }
+
+    @Test
+    void docmRoutesToDocxConverter() throws IOException {
+        byte[] bytes;
+        try (XWPFDocument document = new XWPFDocument()) {
+            document.createParagraph().createRun().setText("Macro doc body");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            document.write(out);
+            bytes = out.toByteArray();
+        }
+        assertThat(KnowledgeContentConverter.toStoredContent("docm", bytes))
+                .contains("Macro doc body");
+    }
+
+    @Test
+    void everySupportedNonImageExtensionIsRoutable() {
+        // 与 AdminAiKnowledgeController.SUPPORTED_EXTENSIONS 去掉图片后的集合一致：
+        // 任一扩展名都不许在转换器里落到 "unsupported extension"（上传被接受却转换
+        // 不支持是最坏的漂移）。二进制格式喂垃圾字节只断言路由存在，不求转换成功。
+        String[] routable = {
+            "txt", "md", "markdown", "text", "rst", "adoc", "asciidoc", "org", "tex",
+            "csv", "tsv", "json", "xml", "yaml", "yml", "toml", "ini", "log",
+            "jsonl", "ndjson", "properties", "conf", "cfg", "env", "diff", "patch",
+            "py", "java", "js", "ts", "tsx", "jsx", "css", "scss", "sql", "sh",
+            "bash", "zsh", "ps1", "mjs", "cjs",
+            "go", "rs", "c", "h", "cpp", "hpp", "cs", "rb", "php", "swift", "kt", "kts",
+            "scala", "pl", "r", "lua", "vue", "svelte", "dart", "groovy", "gradle",
+            "hs", "ex", "exs", "tf", "proto",
+            "pdf", "docx", "docm", "doc", "html", "htm", "xlsx", "xlsm", "xls",
+            "pptx", "pptm", "ppt", "epub", "odt", "ods", "odp", "rtf",
+        };
+        byte[] sample = "sample content".getBytes(StandardCharsets.UTF_8);
+        for (String extension : routable) {
+            try {
+                KnowledgeContentConverter.toStoredContent(extension, sample);
+            } catch (KnowledgeTextExtractor.ExtractionException ex) {
+                assertThat(ex.getMessage())
+                        .as("extension %s must be routable", extension)
+                        .doesNotStartWith("unsupported extension");
+            }
+        }
     }
 
     @Test
@@ -64,7 +122,7 @@ class AdminAiKnowledgeContentConverterTest {
             slideshow.write(out);
             bytes = out.toByteArray();
         }
-        String markdown = AdminAiKnowledgeContentConverter.toStoredContent("pptx", bytes);
+        String markdown = KnowledgeContentConverter.toStoredContent("pptx", bytes);
         assertThat(markdown).contains("## Slide 1").contains("Slide title text");
     }
 
@@ -73,7 +131,7 @@ class AdminAiKnowledgeContentConverterTest {
         String html = "<html><head><title>t</title><script>var secret = 1;</script></head>"
                 + "<body><h1>Heading One</h1><p>First paragraph.</p></body></html>";
         String markdown =
-                AdminAiKnowledgeContentConverter.toStoredContent("html", html.getBytes(StandardCharsets.UTF_8));
+                KnowledgeContentConverter.toStoredContent("html", html.getBytes(StandardCharsets.UTF_8));
         assertThat(markdown).contains("# Heading One").contains("First paragraph.").doesNotContain("secret");
     }
 
@@ -81,7 +139,7 @@ class AdminAiKnowledgeContentConverterTest {
     void csvBecomesMarkdownTable() {
         String csv = "name,hours\nMon,9-18\nTue,10-19\n";
         String markdown =
-                AdminAiKnowledgeContentConverter.toStoredContent("csv", csv.getBytes(StandardCharsets.UTF_8));
+                KnowledgeContentConverter.toStoredContent("csv", csv.getBytes(StandardCharsets.UTF_8));
         assertThat(markdown).contains("| name | hours |").contains("| --- | --- |").contains("| Mon | 9-18 |");
     }
 
@@ -89,14 +147,14 @@ class AdminAiKnowledgeContentConverterTest {
     void codeFileIsFencedWithLanguage() {
         String code = "print('hi')\n";
         String stored =
-                AdminAiKnowledgeContentConverter.toStoredContent("py", code.getBytes(StandardCharsets.UTF_8));
+                KnowledgeContentConverter.toStoredContent("py", code.getBytes(StandardCharsets.UTF_8));
         assertThat(stored).startsWith("```py").contains("print('hi')").endsWith("```");
     }
 
     @Test
     void shiftJisTextFallsBackFromUtf8() {
         byte[] sjis = "営業時間は9時から18時です".getBytes(Charset.forName("MS932"));
-        String stored = AdminAiKnowledgeContentConverter.toStoredContent("txt", sjis);
+        String stored = KnowledgeContentConverter.toStoredContent("txt", sjis);
         assertThat(stored).contains("営業時間");
     }
 
@@ -113,7 +171,7 @@ class AdminAiKnowledgeContentConverterTest {
                 </office:document-content>
                 """;
         byte[] bytes = zipOf("content.xml", contentXml);
-        String markdown = AdminAiKnowledgeContentConverter.toStoredContent("odt", bytes);
+        String markdown = KnowledgeContentConverter.toStoredContent("odt", bytes);
         assertThat(markdown).contains("# Odt Heading").contains("Odt paragraph text.");
     }
 
@@ -137,7 +195,7 @@ class AdminAiKnowledgeContentConverterTest {
             putZip(zip, "OEBPS/ch1.xhtml",
                     "<html><body><h1>Chapter One</h1><p>Hello EPUB.</p></body></html>");
         }
-        String markdown = AdminAiKnowledgeContentConverter.toStoredContent("epub", buffer.toByteArray());
+        String markdown = KnowledgeContentConverter.toStoredContent("epub", buffer.toByteArray());
         assertThat(markdown).contains("# Chapter One").contains("Hello EPUB.");
     }
 

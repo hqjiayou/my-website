@@ -47,7 +47,9 @@ def build_prompt_parts(
             "you already know the answer: a site-specific value in the documents "
             "takes precedence over general knowledge. If the search returns nothing "
             "relevant, say you could not find it in the site's documents instead of "
-            "answering from general knowledge."
+            "answering from general knowledge. If the question has several distinct "
+            "parts, run a separate search for each part instead of merging them "
+            "into one query."
         )
     if skill_instructions:
         text = skill_instructions
