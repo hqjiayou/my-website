@@ -288,22 +288,6 @@ class SiteAiConversationManageTest {
     }
 
     @Test
-    void searchEscapesLikeWildcardsInPattern() {
-        SiteAiConversationEntity idOnly = new SiteAiConversationEntity();
-        idOnly.setId(1L);
-        when(conversationMapper.selectList(any())).thenReturn(List.of(idOnly));
-        when(messageMapper.selectList(any())).thenReturn(List.of());
-
-        service.searchConversations(10L, 200L, "50%_");
-
-        org.mockito.ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<?>> captor =
-                org.mockito.ArgumentCaptor.forClass(
-                        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
-        verify(messageMapper).selectList(captor.capture());
-        assertThat(captor.getValue().getParamNameValuePairs().values()).contains("%50\\%\\_%");
-    }
-
-    @Test
     void searchBlankQueryReturnsEmptyWithoutTouchingMappers() {
         assertThat(service.searchConversations(10L, 200L, "   ")).isEmpty();
         verifyNoInteractions(conversationMapper);

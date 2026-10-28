@@ -299,9 +299,7 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
         if (conversationIds.isEmpty()) {
             return List.of();
         }
-        String pattern = "%"
-                + trimmed.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                + "%";
+        String pattern = likePattern(trimmed);
         List<SiteAiMessageEntity> hits = messageMapper.selectList(
                 new LambdaQueryWrapper<SiteAiMessageEntity>()
                         .in(SiteAiMessageEntity::getConversationId, conversationIds)
@@ -328,6 +326,13 @@ public class SiteAiConversationServiceImpl implements SiteAiConversationService 
                         snippet(m.getContent(), trimmed),
                         m.getCreatedAt()))
                 .toList();
+    }
+
+    /** LIKE 模式：转义反斜杠与通配符后包裹 %，与 SQL 的 ESCAPE '\' 对应。 */
+    static String likePattern(String trimmedQuery) {
+        return "%"
+                + trimmedQuery.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                + "%";
     }
 
     /** 围绕首个命中位置截取 ±30 字摘要（空白折叠）；找不到时退化为开头 60 字。 */
