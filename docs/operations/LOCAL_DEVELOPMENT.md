@@ -74,7 +74,7 @@ mvn -pl gateway -am spring-boot:run        # gateway：8080
 | agent-app | 8082 | `agent/agent-app/src/main/resources/application.yml` |
 | auth | 8083（`AUTH_APP_PORT` 可覆盖） | `auth/src/main/resources/application.yml` |
 
-Flyway：表结构只由 **admin** 执行（`FLYWAY_ENABLED` 默认 `true`，当前迁移至 **V35**）。agent-app 默认不跑（代码里变量名仍是历史名 `SITE_APP_FLYWAY_ENABLED`，默认 `false`）；auth 的 local profile 关闭。所以先起 admin 把迁移跑完，再起其余服务。改 `.env` 后必须重启对应进程。
+Flyway：表结构只由 **admin** 执行（`FLYWAY_ENABLED` 默认 `true`，当前迁移至 **V35**）。agent-app 默认不跑（代码里变量名仍是历史名 `AGENT_APP_FLYWAY_ENABLED`，默认 `false`）；auth 的 local profile 关闭。所以先起 admin 把迁移跑完，再起其余服务。改 `.env` 后必须重启对应进程。
 
 gateway 路由（`gateway/src/main/resources/application.yml`，顺序敏感）：`/api/auth/**` → auth:8083、`/api/admin/**` → admin:8081、`/api/agent/**` → agent-app:8082。
 

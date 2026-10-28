@@ -226,7 +226,7 @@ Flyway 是唯一数据库结构迁移机制。后续任何表结构变更必须�
 **执行策略（阶段 2B 起）：**
 
 - **脚本目录（唯一来源）**：`infra/src/main/resources/db/migration`
-- **`agent-app` 默认不执行 Flyway**（环境变量 `SITE_APP_FLYWAY_ENABLED`，默认 `false`），避免与 `admin` 共用同一库时出现重复 migration / `flyway_schema_history` 冲突。
+- **`agent-app` 默认不执行 Flyway**（环境变量 `AGENT_APP_FLYWAY_ENABLED`，默认 `false`），避免与 `admin` 共用同一库时出现重复 migration / `flyway_schema_history` 冲突。
 - 本地联调建议：**先启动 `admin`** 完成迁移，再启动 `agent-app`。说明见 `agent/agent-app/src/main/resources/db/README.md`。
 - `admin` 侧开关：`FLYWAY_ENABLED`（默认 `true`）。
 
@@ -288,14 +288,14 @@ cp .env.example .env
 - **`AUTH_JWT_PRIVATE_KEY_PATH`**、**`AUTH_JWT_PUBLIC_KEY_PATH`**、**`AUTH_JWT_KEY_ID`**（Auth **RS256**）
 - **`AUTH_JWKS_URI`**（Admin Resource Server 拉取 JWKS；默认 `http://localhost:8083/.well-known/jwks.json`）
 - **`SECURITY_REFRESH_COOKIE_SECURE`**（Refresh Cookie）
-- `FLYWAY_ENABLED`、`SITE_APP_FLYWAY_ENABLED`
+- `FLYWAY_ENABLED`、`AGENT_APP_FLYWAY_ENABLED`
 
 在 `services/website-services/` 目录创建 `.env`（已在仓库根 `.gitignore` 中忽略 **`.env`**，**勿提交**）。本地可从 **`services/website-services`**、各应用子目录 **或仓库根目录 `my-website`** 启动：`LocalDotenvSupport` 会在 **`user.dir`** 及其祖先中查找 **`.env`**，或在每层尝试 **`services/website-services/.env`**（根目录启动时常用）。更多说明见 [`docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md`](../../docs/website-services/设计文档/基础架构/WSL与Docker环境配置说明.md) §3。
 
 Flyway 相关：
 
 - `FLYWAY_ENABLED`：是否由 **admin** 执行迁移（默认 `true`）。
-- `SITE_APP_FLYWAY_ENABLED`：是否由 **agent-app** 执行迁移（默认 `false`，建议保持关闭）。
+- `AGENT_APP_FLYWAY_ENABLED`：是否由 **agent-app** 执行迁移（默认 `false`，建议保持关闭）。
 
 若日志出现 **`database "my_website_dev" does not exist`**：需在 **当前连接的 Postgres 实例**上手动 `CREATE DATABASE`，或调整 **local-stack** 初始化逻辑（取决于你如何创建库）；步骤见 [`scripts/README.md`](./scripts/README.md)。
 

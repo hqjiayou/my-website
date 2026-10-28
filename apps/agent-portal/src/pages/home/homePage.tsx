@@ -267,8 +267,8 @@ export function HomePage() {
           {agentMismatch ? (
             <p className="mt-2 text-sm leading-6 text-danger">
               {agentIdFromSession
-                ? '權杖裡的 site_id 與目前站點不一致。站點 AI 會依路徑上的站點 ID 驗證，存取會被拒絕。'
-                : '權杖裡的 site_id 與 VITE_PORTAL_AGENT_ID 不一致。站點 AI 會依路徑上的站點 ID 驗證，存取會被拒絕。'}
+                ? '權杖裡的 agent_id 與目前站點不一致。站點 AI 會依路徑上的站點 ID 驗證，存取會被拒絕。'
+                : '權杖裡的 agent_id 與 VITE_PORTAL_AGENT_ID 不一致。站點 AI 會依路徑上的站點 ID 驗證，存取會被拒絕。'}
             </p>
           ) : null}
         </Card>

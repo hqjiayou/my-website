@@ -4,7 +4,7 @@ spring:
   profiles:
     default: local
   flyway:
-    enabled: ${SITE_APP_FLYWAY_ENABLED:false}
+    enabled: ${AGENT_APP_FLYWAY_ENABLED:false}
   messages:
     basename: i18n/common/messages,i18n/auth/messages
     encoding: UTF-8

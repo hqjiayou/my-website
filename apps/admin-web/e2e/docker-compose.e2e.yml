@@ -2,8 +2,7 @@
 #
 # Why a dedicated compose file instead of the repo-root docker-compose.yml:
 # the root stack targets self-hosting (Tailscale/Caddy, the Python agent
-# service, .env-driven secrets) and currently references a stale
-# services/webagent-services/Dockerfile path. The E2E stack only needs the
+# service, .env-driven secrets). The E2E stack only needs the
 # admin golden-path slice: postgres + redis + S3 (SeaweedFS) + admin + auth +
 # gateway + admin-web, with fixed throwaway credentials and generated
 # JWT keys (see run-e2e.sh / the browser-e2e-ci workflow).

@@ -12,7 +12,7 @@ SERVICES_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SQL_FILE="$SCRIPT_DIR/seed-admin-hqjiayou-super.sql"
 ENV_FILE="$SERVICES_ROOT/.env"
 
-CONTAINER="${POSTGRES_CONTAINER:-local-postgres}"
+CONTAINER="${POSTGRES_CONTAINER:-local-dev-postgres-1}"
 USE_HOST_PSQL="${USE_HOST_PSQL:-0}"
 
 read_dotenv() {

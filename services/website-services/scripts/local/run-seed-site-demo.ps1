@@ -7,7 +7,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $Container = 'local-postgres',
+    [string] $Container = 'local-dev-postgres-1',
     [switch] $UseHostPsql
 )
 

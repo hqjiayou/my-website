@@ -70,7 +70,7 @@ services:
   admin:
     build:
       context: .
-      dockerfile: services/webagent-services/Dockerfile
+      dockerfile: services/website-services/Dockerfile
       args:
         MODULE: admin
         JAR_GLOB: admin/target/admin-*.jar
@@ -90,7 +90,7 @@ services:
   auth:
     build:
       context: .
-      dockerfile: services/webagent-services/Dockerfile
+      dockerfile: services/website-services/Dockerfile
       args:
         MODULE: auth
         JAR_GLOB: auth/target/auth-*.jar
@@ -112,7 +112,7 @@ services:
       AUTH_JWT_PUBLIC_KEY_PATH: "${AUTH_JWT_PUBLIC_KEY_PATH}"
       AUTH_JWT_KEY_ID: "${AUTH_JWT_KEY_ID:-auth-local-rs256-key-1}"
     volumes:
-      - ./services/webagent-services/secrets/local:/secrets:ro
+      - ./services/website-services/secrets/local:/secrets:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -127,7 +127,7 @@ services:
   agent-service:
     build:
       context: .
-      dockerfile: services/webagent-services/Dockerfile
+      dockerfile: services/website-services/Dockerfile
       args:
         MODULE: agent/agent-app
         JAR_GLOB: agent/agent-app/target/agent-app-*.jar
@@ -154,7 +154,7 @@ services:
   gateway:
     build:
       context: .
-      dockerfile: services/webagent-services/Dockerfile
+      dockerfile: services/website-services/Dockerfile
       args:
         MODULE: gateway
         JAR_GLOB: gateway/target/gateway-*.jar

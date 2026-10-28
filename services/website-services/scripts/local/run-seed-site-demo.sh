@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICES_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SQL_FILE="${SCRIPT_DIR}/seed-site-demo.sql"
 ENV_FILE="${SERVICES_ROOT}/.env"
-CONTAINER="${CONTAINER:-local-postgres}"
+CONTAINER="${CONTAINER:-local-dev-postgres-1}"
 
 if [[ ! -f "${SQL_FILE}" ]]; then
   echo "SQL 文件不存在: ${SQL_FILE}" >&2
