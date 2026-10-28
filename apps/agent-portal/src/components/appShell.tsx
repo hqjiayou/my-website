@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, House, LogOut, MessageSquare, PanelLeftClose, PanelLeftOpen, Sparkles, X } from 'lucide-react'
+import { BookOpen, House, LogOut, MessageSquare, Moon, PanelLeftClose, PanelLeftOpen, Sparkles, Sun, X } from 'lucide-react'
 
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
@@ -47,6 +47,9 @@ export function AppShell() {
   const logout = useAuthStore((state) => state.logout)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
+  const [dark, setDark] = useState<boolean>(() =>
+    typeof document !== 'undefined' ? document.documentElement.classList.contains('dark') : false,
+  )
   const [extra, setExtraState] = useState<ReactNode>(null)
   const [loggingOut, setLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState<string | null>(null)
@@ -62,6 +65,17 @@ export function AppShell() {
       // 存不了就只在本次会话内生效，不挡功能。
     }
   }, [collapsed])
+
+  function toggleTheme() {
+    const next = !dark
+    setDark(next)
+    document.documentElement.classList.toggle('dark', next)
+    try {
+      window.localStorage.setItem('portal.theme', next ? 'dark' : 'light')
+    } catch {
+      // 存不了就只改本次会话。
+    }
+  }
 
   async function onLogout() {
     setLoggingOut(true)
@@ -130,6 +144,15 @@ export function AppShell() {
           <p className="min-w-0 flex-1 truncate text-sm">{displayName || '已登入'}</p>
           <button
             type="button"
+            onClick={toggleTheme}
+            aria-label={dark ? '切換淺色模式' : '切換深色模式'}
+            title={dark ? '淺色模式' : '深色模式'}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gpt-muted hover:bg-gpt-hover hover:text-gpt-ink"
+          >
+            {dark ? <Sun size={17} strokeWidth={1.8} /> : <Moon size={17} strokeWidth={1.8} />}
+          </button>
+          <button
+            type="button"
             onClick={() => void onLogout()}
             disabled={loggingOut}
             aria-label="登出"
@@ -152,7 +175,7 @@ export function AppShell() {
           <button
             type="button"
             aria-label="關閉選單"
-            className="fixed inset-0 z-30 bg-gpt-ink/30 md:hidden"
+            className="fixed inset-0 z-30 bg-black/40 md:hidden"
             onClick={() => setDrawerOpen(false)}
           />
         ) : null}

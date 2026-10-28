@@ -36,13 +36,13 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   }
 
   return (
-    <div className="mb-3 overflow-hidden rounded-xl bg-gpt-ink text-gpt-canvas">
-      <div className="flex items-center justify-between px-3.5 pt-2 text-xs text-gpt-canvas/60">
+    <div className="mb-3 overflow-hidden rounded-xl bg-gpt-code text-gpt-code-fg">
+      <div className="flex items-center justify-between px-3.5 pt-2 text-xs text-gpt-code-fg/60">
         <span>{language || 'code'}</span>
         <button
           type="button"
           onClick={() => void copyCode()}
-          className="flex items-center gap-1.5 rounded px-1 py-0.5 transition hover:text-gpt-canvas"
+          className="flex items-center gap-1.5 rounded px-1 py-0.5 transition hover:text-gpt-code-fg"
         >
           {copied ? <Check size={13} /> : <Copy size={13} />}
           {copied ? '已複製' : '複製代碼'}
