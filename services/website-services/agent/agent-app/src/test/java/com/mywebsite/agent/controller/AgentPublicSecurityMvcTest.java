@@ -21,20 +21,15 @@ class AgentPublicSecurityMvcTest extends AbstractAgentSpringBootTest {
 
     @Test
     void anonymousCanReadPublicGets() throws Exception {
-        mockMvc.perform(get("/api/agent/public/missing-public-agent"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(ErrorCode.NOT_FOUND.getCode()));
-        mockMvc.perform(get("/api/agent/public/missing-public-agent/contents"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(ErrorCode.NOT_FOUND.getCode()));
-        mockMvc.perform(get("/api/agent/public/missing-public-agent/contents/1"))
+        // 公开面只剩分享读：匿名 GET 凭 token 读分享，未知 token 是业务 NOT_FOUND（而非 401），证明 permitAll 生效。
+        mockMvc.perform(get("/api/agent/public/ai/shares/nonexistent-token"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(ErrorCode.NOT_FOUND.getCode()));
     }
 
     @Test
     void publicPostIsNotPermitAll() throws Exception {
-        mockMvc.perform(post("/api/agent/public/missing-public-agent"))
+        mockMvc.perform(post("/api/agent/public/ai/shares/nonexistent-token"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(ErrorCode.UNAUTHORIZED.getCode()));
     }
