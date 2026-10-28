@@ -2,18 +2,18 @@
 
 用于 **`my_website_dev` 不存在**（Flyway / JDBC 报错 `database "my_website_dev" does not exist`）时的补救。
 
-本仓库 **不再**附带 PostgreSQL / Redis 的 Compose；请确保你已启动既有 **local-stack**（典型容器名 **`local-postgres`**），且 **`5432`** 映射到宿主机。
+本仓库 **不再**附带 PostgreSQL / Redis 的 Compose；请确保你已启动既有 **local-stack**（典型容器名 **`local-dev-postgres-1`**），且 **`5432`** 映射到宿主机。
 
 ---
 
-## 方式 A：Docker 中的 Postgres（local-stack / `local-postgres`）
+## 方式 A：Docker 中的 Postgres（local-stack / `local-dev-postgres-1`）
 
 ### A1 保留其它数据的情况下单独建库（推荐）
 
-容器名以 **`docker ps`** 为准（常见为 **`local-postgres`**）。将 **`mywebsite`** 替换为你 **`website-services/.env`** 中与 Postgres 一致的登录用户（范本 `.env.example` 默认为 **`mywebsite`**）：
+容器名以 **`docker ps`** 为准（常见为 **`local-dev-postgres-1`**）。将 **`mywebsite`** 替换为你 **`website-services/.env`** 中与 Postgres 一致的登录用户（范本 `.env.example` 默认为 **`mywebsite`**）：
 
 ```bash
-docker exec -i local-postgres psql -U mywebsite -d postgres -c "CREATE DATABASE my_website_dev OWNER mywebsite ENCODING 'UTF8';"
+docker exec -i local-dev-postgres-1 psql -U mywebsite -d postgres -c "CREATE DATABASE my_website_dev OWNER mywebsite ENCODING 'UTF8';"
 ```
 
 等价地，也可用宿主机 **`psql`** 直连 **`localhost:5432`**：
@@ -48,10 +48,10 @@ psql -h localhost -p 5432 -U postgres -d postgres -v ON_ERROR_STOP=1 -f scripts/
 
 用于持久层真实 PostgreSQL 验证（Flyway V1 + Mapper 回归测试；原《持久层真实 PostgreSQL 验证说明》已于 2026-10-29 移除，见 git 历史），与日常开发库 **`my_website_dev`** 分离。
 
-在 **`local-postgres`**（或任一可达 **`localhost:5432`** 的实例）上建库示例：
+在 **`local-dev-postgres-1`**（或任一可达 **`localhost:5432`** 的实例）上建库示例：
 
 ```bash
-docker exec -i local-postgres psql -U mywebsite -d postgres -c "CREATE DATABASE my_website_3c_verify OWNER mywebsite ENCODING 'UTF8';"
+docker exec -i local-dev-postgres-1 psql -U mywebsite -d postgres -c "CREATE DATABASE my_website_3c_verify OWNER mywebsite ENCODING 'UTF8';"
 ```
 
 用户 **`OWNER`** 须与 **`website-services/.env`** 中 JDBC 登录用户一致。
@@ -65,7 +65,7 @@ docker exec -i local-postgres psql -U mywebsite -d postgres -c "CREATE DATABASE 
 用于阶段 5C.1 RBAC 种子真实 PostgreSQL 迁移验证（Flyway **V1 + V2** 与种子数据；原验证说明已于 2026-10-29 移除，见 git 历史），与开发库、持久层验证库分离。
 
 ```bash
-docker exec -i local-postgres psql -U hqjiayou -d postgres -v ON_ERROR_STOP=1 \
+docker exec -i local-dev-postgres-1 psql -U hqjiayou -d postgres -v ON_ERROR_STOP=1 \
   -c "CREATE DATABASE my_website_rbac_seed_verify OWNER hqjiayou ENCODING 'UTF8';"
 ```
 
@@ -90,7 +90,7 @@ docker exec -i local-postgres psql -U hqjiayou -d postgres -v ON_ERROR_STOP=1 \
 | 文件 | 用途 |
 |------|------|
 | [`local/seed-admin-hqjiayou-super.sql`](./local/seed-admin-hqjiayou-super.sql) | SQL：用户 `hqjiayou` / 密码 `123456`，绑定 `super_admin` |
-| [`local/run-seed-admin-hqjiayou-super.ps1`](./local/run-seed-admin-hqjiayou-super.ps1) | Windows：默认 `docker exec` → `local-postgres` |
+| [`local/run-seed-admin-hqjiayou-super.ps1`](./local/run-seed-admin-hqjiayou-super.ps1) | Windows：默认 `docker exec` → `local-dev-postgres-1` |
 | [`local/run-seed-admin-hqjiayou-super.sh`](./local/run-seed-admin-hqjiayou-super.sh) | Linux/macOS：同上 |
 
 ```powershell
@@ -112,7 +112,7 @@ pwsh ./scripts/local/run-seed-admin-hqjiayou-super.ps1 -UseHostPsql
 | 文件 | 用途 |
 |------|------|
 | [`local/seed-site-demo.sql`](./local/seed-site-demo.sql) | SQL：站点 `demo` + 用户 `site_demo` / 密码 `123456` |
-| [`local/run-seed-site-demo.ps1`](./local/run-seed-site-demo.ps1) | Windows：默认 `docker exec` → `local-postgres` |
+| [`local/run-seed-site-demo.ps1`](./local/run-seed-site-demo.ps1) | Windows：默认 `docker exec` → `local-dev-postgres-1` |
 | [`local/run-seed-site-demo.sh`](./local/run-seed-site-demo.sh) | Linux/macOS：同上 |
 
 ```powershell
