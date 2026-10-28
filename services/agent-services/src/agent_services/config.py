@@ -21,6 +21,10 @@ RETRIEVAL_RERANK_MAX_CANDIDATES_DEFAULT = 12
 # 2026-10-27 对抗探针标定：干扰文档（错型号 XJ-800、招聘、同型号清洁指南）在
 # 分数管线下全部漏过，裁门模式下真模型逐题全对且多文档题两篇都保留。
 RETRIEVAL_RERANK_CUTOFF_DEFAULT = True
+# 同源块数上限：融合后同一 source_id 最多保留几块进 topK/rerank 窗口。长文档被切成
+# 多块时，其相近块会整排挤占 topK、饿死其他文档（2026-10-27 真嵌入探针：保养单题
+# top4 全是同一指南的 4 块）。2 兼顾「同文档多面命中」与多样性；0 表示不限制。
+RETRIEVAL_MAX_CHUNKS_PER_SOURCE_DEFAULT = 2
 
 
 class Settings(BaseSettings):
@@ -72,6 +76,10 @@ class Settings(BaseSettings):
     retrieval_score_ratio_floor: float = Field(
         default=RETRIEVAL_SCORE_RATIO_FLOOR_DEFAULT,
         validation_alias="RETRIEVAL_SCORE_RATIO_FLOOR",
+    )
+    retrieval_max_chunks_per_source: int = Field(
+        default=RETRIEVAL_MAX_CHUNKS_PER_SOURCE_DEFAULT,
+        validation_alias="RETRIEVAL_MAX_CHUNKS_PER_SOURCE",
     )
     retrieval_hnsw_ef_search: int = Field(
         default=RETRIEVAL_HNSW_EF_SEARCH_DEFAULT, validation_alias="RETRIEVAL_HNSW_EF_SEARCH"
@@ -179,6 +187,14 @@ def assert_retrieval_score_ratio_floor(value: float) -> None:
     if not math.isfinite(value) or value < 0 or value > 1:
         raise RuntimeError(
             "RETRIEVAL_SCORE_RATIO_FLOOR must be a number from 0 to 1. 0 disables pruning."
+        )
+
+
+def assert_retrieval_max_chunks_per_source(value: int) -> None:
+    """启动期校验：同源块数上限必须是非负整数。0 表示不限制。非法值 fail-fast。"""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise RuntimeError(
+            "RETRIEVAL_MAX_CHUNKS_PER_SOURCE must be a non-negative integer. 0 disables the cap."
         )
 
 

@@ -959,6 +959,27 @@ async def test_retrieval_min_score_zero_keeps_low_vector_hits() -> None:
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:hi", 0.9), ("kb:lo", 0.2)]
 
 
+def test_apply_per_source_cap_pure() -> None:
+    from agent_services.retrieval.service import apply_per_source_cap
+
+    chunks = [
+        RetrievedChunk("kb:a", 0, "a0", 0.9),
+        RetrievedChunk("kb:a", 1, "a1", 0.8),
+        RetrievedChunk("kb:a", 2, "a2", 0.7),
+        RetrievedChunk("kb:b", 0, "b0", 0.6),
+    ]
+    # 每源最多 2 块：a 的第三块被裁，b 的块补位进来，融合序不变
+    assert [(c.source_id, c.chunk_index) for c in apply_per_source_cap(chunks, 2)] == [
+        ("kb:a", 0),
+        ("kb:a", 1),
+        ("kb:b", 0),
+    ]
+    # 0 = 不限制；上限 ≥ 块数时原样返回
+    assert apply_per_source_cap(chunks, 0) == chunks
+    assert apply_per_source_cap(chunks, 5) == chunks
+    assert apply_per_source_cap([], 2) == []
+
+
 def test_apply_score_ratio_floor_pure() -> None:
     from agent_services.retrieval.service import apply_score_ratio_floor
 

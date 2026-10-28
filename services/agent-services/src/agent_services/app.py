@@ -10,6 +10,7 @@ from agent_services.auth.internal_token import assert_token_configured
 from agent_services.config import (
     Settings,
     assert_contract_test_model_allowed,
+    assert_retrieval_max_chunks_per_source,
     assert_retrieval_min_score,
     assert_retrieval_score_ratio_floor,
     assert_skills_max_instruction_chars,
@@ -45,6 +46,7 @@ def create_app(
     assert_skills_max_instruction_chars(resolved.agent_skills_max_instruction_chars)
     assert_retrieval_min_score(resolved.retrieval_min_score)
     assert_retrieval_score_ratio_floor(resolved.retrieval_score_ratio_floor)
+    assert_retrieval_max_chunks_per_source(resolved.retrieval_max_chunks_per_source)
     assert_contract_test_model_allowed(resolved)
 
     app = FastAPI(title="agent-services", version=__version__, lifespan=_lifespan)

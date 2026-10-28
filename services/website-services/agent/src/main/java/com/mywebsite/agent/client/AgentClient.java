@@ -4,6 +4,7 @@ import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.dto.AgentOcrImageRequest;
 import com.mywebsite.agent.dto.AgentOcrPdfRequest;
 import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentPingResponse;
@@ -58,4 +59,10 @@ public interface AgentClient {
      * BusinessException（EXTERNAL_DEPENDENCY_BLOCKED）；调用方决定是否降级。
      */
     AgentOcrPdfResult ocrPdf(AgentOcrPdfRequest request);
+
+    /**
+     * 图片转写（知识库图片上传，模型原生视觉理解）。响应与 {@link #ocrPdf} 同形状，
+     * 复用 AgentOcrPdfResult 承载。失败语义同 ocrPdf。
+     */
+    AgentOcrPdfResult ocrImage(AgentOcrImageRequest request);
 }
