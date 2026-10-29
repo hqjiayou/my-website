@@ -183,9 +183,11 @@ function GatewayAccessKeysCard() {
                   <span className="font-medium text-slate-900">{key.name}</span>
                   <span className="ml-2 font-mono text-xs text-slate-500">…{key.keyHint}</span>
                   <span className="ml-2 text-xs text-slate-400">
+                    <span className="text-slate-500">{t('settings.gatewayKeys.createdAtTag')}</span>{' '}
                     {new Date(key.createdAt).toLocaleString()}
                   </span>
                   <span className="ml-2 text-xs text-slate-400">
+                    <span className="text-slate-500">{t('settings.gatewayKeys.expiresAtTag')}</span>{' '}
                     {key.expiresAt
                       ? new Date(key.expiresAt).toLocaleString()
                       : t('settings.gatewayKeys.neverExpires')}
@@ -262,6 +264,42 @@ function GatewayAccessKeysCard() {
         </form>
       </PermissionGate>
     </article>
+  )
+}
+
+/** 组链预览按模式拆分的一段：同一作用域下该模式的生效链。 */
+function ModeChainSection({ mode, chain }: { mode: string; chain: AiModelEntry[] }) {
+  const { t } = useTranslation('aiAdmin')
+  return (
+    <div className="space-y-1">
+      <h4 className="text-xs font-semibold text-slate-700">
+        {mode === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
+      </h4>
+      {chain.length === 0 ? (
+        <p className="text-sm text-slate-600">{t('settings.chainModeEmpty')}</p>
+      ) : (
+        <ol className="space-y-1">
+          {chain.map((entry, index) => (
+            <li key={entry.id} className="flex items-center gap-2 text-sm">
+              <span
+                className={
+                  index === 0
+                    ? 'rounded bg-slate-900 px-2 py-0.5 text-xs font-medium text-white'
+                    : 'rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600'
+                }
+              >
+                {index === 0 ? t('settings.chainPrimary') : t('settings.chainFallback', { n: index })}
+              </span>
+              <span className="font-medium text-slate-900">{entry.displayName}</span>
+              <span className="text-slate-500">{entry.modelSpec}</span>
+              <span className="text-xs text-slate-400">
+                {entry.agentId == null ? t('settings.agentPlatform') : null}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   )
 }
 
@@ -345,7 +383,11 @@ export function AiSettingsPage() {
   }
 
   const entries = data ?? []
-  const chain = computeChain(entries, chainScope === '' ? null : Number(chainScope))
+  const scopeAgentId = chainScope === '' ? null : Number(chainScope)
+  const keyChain = computeChain(entries.filter((entry) => (entry.mode ?? 'KEY') === 'KEY'), scopeAgentId)
+  const cliChain = computeChain(entries.filter((entry) => (entry.mode ?? 'KEY') === 'CLI'), scopeAgentId)
+  const aliasTrimmed = draft?.alias.trim() ?? ''
+  const aliasInvalid = aliasTrimmed !== '' && !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(aliasTrimmed.toLowerCase())
 
   function submitDraft() {
     if (!draft || !canUpdate) return
@@ -389,11 +431,27 @@ export function AiSettingsPage() {
                     ) : null}
                     <span className="ml-2 text-slate-500">{entry.modelSpec}</span>
                   </span>
-                  <span className="text-xs text-slate-500">
-                    {entry.defaultEntry ? t('settings.defaultBadge') : null}
-                    {` ${entry.mode === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}`}
-                    {!entry.enabled ? ` ${t('settings.disabledBadge')}` : null}
-                    {entry.apiKeyConfigured ? ` ${entry.apiKeyHint}` : null}
+                  <span className="flex flex-wrap items-center gap-1">
+                    {entry.defaultEntry ? (
+                      <span className="rounded bg-slate-900 px-1.5 py-0.5 text-xs text-white">
+                        {(entry.mode ?? 'KEY') === 'CLI'
+                          ? t('settings.defaultBadgeCli')
+                          : t('settings.defaultBadgeKey')}
+                      </span>
+                    ) : null}
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                      {(entry.mode ?? 'KEY') === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
+                    </span>
+                    {!entry.enabled ? (
+                      <span className="rounded bg-rose-50 px-1.5 py-0.5 text-xs text-rose-700">
+                        {t('settings.disabledBadge')}
+                      </span>
+                    ) : null}
+                    {entry.apiKeyConfigured ? (
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                        {entry.apiKeyHint}
+                      </span>
+                    ) : null}
                   </span>
                 </button>
                 {canUpdate && entry.enabled && !entry.defaultEntry ? (
@@ -439,30 +497,10 @@ export function AiSettingsPage() {
             </select>
           </div>
           <p className="text-sm text-slate-600">{t('settings.chainHint')}</p>
-          {chain.length === 0 ? (
-            <p className="text-sm text-slate-600">{t('settings.chainEmpty')}</p>
-          ) : (
-            <ol className="space-y-1">
-              {chain.map((entry, index) => (
-                <li key={entry.id} className="flex items-center gap-2 text-sm">
-                  <span
-                    className={
-                      index === 0
-                        ? 'rounded bg-slate-900 px-2 py-0.5 text-xs font-medium text-white'
-                        : 'rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600'
-                    }
-                  >
-                    {index === 0 ? t('settings.chainPrimary') : t('settings.chainFallback', { n: index })}
-                  </span>
-                  <span className="font-medium text-slate-900">{entry.displayName}</span>
-                  <span className="text-slate-500">{entry.modelSpec}</span>
-                  <span className="text-xs text-slate-400">
-                    {entry.agentId == null ? t('settings.agentPlatform') : null}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
+          <div className="space-y-4">
+            <ModeChainSection mode="KEY" chain={keyChain} />
+            <ModeChainSection mode="CLI" chain={cliChain} />
+          </div>
         </article>
 
         {draft ? (
@@ -501,6 +539,9 @@ export function AiSettingsPage() {
                 onChange={(event) => setDraft({ ...draft, alias: event.target.value })}
               />
               <span className="mt-1 block text-xs text-slate-500">{t('settings.aliasHint')}</span>
+              {aliasInvalid ? (
+                <span className="mt-1 block text-xs text-rose-600">{t('settings.aliasInvalid')}</span>
+              ) : null}
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-800">{t('settings.apiKey')}</span>
@@ -590,7 +631,7 @@ export function AiSettingsPage() {
               <div className="flex gap-2">
                 <button
                   type="submit"
-                  disabled={saveMutation.isPending}
+                  disabled={saveMutation.isPending || aliasInvalid}
                   className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                 >
                   {saveMutation.isPending ? t('settings.saving') : t('settings.save')}
