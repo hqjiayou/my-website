@@ -10,8 +10,6 @@ import {
   Layers3,
   MessageSquare,
   Palette,
-  Settings2,
-  SlidersHorizontal,
 } from 'lucide-react'
 
 import { ROUTES } from '../config/routePaths'
@@ -79,18 +77,9 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: 'config',
-    titleKey: 'sections.config',
-    entries: [{ labelKey: 'items.paramsConfig', path: ROUTES.config.params, icon: SlidersHorizontal }],
-  },
-  {
     id: 'governance',
     titleKey: 'sections.governance',
-    entries: [
-      { labelKey: 'items.analytics', path: ROUTES.governance.analytics, icon: BarChart3 },
-      { labelKey: 'items.system', path: ROUTES.governance.system, icon: Settings2 },
-      { labelKey: 'items.developer', path: ROUTES.governance.developer, icon: Braces },
-    ],
+    entries: [{ labelKey: 'items.analytics', path: ROUTES.governance.analytics, icon: BarChart3 }],
   },
 ]
 
