@@ -2,6 +2,7 @@ package com.mywebsite.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -13,6 +14,8 @@ import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -89,8 +92,28 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-model:read",
             "admin:ai-model:update");
 
-    private static final int EXPECTED_FLYWAY_VERSION_COUNT = 35;
+    /**
+     * 不硬编码总数：运行时统计 infra 迁移目录（{@code classpath:db/migration}，与本类
+     * {@code application-verify-pg-rbac.yml} 的 Flyway {@code locations} 口径一致）下 {@code V*__*.sql} 文件数。
+     */
+    private static final int EXPECTED_FLYWAY_VERSION_COUNT = countFlywayMigrationFiles();
+
     private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 55;
+
+    private static int countFlywayMigrationFiles() {
+        Resource[] resources;
+        try {
+            resources =
+                    new PathMatchingResourcePatternResolver().getResources("classpath*:db/migration/V*__*.sql");
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "无法统计 Flyway 迁移文件数：classpath:db/migration 下 V*__*.sql 读取失败", e);
+        }
+        if (resources.length == 0) {
+            throw new IllegalStateException("无法统计 Flyway 迁移文件数：classpath:db/migration 下未找到任何 V*__*.sql");
+        }
+        return resources.length;
+    }
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
