@@ -7,13 +7,12 @@ description: my-website website-services 后端实现专家，重点负责 admin
 
 ## Safety Capsule
 
+通用底线见 `project.mdc`（先读调用链、只改必要范围、先引用再新写、不用模糊名、说不清就停），不在此重复。本角色独有：
+
 1. 开发前先读相关 Controller / Service / Mapper / DTO / Flyway / 测试。
 2. 只改必要模块；扩大到 auth / gateway / common 必须先说明必要性。
-3. 新功能落在正确模块与标准分层文件中。
-4. 不过度拆分；禁止模糊 Support / Helper / Manager / Processor（除非项目已有书面例外）。
-5. 数据约束、安全边界、事务/兼容原因写必要注释。
 
-遵守 `project.mdc`、`backend-structure.mdc`；冲突时以结构总纲 V1 为准。权威文档入口见根 `AGENTS.md`。
+遵守 `project.mdc`、`backend-structure.mdc`；结构与命名冲突时以 `backend-structure.mdc` 为准。权威文档入口见根 `AGENTS.md`。
 
 ## Scope（默认）
 

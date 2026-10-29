@@ -21,6 +21,9 @@ export default {
     name: '名前',
     spec: 'モデル spec',
     specHint: '例: google:gemini-3-flash-preview または openai:gpt-4o-mini',
+    alias: 'ゲートウェイ エイリアス',
+    aliasHint:
+      '任意。ゲートウェイのルーティングに使用します。小文字英数字・-・_ のみ、先頭は英数字（2〜64 文字、大文字は自動で小文字化）。空欄なら未設定。',
     site: '対象サイト',
     agentPlatform: '全サイト',
     mode: 'モード',
@@ -46,6 +49,28 @@ export default {
     chainPrimary: '主用',
     chainFallback: '予備 {{n}}',
     chainEmpty: 'このスコープに有効なチェーンはありません（有効なデフォルト入口がありません）。',
+    gatewayKeys: {
+      title: 'ゲートウェイ アクセス Key',
+      description:
+        '対外 API ゲートウェイのアクセス資格情報です。キーは発行時に一度だけ表示され、サーバーにはハッシュのみ保存されます。',
+      empty: 'アクセス Key はまだありません。',
+      name: 'Key 名',
+      expiresAt: '有効期限',
+      expiresAtHint: '空欄なら無期限です。',
+      issue: '発行',
+      issuing: '発行中…',
+      issued: '発行しました。平文キーを今すぐ保存してください',
+      revoke: '失効',
+      revoked: '失効しました',
+      confirmRevoke: 'このアクセス Key を失効しますか？失効後は即座に無効化され、元に戻せません。',
+      statusActive: '有効',
+      statusRevoked: '失効済み',
+      statusExpired: '期限切れ',
+      neverExpires: '無期限',
+      oneTimeWarning:
+        'このキーは今回のみ表示されます。今すぐコピーして保存してください。閉じると平文は二度と表示できません。',
+      close: '閉じる',
+    },
   },
   prompts: {
     title: 'Prompt 設定',

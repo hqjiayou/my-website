@@ -5,9 +5,15 @@ import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
 import { agentApi } from '@/api/apps/agentApi'
+import { CopyableText } from '@/components/admin/copyableText'
 import { PageHeader } from '@/components/page'
 import { PermissionGate, useHasPermission } from '@/router/permission'
-import type { AiModelEntry, AiModelEntryWriteInput } from '@/types/ai'
+import type {
+  AiModelEntry,
+  AiModelEntryWriteInput,
+  GatewayAccessKey,
+  GatewayAccessKeyIssueResponse,
+} from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 
 type Draft = {
@@ -21,6 +27,7 @@ type Draft = {
   enabled: boolean
   defaultEntry: boolean
   mode: string
+  alias: string
   version: number | null
   apiKeyHint: string | null
 }
@@ -37,6 +44,7 @@ function emptyDraft(makeDefault: boolean): Draft {
     enabled: true,
     defaultEntry: makeDefault,
     mode: 'KEY',
+    alias: '',
     version: null,
     apiKeyHint: null,
   }
@@ -74,9 +82,187 @@ function draftFromEntry(entry: AiModelEntry): Draft {
     enabled: entry.enabled,
     defaultEntry: entry.defaultEntry,
     mode: entry.mode ?? 'KEY',
+    alias: entry.alias ?? '',
     version: entry.version,
     apiKeyHint: entry.apiKeyHint,
   }
+}
+
+type GatewayKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED'
+
+function gatewayKeyStatus(key: GatewayAccessKey): GatewayKeyStatus {
+  if (key.revokedAt) return 'REVOKED'
+  if (key.expiresAt && new Date(key.expiresAt).getTime() <= Date.now()) return 'EXPIRED'
+  return 'ACTIVE'
+}
+
+/**
+ * 明文 apiKey 只在签发响应中出现一次：只放组件本地 state 展示，
+ * 不写 localStorage，不进 React Query cache 的列表数据。
+ */
+function GatewayAccessKeysCard() {
+  const { t } = useTranslation('aiAdmin')
+  const queryClient = useQueryClient()
+  const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
+  const [name, setName] = useState('')
+  const [expiresAt, setExpiresAt] = useState('')
+  const [issuedKey, setIssuedKey] = useState<GatewayAccessKeyIssueResponse | null>(null)
+
+  const { data, isPending } = useQuery({
+    queryKey: ['ai', 'gateway-access-keys'],
+    queryFn: () => aiApi.listGatewayAccessKeys(),
+  })
+
+  const issueMutation = useMutation({
+    mutationFn: () =>
+      aiApi.issueGatewayAccessKey({
+        name: name.trim(),
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      }),
+    onSuccess: (response) => {
+      setIssuedKey(response)
+      setName('')
+      setExpiresAt('')
+      toast.success(t('settings.gatewayKeys.issued'))
+      void queryClient.invalidateQueries({ queryKey: ['ai', 'gateway-access-keys'] })
+    },
+    onError: (issueError: Error) => toast.error(issueError.message),
+  })
+
+  const revokeMutation = useMutation({
+    mutationFn: (id: number) => aiApi.revokeGatewayAccessKey(id),
+    onSuccess: () => {
+      toast.success(t('settings.gatewayKeys.revoked'))
+      void queryClient.invalidateQueries({ queryKey: ['ai', 'gateway-access-keys'] })
+    },
+    onError: (revokeError: Error) => toast.error(revokeError.message),
+  })
+
+  const keys = data ?? []
+  const statusLabel: Record<GatewayKeyStatus, string> = {
+    ACTIVE: t('settings.gatewayKeys.statusActive'),
+    REVOKED: t('settings.gatewayKeys.statusRevoked'),
+    EXPIRED: t('settings.gatewayKeys.statusExpired'),
+  }
+
+  return (
+    <article className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="text-sm font-semibold text-slate-900">{t('settings.gatewayKeys.title')}</h3>
+      <p className="text-sm text-slate-600">{t('settings.gatewayKeys.description')}</p>
+
+      {issuedKey ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-medium">{t('settings.gatewayKeys.oneTimeWarning')}</p>
+          <div className="mt-2 flex items-center gap-2 rounded bg-white px-3 py-2">
+            <CopyableText value={issuedKey.apiKey} className="font-mono text-xs" />
+          </div>
+          <button
+            type="button"
+            className="mt-2 text-xs underline"
+            onClick={() => setIssuedKey(null)}
+          >
+            {t('settings.gatewayKeys.close')}
+          </button>
+        </div>
+      ) : null}
+
+      {isPending ? (
+        <p className="text-sm text-slate-500">{t('loading')}</p>
+      ) : keys.length === 0 ? (
+        <p className="text-sm text-slate-600">{t('settings.gatewayKeys.empty')}</p>
+      ) : (
+        <ul className="space-y-2">
+          {keys.map((key) => {
+            const status = gatewayKeyStatus(key)
+            return (
+              <li
+                key={key.id}
+                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              >
+                <span>
+                  <span className="font-medium text-slate-900">{key.name}</span>
+                  <span className="ml-2 font-mono text-xs text-slate-500">…{key.keyHint}</span>
+                  <span className="ml-2 text-xs text-slate-400">
+                    {new Date(key.createdAt).toLocaleString()}
+                  </span>
+                  <span className="ml-2 text-xs text-slate-400">
+                    {key.expiresAt
+                      ? new Date(key.expiresAt).toLocaleString()
+                      : t('settings.gatewayKeys.neverExpires')}
+                  </span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span
+                    className={
+                      status === 'ACTIVE'
+                        ? 'rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700'
+                        : 'rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500'
+                    }
+                  >
+                    {statusLabel[status]}
+                  </span>
+                  {canUpdate && status === 'ACTIVE' ? (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-rose-200 px-2 py-1 text-xs text-rose-700 disabled:opacity-50"
+                      disabled={revokeMutation.isPending}
+                      onClick={() => {
+                        if (!window.confirm(t('settings.gatewayKeys.confirmRevoke'))) return
+                        revokeMutation.mutate(key.id)
+                      }}
+                    >
+                      {t('settings.gatewayKeys.revoke')}
+                    </button>
+                  ) : null}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (!name.trim()) return
+            issueMutation.mutate()
+          }}
+        >
+          <label className="block">
+            <span className="text-xs font-medium text-slate-800">{t('settings.gatewayKeys.name')}</span>
+            <input
+              className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-slate-800">
+              {t('settings.gatewayKeys.expiresAt')}
+            </span>
+            <input
+              type="datetime-local"
+              className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={expiresAt}
+              onChange={(event) => setExpiresAt(event.target.value)}
+            />
+            <span className="mt-1 block text-xs text-slate-500">
+              {t('settings.gatewayKeys.expiresAtHint')}
+            </span>
+          </label>
+          <button
+            type="submit"
+            disabled={issueMutation.isPending || !name.trim()}
+            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {issueMutation.isPending ? t('settings.gatewayKeys.issuing') : t('settings.gatewayKeys.issue')}
+          </button>
+        </form>
+      </PermissionGate>
+    </article>
+  )
 }
 
 export function AiSettingsPage() {
@@ -119,6 +305,7 @@ export function AiSettingsPage() {
         enabled: true,
         defaultEntry: true,
         mode: entry.mode ?? 'KEY',
+        alias: entry.alias ?? null,
         version: entry.version,
       }),
     onSuccess: () => {
@@ -171,6 +358,7 @@ export function AiSettingsPage() {
       enabled: draft.enabled,
       defaultEntry: draft.defaultEntry,
       mode: draft.mode,
+      alias: draft.alias.trim() || null,
       version: draft.version,
     }
     if (draft.apiKey.trim()) body.apiKey = draft.apiKey.trim()
@@ -194,6 +382,11 @@ export function AiSettingsPage() {
                 >
                   <span>
                     <span className="font-medium text-slate-900">{entry.displayName}</span>
+                    {entry.alias ? (
+                      <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                        {entry.alias}
+                      </span>
+                    ) : null}
                     <span className="ml-2 text-slate-500">{entry.modelSpec}</span>
                   </span>
                   <span className="text-xs text-slate-500">
@@ -226,6 +419,8 @@ export function AiSettingsPage() {
             </button>
           </PermissionGate>
         </article>
+
+        <GatewayAccessKeysCard />
 
         <article className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
@@ -296,6 +491,16 @@ export function AiSettingsPage() {
                 placeholder={t('settings.specHint')}
                 onChange={(event) => setDraft({ ...draft, modelSpec: event.target.value })}
               />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-800">{t('settings.alias')}</span>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={draft.alias}
+                disabled={!canUpdate}
+                onChange={(event) => setDraft({ ...draft, alias: event.target.value })}
+              />
+              <span className="mt-1 block text-xs text-slate-500">{t('settings.aliasHint')}</span>
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-800">{t('settings.apiKey')}</span>

@@ -7,13 +7,12 @@ description: my-website 架构与任务规划专家。先读相关代码再做�
 
 ## Safety Capsule
 
-1. 规划前先读取当前相关真实代码；不以旧文档直接定案。
-2. 方案必须写清允许修改 / 禁止修改范围；不扩大模块边界。
-3. 新增功能落在与职责匹配的现有模块与文件。
-4. 最小合理实现；不为解耦过度拆分。
-5. 要求在非显然边界 / 安全 / 兼容处写必要注释；禁止逐行废话注释。
+通用底线见 `project.mdc`（规划前先读当前真实代码、不以旧文档定案），不在此重复。本角色独有：
 
-遵守 `.cursor/rules/project.mdc`；后端规划对照 `backend-structure.mdc` 与结构总纲；admin-web 规划对照 `admin-web*.mdc`；**AI 跨模块**对照 `ai-domain.mdc` 与 ADR-0004/0005。
+1. 方案必须写清允许修改 / 禁止修改范围；不扩大模块边界。
+2. 最小合理实现；不为「架构完整」扩大需求。
+
+遵守 `.cursor/rules/project.mdc`；后端规划对照 `backend-structure.mdc`；admin-web 规划对照 `admin-web*.mdc`；agent-portal 规划对照 `agent-portal.mdc`；**AI 跨模块**对照 `ai-domain.mdc` 与 ADR-0004/0005。
 
 ## Scope
 
@@ -68,7 +67,7 @@ description: my-website 架构与任务规划专家。先读相关代码再做�
 
 ## Cooperation
 
-- 实现：admin-frontend / admin-backend / **agent-services**  
+- 实现：admin-frontend / portal-frontend / admin-backend / **agent-services**  
 - 合并前：integration-reviewer  
 - 按域找缺陷或盘点是否完善：area-reviewer  
 - 不替代 explorer 做纯盘点
@@ -77,7 +76,7 @@ description: my-website 架构与任务规划专家。先读相关代码再做�
 
 `/dev` 按验收项逐项实现，验收项全部通过就停（流程见 `.cursor/skills/dev/SKILL.md`）。本角色只负责写出验收项，不执行循环。
 
-每一项写成可勾选的一句：执行者（admin-backend / admin-frontend / agent-services / 主会话）做什么、成功时看到什么、用哪条测试或哪条手工路径验证。不能验证的句子不写成验收项。跨模块按 Flyway → Java → `agent` 契约 DTO → Python → admin-web 排序。同一层里，先写最可能被证伪的那一项。
+每一项写成可勾选的一句：执行者（admin-backend / admin-frontend / portal-frontend / agent-services / 主会话）做什么、成功时看到什么、用哪条测试或哪条手工路径验证。不能验证的句子不写成验收项。跨模块按 Flyway → Java → `agent` 契约 DTO → Python → admin-web / agent-portal 排序。同一层里，先写最可能被证伪的那一项。
 
 下面五类除了这一句，还要写主张，以及哪条测试或哪条请求会证伪：
 

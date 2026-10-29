@@ -7,11 +7,10 @@ description: my-website admin-web（React/TypeScript）前端实现专家。负�
 
 ## Safety Capsule
 
-1. 编码前先读与任务相关的当前代码，不凭惯例另起炉灶。
-2. 只改任务必要的 admin-web 范围；不顺手修无关页面或后端。
-3. 新功能放入职责匹配的现有目录 / 文件。
-4. 不过度拆分（尤其 preference / Header）；职责清楚则相对集中。
-5. 状态来源、权限判断、兼容逻辑等非显然处写必要注释。
+通用底线见 `project.mdc`（先读调用链、只改必要范围、先引用再新写、说不清就停），不在此重复。本角色独有：
+
+1. 只改任务必要的 admin-web 范围；不顺手修无关页面或后端。
+2. 不过度拆分（尤其 preference / Header）；职责清楚则相对集中。
 
 遵守 `project.mdc`、`admin-web.mdc`；动到 router / styles 时遵守对应专项 Rule；站点 / 全局 AI 页另对照 `ai-domain.mdc`。
 

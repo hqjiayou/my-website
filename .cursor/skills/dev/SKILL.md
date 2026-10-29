@@ -8,12 +8,12 @@ disable-model-invocation: true
 
 输入：一句需求，可带模块。停止条件：验收项全部通过，且 `integration-reviewer` 对本次 diff 没有 BLOCKER / HIGH。
 
-运行状态格式、闸门、续跑、不能跳过见 `.cursor/README.md`。
+运行状态格式、闸门、续跑、不能跳过见 `.cursor/README.md`。双入口与共同硬规矩（先开 Issue、一任务一 worktree、不自行开 PR、本地全绿 ≠ 完成）见 README「与实际编排的关系」；任务来自 GitHub Issue 时，以 Issue 的 UoW 为验收项来源。
 
 ## 开始（一次）
 
 1. 读调用链和相邻代码；范围大时先派 `codebase-explorer`。
-2. 按 `architecture-planner` 的输出格式写方案，并读它的验收项写法。验收项每条标执行者：`admin-backend` / `admin-frontend` / `agent-services` / 主会话。跨模块按 Flyway → Java → `agent` 契约 DTO → Python → admin-web 排序；同一层里先做最可能被证伪的那一项。五类高风险项写明主张，以及哪条测试或哪条请求会证伪。
+2. 按 `architecture-planner` 的输出格式写方案，并读它的验收项写法。验收项每条标执行者：`admin-backend` / `admin-frontend` / `portal-frontend` / `agent-services` / 主会话。跨模块按 Flyway → Java → `agent` 契约 DTO → Python → admin-web / agent-portal 排序；同一层里先做最可能被证伪的那一项。五类高风险项写明主张，以及哪条测试或哪条请求会证伪。
 3. 建 `.cursor/runs/dev-<slug>.md`，`status: confirm`，写入验收项和 `round: 0 / <验收项数 × 3，最多 30>`。
 4. 用 AskQuestion 请用户确认验收项。**确认前不改代码。** 用户改了就更新验收项再问。
 5. 确认后改成 `status: running`，进入第一轮。
@@ -30,6 +30,7 @@ disable-model-invocation: true
    | Java | `mvn -pl <模块> -am test "-Dtest=<类>" "-Dsurefire.failIfNoSpecifiedTests=false"`（在 `services/website-services`） |
    | Python | `uv run python -m pytest -q`（在 `services/agent-services`；无 uv 时用 Docker `ghcr.io/astral-sh/uv:python3.13-bookworm-slim`） |
    | admin-web | `pnpm lint` 与 `pnpm build`；界面行为变了，在浏览器走通这次改到的主路径，以及空态或错误态里被改到的那一个。截图不算通过 |
+   | agent-portal | `pnpm lint` 与 `pnpm build`（在 `apps/agent-portal`）；界面行为变了，在移动端视口走通这次改到的主路径，以及空态或错误态里被改到的那一个。截图不算通过 |
 
 5. 通过才勾上。行为变了，同步任务范围内的 CURRENT_STATE / 契约 / 环境变量。
 6. 更新 `round` 和「每轮记录」，结束本轮回复。stop hook 会接下一轮。
@@ -47,4 +48,4 @@ disable-model-invocation: true
 ## 交代
 
 - 每轮：本项验收句、改了哪些文件、验证结果、还剩几项
-- 结束：全部验收项与验证、审查结论、顺带发现、未提交改动清单（不 git commit）
+- 结束：全部验收项与验证、审查结论、顺带发现、未提交改动清单（不 git commit）、是否已开 PR；未开 PR 时写明「CI 未验，最终把关在 PR 的 CI」

@@ -6,19 +6,18 @@ alwaysApply: false
 
 # website-services 后端结构（硬约束）
 
-完整条文：`docs/website-services/设计文档/基础架构/单模块文件结构与AI开发约束规则V1.md`
+本文件即后端结构与命名的权威条文（原《单模块文件结构与AI开发约束规则 V1》《后端包结构与命名规范 V1》已于 2026-10-29 移除，见 git 历史；不要再引用该文档）。
 
 ## Maven 模块（禁止越界）
 
 | 模块 | 只做 | 禁止 |
 |------|------|------|
 | gateway | 路由、CORS、RequestId、网关 Filter | 业务、DB/Redis、Entity/Mapper/Service、依赖业务实现 |
-| auth | 登录/刷新/登出、JWT 签发、JWKS、Refresh | RBAC/菜单管理、依赖 admin/site 业务包 |
+| auth | 登录/刷新/登出、JWT 签发、JWKS、Refresh | RBAC/菜单管理、依赖 admin/agent 业务包 |
 | admin | 后台 API、RBAC 管理、Resource Server 验签 | `/api/auth/*`、JWT 签发、依赖 auth 实现、`admin.rbac.*` 深包 |
-| site | 前台业务 | 强依赖 admin 实现、无业务时堆 manager/adapter |
 | common | ApiResponse、ErrorCode、common.security 契约 | 业务 DTO/Entity/Mapper/Service |
 | infra | Redis、MyBatis、i18n、OAuth2 RS 辅助；Flyway 脚本宿主 | 业务流程、业务 Entity/Mapper |
-| agent | `HttpAgentClient`、Agent DTO 契约 | 业务编排、Prompt/Conversation 持久化 |
+| agent | 父模块，下含 `agent-core`（业务实体/Mapper＋`HttpAgentClient` 与 Java↔Python 契约 DTO）与 `agent-app`（站点业务 API、站点 AI chat / internal tools） | 在 agent 写 Prompt/Conversation 主数据 CRUD（主数据在 admin）；绕过 agent-core 契约直连 Python |
 
 ## 业务模块包树（admin / auth / agent-core / agent-app）
 

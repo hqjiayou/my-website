@@ -1,18 +1,26 @@
-// 全自动接管的硬闸门：preToolUse 拦文件写入，beforeShellExecution 拦命令。
-// 规则说明见 .cursor/README.md「Hooks」。
+// 全自动运行的闸门：preToolUse 拦文件写入，beforeShellExecution 拦命令。
+// 定位：防误触＋破坏性操作硬拒。只匹配命令文本与文件工具路径；把命令写进
+// 脚本文件再执行、shell 间接改文件等不在拦截范围（见 .cursor/README.md「Hooks」）。
+// 规则说明见 .cursor/README.md「Hooks」；测试见 guard.test.js（node 直接跑）。
 const fs = require("fs");
 const path = require("path");
 
+// git 全局参数（-C <path>、-c <k=v>、--git-dir 等）可插在 git 与子命令之间，
+// 匹配时必须容忍，否则 `git -C <path> push` 一类写法会整条绕过。
+const GIT =
+  "git(?:\\s+(?:-C\\s+\\S+|-c\\s+\\S+|--git-dir(?:=\\S+|\\s+\\S+)?|--work-tree(?:=\\S+|\\s+\\S+)?|--namespace(?:=\\S+|\\s+\\S+)?|--exec-path(?:=\\S+|\\s+\\S+)?|-[pP]|--paginate|--no-pager))*\\s+";
+const gitRe = (body) => new RegExp(`\\b${GIT}${body}`);
+
 const SHELL_DENY = [
-  [/\bgit\s+(push|rebase|merge|cherry-pick|am)\b/, "不自动 push 或改写 git 历史"],
-  [/\bgit\s+reset\s+--hard\b/, "不丢弃工作区改动"],
-  [/\bgit\s+(checkout|restore)\s+(--\s|\.(\s|$)|--worktree|--source)/, "不丢弃工作区改动"],
-  [/\bgit\s+clean\b/, "不删除未跟踪文件"],
-  [/\bgit\s+stash\s+(drop|clear)\b/, "不丢弃 stash"],
-  [/\bgit\s+branch\s+-D\b/, "不强删分支"],
+  [gitRe("(push|rebase|merge|cherry-pick|am)\\b"), "不自动 push 或改写 git 历史"],
+  [gitRe("reset\\s+--hard\\b"), "不丢弃工作区改动"],
+  [gitRe("(checkout|restore)\\s+(--\\s|\\.(\\s|$)|--worktree|--source)"), "不丢弃工作区改动"],
+  [gitRe("clean\\b"), "不删除未跟踪文件"],
+  [gitRe("stash\\s+(drop|clear)\\b"), "不丢弃 stash"],
+  [gitRe("branch\\s+-D\\b"), "不强删分支"],
 ];
 const SHELL_ASK = [
-  [/\bgit\s+commit\b/, "提交需要确认；/dev /fix /hunt 循环里不要自己 commit"],
+  [gitRe("commit\\b"), "提交需要确认；/dev /fix /hunt 循环里不要自己 commit"],
   [/\brm\s+-[a-z]*(rf|fr)\b|\bRemove-Item\b[^|;]*-Recurse/i, "递归删除需要用户确认"],
 ];
 
@@ -55,35 +63,41 @@ function shellVerdict(command) {
   return null;
 }
 
-let raw = "";
-process.stdin.on("data", (c) => (raw += c));
-process.stdin.on("end", () => {
-  let input = {};
-  try {
-    input = JSON.parse(raw.replace(/^\uFEFF/, "") || "{}");
-  } catch {
-    input = {};
-  }
-  let verdict = null;
-  if (input.hook_event_name === "beforeShellExecution") {
-    verdict = shellVerdict(String(input.command || ""));
-  } else if (input.hook_event_name === "preToolUse") {
-    const toolInput = input.tool_input || {};
-    const filePath = toolInput.file_path || toolInput.path;
-    if (filePath && input.tool_name !== "Read") {
-      verdict = fileVerdict(String(input.tool_name || ""), filePath, input.cwd);
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { shellVerdict, fileVerdict };
+}
+
+if (typeof require !== "undefined" && typeof module !== "undefined" && require.main === module) {
+  let raw = "";
+  process.stdin.on("data", (c) => (raw += c));
+  process.stdin.on("end", () => {
+    let input = {};
+    try {
+      input = JSON.parse(raw.replace(/^\uFEFF/, "") || "{}");
+    } catch {
+      input = {};
     }
-  }
-  if (!verdict) {
-    process.stdout.write(JSON.stringify({ permission: "allow" }));
-    return;
-  }
-  const [permission, why] = verdict;
-  process.stdout.write(
-    JSON.stringify({
-      permission,
-      user_message: `闸门：${why}`,
-      agent_message: `被 .cursor/hooks/guard.js 拦下：${why}。不要绕过；需要时用 AskQuestion 问用户，或把它写进运行状态的「需要用户决定」。`,
-    }),
-  );
-});
+    let verdict = null;
+    if (input.hook_event_name === "beforeShellExecution") {
+      verdict = shellVerdict(String(input.command || ""));
+    } else if (input.hook_event_name === "preToolUse") {
+      const toolInput = input.tool_input || {};
+      const filePath = toolInput.file_path || toolInput.path;
+      if (filePath && input.tool_name !== "Read") {
+        verdict = fileVerdict(String(input.tool_name || ""), filePath, input.cwd);
+      }
+    }
+    if (!verdict) {
+      process.stdout.write(JSON.stringify({ permission: "allow" }));
+      return;
+    }
+    const [permission, why] = verdict;
+    process.stdout.write(
+      JSON.stringify({
+        permission,
+        user_message: `闸门：${why}`,
+        agent_message: `被 .cursor/hooks/guard.js 拦下：${why}。不要绕过；需要时用 AskQuestion 问用户，或把它写进运行状态的「需要用户决定」。`,
+      }),
+    );
+  });
+}

@@ -28,6 +28,10 @@ public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
     private Boolean defaultEntry;
     private String mode;
 
+    /** 可清空：null 必须写入 DB，不能被 NOT_NULL 策略跳过。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String alias;
+
     public String getDisplayName() {
         return displayName;
     }
@@ -98,5 +102,13 @@ public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
 
     public void setMode(String mode) {
         this.mode = mode;
+    }
+
+    public String getAlias() {
+        return alias;
+    }
+
+    public void setAlias(String alias) {
+        this.alias = alias;
     }
 }

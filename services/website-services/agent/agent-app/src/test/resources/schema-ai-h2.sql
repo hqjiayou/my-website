@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS agent_model_entry (
     enabled             BOOLEAN NOT NULL DEFAULT TRUE,
     is_default          BOOLEAN NOT NULL DEFAULT FALSE,
     mode                VARCHAR(16) NOT NULL DEFAULT 'KEY',
+    alias               VARCHAR(64),
     created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     created_by          BIGINT,
     updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),

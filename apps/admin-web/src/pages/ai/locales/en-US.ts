@@ -21,6 +21,9 @@ export default {
     name: 'Name',
     spec: 'Model spec',
     specHint: 'For example google:gemini-3-flash-preview or openai:gpt-4o-mini',
+    alias: 'Gateway alias',
+    aliasHint:
+      'Optional. Used for gateway routing. Lowercase letters, digits, - or _ only, starting with a letter or digit (2-64 chars; uppercase is lowercased automatically). Leave blank to unset.',
     site: 'Site',
     agentPlatform: 'All sites',
     mode: 'Mode',
@@ -46,6 +49,28 @@ export default {
     chainPrimary: 'Primary',
     chainFallback: 'Fallback {{n}}',
     chainEmpty: 'No active chain for this scope (no enabled default entry).',
+    gatewayKeys: {
+      title: 'Gateway access keys',
+      description:
+        'Access credentials for the external API gateway. The key is shown once at issue time; the server only keeps a hash.',
+      empty: 'No access keys yet.',
+      name: 'Key name',
+      expiresAt: 'Expires at',
+      expiresAtHint: 'Leave blank for no expiry.',
+      issue: 'Issue',
+      issuing: 'Issuing…',
+      issued: 'Issued — save the plaintext key now',
+      revoke: 'Revoke',
+      revoked: 'Revoked',
+      confirmRevoke: 'Revoke this access key? It takes effect immediately and cannot be undone.',
+      statusActive: 'Active',
+      statusRevoked: 'Revoked',
+      statusExpired: 'Expired',
+      neverExpires: 'Never expires',
+      oneTimeWarning:
+        'This key is shown only this once — copy and save it now. It cannot be viewed again after closing.',
+      close: 'Close',
+    },
   },
   prompts: {
     title: 'Prompt Settings',
