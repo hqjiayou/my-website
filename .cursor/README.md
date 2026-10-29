@@ -13,6 +13,7 @@
 | [`admin-web.mdc`](rules/admin-web.mdc) | `apps/admin-web/src/**` | API/mock、权限、i18n |
 | [`admin-web-router.mdc`](rules/admin-web-router.mdc) | `router/**` | 路由表与 permission |
 | [`admin-web-styles.mdc`](rules/admin-web-styles.mdc) | `assets/styles/**` | 全局样式三层 |
+| [`agent-portal.mdc`](rules/agent-portal.mdc) | `apps/agent-portal/**` | 站点用户端 PWA：API、站点上下文、移动端体验 |
 | [`docs.mdc`](rules/docs.mdc) | `docs/**` | CURRENT_STATE / 契约同步 |
 
 ## Agents（`.cursor/agents/`）
@@ -23,6 +24,7 @@
 | [`architecture-planner`](agents/architecture-planner.md) | 范围不清、要最小方案与验收项 |
 | [`admin-backend`](agents/admin-backend.md) | Java admin、Flyway、RBAC、Admin AI API |
 | [`admin-frontend`](agents/admin-frontend.md) | admin-web UI、mock→real、i18n |
+| [`portal-frontend`](agents/portal-frontend.md) | agent-portal 用户端 UI、AI 对话、模式切换、移动端 |
 | [`agent-services`](agents/agent-services.md) | Python runtime、SSE、RAG、MCP/Skills/Todo |
 | [`integration-reviewer`](agents/integration-reviewer.md) | 变更审查四层：单文件、逻辑、功能、模块 |
 | [`area-reviewer`](agents/area-reviewer.md) | 按域：缺陷判定标准，或功能完善盘点 |
@@ -44,6 +46,22 @@
 
 Agents 只写「谁做、能改哪里、怎么验证」；循环和停法只写在对应 skill；Rules 不复制二者。勾选前要哪份证据，见「不能跳过」。
 
+## 与实际编排的关系（双入口，同一套闸门）
+
+本目录有两种入口，执行的是同一套规则（Rules、Agents 角色、「不能跳过」证据表、reviewer 收尾）：
+
+| 入口 | 怎么跑 | 跨会话状态 |
+|------|--------|-----------|
+| IDE 入口 | 人在 Cursor 里打 `/dev`、`/fix`、`/hunt`，AskQuestion 确认，stop hook 续跑 | `.cursor/runs/` 运行状态 |
+| 编排入口 | 外部编排者（如 kevin）开 GitHub Issue 并做 UoW 分解，写 brief 派 headless `cursor-agent` 在**独立 worktree** 执行，编排者亲跑测试、核 diff、探针验收 | GitHub Issue ＋ brief ＋ worktree 分支 |
+
+两边共同的硬规矩：
+
+- **新規先开 Issue**：新功能 / 新规划先在 GitHub Issues 开单并做 UoW 步骤分解再实施；来自 Issue 的任务以 Issue 的 UoW 为验收项来源，不另起一套。
+- **一任务一 worktree**：编排入口不在主工作区直接改；分支只用 `dev`（最新）与 `main`（发布）为长期分支。
+- **不自行开 PR**：改动先留分支 / 本地，等用户拍板；获批后只开 base 为 `dev` 的 PR，非 dev 的中间 PR 不开。IDE 入口不 git commit；编排入口的 commit / push 范围以 brief 写明的为准。
+- **本地全绿 ≠ 完成**：本地验收是前置；最终把关是 PR 的 CI（backend PG 契约、browser-e2e、admin-web / agent-portal CI）。未开 PR 时，交代里必须写明「CI 未验」。
+
 ## Hooks（`.cursor/hooks.json`）
 
 | 脚本 | 事件 | 作用 |
@@ -54,7 +72,8 @@ Agents 只写「谁做、能改哪里、怎么验证」；循环和停法只写�
 
 - 脚本异常按拒绝处理（`failClosed`），续跑最多 30 次（`loop_limit`）。
 - 「要确认」在自动运行模式下可能直接放行；必须挡住的规则写成拒绝。
-- 拒绝只覆盖 Agent 的文件工具和 shell 命令文本，shell 里间接改文件不在拦截范围。
+- 定位是**防误触＋破坏性操作硬拒**，不是安全边界：拒绝只覆盖 Agent 的文件工具和 shell 命令文本；把命令写进脚本文件再执行、shell 里间接改文件不在拦截范围。git 匹配已容忍 `-C` / `-c` / `--git-dir` 等全局参数写法。
+- guard 的判定逻辑有 [`guard.test.js`](hooks/guard.test.js) 锁住（`node .cursor/hooks/guard.test.js`，改规则先改测试）。
 
 ## 运行状态（`.cursor/runs/`，不进 git）
 

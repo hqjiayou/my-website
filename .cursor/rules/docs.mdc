@@ -13,7 +13,7 @@ alwaysApply: false
 ## 修改功能时（任务范围内）
 
 - 行为 / API / 环境变量变化 → 同步相关 CURRENT_STATE、契约、`ENVIRONMENT_VARIABLES.md`。
-- AI 域 → 设计文档 AI 章 Phase 记录、ADR-0004/0005（若边界变化）。
+- AI 域 → 相关 CURRENT_STATE、ADR-0004/0005（若边界变化）。
 
 ## 不得作为当前实现依据
 

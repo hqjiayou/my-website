@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 输入：报错、日志、Issue 或一句缺陷描述。停止条件：复现测试从失败变通过，相关模块测试全过，`integration-reviewer` 对本次 diff 没有 BLOCKER / HIGH。
 
-运行状态格式、闸门、续跑、不能跳过见 `.cursor/README.md`。找未知缺陷用 `/hunt`，不用本流程。
+运行状态格式、闸门、续跑、不能跳过见 `.cursor/README.md`。双入口与共同硬规矩（不自行开 PR、本地全绿 ≠ 完成）见 README「与实际编排的关系」；来自 GitHub Issue 的修复在交代里回链 Issue 号。找未知缺陷用 `/hunt`，不用本流程。
 
 ## 开始（一次）
 
@@ -39,4 +39,4 @@ disable-model-invocation: true
 
 ## 交代
 
-- 结束：失败路径、原因所在的那一层、复现测试名、红绿输出、修复文件、审查结论、未提交改动清单（不 git commit）
+- 结束：失败路径、原因所在的那一层、复现测试名、红绿输出、修复文件、审查结论、未提交改动清单（不 git commit）；未开 PR 时写明「CI 未验」

@@ -1,6 +1,6 @@
 ---
-description: AI 域跨模块边界（Java 业务真相 + agent 客户端 + admin-web AI 页）
-globs: services/website-services/**/*Ai*.java,services/website-services/agent/**/*.java,apps/admin-web/src/pages/ai/**,apps/admin-web/src/pages/apps/sites/siteAi*,apps/admin-web/src/api/**/aiApi.ts,apps/admin-web/src/types/ai.ts
+description: AI 域跨模块边界（Java 业务真相 + agent 客户端 + admin-web AI 页 + agent-portal 对话）
+globs: services/website-services/**/*Ai*.java,services/website-services/agent/**/*.java,apps/admin-web/src/pages/ai/**,apps/admin-web/src/pages/apps/sites/siteAi*,apps/admin-web/src/api/**/aiApi.ts,apps/admin-web/src/types/ai.ts,apps/agent-portal/src/api/agentAiApi.ts,apps/agent-portal/src/pages/chat/**
 alwaysApply: false
 ---
 
@@ -17,6 +17,7 @@ alwaysApply: false
 | **agent** | `HttpAgentClient`、DTO 契约；**不做**业务编排或持久化 |
 | **agent-services** | Python execution only（见 `agent-services.mdc`） |
 | **admin-web** | AI 管理 UI；`aiApi` **FORCE REAL**（见 `MOCK_POLICY`） |
+| **agent-portal** | 站点用户端 AI 对话 UI（登录、流式对话、会话历史、模式切换）；经 gateway 调 agent-app，不直连 Python（见 `agent-portal.mdc`） |
 
 ## Java → Python 请求
 
@@ -29,13 +30,14 @@ alwaysApply: false
 
 - 站点 AI 工作台：`pages/apps/sites/siteAi*.tsx`；全局 AI 页：`pages/ai/**`。
 - 预览 SSE 走 assistant-ui 自定义 transport；不得用 mock 冒充 LIVE。
+- 站点用户端对话在 `apps/agent-portal`（`api/agentAiApi.ts`、`pages/chat/**`）；模式（CLI / Key）与模型入口由 Java 主数据决定，前端不自维护模型链，会话历史在模式间共享。
 - 不在页面散落对 Python internal 的直接调用（须经 gateway → Java）。
 
 ## 改 AI 功能前必读
 
 1. `docs/contracts/ADMIN_API_CONTRACT.md`（AI 段）
 2. `docs/website-services/CURRENT_STATE.md`
-3. 设计文档 AI 章 §12–§18（Phase 记录）
+3. `docs/overview/CURRENT_STATE.md` 的 AI 段（原设计文档 AI 章已于 2026-10-29 移除，见 git 历史）
 
 ## 禁止
 

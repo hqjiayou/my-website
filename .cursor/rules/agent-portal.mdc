@@ -1,0 +1,33 @@
+---
+description: agent-portal 实现硬约束（站点用户端 PWA：API、站点上下文、移动端体验）
+globs: apps/agent-portal/**/*
+alwaysApply: false
+---
+
+# agent-portal 实现边界
+
+`apps/agent-portal` 是站点用户端（移动优先 PWA）：站点用户登录、AI 流式对话、会话历史、知识与站点信息页。经 gateway 调 Java `agent-app` 的 `/api/agent/{agentId}/ai/**` 与站点 auth；**不直连 Python internal**。
+
+## API 与上下文
+
+- 页面 / 组件不要直接散落 `axios` / `fetch`；走 `src/api/`（`agentAiApi`、`authApi`）与既有 HTTP 层，不重造第二套 client。
+- 站点上下文（agentId）来源顺序以 `src/config/env.ts` 为准：登录后服务端下发的站点信息优先，`VITE_PORTAL_AGENT_ID` 只作后备；JWT 只读 `agent_id` claim 做展示与路由，**不验签、不作存取控制依据**（存取控制以服务端为准）。
+- 模式（CLI / Key）与模型入口是 Java 后端主数据：请求按后端契约带 `mode`，前端不自维护模型链、不绕过 Java 直选 provider。
+
+## 对话与诚实失败
+
+- AI 对话走 Java 转发的 SSE；事件形状以 Java `agent` 契约 DTO 为准，不按 Python 内部事件自行发明字段。
+- 无 Provider / BLOCKED 时展示诚实失败与可重试入口，不伪造回复、不假装 LIVE（ADR-0004）。
+- CLI / Key 模式切换共享同一套会话历史；切换模式不新建、不清空会话。
+
+## 移动端与 PWA
+
+- 移动优先：主路径在手机视口走通；键盘弹起、底部安全区、输入框高度用既有处理（见 `pages/chat/useKeyboardInset.ts`），不另起一套。
+- 样式走 `assets/styles/` 的 globals / theme 两文件与组件旁样式；不在页面内散写全局 CSS。
+- 新增用户可见文案优先接入既有语言处理；不混杂硬编码多语言。
+
+## 禁止
+
+- 修改 Java / Python / admin-web（契约要变时先说明，走 admin-backend / agent-services）。
+- 在前端持久化业务主数据或把 token、站点密钥写进 localStorage 以外的明文位置。
+- 为占位功能造假数据冒充真实接口；未接上的能力明确标未接上。

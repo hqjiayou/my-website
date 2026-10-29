@@ -13,7 +13,7 @@
 
 ## 默认阅读顺序（任务开始前）
 
-1. 本文 + `.cursor/rules/`
+1. 本文；`.cursor/rules/` 按其 globs 由 Cursor 自动加载命中的那几份，不必每次全读八份（`project.mdc` 为 alwaysApply）
 2. [`docs/README.md`](docs/README.md)
 3. [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md)
 4. 相关域 `CURRENT_STATE`
@@ -49,6 +49,7 @@
 | [`.cursor/rules/admin-web.mdc`](.cursor/rules/admin-web.mdc) | `admin-web` 实现边界 |
 | [`.cursor/rules/admin-web-router.mdc`](.cursor/rules/admin-web-router.mdc) | router 目录 |
 | [`.cursor/rules/admin-web-styles.mdc`](.cursor/rules/admin-web-styles.mdc) | 全局样式分层 |
+| [`.cursor/rules/agent-portal.mdc`](.cursor/rules/agent-portal.mdc) | `agent-portal` 实现边界（站点用户端 PWA） |
 | [`.cursor/rules/docs.mdc`](.cursor/rules/docs.mdc) | 文档与 CURRENT_STATE 同步 |
 
 索引与 Agent 协作流见 [`.cursor/README.md`](.cursor/README.md)。变更审查在 [`.cursor/agents/integration-reviewer.md`](.cursor/agents/integration-reviewer.md)。按域缺陷判定和功能完善盘点在 [`.cursor/agents/area-reviewer.md`](.cursor/agents/area-reviewer.md)。工作方式入口（`/dev`、`/fix`、`/hunt`、`/review`、`/audit`、`/pair`）在 [`.cursor/skills/`](.cursor/skills/)，闸门与续跑在 [`.cursor/hooks.json`](.cursor/hooks.json)，说明见 `.cursor/README.md`。
@@ -61,6 +62,7 @@
 | `architecture-planner` | 方案：边界、顺序、验收项（`/dev` 按验收项执行） |
 | `admin-backend` | Java admin / Flyway / RBAC / Admin AI API |
 | `admin-frontend` | admin-web UI / API 对接 / i18n |
+| `portal-frontend` | agent-portal UI / AI 对话 / 模式切换 / 移动端 |
 | `agent-services` | Python runtime / SSE / RAG / MCP·Skills·Todo |
 | `integration-reviewer` | 变更审查：单文件、逻辑、功能、模块 |
 | `area-reviewer` | 按域：长期缺陷审查，或功能完善盘点 |
