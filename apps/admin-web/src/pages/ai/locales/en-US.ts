@@ -24,6 +24,7 @@ export default {
     alias: 'Gateway alias',
     aliasHint:
       'Optional. Used for gateway routing. Lowercase letters, digits, - or _ only, starting with a letter or digit (2-64 chars; uppercase is lowercased automatically). Leave blank to unset.',
+    aliasInvalid: 'Invalid alias: lowercase letters, digits, - or _ only, starting with a letter or digit (2-64 chars).',
     site: 'Site',
     agentPlatform: 'All sites',
     mode: 'Mode',
@@ -40,6 +41,8 @@ export default {
     enabled: 'Enabled',
     defaultEntry: 'Use as the default entry',
     defaultBadge: 'Default',
+    defaultBadgeKey: 'Default · Key',
+    defaultBadgeCli: 'Default · CLI',
     disabledBadge: 'Disabled',
     setDefault: 'Set as default',
     defaultSet: 'Default entry updated',
@@ -49,12 +52,15 @@ export default {
     chainPrimary: 'Primary',
     chainFallback: 'Fallback {{n}}',
     chainEmpty: 'No active chain for this scope (no enabled default entry).',
+    chainModeEmpty: 'No default entry configured for this mode; unavailable in the Portal.',
     gatewayKeys: {
       title: 'Gateway access keys',
       description:
         'Access credentials for the external API gateway. The key is shown once at issue time; the server only keeps a hash.',
       empty: 'No access keys yet.',
       name: 'Key name',
+      createdAtTag: 'Created',
+      expiresAtTag: 'Expires',
       expiresAt: 'Expires at',
       expiresAtHint: 'Leave blank for no expiry.',
       issue: 'Issue',

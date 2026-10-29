@@ -24,6 +24,7 @@ export default {
     alias: 'ゲートウェイ エイリアス',
     aliasHint:
       '任意。ゲートウェイのルーティングに使用します。小文字英数字・-・_ のみ、先頭は英数字（2〜64 文字、大文字は自動で小文字化）。空欄なら未設定。',
+    aliasInvalid: 'エイリアスの形式が正しくありません：小文字英数字・-・_ のみ、先頭は英数字（2〜64 文字）。',
     site: '対象サイト',
     agentPlatform: '全サイト',
     mode: 'モード',
@@ -40,6 +41,8 @@ export default {
     enabled: '有効',
     defaultEntry: 'デフォルト入口にする',
     defaultBadge: 'デフォルト',
+    defaultBadgeKey: 'デフォルト・Key',
+    defaultBadgeCli: 'デフォルト・CLI',
     disabledBadge: '停止',
     setDefault: 'デフォルトに設定',
     defaultSet: 'デフォルト入口を変更しました',
@@ -49,12 +52,15 @@ export default {
     chainPrimary: '主用',
     chainFallback: '予備 {{n}}',
     chainEmpty: 'このスコープに有効なチェーンはありません（有効なデフォルト入口がありません）。',
+    chainModeEmpty: 'このモードにはデフォルト入口が設定されていないため、Portal では利用できません。',
     gatewayKeys: {
       title: 'ゲートウェイ アクセス Key',
       description:
         '対外 API ゲートウェイのアクセス資格情報です。キーは発行時に一度だけ表示され、サーバーにはハッシュのみ保存されます。',
       empty: 'アクセス Key はまだありません。',
       name: 'Key 名',
+      createdAtTag: '作成',
+      expiresAtTag: '期限',
       expiresAt: '有効期限',
       expiresAtHint: '空欄なら無期限です。',
       issue: '発行',
