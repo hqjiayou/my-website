@@ -38,7 +38,7 @@ PostgreSQL、Redis、MinIO 由仓库外的 **local-stack** 提供，本仓库不
 
 MinIO 起不来时四个 Java 进程仍可启动，只是对象存储功能不可用。
 
-本地如需使用 Portal 的 AI 模型入口 CLI 代理池模式，可另起一个独立附加组件：[`services/website-services/scripts/local/cliproxy/`](../../services/website-services/scripts/local/cliproxy/README.md)（自包含 Compose，不与此处 local-stack 或根 `docker-compose.yml` 耦合，按需启停）。
+本地如需使用 Portal 的 AI 模型入口 CLI 代理池模式，可另起一个独立附加组件：[`addons/cliproxy/`](../../addons/cliproxy/README.md)（自包含 Compose，不与此处 local-stack 或根 `docker-compose.yml` 耦合，按需启停）。
 
 ## 2. 两份 `.env`（互不读取）
 
