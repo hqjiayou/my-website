@@ -53,7 +53,7 @@ Agents 只写「谁做、能改哪里、怎么验证」；循环和停法只写�
 | 入口 | 怎么跑 | 跨会话状态 |
 |------|--------|-----------|
 | IDE 入口 | 人在 Cursor 里打 `/dev`、`/fix`、`/hunt`，AskQuestion 确认，stop hook 续跑 | `.cursor/runs/` 运行状态 |
-| 编排入口 | 外部编排者（如 kevin）开 GitHub Issue 并做 UoW 分解，写 brief 派 headless `cursor-agent` 在**独立 worktree** 执行，编排者亲跑测试、核 diff、探针验收 | GitHub Issue ＋ brief ＋ worktree 分支 |
+| 编排入口 | 外部编排者（如 kevin）开 GitHub Issue 并做 UoW 分解，写 brief 派 headless `cursor-agent` 在**独立 worktree** 执行；执行者（Cursor）只写代码、**不启动程序**（含测试与 dev server），测试、探针与 diff 核验由编排者执行 | GitHub Issue ＋ brief ＋ worktree 分支 |
 
 两边共同的硬规矩：
 
@@ -123,7 +123,7 @@ stop: 复现测试 HttpAgentClientTest.chatReadTimeoutDoesNotRetry 转绿，agen
 - **业务真相**：Java admin + agent-app + PostgreSQL  
 - **执行层**：`services/agent-services`（internal only）  
 - **契约**：`services/website-services/agent` 的 `HttpAgentClient`  
-- **前端**：`aiApi` FORCE REAL；见 [`docs/rules/MOCK_POLICY.md`](../docs/rules/MOCK_POLICY.md)
+- **前端**：admin-web `aiApi` FORCE REAL（见 [`docs/rules/MOCK_POLICY.md`](../docs/rules/MOCK_POLICY.md)）；用户端 `apps/agent-portal` 的 `agentAiApi` 经 gateway 调 agent-app（见 [`agent-portal.mdc`](rules/agent-portal.mdc)）
 
 ## 修改本目录时
 

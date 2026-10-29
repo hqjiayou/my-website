@@ -35,6 +35,7 @@
 | agent-services | Python AI Execution（internal only，经 Java 调用） |
 | common / infra | 横切契约与基础设施；不放单模块业务 |
 | admin-web | 管理后台 UI；经 gateway 调 `/api/**` |
+| agent-portal | 站点用户端 PWA（登录、AI 对话、会话历史）；经 gateway 调 `/api/agent/**` |
 
 新建、引用和落点以 [`.cursor/rules/project.mdc`](.cursor/rules/project.mdc) 为准。
 
@@ -81,4 +82,4 @@
 
 ## Menu / 5E 现状
 
-**Menu 只读能力已存在**（如 `/api/admin/auth/me` 的 `menus`、`GET /api/admin/menus`，以及现有 Menu Service / Mapper / DTO）。**Menu 写操作尚未完成**。后续写操作应基于现有 Menu API / Service / Mapper / DTO 与 permission 模型扩展，不另起平行实现。
+Menu 只读已存在、写操作未完成；落点与「不另起平行实现」见 `.cursor/rules/backend-structure.mdc` 的 Menu / 5E 节，现状以 `docs/website-services/CURRENT_STATE.md` 为准。

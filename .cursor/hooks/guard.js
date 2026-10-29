@@ -8,7 +8,7 @@ const path = require("path");
 // git 全局参数（-C <path>、-c <k=v>、--git-dir 等）可插在 git 与子命令之间，
 // 匹配时必须容忍，否则 `git -C <path> push` 一类写法会整条绕过。
 const GIT =
-  "git(?:\\s+(?:-C\\s+\\S+|-c\\s+\\S+|--git-dir(?:=\\S+|\\s+\\S+)?|--work-tree(?:=\\S+|\\s+\\S+)?|--namespace(?:=\\S+|\\s+\\S+)?|--exec-path(?:=\\S+|\\s+\\S+)?|-p|--paginate|--no-pager))*\\s+";
+  "git(?:\\s+(?:-C\\s+\\S+|-c\\s+\\S+|--git-dir(?:=\\S+|\\s+\\S+)?|--work-tree(?:=\\S+|\\s+\\S+)?|--namespace(?:=\\S+|\\s+\\S+)?|--exec-path(?:=\\S+|\\s+\\S+)?|-[pP]|--paginate|--no-pager))*\\s+";
 const gitRe = (body) => new RegExp(`\\b${GIT}${body}`);
 
 const SHELL_DENY = [

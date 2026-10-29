@@ -76,3 +76,25 @@ test("file ask: 改 hooks 本身", () => {
   assert.strictEqual((fileVerdict("Write", ".cursor/hooks/guard.js", "/repo") || [])[0], "ask");
   assert.strictEqual((fileVerdict("Write", ".cursor/hooks.json", "/repo") || [])[0], "ask");
 });
+
+test("deny: git -P（--no-pager 短写）与环境变量前缀写法", () => {
+  assert.strictEqual((shellVerdict("git -P push") || [])[0], "deny");
+  assert.strictEqual((shellVerdict("GIT_SSH=ssh git push") || [])[0], "deny");
+});
+
+test("file: 已存在的 Flyway 迁移不可改、未存在的新迁移可建", () => {
+  const fs = require("fs");
+  const os = require("os");
+  const path = require("path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "guard-test-"));
+  try {
+    const mig = path.join(dir, "infra/src/main/resources/db/migration");
+    fs.mkdirSync(mig, { recursive: true });
+    fs.writeFileSync(path.join(mig, "V99__exists.sql"), "select 1;");
+    const rel = "infra/src/main/resources/db/migration";
+    assert.strictEqual((fileVerdict("Write", `${rel}/V99__exists.sql`, dir) || [])[0], "deny");
+    assert.strictEqual(fileVerdict("Write", `${rel}/V100__new.sql`, dir), null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
