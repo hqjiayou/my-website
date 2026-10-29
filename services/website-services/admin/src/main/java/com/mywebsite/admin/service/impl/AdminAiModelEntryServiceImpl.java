@@ -60,8 +60,10 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         if (asDefault) {
             clearOtherDefaults(request.agentId(), null, normalizeMode(request.mode()));
         }
+        String alias = normalizeAlias(request.alias());
+        requireAliasAvailable(alias, null);
         AdminAiModelEntryEntity entry = new AdminAiModelEntryEntity();
-        apply(entry, request, request.apiKey().trim(), asDefault);
+        apply(entry, request, request.apiKey().trim(), asDefault, alias);
         try {
             modelEntryMapper.insert(entry);
         } catch (DuplicateKeyException ex) {
@@ -86,7 +88,9 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         if (!StringUtils.hasText(apiKey)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        apply(entry, request, apiKey, asDefault);
+        String alias = normalizeAlias(request.alias());
+        requireAliasAvailable(alias, id);
+        apply(entry, request, apiKey, asDefault, alias);
         entry.setVersion(request.version());
         try {
             int updated = modelEntryMapper.updateById(entry);
@@ -224,7 +228,8 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
             AdminAiModelEntryEntity entry,
             AdminAiModelEntryWriteRequest request,
             String apiKey,
-            boolean asDefault) {
+            boolean asDefault,
+            String alias) {
         entry.setDisplayName(request.displayName().trim());
         entry.setModelSpec(normalizeSpec(request.modelSpec()));
         entry.setApiKey(cipher.encrypt(apiKey));
@@ -234,6 +239,34 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         entry.setEnabled(request.enabled());
         entry.setDefaultEntry(asDefault);
         entry.setMode(normalizeMode(request.mode()));
+        entry.setAlias(alias);
+    }
+
+    /** 空/空白 → null（清空 alias）；否则 trim 转小写并校验格式。对外模型名，供网关 UoW-2 选模型用。 */
+    static String normalizeAlias(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String value = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!value.matches("^[a-z0-9][a-z0-9_-]{1,63}$")) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        return value;
+    }
+
+    /** 非空 alias 不得被另一条未删除入口占用；DB 部分唯一索引兜底并发竞态。 */
+    private void requireAliasAvailable(String alias, Long excludeId) {
+        if (alias == null) {
+            return;
+        }
+        LambdaQueryWrapper<AdminAiModelEntryEntity> query =
+                new LambdaQueryWrapper<AdminAiModelEntryEntity>().eq(AdminAiModelEntryEntity::getAlias, alias);
+        if (excludeId != null) {
+            query.ne(AdminAiModelEntryEntity::getId, excludeId);
+        }
+        if (modelEntryMapper.selectCount(query) > 0) {
+            throw new BusinessException(ErrorCode.CONFLICT);
+        }
     }
 
     /** 双模式归属：空缺省 KEY（直连 key）；只接受 KEY / CLI，其余拒绝。 */
@@ -290,7 +323,8 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
                 Boolean.TRUE.equals(entry.getDefaultEntry()),
                 entry.getVersion(),
                 entry.getUpdatedAt(),
-                normalizeMode(entry.getMode()));
+                normalizeMode(entry.getMode()),
+                entry.getAlias());
     }
 
     private static String normalizeOptionalSpec(String raw) {
