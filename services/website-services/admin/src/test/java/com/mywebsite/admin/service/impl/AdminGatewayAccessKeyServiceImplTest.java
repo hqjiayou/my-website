@@ -88,7 +88,7 @@ class AdminGatewayAccessKeyServiceImplTest {
         entity.setId(3L);
         entity.setName("ext-client");
         when(accessKeyMapper.selectById(3L)).thenReturn(entity);
-        when(accessKeyMapper.updateById(any())).thenReturn(1);
+        when(accessKeyMapper.updateById(any(AdminGatewayAccessKeyEntity.class))).thenReturn(1);
 
         AdminGatewayAccessKeyDto revoked = service.revoke(3L);
         assertThat(revoked.revokedAt()).isNotNull();
