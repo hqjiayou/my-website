@@ -31,6 +31,8 @@ export interface AiModelEntry {
   updatedAt: string | null
   /** 双模式归属：KEY 直连 / CLI 代理池。旧数据后端缺省 KEY。 */
   mode: string
+  /** 网关路由别名；null 表示未设置。服务端校验 `^[a-z0-9][a-z0-9_-]{1,63}$`（会转小写）。 */
+  alias: string | null
 }
 
 export interface AiModelEntryWriteInput {
@@ -44,6 +46,28 @@ export interface AiModelEntryWriteInput {
   defaultEntry: boolean
   version?: number | null
   mode?: string
+  alias?: string | null
+}
+
+/** 网关访问 Key。列表/详情不含明文与哈希。 */
+export interface GatewayAccessKey {
+  id: number
+  name: string
+  keyHint: string
+  expiresAt: string | null
+  revokedAt: string | null
+  createdAt: string
+  version: number
+}
+
+export interface GatewayAccessKeyIssueInput {
+  name: string
+  expiresAt?: string | null
+}
+
+/** 明文 apiKey 仅在签发响应中出现一次，不落入任何持久化状态。 */
+export interface GatewayAccessKeyIssueResponse extends GatewayAccessKey {
+  apiKey: string
 }
 
 export const AI_KB_STATUS = {

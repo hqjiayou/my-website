@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryWriteRequest;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
@@ -155,5 +156,46 @@ class AdminAiModelEntryServiceImplTest {
     void normalizeModeRejectsUnknown() {
         assertThatThrownBy(() -> AdminAiModelEntryServiceImpl.normalizeMode("BOGUS"))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void normalizeAliasBlankReturnsNull() {
+        assertThat(AdminAiModelEntryServiceImpl.normalizeAlias(null)).isNull();
+        assertThat(AdminAiModelEntryServiceImpl.normalizeAlias("   ")).isNull();
+    }
+
+    @Test
+    void normalizeAliasTrimsAndLowercases() {
+        assertThat(AdminAiModelEntryServiceImpl.normalizeAlias(" Gpt-4o_Mini ")).isEqualTo("gpt-4o_mini");
+    }
+
+    @Test
+    void normalizeAliasRejectsInvalidFormat() {
+        assertThatThrownBy(() -> AdminAiModelEntryServiceImpl.normalizeAlias("A"))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> AdminAiModelEntryServiceImpl.normalizeAlias("-leading-dash"))
+                .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> AdminAiModelEntryServiceImpl.normalizeAlias("has space"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void createEntryRejectsAliasAlreadyTakenByAnotherEntry() {
+        when(modelEntryMapper.selectCount(any())).thenReturn(1L);
+
+        AdminAiModelEntryWriteRequest request = new AdminAiModelEntryWriteRequest(
+                "Display",
+                "google:gemini-3-flash-preview",
+                "sk-live-key",
+                null,
+                null,
+                null,
+                true,
+                false,
+                null,
+                null,
+                "taken-alias");
+
+        assertThatThrownBy(() -> service.createEntry(request)).isInstanceOf(BusinessException.class);
     }
 }

@@ -24,6 +24,9 @@ import type {
   AiMcpReady,
   AiRuntime,
   CreateAiKnowledgeInput,
+  GatewayAccessKey,
+  GatewayAccessKeyIssueInput,
+  GatewayAccessKeyIssueResponse,
   UpdateAiKnowledgeInput,
   UpdateAiPromptProfileInput,
 } from '@/types/ai'
@@ -76,6 +79,30 @@ export const aiApi = {
     return httpClient
       .delete<HttpMessageBody<null | void>>(`/admin/ai/model-entries/${id}`)
       .then(unwrapVoid)
+  },
+
+  listGatewayAccessKeys(): Promise<GatewayAccessKey[]> {
+    return httpClient
+      .get<HttpMessageBody<GatewayAccessKey[]>>('/admin/ai/gateway-access-keys')
+      .then(unwrapData)
+  },
+
+  issueGatewayAccessKey(input: GatewayAccessKeyIssueInput): Promise<GatewayAccessKeyIssueResponse> {
+    return httpClient
+      .post<HttpMessageBody<GatewayAccessKeyIssueResponse>, GatewayAccessKeyIssueInput>(
+        '/admin/ai/gateway-access-keys',
+        input,
+      )
+      .then(unwrapData)
+  },
+
+  revokeGatewayAccessKey(id: number): Promise<GatewayAccessKey> {
+    return httpClient
+      .post<HttpMessageBody<GatewayAccessKey>, Record<string, never>>(
+        `/admin/ai/gateway-access-keys/${id}/revoke`,
+        {},
+      )
+      .then(unwrapData)
   },
 
   getPromptProfile(agentId: number): Promise<AiPromptProfile> {

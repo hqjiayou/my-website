@@ -23,7 +23,8 @@ public final class AdminAiModelEntryDtos {
             boolean defaultEntry,
             Integer version,
             OffsetDateTime updatedAt,
-            String mode) {}
+            String mode,
+            String alias) {}
 
     public record AdminAiModelEntryWriteRequest(
             @NotBlank @Size(max = 128) String displayName,
@@ -35,5 +36,6 @@ public final class AdminAiModelEntryDtos {
             @NotNull Boolean enabled,
             @NotNull Boolean defaultEntry,
             Integer version,
-            @Size(max = 16) String mode) {}
+            @Size(max = 16) String mode,
+            @Size(max = 64) String alias) {}
 }

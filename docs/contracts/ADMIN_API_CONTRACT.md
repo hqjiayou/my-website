@@ -17,7 +17,8 @@ last_verified: 2026-10-10
 | Appearance | `/sites/{id}/appearance` GET/PUT | `appearanceApi` |
 | Media | `/sites/{id}/media` | `mediaApi` |
 | Contents | `/sites/{id}/contents` | `contentApi` |
-| AI Model Entry | `/ai/model-entries`（平台级，不按站点）GET/POST、`/{id}` PUT/DELETE。响应不含 `apiKey`，只有 `apiKeyConfigured` 与 `apiKeyHint`；更新时 `apiKey` 留空保留原密钥。权限 `admin:ai-model:read` / `admin:ai-model:update`。启用且 `defaultEntry` 的那一条由 Java 注入站点对话与预览；没有则 Python 回退 `AI_MODEL` | `aiApi` FORCE REAL |
+| AI Model Entry | `/ai/model-entries`（平台级，不按站点）GET/POST、`/{id}` PUT/DELETE。响应不含 `apiKey`，只有 `apiKeyConfigured` 与 `apiKeyHint`；更新时 `apiKey` 留空保留原密钥。读写 DTO 新增 `alias`（对外模型名，经 `normalizeAlias` 归一化为小写、格式 `^[a-z0-9][a-z0-9_-]{1,63}$`，留空清除；同名冲突 409，网关对外选模型用，见 UoW-2）。权限 `admin:ai-model:read` / `admin:ai-model:update`。启用且 `defaultEntry` 的那一条由 Java 注入站点对话与预览；没有则 Python 回退 `AI_MODEL` | `aiApi` FORCE REAL |
+| Gateway Access Key | `/ai/gateway-access-keys` GET 列表、POST 签发、`/{id}/revoke` POST 吊销。读 DTO 不含 `keyHash` 与明文；签发响应额外带明文 `apiKey`（`mwgw_` 前缀，仅此一次返回，之后不可再取回，只存 SHA-256 哈希与尾 4 位 `keyHint`）。吊销幂等（已吊销重复调用保持原样）。权限 `admin:ai-model:read` / `admin:ai-model:update`（复用模型入口权限码）。对外网关认证用途在 UoW-2 | `aiApi` FORCE REAL |
 | AI Prompt | `/sites/{id}/ai/prompt-profile` | `aiApi` FORCE REAL |
 | AI Knowledge | `/sites/{id}/ai/knowledge-documents` | `aiApi` FORCE REAL |
 | AI Conversations | `/sites/{id}/ai/conversations`（只读）；`.../{cid}/messages` 的 ASSISTANT 项含 `agentMeta{usage{requests,toolCalls,inputTokens,outputTokens}, tools[{name,ok}], skillsApplied[]}`（无 / 历史数据 / 损坏 → null） | `aiApi` FORCE REAL |
