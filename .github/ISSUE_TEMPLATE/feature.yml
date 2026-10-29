@@ -20,6 +20,13 @@ body:
       label: 验收标准
     validations:
       required: true
+  - type: textarea
+    id: uow
+    attributes:
+      label: UoW 分解
+      description: 主任務拆成可獨立驗收的 UoW 勾選項（- [ ] UoW-1 …）；次要任務若可獨立交付，另開子 Issue 並在此回鏈，不混進同一 UoW 項
+    validations:
+      required: true
   - type: input
     id: roadmap
     attributes:

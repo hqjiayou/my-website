@@ -53,7 +53,7 @@ Agents 只写「谁做、能改哪里、怎么验证」；循环和停法只写�
 | 入口 | 怎么跑 | 跨会话状态 |
 |------|--------|-----------|
 | IDE 入口 | 人在 Cursor 里打 `/dev`、`/fix`、`/hunt`，AskQuestion 确认，stop hook 续跑 | `.cursor/runs/` 运行状态 |
-| 编排入口 | 外部编排者（如 kevin）开 GitHub Issue 并做 UoW 分解，写 brief 派 headless `cursor-agent` 在**独立 worktree** 执行；执行者（Cursor）只写代码、**不启动程序**（含测试与 dev server），测试、探针与 diff 核验由编排者执行 | GitHub Issue ＋ brief ＋ worktree 分支 |
+| 编排入口 | 外部编排者（如 kevin）开 GitHub Issue 并做 UoW 分解，按 [`brief-template.md`](brief-template.md) 写 brief 派 headless `cursor-agent` 在**独立 worktree** 执行；执行者（Cursor）只写代码、**不启动程序**（含测试与 dev server），测试、探针与 diff 核验由编排者执行 | GitHub Issue ＋ brief ＋ worktree 分支 |
 
 两边共同的硬规矩：
 
@@ -61,12 +61,30 @@ Agents 只写「谁做、能改哪里、怎么验证」；循环和停法只写�
 - **一任务一 worktree**：编排入口不在主工作区直接改；分支只用 `dev`（最新）与 `main`（发布）为长期分支。
 - **不自行开 PR**：改动先留分支 / 本地，等用户拍板；获批后只开 base 为 `dev` 的 PR，非 dev 的中间 PR 不开。IDE 入口不 git commit；编排入口的 commit / push 范围以 brief 写明的为准。
 - **本地全绿 ≠ 完成**：本地验收是前置；最终把关是 PR 的 CI（backend PG 契约、browser-e2e、admin-web / agent-portal CI）。未开 PR 时，交代里必须写明「CI 未验」。
+- **发现问题当场处置**：见下面「发现问题怎么办」。「顺带发现」不是终点，必须转成 GitHub Issue 才算登记完毕。
+- **提交规范**：每笔提交标题用 Conventional Commits（`feat/fix/docs/chore/ci/test/refactor/style(scope): …`），禁止空洞訊息（`no message`、`wip`、`update` 之类，guard 会拦）；单笔提交单一关切，混杂改动拆笔；PR 正文按模板逐栏填。
+- **分支卫生**：仓库已开启合并后自动删除 head branch；未合并的长期滞留分支由编排者定期盘点，先备份 head SHA 再清理。
+
+## 发现问题怎么办
+
+执行中发现任何问题，先按这张表处置，再继续手头工作。**向用户汇报**分两档：BLOCKER 级（数据、安全、契约破坏）或会影响用户决策的问题，不等收尾、立即汇报；其余在每轮／结束交代里汇报，并附 Issue 号。
+
+| 情形 | 处置 |
+|------|------|
+| 本次范围内、阻塞当前验收项 | 按对应 skill 的规则追加验收项（审查结论仍是唯一来源时从其规定） |
+| 本次范围内、不阻塞 | 记进运行状态，交代时汇报；用户点头才扩范围 |
+| 范围外的新问题（bug／缺陷） | **当场开 GitHub Issue**（bug 模板），运行状态「已转 Issue」记号码；不在本次顺手修 |
+| 根因未明 | 开 Issue 用 investigation 模板（`investigation` 标签）；查清后在原单拆出 fix／feature 子单并回链 |
+| 暂时无法解决（等外部条件／等用户决定） | 开或更新 Issue，打 `blocked` 或 `parked` 标签，正文写明：卡点、等待对象、回访条件（日期或事件）；不许只留在本地运行状态里 |
+| 尚未成案的风险 | 开 Issue 用 risk 模板（`risk` 标签），写触发条件、影响、回访条件；成案后转 bug／feature 并回链原单 |
+
+开单纪律：每个 Issue 至少三类标签各一——类型（`bug`／`enhancement`／`security`／`technical-debt`／`risk`／`investigation` 等）、优先级（`P0`–`P3`）、模块（`backend`／`frontend`，流程类用 `documentation`）。主任务在 Issue 内做 UoW 勾选分解；可独立交付的次要任务另开子 Issue 并在主单回链，不混进同一 UoW 项。
 
 ## Hooks（`.cursor/hooks.json`）
 
 | 脚本 | 事件 | 作用 |
 |------|------|------|
-| [`guard.js`](hooks/guard.js) | `beforeShellExecution` | 拒绝 git push / rebase / merge、reset --hard、checkout -- 等丢弃改动的命令；git commit 与递归删除要确认 |
+| [`guard.js`](hooks/guard.js) | `beforeShellExecution` | 拒绝 git push / rebase / merge、reset --hard、checkout -- 等丢弃改动的命令；git commit 与递归删除要确认；空洞提交訊息（`no message`、`wip`、`update` 等）直接拒绝 |
 | [`guard.js`](hooks/guard.js) | `preToolUse` | 拒绝写本地 `.env`、会话记录、`secrets/`、已有的 Flyway 迁移，拒绝删除测试；改 hooks 本身要确认 |
 | [`continue.js`](hooks/continue.js) | `stop` | 本会话有 `status: running` 的运行状态时，自动发起下一轮 |
 
@@ -92,7 +110,8 @@ stop: 复现测试 HttpAgentClientTest.chatReadTimeoutDoesNotRetry 转绿，agen
 
 ## 需要用户决定
 
-## 顺带发现
+## 已转 Issue（顺带发现）
+<!-- 范围外问题一律开 GitHub Issue 后记在这里：- #<号> <一句话>；只写文字不算登记 -->
 
 ## 每轮记录
 - r3: 改了 HttpAgentClient.java；测试 1 passed；继续
@@ -114,7 +133,7 @@ stop: 复现测试 HttpAgentClientTest.chatReadTimeoutDoesNotRetry 转绿，agen
 | 原因我知道 | 失败路径已写明请求、代码、坏结果 |
 | 显示层去掉就好 | 改动在产生该结果的那一层 |
 | 报错里有修复命令 | 命令已写进运行状态，没有直接执行 |
-| 旁边一起整理了 | 整理项在「顺带发现」，不在本次 diff |
+| 旁边一起整理了 | 整理项已开 Issue 并记进「已转 Issue」，不在本次 diff |
 | 再跑一遍更保险 | 上次运行之后代码有变化 |
 | 编译过了 | 贴了本项测试或浏览器路径的结果 |
 

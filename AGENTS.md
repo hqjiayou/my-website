@@ -53,7 +53,7 @@
 | [`.cursor/rules/agent-portal.mdc`](.cursor/rules/agent-portal.mdc) | `agent-portal` 实现边界（站点用户端 PWA） |
 | [`.cursor/rules/docs.mdc`](.cursor/rules/docs.mdc) | 文档与 CURRENT_STATE 同步 |
 
-索引与 Agent 协作流见 [`.cursor/README.md`](.cursor/README.md)。变更审查在 [`.cursor/agents/integration-reviewer.md`](.cursor/agents/integration-reviewer.md)。按域缺陷判定和功能完善盘点在 [`.cursor/agents/area-reviewer.md`](.cursor/agents/area-reviewer.md)。工作方式入口（`/dev`、`/fix`、`/hunt`、`/review`、`/audit`、`/pair`）在 [`.cursor/skills/`](.cursor/skills/)，闸门与续跑在 [`.cursor/hooks.json`](.cursor/hooks.json)，说明见 `.cursor/README.md`。
+索引与 Agent 协作流见 [`.cursor/README.md`](.cursor/README.md)（含「发现问题怎么办」处置定式、提交规范与标签纪律）。编排入口的 brief 定式在 [`.cursor/brief-template.md`](.cursor/brief-template.md)。变更审查在 [`.cursor/agents/integration-reviewer.md`](.cursor/agents/integration-reviewer.md)。按域缺陷判定和功能完善盘点在 [`.cursor/agents/area-reviewer.md`](.cursor/agents/area-reviewer.md)。工作方式入口（`/dev`、`/fix`、`/hunt`、`/review`、`/audit`、`/pair`）在 [`.cursor/skills/`](.cursor/skills/)，闸门与续跑在 [`.cursor/hooks.json`](.cursor/hooks.json)，说明见 `.cursor/README.md`。
 
 ## Cursor Agents（Subagent 角色）
 
