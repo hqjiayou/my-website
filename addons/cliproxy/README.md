@@ -10,7 +10,7 @@ Portal 的 AI 模型入口支持两种模式：Key 直连 / CLI 代理池（见 
 
 ## 启停
 
-在本目录（`services/website-services/scripts/local/cliproxy/`）下执行：
+在本目录（`addons/cliproxy/`）下执行：
 
 ```bash
 docker compose up -d
