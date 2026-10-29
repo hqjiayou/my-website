@@ -16,6 +16,7 @@ disable-model-invocation: true
    - Java：`mvn -pl <模块> -am test "-Dtest=<类>" "-Dsurefire.failIfNoSpecifiedTests=false"`
    - Python：`uv run python -m pytest -q <测试文件>`
    - admin-web：`pnpm lint`；类型有变化再 `pnpm build`
+   - agent-portal：`pnpm lint`（在 `apps/agent-portal`）；类型有变化再 `pnpm build`
 4. 交代后停下：改了哪些文件和为什么、验证结果、你建议的下一步（一句）。
 
 ## 用户说

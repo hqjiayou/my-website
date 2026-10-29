@@ -1,5 +1,7 @@
 // stop 续跑：本会话有 status: running 的运行状态文件时，让 Agent 继续下一轮。
 // 运行状态格式见 .cursor/README.md「运行状态」。
+// 判定逻辑可被 require 供测试（continue.test.js，node 直接跑）；作为脚本被
+// hooks.json 调用时才走 stdin 主流程。
 const fs = require("fs");
 const path = require("path");
 
@@ -70,24 +72,30 @@ function decide(input) {
   };
 }
 
-let raw = "";
-process.stdin.on("data", (c) => (raw += c));
-process.stdin.on("end", () => {
-  let out = {};
-  try {
-    fs.mkdirSync(RUNS, { recursive: true });
-    const input = JSON.parse(raw.replace(/^\uFEFF/, "") || "{}");
-    const result = decide(input);
-    if (typeof result === "string") {
-      log(`${result} (status=${input.status} loop=${input.loop_count})`);
-    } else {
-      log(`continue (loop=${input.loop_count})`);
-      out = result;
-    }
-  } catch (e) {
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { decide, findRun, field };
+}
+
+if (typeof require !== "undefined" && typeof module !== "undefined" && require.main === module) {
+  let raw = "";
+  process.stdin.on("data", (c) => (raw += c));
+  process.stdin.on("end", () => {
+    let out = {};
     try {
-      log(`error ${e && e.message}`);
-    } catch {}
-  }
-  process.stdout.write(JSON.stringify(out));
-});
+      fs.mkdirSync(RUNS, { recursive: true });
+      const input = JSON.parse(raw.replace(/^\uFEFF/, "") || "{}");
+      const result = decide(input);
+      if (typeof result === "string") {
+        log(`${result} (status=${input.status} loop=${input.loop_count})`);
+      } else {
+        log(`continue (loop=${input.loop_count})`);
+        out = result;
+      }
+    } catch (e) {
+      try {
+        log(`error ${e && e.message}`);
+      } catch {}
+    }
+    process.stdout.write(JSON.stringify(out));
+  });
+}

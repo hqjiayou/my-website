@@ -7,11 +7,11 @@ description: my-website 只读代码库探索专家。定位前后端/数据库/
 
 ## Safety Capsule
 
+通用底线见 `project.mdc`，不在此重复。本角色独有：
+
 1. 结论必须来自当前真实代码；每次任务重新扫描，不依赖历史结论。
 2. 只分析任务相关范围，不借机建议全仓重构。
-3. 功能归属必须对应现有模块 / 目录 / 文件职责。
-4. 不为“架构漂亮”建议过度拆分或模糊 Helper / Manager / Processor。
-5. 不确定就写 UNKNOWN，并说明已搜索范围。
+3. 不确定就写 UNKNOWN，并说明已搜索范围。
 
 硬约束细节遵守 `.cursor/rules/project.mdc`；涉及 Java / admin-web / agent-services 时分别遵守对应 Rules；AI 域对照 `ai-domain.mdc`。
 

@@ -6,7 +6,7 @@ alwaysApply: false
 
 # agent-services（Python AI Execution）
 
-权威：[`ADR-0004`](../../docs/decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](../../docs/decisions/ADR-0005-java-business-truth-python-ai-execution.md)；设计文档 [`Agent服务技术选型与架构设计V1.md`](../../docs/website-services/设计文档/AI/Agent服务技术选型与架构设计V1.md)。
+权威：[`ADR-0004`](../../docs/decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](../../docs/decisions/ADR-0005-java-business-truth-python-ai-execution.md) 与本文件（原《Agent 服务技术选型与架构设计 V1》已于 2026-10-29 移除，见 git 历史；不要再引用该文档）。
 
 ## 边界
 
@@ -32,7 +32,7 @@ alwaysApply: false
 | `agent/runtime.py` `stream_runtime.py` | 同步 / SSE agent loop |
 | `agent/model_factory.py` | `AI_MODEL` → Pydantic AI；无配置则 BLOCKED |
 | `agent/prompt_builder.py` | system prompt 组装（含 skills / todos 注入） |
-| `agent/harness.py` + `harness/*.md` | 一次请求的 background、护栏、技能、工具说明、MCP 服务器名 |
+| `agent/harness.py` + `services/agent-services/harness/*.md` | 一次请求的 background、护栏、技能、工具说明、MCP 服务器名（`EXPERIENCE.md` 只作经验账本，不注入提示） |
 | `agent/toolset_factory.py` | business + todo + MCP 工具合并 |
 | `agent/business_tools.py` `tools/business_api.py` | 回调 Java agent-app internal |
 | `agent/skills.py` + `skills/*/SKILL.md` | skill 加载 / frontmatter / catalog；未知策略 |
@@ -40,7 +40,7 @@ alwaysApply: false
 | `agent/mcp_tools.py` | `MCP_SERVERS_JSON` 解析与注册；health `mcpStatus` |
 | `schemas/` | chat / stream / health / skills / retrieval 请求响应 |
 | `testing/mcp_echo.py` | 平台 MCP smoke（in-process echo/add）；不进 app 装配 |
-| `retrieval/` | 派生向量索引（**非**业务 SoT）。embedding 仅 `openai:`，经 httpx 调兼容端点 |
+| `retrieval/` | 派生向量索引（**非**业务 SoT）。embedding 支持 `openai:`（经 httpx 调兼容端点）与 `google:` / 旧别名 `google-gla:`（走 Pydantic AI Embedder），以 `retrieval/embeddings.py` 为准 |
 
 ## 契约
 

@@ -7,6 +7,8 @@ description: my-website agent-services（Python）AI Execution 实现专家。�
 
 ## Safety Capsule
 
+通用底线见 `project.mdc`（先读调用链、只改必要范围、先引用再新写、说不清就停），不在此重复。本角色独有：
+
 1. 开发前先读 `runtime` / `stream_runtime` / `internal.py` / 相关 schema 与测试。
 2. 遵守 ADR-0004（诚实失败）与 ADR-0005（Java 业务真相、Python stateless）。
 3. 只改 agent-services 必要范围；扩大到 Java 契约须先说明必要性。
@@ -28,7 +30,7 @@ Python runtime、SSE 事件、RAG、business tools、MCP、skills、todo 编排�
 
 - 实现 / 调整 agent loop、prompt_builder、toolset_factory、retrieval
 - 新增 SKILL.md、环境变量、单测与 evals baseline
-- 更新与本任务直接相关的设计文档 § 与 `ENVIRONMENT_VARIABLES.md`
+- 更新与本任务直接相关的 CURRENT_STATE 与 `ENVIRONMENT_VARIABLES.md`
 
 ## Forbidden
 
