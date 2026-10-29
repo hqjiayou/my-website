@@ -49,10 +49,10 @@ export function DataTable<T>({
   const totalPages = pagination ? Math.max(1, Math.ceil(pagination.total / pagination.pageSize)) : 1
 
   return (
-    <div className={cn('overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm', className)}>
+    <div className={cn('overflow-hidden rounded-xl border border-admin bg-admin-surface shadow-sm', className)}>
       <div className="overflow-x-auto">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-admin-surface-muted text-xs uppercase tracking-wide text-admin-muted">
             <tr>
               {columns.map((column) => (
                 <th key={column.id} className={cn('px-4 py-3', column.headerClassName)}>
@@ -61,24 +61,24 @@ export function DataTable<T>({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-[rgb(var(--border))]">
             {isLoading ? (
               <tr>
-                <td colSpan={colSpan} className="px-4 py-10 text-center text-slate-500">
+                <td colSpan={colSpan} className="px-4 py-10 text-center text-admin-muted">
                   {t('table.loading')}
                 </td>
               </tr>
             ) : isError ? (
               <tr>
                 <td colSpan={colSpan} className="px-4 py-10">
-                  <div className="flex flex-col items-center justify-center gap-2 text-center text-slate-600">
+                  <div className="flex flex-col items-center justify-center gap-2 text-center text-admin-muted">
                     <AlertCircle className="h-6 w-6 text-rose-500" />
                     <p className="text-sm">{errorMessage ?? t('table.error')}</p>
                     {onRetry ? (
                       <button
                         type="button"
                         onClick={onRetry}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-admin px-3 py-1.5 text-xs font-medium text-admin transition hover:bg-admin-surface-muted"
                       >
                         <RefreshCw className="h-3.5 w-3.5" />
                         {t('table.retry')}
@@ -89,7 +89,7 @@ export function DataTable<T>({
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={colSpan} className="px-4 py-10 text-center text-slate-500">
+                <td colSpan={colSpan} className="px-4 py-10 text-center text-admin-muted">
                   {emptyMessage ?? t('table.empty')}
                 </td>
               </tr>
@@ -97,7 +97,7 @@ export function DataTable<T>({
               data.map((row) => (
                 <tr key={rowKey(row)}>
                   {columns.map((column) => (
-                    <td key={column.id} className={cn('px-4 py-3 align-top', column.className)}>
+                    <td key={column.id} className={cn('px-4 align-top text-admin admin-table-row', column.className)}>
                       {column.cell(row)}
                     </td>
                   ))}
@@ -109,25 +109,25 @@ export function DataTable<T>({
       </div>
 
       {pagination && pagination.total > pagination.pageSize ? (
-        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm text-slate-600">
+        <div className="flex items-center justify-between border-t border-admin px-4 py-3 text-sm text-admin-muted">
           <span>{t('table.paginationTotal', { total: pagination.total })}</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               disabled={pagination.page <= 1}
               onClick={() => pagination.onPageChange(pagination.page - 1)}
-              className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium disabled:opacity-50"
+              className="rounded-md border border-admin px-2.5 py-1 text-xs font-medium text-admin disabled:opacity-50"
             >
               {t('table.prev')}
             </button>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-admin-muted">
               {pagination.page} / {totalPages}
             </span>
             <button
               type="button"
               disabled={pagination.page >= totalPages}
               onClick={() => pagination.onPageChange(pagination.page + 1)}
-              className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium disabled:opacity-50"
+              className="rounded-md border border-admin px-2.5 py-1 text-xs font-medium text-admin disabled:opacity-50"
             >
               {t('table.next')}
             </button>

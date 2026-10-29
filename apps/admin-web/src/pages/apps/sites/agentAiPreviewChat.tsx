@@ -6,11 +6,12 @@ import {
   useLocalRuntime,
 } from '@assistant-ui/react'
 import { useQuery } from '@tanstack/react-query'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { aiApi } from '@/api/apps/aiApi'
 import type {
+  AiModelEntry,
   AiPreviewAgentEvent,
   AiPreviewTodoItem,
   AiPreviewTodoStatus,
@@ -18,6 +19,7 @@ import type {
   AiSearchSummary,
 } from '@/types/ai'
 
+import { modelIdFromSpec } from '@/utils/modelSpec'
 import { createJavaPreviewAdapter } from './agentAiPreviewAdapter'
 import { AiRunUsageLine } from './agentAiRunMeta'
 
@@ -34,9 +36,28 @@ interface RunTrace {
   thinking: string
   tools: ToolCallTrace[]
   usage: AiRunUsage | null
+  model: string | null
 }
 
-const EMPTY_TRACE: RunTrace = { skillsApplied: [], skillsMissing: [], thinking: '', tools: [], usage: null }
+const EMPTY_TRACE: RunTrace = {
+  skillsApplied: [],
+  skillsMissing: [],
+  thinking: '',
+  tools: [],
+  usage: null,
+  model: null,
+}
+
+function entryForMode(entries: AiModelEntry[], agentId: number, mode: 'CLI' | 'KEY') {
+  const enabled = entries.filter(
+    (entry) => entry.enabled && (entry.mode ?? 'KEY') === mode && (entry.agentId == null || entry.agentId === agentId),
+  )
+  return (
+    enabled.find((entry) => entry.agentId === agentId && entry.defaultEntry) ??
+    enabled.find((entry) => entry.agentId == null && entry.defaultEntry) ??
+    null
+  )
+}
 
 type RunError = { errorCode: string; message?: string }
 
@@ -65,6 +86,7 @@ const TOOL_STATE_CLASS: Record<ToolCallTrace['state'], string> = {
 function createPreviewSelection() {
   let skills: string[] = []
   let todos: AiPreviewTodoItem[] = []
+  let mode: 'CLI' | 'KEY' = 'CLI'
   return {
     getSkills: () => skills,
     setSkills: (next: string[]) => {
@@ -73,6 +95,10 @@ function createPreviewSelection() {
     getTodos: () => todos,
     setTodos: (next: AiPreviewTodoItem[]) => {
       todos = next
+    },
+    getMode: () => mode,
+    setMode: (next: 'CLI' | 'KEY') => {
+      mode = next
     },
   }
 }
@@ -86,11 +112,12 @@ function applyAgentEvent(trace: RunTrace, event: AiPreviewAgentEvent): RunTrace 
         thinking: '',
         tools: [],
         usage: null,
+        model: null,
       }
     case 'thinking':
       return { ...trace, thinking: trace.thinking + event.delta }
     case 'done':
-      return { ...trace, usage: event.usage }
+      return { ...trace, usage: event.usage, model: event.model }
     case 'toolStart':
       return {
         ...trace,
@@ -125,6 +152,33 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   const [trace, setTrace] = useState<RunTrace>(EMPTY_TRACE)
   const [runError, setRunError] = useState<RunError | null>(null)
   const [selection] = useState(createPreviewSelection)
+  const [mode, setMode] = useState<'CLI' | 'KEY'>('CLI')
+  const [modeChosen, setModeChosen] = useState(false)
+  const entriesQuery = useQuery({
+    queryKey: ['ai', 'model-entries'],
+    queryFn: () => aiApi.listModelEntries(),
+  })
+  const activeEntry = entryForMode(entriesQuery.data ?? [], agentId, mode)
+  const activeModel = activeEntry
+    ? activeEntry.mode === 'CLI'
+      ? modelIdFromSpec(activeEntry.modelSpec)
+      : activeEntry.modelSpec
+    : ''
+  const servedModel = trace.model ? modelIdFromSpec(trace.model) : ''
+
+  useEffect(() => {
+    if (modeChosen || !entriesQuery.data) return
+    const next = entryForMode(entriesQuery.data, agentId, 'CLI') ? 'CLI' : 'KEY'
+    selection.setMode(next)
+    setMode(next)
+    setModeChosen(true)
+  }, [agentId, entriesQuery.data, modeChosen, selection])
+
+  const chooseMode = (next: 'CLI' | 'KEY') => {
+    selection.setMode(next)
+    setMode(next)
+    setModeChosen(true)
+  }
 
   const updateTodos = useCallback(
     (next: AiPreviewTodoItem[]) => {
@@ -147,6 +201,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
       createJavaPreviewAdapter(agentId, {
         getSkills: selection.getSkills,
         getTodos: selection.getTodos,
+        getMode: selection.getMode,
         onAgentEvent: (event) => {
           if (event.type === 'error') {
             setRunError({ errorCode: event.errorCode, message: event.message })
@@ -168,6 +223,30 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {(['CLI', 'KEY'] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={mode === value}
+            className={
+              mode === value
+                ? 'rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white'
+                : 'rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700'
+            }
+            onClick={() => chooseMode(value)}
+          >
+            {value === 'CLI' ? t('aiWorkspace.preview.modeCli') : t('aiWorkspace.preview.modeKey')}
+          </button>
+        ))}
+      </div>
+      <p className="mb-3 text-sm text-slate-600">
+        {entriesQuery.isPending
+          ? t('aiWorkspace.loading')
+          : activeModel
+            ? t('aiWorkspace.preview.using', { model: activeModel })
+            : t('aiWorkspace.preview.noEntry')}
+      </p>
       <p className="mb-3 text-sm text-slate-600">{t('aiWorkspace.preview.hint')}</p>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <ThreadPrimitive.Root className="flex h-[28rem] flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
@@ -210,6 +289,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
         <aside className="space-y-4 text-sm">
           <section className="rounded-xl border border-slate-200 bg-white p-3">
             <h4 className="mb-2 font-medium text-slate-800">{t('aiWorkspace.preview.skills.title')}</h4>
+            <p className="mb-2 text-xs text-slate-500">{t('aiWorkspace.preview.skills.hint')}</p>
             {skillsQuery.isPending ? (
               <p className="text-slate-500">{t('aiWorkspace.loading')}</p>
             ) : skillsQuery.isError ? (
@@ -247,6 +327,11 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
 
           <section className="rounded-xl border border-slate-200 bg-white p-3">
             <h4 className="mb-2 font-medium text-slate-800">{t('aiWorkspace.preview.run.title')}</h4>
+            {servedModel && activeModel && servedModel !== activeModel ? (
+              <p className="mb-2 text-xs text-amber-700">
+                {t('aiWorkspace.preview.run.servedModel', { model: servedModel })}
+              </p>
+            ) : null}
             <p className="text-xs text-slate-500">{t('aiWorkspace.preview.run.skillsApplied')}</p>
             <p className="mb-2 font-mono text-xs text-slate-800">
               {trace.skillsApplied.length ? trace.skillsApplied.join(', ') : '—'}

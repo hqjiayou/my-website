@@ -1,7 +1,8 @@
 export default {
   title: 'Permissions',
-  description: 'View system permission points (read-only). Permissions are maintained by backend seed data.',
-  hint: 'Permissions are seeded on the backend. This page is read-only.',
+  description: 'View system permission points. Codes are tied to API checks and maintained by backend seed data.',
+  hint: 'Permission points cannot be created or removed here. Assign them to a role instead.',
+  assignLink: 'Assign on Roles',
   tabs: {
     menu: 'Menu',
     action: 'Action',

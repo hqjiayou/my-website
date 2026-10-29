@@ -3,11 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { rbacApi } from '@/api/rbacApi'
+import {
+  adminFieldClass,
+  adminFormActionsClass,
+  adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+} from '@/components/admin/controls'
 import { PageHeader } from '@/components/page'
 import { PermissionGate } from '@/router/permission'
 import { ROUTES } from '@/router/config/routePaths'
@@ -16,16 +22,24 @@ import { PERMISSION_CODES } from '@/types/rbac'
 
 const usernamePattern = /^[a-zA-Z][a-zA-Z0-9_]{2,127}$/
 
-export function UserEditPage() {
+export function UserEditPage({
+  userId: userIdProp,
+  onClose,
+}: {
+  userId?: string
+  onClose?: () => void
+} = {}) {
   const { t } = useTranslation('users')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { userId } = useParams()
+  const params = useParams()
+  const userId = userIdProp ?? params.userId
   const authUser = useAuthStore((state) => state.user)
   const meUserCode = authUser?.userCode
-  // create 路由为 /system/users/new（无 :userId）；edit 为 /system/users/:userId/edit
   const isCreate = userId == null || userId === 'new'
   const parsedId = isCreate ? null : Number(userId)
+  const close = onClose ?? (() => navigate(ROUTES.system.users))
+  const embedded = onClose != null
 
   const optionalEmail = z
     .string()
@@ -111,7 +125,7 @@ export function UserEditPage() {
     onSuccess: () => {
       toast.success(t('edit.messages.created'))
       void queryClient.invalidateQueries({ queryKey: ['users'] })
-      navigate(ROUTES.system.users)
+      close()
     },
   })
 
@@ -126,7 +140,7 @@ export function UserEditPage() {
       toast.success(t('edit.messages.updated'))
       void queryClient.invalidateQueries({ queryKey: ['users'] })
       void queryClient.invalidateQueries({ queryKey: ['users', parsedId] })
-      navigate(ROUTES.system.users)
+      close()
     },
   })
 
@@ -149,24 +163,14 @@ export function UserEditPage() {
     )
   }
 
-  return (
-    <section>
-      <PageHeader
-        title={isCreate ? t('edit.createTitle') : t('edit.editTitle')}
-        description={
-          isCreate
-            ? t('edit.createDescription')
-            : t('edit.editDescription', { username: user?.username ?? '' })
-        }
-      />
-
+  const form = (
+    <>
       {formLocked ? (
-        <div className="mb-4 max-w-xl rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {t('edit.messages.protectedHint')}
         </div>
       ) : null}
-
-      <div className="max-w-xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div>
         {isCreate ? (
           <form
             className="space-y-4"
@@ -209,7 +213,7 @@ export function UserEditPage() {
             </Field>
             <FormActions
               submitting={createMutation.isPending}
-              cancelTo={ROUTES.system.users}
+              onCancel={close}
               saveLabel={t('edit.actions.save')}
               savingLabel={t('edit.actions.saving')}
               cancelLabel={t('edit.actions.cancel')}
@@ -246,7 +250,7 @@ export function UserEditPage() {
             </Field>
             <FormActions
               submitting={updateMutation.isPending}
-              cancelTo={ROUTES.system.users}
+              onCancel={close}
               saveLabel={t('edit.actions.save')}
               savingLabel={t('edit.actions.saving')}
               cancelLabel={t('edit.actions.cancel')}
@@ -256,12 +260,27 @@ export function UserEditPage() {
           </form>
         )}
       </div>
+    </>
+  )
+
+  if (embedded) return form
+
+  return (
+    <section>
+      <PageHeader
+        title={isCreate ? t('edit.createTitle') : t('edit.editTitle')}
+        description={
+          isCreate
+            ? t('edit.createDescription')
+            : t('edit.editDescription', { username: user?.username ?? '' })
+        }
+      />
+      <div className="max-w-xl">{form}</div>
     </section>
   )
 }
 
-const inputClassName =
-  'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:bg-slate-50 disabled:text-slate-500'
+const inputClassName = adminFieldClass
 
 function Field({
   label,
@@ -274,7 +293,7 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-slate-700">{label}</label>
+      <label className="mb-1.5 block text-sm font-medium text-admin">{label}</label>
       {children}
       {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
     </div>
@@ -283,7 +302,7 @@ function Field({
 
 function FormActions({
   submitting,
-  cancelTo,
+  onCancel,
   saveLabel,
   savingLabel,
   cancelLabel,
@@ -291,7 +310,7 @@ function FormActions({
   permissionCode,
 }: {
   submitting: boolean
-  cancelTo: string
+  onCancel: () => void
   saveLabel: string
   savingLabel: string
   cancelLabel: string
@@ -299,22 +318,19 @@ function FormActions({
   permissionCode: string
 }) {
   return (
-    <div className="flex gap-2 pt-2">
+    <div className={adminFormActionsClass}>
+      <button type="button" onClick={onCancel} className={adminSecondaryButtonClass}>
+        {cancelLabel}
+      </button>
       <PermissionGate code={permissionCode}>
         <button
           type="submit"
           disabled={submitting || disableSubmit}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          className={adminPrimaryButtonClass}
         >
           {submitting ? savingLabel : saveLabel}
         </button>
       </PermissionGate>
-      <Link
-        to={cancelTo}
-        className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-      >
-        {cancelLabel}
-      </Link>
     </div>
   )
 }

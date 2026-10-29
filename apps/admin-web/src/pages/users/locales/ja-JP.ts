@@ -96,7 +96,8 @@ export default {
     selectAll: 'すべて選択',
     clearAll: '選択解除',
     atLeastOne: '少なくとも 1 つのロールを選択してください',
-    cannotAssignSuperAdmin: 'この画面から super_admin は割当てできません。',
+    cannotAssignSuperAdmin:
+      'スーパー管理者はこの一覧に出ず、このダイアログからも割り当てできません。チェック中のシステム管理者は admin ロールです。',
     messages: {
       saved: 'ユーザーロールを保存しました',
       restrictedSelf: '自分のロール割当は変更できません。',

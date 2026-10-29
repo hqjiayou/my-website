@@ -672,7 +672,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         Map<SelectionGroup, List<Long>> sitesBySelection = new LinkedHashMap<>();
         Map<Long, AgentModelSelection> selectionBySite = new LinkedHashMap<>();
         for (Long agentId : documentsBySite.keySet()) {
-            AgentModelSelection selection = modelEntryService.currentSelection(agentId);
+            AgentModelSelection selection = modelEntryService.embeddingSelection(agentId);
             selectionBySite.put(agentId, selection);
             sitesBySelection.computeIfAbsent(new SelectionGroup(selection), ignored -> new ArrayList<>()).add(agentId);
         }
@@ -880,9 +880,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
     }
 
-    /** 以目标站点自己的模型入口规格 upsert 到其检索分区（共享文档在每个分区用消费站点的 embedding）。 */
+    /** 以目标站点的 KEY 嵌入入口 upsert。没有则不带凭证，由进程嵌入模型写入。不跟随对话主用入口。 */
     private void upsertDerivedIndexForSite(AdminAiKnowledgeDocumentEntity entity, long targetAgentId) {
-        AgentModelSelection selection = modelEntryService.currentSelection(targetAgentId);
+        AgentModelSelection selection = modelEntryService.embeddingSelection(targetAgentId);
         agentClient.upsertRetrievalDocument(retrievalDocument(entity, targetAgentId, selection));
     }
 

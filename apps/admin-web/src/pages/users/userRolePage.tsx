@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { rbacApi } from '@/api/rbacApi'
+import { adminFormActionsClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
 import { PageHeader } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { isSuperAdminRole, useHasPermission } from '@/router/permission'
@@ -12,12 +13,20 @@ import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
 import { PERMISSION_CODES, USER_STATUS, type RoleDto } from '@/types/rbac'
 
-export function UserRolePage() {
+export function UserRolePage({
+  userId: userIdProp,
+  onClose,
+}: {
+  userId?: string
+  onClose?: () => void
+} = {}) {
   const { t } = useTranslation('users')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { userId } = useParams()
+  const params = useParams()
+  const userId = userIdProp ?? params.userId
   const parsedUserId = Number(userId)
+  const close = onClose ?? (() => navigate(ROUTES.system.users))
   const canSave = useHasPermission(PERMISSION_CODES.userRoleUpdate)
   const authUser = useAuthStore((state) => state.user)
   const meUserCode = authUser?.userCode
@@ -113,7 +122,8 @@ export function UserRolePage() {
       canSave={canSave}
       parsedUserId={parsedUserId}
       queryClient={queryClient}
-      navigate={navigate}
+      onClose={close}
+      embedded={onClose != null}
     />
   )
 }
@@ -128,7 +138,8 @@ function UserRoleEditor({
   canSave,
   parsedUserId,
   queryClient,
-  navigate,
+  onClose,
+  embedded,
 }: {
   username: string
   userCode: string
@@ -139,7 +150,8 @@ function UserRoleEditor({
   canSave: boolean
   parsedUserId: number
   queryClient: ReturnType<typeof useQueryClient>
-  navigate: ReturnType<typeof useNavigate>
+  onClose: () => void
+  embedded: boolean
 }) {
   const { t } = useTranslation('users')
   const [selectedCodes, setSelectedCodes] = useState(() => new Set(initialCodes))
@@ -155,6 +167,7 @@ function UserRoleEditor({
       void queryClient.invalidateQueries({ queryKey: ['users', parsedUserId, 'roles'] })
       void queryClient.invalidateQueries({ queryKey: ['users'] })
       void queryClient.invalidateQueries({ queryKey: ['users', parsedUserId] })
+      if (embedded) onClose()
     },
   })
 
@@ -191,38 +204,46 @@ function UserRoleEditor({
 
   return (
     <section>
-      <PageHeader
-        title={t('roles.title')}
-        description={t('roles.description', { username, userCode })}
-        action={
-          <Link
-            to={ROUTES.system.users}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-          >
-            {t('roles.back')}
-          </Link>
-        }
-      />
+      {embedded ? null : (
+        <PageHeader
+          title={t('roles.title')}
+          description={t('roles.description', { username, userCode })}
+          action={
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              {t('roles.back')}
+            </button>
+          }
+        />
+      )}
 
       {restrictionHint ? (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {restrictionHint}
         </div>
-      ) : (
-        <p className="mb-4 text-sm text-slate-500">{t('roles.cannotAssignSuperAdmin')}</p>
-      )}
+      ) : null}
+      <p className="mb-4 text-sm text-admin-muted">{t('roles.cannotAssignSuperAdmin')}</p>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">{t('roles.title')}</h2>
-            <p className="mt-1 text-sm text-slate-500">{t('roles.descriptionFallback')}</p>
-          </div>
+          {embedded ? (
+            <p className="text-sm text-admin-muted">
+              {username ? t('roles.description', { username, userCode }) : t('roles.descriptionFallback')}
+            </p>
+          ) : (
+            <div>
+              <h2 className="text-base font-semibold text-admin">{t('roles.title')}</h2>
+              <p className="mt-1 text-sm text-admin-muted">{t('roles.descriptionFallback')}</p>
+            </div>
+          )}
           {!readOnly && assignableRoles.length > 0 ? (
             <button
               type="button"
               onClick={() => toggleAll(!allSelected)}
-              className="text-sm text-slate-600 underline-offset-2 hover:underline"
+              className="text-sm text-admin underline-offset-2 hover:underline"
             >
               {allSelected ? t('roles.clearAll') : t('roles.selectAll')}
             </button>
@@ -230,7 +251,7 @@ function UserRoleEditor({
         </div>
 
         {assignableRoles.length === 0 ? (
-          <p className="text-sm text-slate-500">{t('roles.emptyRoles')}</p>
+          <p className="text-sm text-admin-muted">{t('roles.emptyRoles')}</p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
             {assignableRoles.map((role) => (
@@ -239,8 +260,8 @@ function UserRoleEditor({
                 className={cn(
                   'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition',
                   selectedCodes.has(role.roleCode)
-                    ? 'border-slate-900 bg-slate-50'
-                    : 'border-slate-200 hover:bg-slate-50',
+                    ? 'border-[rgb(var(--primary))] bg-admin-surface-muted'
+                    : 'border-admin bg-admin-surface hover:bg-admin-surface-muted',
                   readOnly && 'cursor-not-allowed opacity-60',
                 )}
               >
@@ -252,8 +273,8 @@ function UserRoleEditor({
                   onChange={() => toggleCode(role.roleCode)}
                 />
                 <span>
-                  <span className="block text-sm font-medium text-slate-900">{role.roleName}</span>
-                  <span className="mt-0.5 block text-xs text-slate-500">{role.roleCode}</span>
+                  <span className="block text-sm font-medium text-admin">{role.roleName}</span>
+                  <span className="mt-0.5 block text-xs text-admin-muted">{role.roleCode}</span>
                 </span>
               </label>
             ))}
@@ -262,24 +283,20 @@ function UserRoleEditor({
         {localError ? <p className="mt-3 text-xs text-red-600">{localError}</p> : null}
       </div>
 
-      <div className="mt-6 flex gap-2">
+      <div className={adminFormActionsClass}>
+        <button type="button" onClick={onClose} className={adminSecondaryButtonClass}>
+          {t('roles.cancel')}
+        </button>
         {canSave && !readOnly ? (
           <button
             type="button"
             disabled={saveMutation.isPending}
             onClick={handleSave}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            className={adminPrimaryButtonClass}
           >
             {saveMutation.isPending ? t('roles.saving') : t('roles.save')}
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={() => navigate(ROUTES.system.users)}
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-        >
-          {t('roles.cancel')}
-        </button>
       </div>
     </section>
   )

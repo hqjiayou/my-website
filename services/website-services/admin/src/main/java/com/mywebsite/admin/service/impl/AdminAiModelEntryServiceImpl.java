@@ -119,15 +119,22 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         return chain.isEmpty() ? null : chain.get(0);
     }
 
-    /**
-     * admin 侧（试聊 / 知识索引）用整链、不分模式；Portal 聊天的按模式组链在 agent-app
-     * AgentAiServiceImpl.loadModelChain(agentId, mode)，规则除模式过滤外一致。
-     */
     @Override
     @Transactional
     public List<AgentModelSelection> selectionChain(long agentId) {
-        List<AdminAiModelEntryEntity> agentEntries = enabledEntries(agentId);
-        List<AdminAiModelEntryEntity> globalEntries = enabledEntries(null);
+        return selectionChain(agentId, null);
+    }
+
+    /**
+     * 组链规则与 agent-app {@code AgentAiServiceImpl.loadModelChain} 一致。
+     * 试聊传入模式，使用户端和后台打的是同一条接入；知识转写仍走不分模式的整链。
+     */
+    @Override
+    @Transactional
+    public List<AgentModelSelection> selectionChain(long agentId, String mode) {
+        String normalized = chainMode(mode);
+        List<AdminAiModelEntryEntity> agentEntries = filterMode(enabledEntries(agentId), normalized);
+        List<AdminAiModelEntryEntity> globalEntries = filterMode(enabledEntries(null), normalized);
         AdminAiModelEntryEntity primary = firstDefault(agentEntries);
         if (primary == null) {
             primary = firstDefault(globalEntries);
@@ -146,6 +153,29 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         appendSelections(chain, agentEntries, primary.getId());
         appendSelections(chain, globalEntries, primary.getId());
         return List.copyOf(chain);
+    }
+
+    @Override
+    public AgentModelSelection embeddingSelection(long agentId) {
+        AgentModelSelection fromAgent = firstKeyEmbedding(enabledEntries(agentId));
+        if (fromAgent != null) {
+            return fromAgent;
+        }
+        return firstKeyEmbedding(enabledEntries(null));
+    }
+
+    /** 启用列表已是默认在前、id 升序。跳过 CLI 和没填 embedding spec 的入口。 */
+    private AgentModelSelection firstKeyEmbedding(List<AdminAiModelEntryEntity> entries) {
+        for (AdminAiModelEntryEntity entry : entries) {
+            if (!"KEY".equals(entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())) {
+                continue;
+            }
+            AgentModelSelection selection = toSelection(entry);
+            if (selection != null && StringUtils.hasText(selection.embeddingSpec())) {
+                return selection;
+            }
+        }
+        return null;
     }
 
     /** 作用域内启用入口：默认在前，其余 id 升序（与 listEntries 的展示序一致）。 */
@@ -235,10 +265,12 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         entry.setApiKey(cipher.encrypt(apiKey));
         entry.setBaseUrl(normalizeBaseUrl(request.baseUrl()));
         entry.setAgentId(request.agentId());
-        entry.setEmbeddingSpec(normalizeOptionalSpec(request.embeddingSpec()));
+        String mode = normalizeMode(request.mode());
+        entry.setMode(mode);
+        // CLI 的 key 是进代理的客户端 key，不能拿来做嵌入。
+        entry.setEmbeddingSpec("CLI".equals(mode) ? null : normalizeOptionalSpec(request.embeddingSpec()));
         entry.setEnabled(request.enabled());
         entry.setDefaultEntry(asDefault);
-        entry.setMode(normalizeMode(request.mode()));
         entry.setAlias(alias);
     }
 
@@ -296,8 +328,41 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
             return null;
         }
         String baseUrl = StringUtils.hasText(entry.getBaseUrl()) ? entry.getBaseUrl().trim() : null;
-        String embeddingSpec = StringUtils.hasText(entry.getEmbeddingSpec()) ? entry.getEmbeddingSpec().trim() : null;
-        return new AgentModelSelection(entry.getModelSpec().trim(), apiKey, baseUrl, embeddingSpec);
+        return new AgentModelSelection(entry.getModelSpec().trim(), apiKey, baseUrl, embeddingSpecFor(entry));
+    }
+
+    /** CLI 客户端 key 只用于回答，不随入口带进嵌入。 */
+    private static String embeddingSpecFor(AdminAiModelEntryEntity entry) {
+        if ("CLI".equals(entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())) {
+            return null;
+        }
+        return entry.getEmbeddingSpec().trim();
+    }
+
+    /** 空 mode 表示整链。CLI / KEY 以外拒绝，避免把拼错的模式当成整链。 */
+    private static String chainMode(String mode) {
+        if (!StringUtils.hasText(mode)) {
+            return null;
+        }
+        String normalized = mode.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!"CLI".equals(normalized) && !"KEY".equals(normalized)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        return normalized;
+    }
+
+    private static List<AdminAiModelEntryEntity> filterMode(
+            List<AdminAiModelEntryEntity> entries, String mode) {
+        if (mode == null) {
+            return entries;
+        }
+        return entries.stream().filter(entry -> mode.equals(entryMode(entry))).toList();
+    }
+
+    private static String entryMode(AdminAiModelEntryEntity entry) {
+        return StringUtils.hasText(entry.getMode())
+                ? entry.getMode().trim().toUpperCase(java.util.Locale.ROOT)
+                : "KEY";
     }
 
     static String apiKeyHint(String apiKey) {

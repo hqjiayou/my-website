@@ -60,6 +60,7 @@ class _StreamOutput:
     reply: str
     usage: dict[str, int]
     tools: list[dict[str, object]]
+    model: str | None = None
 
 
 def _error_event(error_code: str, message: str) -> AgentStreamEvent:
@@ -188,6 +189,8 @@ async def stream_chat_events(
         "tools": output.tools,
         "retrievalDegraded": retrieval_degraded or tool_degraded,
     }
+    if output.model:
+        done_data["model"] = output.model
     if skills_applied:
         done_data["skillsApplied"] = list(skills_applied)
     if skills_missing:
@@ -236,6 +239,7 @@ async def _emit_agent_stream(
     search_calls = 0
     final_output: str | None = None
     final_usage: dict[str, int] = {}
+    final_model: str | None = None
     async with agent.run_stream_events(user_prompt, **run_kwargs) as events:
         async for event in events:
             if isinstance(event, PartStartEvent):
@@ -286,5 +290,8 @@ async def _emit_agent_stream(
                 result = event.result
                 final_output = str(result.output).strip() if result.output is not None else ""
                 final_usage = usage_to_api(result.usage)
+                served = getattr(getattr(result, "response", None), "model_name", None)
+                if isinstance(served, str) and served.strip():
+                    final_model = served.strip()
     reply = final_output if final_output is not None else "".join(text_parts).strip()
-    yield _StreamOutput(reply=reply, usage=final_usage, tools=tool_trace)
+    yield _StreamOutput(reply=reply, usage=final_usage, tools=tool_trace, model=final_model)

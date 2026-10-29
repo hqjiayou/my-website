@@ -132,7 +132,7 @@ class AgentAiMemoryInjectionTest {
         assertThat(captor.getValue().memoryEnabled()).isTrue();
         InOrder order = inOrder(conversationService, memoryService);
         order.verify(conversationService)
-                .recordExchange(any(), any(), any(), any(), any(), any(), any());
+                .recordExchange(any(), any(), any(), any(), any(), any(), any(), any());
         order.verify(memoryService)
                 .storeExtracted(10L, 200L, 77L, List.of("  likes   tea  "));
     }

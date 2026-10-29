@@ -5,7 +5,7 @@ export default {
     emptyMenus: '表示できるメニューがありません',
   },
   header: {
-    subtitle: 'マルチサイト管理 · レスポンシブ',
+    subtitle: '管理コンソール',
     logout: 'ログアウト',
     anonymous: '管理者',
   },

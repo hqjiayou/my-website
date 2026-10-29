@@ -1,40 +1,35 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   BookOpen,
   Bot,
   Braces,
-  ExternalLink,
-  FileText,
-  FolderOpen,
-  Globe,
   MessageSquare,
   MessagesSquare,
-  Palette,
+  Plus,
+  Plug,
   SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react'
 import { Suspense, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, NavLink, Outlet, useParams } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 
-import { agentApi, SITE_STATUS, type Site, type AgentStatus } from '@/api'
+import { agentApi, SITE_STATUS, type Site } from '@/api'
+import { StatusTag } from '@/components/admin'
 import { RouteFallback } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
-import { useHasPermission } from '@/router/permission'
+import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
-import { agentWebUrl } from '@/utils/agentWebUrl'
 
 export interface AgentWorkspaceOutletContext {
   site: Site
 }
 
-function statusClassName(status: string) {
-  return status === SITE_STATUS.ACTIVE
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : 'border-slate-200 bg-slate-50 text-slate-600'
-}
+const headerControlClass =
+  'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--primary)/0.35)] disabled:opacity-60'
 
 interface WorkspaceNavItem {
   key: string
@@ -50,10 +45,13 @@ interface WorkspaceNavGroup {
 
 export function AgentWorkspaceLayout() {
   const { t } = useTranslation('sites')
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { agentId } = useParams()
   const parsedId = Number(agentId)
-  const canListContent = useHasPermission(PERMISSION_CODES.contentList)
-  const canListMedia = useHasPermission(PERMISSION_CODES.mediaList)
+  const canList = useHasPermission(PERMISSION_CODES.agentList)
+  const canStatus = useHasPermission(PERMISSION_CODES.agentStatus)
+  const canDelete = useHasPermission(PERMISSION_CODES.agentDelete)
   const canPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
   const canKnowledge = useHasPermission(PERMISSION_CODES.aiKbList)
   const canConversations = useHasPermission(PERMISSION_CODES.aiConversationList)
@@ -63,6 +61,43 @@ export function AgentWorkspaceLayout() {
     queryKey: ['sites', parsedId],
     queryFn: () => agentApi.getSite(parsedId),
     enabled: Number.isFinite(parsedId),
+  })
+  const agentsQuery = useQuery({
+    queryKey: ['sites', { pageNum: 1, pageSize: 50 }],
+    queryFn: () => agentApi.listSites({ pageNum: 1, pageSize: 50 }),
+    enabled: canList,
+  })
+  const agents = agentsQuery.data?.records ?? []
+
+  const statusMutation = useMutation({
+    mutationFn: () => {
+      if (!site) return Promise.reject(new Error(t('workspace.notFound.title')))
+      return agentApi.updateAgentStatus(site.id, {
+        status: site.status === SITE_STATUS.ACTIVE ? SITE_STATUS.DISABLED : SITE_STATUS.ACTIVE,
+        version: site.version,
+      })
+    },
+    onSuccess: () => {
+      toast.success(t('list.messages.statusUpdated'))
+      void queryClient.invalidateQueries({ queryKey: ['sites'] })
+    },
+    onError: (err: Error) => {
+      toast.error(err.message)
+      void queryClient.invalidateQueries({ queryKey: ['sites'] })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => {
+      if (!site) return Promise.reject(new Error(t('workspace.notFound.title')))
+      return agentApi.deleteSite(site.id)
+    },
+    onSuccess: () => {
+      toast.success(t('list.messages.deleted'))
+      void queryClient.invalidateQueries({ queryKey: ['sites'] })
+      navigate(ROUTES.apps.sites)
+    },
+    onError: (err: Error) => toast.error(err.message),
   })
 
   const navGroups = useMemo<WorkspaceNavGroup[]>(() => {
@@ -95,119 +130,98 @@ export function AgentWorkspaceLayout() {
       groups.push({ key: 'agent', items: agentItems })
     }
 
-    const materialItems: WorkspaceNavItem[] = []
-    if (canListContent) {
-      materialItems.push({ key: 'contents', path: ROUTES.apps.agentContents(site.id), icon: FileText })
-    }
-    if (canListMedia) {
-      materialItems.push({ key: 'files', path: ROUTES.apps.agentFiles(site.id), icon: FolderOpen })
-    }
-    if (materialItems.length > 0) {
-      groups.push({ key: 'materials', items: materialItems })
-    }
-
     groups.push({
       key: 'settings',
       items: [
+        { key: 'access', path: ROUTES.apps.agentAccess(site.id), icon: Plug },
         { key: 'basic', path: ROUTES.apps.agentBasic(site.id), icon: SlidersHorizontal },
-        { key: 'theme', path: ROUTES.apps.agentTheme(site.id), icon: Palette },
-        { key: 'domain', path: ROUTES.apps.agentDomain(site.id), icon: Globe },
       ],
     })
     return groups
-  }, [canAi, canConversations, canKnowledge, canListContent, canListMedia, canPrompt, site])
+  }, [canAi, canConversations, canKnowledge, canPrompt, site])
 
-  if (!Number.isFinite(parsedId)) {
+  if (!Number.isFinite(parsedId) || isError || (!isPending && !site)) {
     return (
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-900">{t('workspace.notFound.title')}</h1>
-        <p className="mt-2 text-sm text-slate-600">{t('workspace.notFound.description')}</p>
-        <Link
-          to={ROUTES.apps.sites}
-          className="mt-4 inline-flex rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-        >
-          {t('workspace.backToList')}
-        </Link>
-      </section>
+      <p className="text-sm text-rose-700">
+        {error instanceof Error ? error.message : t('workspace.notFound.title')}
+      </p>
     )
   }
 
-  if (isPending) {
-    return (
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
-        {t('workspace.loading')}
-      </section>
-    )
+  if (isPending || !site) {
+    return <p className="text-sm text-admin-muted">{t('workspace.loading')}</p>
   }
-
-  if (isError || !site) {
-    return (
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-900">{t('workspace.notFound.title')}</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          {error instanceof Error ? error.message : t('workspace.notFound.description')}
-        </p>
-        <Link
-          to={ROUTES.apps.sites}
-          className="mt-4 inline-flex rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-        >
-          {t('workspace.backToList')}
-        </Link>
-      </section>
-    )
-  }
-
-  const visitUrl = agentWebUrl(site.agentCode)
 
   return (
     <section className="space-y-4">
-      <article className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h1 className="text-xl font-semibold text-slate-900">{site.agentName}</h1>
-            <span
-              className={cn(
-                'inline-flex rounded-md border px-2 py-0.5 text-xs font-medium',
-                statusClassName(site.status as AgentStatus),
-              )}
-            >
-              {t(`status.${site.status}`, { defaultValue: site.status })}
-            </span>
-            <p className="text-sm text-slate-500">
-              {site.agentCode} · {t(`agentType.${site.agentType}`, { defaultValue: site.agentType })}
-              {site.defaultDomain ? ` · ${site.defaultDomain}` : ''}
-            </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold text-admin">{site.agentName}</h1>
+            <StatusTag status={site.status} label={t(`status.${site.status}`, { defaultValue: site.status })} />
           </div>
-          <div className="flex flex-wrap gap-2">
-            {visitUrl ? (
-              <a
-                href={visitUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800"
-              >
-                <ExternalLink className="h-4 w-4" />
-                {t('workspace.visitSite')}
-              </a>
-            ) : null}
-            <Link
-              to={ROUTES.apps.sites}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              {t('workspace.backToList')}
-            </Link>
-          </div>
+          <p className="mt-1 text-sm text-admin-muted">
+            {site.agentCode}
+            <span className="mx-1.5">·</span>
+            {t(`agentType.${site.agentType}`, { defaultValue: site.agentType })}
+          </p>
         </div>
-      </article>
+        <div className="flex flex-wrap items-center gap-2">
+          {agents.length > 1 ? (
+            <select
+              className={cn(headerControlClass, 'w-44 border-admin bg-admin-surface text-admin')}
+              value={site.id}
+              onChange={(event) => navigate(ROUTES.apps.agent(event.target.value))}
+            >
+              {agents.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.agentName}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {canStatus ? (
+            <button
+              type="button"
+              className={cn(headerControlClass, 'border-admin bg-admin-surface text-admin hover:bg-admin-surface-muted')}
+              disabled={statusMutation.isPending}
+              onClick={() => statusMutation.mutate()}
+            >
+              {site.status === SITE_STATUS.ACTIVE ? t('list.actions.disable') : t('list.actions.enable')}
+            </button>
+          ) : null}
+          {canDelete ? (
+            <button
+              type="button"
+              className={cn(headerControlClass, 'border-rose-300 bg-admin-surface text-rose-700 hover:bg-rose-50')}
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (!window.confirm(t('list.messages.confirmDelete', { name: site.agentName }))) return
+                deleteMutation.mutate()
+              }}
+            >
+              {t('list.actions.delete')}
+            </button>
+          ) : null}
+          <PermissionGate code={PERMISSION_CODES.agentCreate}>
+            <button
+              type="button"
+              className={cn(headerControlClass, 'border-admin bg-admin-surface text-admin hover:bg-admin-surface-muted')}
+              onClick={() => navigate(ROUTES.apps.agentCreate)}
+            >
+              <Plus className="h-4 w-4" />
+              {t('list.createSite')}
+            </button>
+          </PermissionGate>
+        </div>
+      </div>
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <aside className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-4 lg:w-60 lg:shrink-0">
+      <div className="grid items-start gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <aside className="rounded-xl border border-admin bg-admin-surface p-2">
           {navGroups.map((group) => (
-            <div key={group.key} className="mb-4 last:mb-0">
-              <p className="px-2 pb-1.5 text-xs font-semibold tracking-wide text-slate-400">
-                {t(`workspace.groups.${group.key}`)}
-              </p>
-              <nav className="flex flex-wrap gap-1 lg:flex-col lg:flex-nowrap">
+            <div key={group.key} className="mb-3 last:mb-0">
+              <p className="px-2.5 pb-1 text-xs font-medium text-admin-muted">{t(`workspace.groups.${group.key}`)}</p>
+              <nav className="flex flex-col gap-0.5">
                 {group.items.map((item) => (
                   <NavLink
                     key={item.key}
@@ -215,8 +229,8 @@ export function AgentWorkspaceLayout() {
                     end={item.end}
                     className={({ isActive }) =>
                       cn(
-                        'inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition',
-                        isActive ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-50',
+                        'inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium text-admin transition hover:bg-admin-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--primary)/0.35)]',
+                        isActive && 'bg-[rgb(var(--primary)/0.08)] shadow-[inset_2px_0_0_rgb(var(--primary))]',
                       )
                     }
                   >
@@ -229,7 +243,7 @@ export function AgentWorkspaceLayout() {
           ))}
         </aside>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           <Suspense fallback={<RouteFallback />}>
             <Outlet context={{ site } satisfies AgentWorkspaceOutletContext} />
           </Suspense>

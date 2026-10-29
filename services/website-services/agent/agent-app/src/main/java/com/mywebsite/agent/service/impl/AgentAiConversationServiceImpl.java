@@ -138,6 +138,20 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
             AgentRunMeta runMeta,
             List<AgentAttachmentDto> userAttachments,
             List<AgentCitation> citations) {
+        recordExchange(conversation, userMessage, reply, todos, runMeta, userAttachments, citations, null);
+    }
+
+    @Override
+    @Transactional
+    public void recordExchange(
+            AgentAiConversationEntity conversation,
+            String userMessage,
+            String reply,
+            List<AgentTodoItem> todos,
+            AgentRunMeta runMeta,
+            List<AgentAttachmentDto> userAttachments,
+            List<AgentCitation> citations,
+            String modelSpec) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         conversation.setAgentTodos(writeTodos(todos));
         if (conversation.getId() == null) {
@@ -153,7 +167,7 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
                 conversation,
                 AgentAiMessageEntity.ROLE_ASSISTANT,
                 reply,
-                writeAgentMeta(runMeta, citations),
+                writeAgentMeta(withModel(runMeta, modelSpec), citations),
                 null);
     }
 
@@ -682,6 +696,22 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
             log.warn("agent ai message {} has malformed agent_meta process, ignored", message.getId(), ex);
             return null;
         }
+    }
+
+    /** 本轮请求的模型 spec 记在 run meta 上；空白则保持原样。 */
+    private static AgentRunMeta withModel(AgentRunMeta runMeta, String modelSpec) {
+        if (!StringUtils.hasText(modelSpec)) {
+            return runMeta;
+        }
+        String model = modelSpec.trim();
+        if (runMeta == null) {
+            return new AgentRunMeta(null, null, null, null, model);
+        }
+        if (model.equals(runMeta.model())) {
+            return runMeta;
+        }
+        return new AgentRunMeta(
+                runMeta.usage(), runMeta.tools(), runMeta.skillsApplied(), runMeta.searches(), model);
     }
 
     /** 观测数据序列化失败不得让已成功的一轮回滚：记日志后存 NULL。 */

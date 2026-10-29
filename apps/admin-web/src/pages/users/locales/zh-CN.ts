@@ -96,7 +96,7 @@ export default {
     selectAll: '全选',
     clearAll: '取消全选',
     atLeastOne: '至少选择一个角色',
-    cannotAssignSuperAdmin: '不能通过此页分配 super_admin。',
+    cannotAssignSuperAdmin: '超级管理员不会出现在这里，也不能在这个弹层里分配。勾选的「系统管理员」是角色 admin。',
     messages: {
       saved: '用户角色已保存',
       restrictedSelf: '不能修改自己的角色绑定。',

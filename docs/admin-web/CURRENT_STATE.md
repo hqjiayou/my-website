@@ -9,7 +9,7 @@ source_of_truth: apps/admin-web/src
 
 ## 总览
 
-管理后台 React 应用。主纵向域、运营聚合与站点 AI 管理走 **REAL API**。站点工作台以 Agent 为中心组织（左栏分组：Agent／素材／站点设置，落地页为 Agent 总览）；发布检查由现有 REAL API 推导。部分导航页为占位。
+管理后台 React 应用。主纵向域走 **REAL API**。侧栏父级叫 agent。打开 `/agent` 进入最近更新的智能体工作区（没有智能体时只留下新建），API 管理在同一菜单下的 `/agent/api`，页签切换两种：CLI 代理（登录 GPT CLI、Claude、Gemini 或 Muse，查看该账号用量和模型，客户端 key 在这一页；Cursor 不能登录）和供应商 API key（模型 spec 与 key，不经过登录账号）。智能体用哪一条在接入里选，这里不改智能体。工作台导航只留对话、接入和基础信息。接入页的 CLI 仍保存代理地址、客户端 key 和已登录账号放出的模型；API key 只从 API 管理里已有的条目里选一条绑到当前智能体。概览左侧上方是当前模型、Prompt 和知识库，下面是 Harness（三个平台文件是否装上、技能、运行上限、MCP），右侧是对话列表（模型、条数、上下文、输入和输出 token）。
 
 ## 域 × 数据源
 
@@ -22,8 +22,8 @@ source_of_truth: apps/admin-web/src
 | Appearance | FORCE REAL | `heroLayout` |
 | Media | FORCE REAL | |
 | Content | FORCE REAL | |
-| AI 站点工作台与全局 Prompt / 知识库 / 会话 | FORCE REAL | 站点工作台 `agent/*` 一级页（总览/试聊/Prompt/知识库/对话/运行状态，面板组件沿用原 AI 页）与 `pages/ai/promptsPage` 等走 `aiApi`。`pages/ai/settingsPage` 只解释环境变量，不调 API |
-| 占位页 | 无后端 | `siteDomainPage`（DNS/CDN 文案）；`ParamsConfigPage`、`AnalyticsPage`、`SystemSettingsPage`、`DeveloperPage` 使用 `EmptyModulePage` |
+| AI 工作台与全局 Prompt / 知识库 / 会话 | FORCE REAL | 工作台概览、试聊、Prompt、知识库、对话、运行状态走 `aiApi`。试聊按 CLI / API key 选择接入里该模式的默认模型，只调用这一条；不勾选 skill 则本轮不注入。概览读运行状态里的 Harness（平台文件、技能、运行上限、MCP）、Prompt、知识库和会话消息上的用量；会话列表按条展示模型、条数、最近一轮上下文和累计输入输出 token。新的一轮会把请求的模型 spec 记在助手消息上，更早的消息没有这条记录时列表用当前模型名。`pages/ai/settingsPage` 是模型入口。 |
+| 占位页 | 无后端 | 域名页已从工作台拿掉，`/domain` 回到基础信息。`ParamsConfigPage`、`AnalyticsPage`、`SystemSettingsPage`、`DeveloperPage` 仍是 `EmptyModulePage` |
 | 运营全局 Contents/Files | REAL | `api/operation/*` 客户端跨站聚合，无单独跨站后端 |
 
 ## Mock

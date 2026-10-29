@@ -97,12 +97,12 @@ class AdminRbacSecurityMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.menus", hasSize(2)))
                 .andExpect(jsonPath("$.data.menus[0].menuCode").value("admin:menu:system"))
-                .andExpect(jsonPath("$.data.menus[0].children", hasSize(4)))
+                .andExpect(jsonPath("$.data.menus[0].children", hasSize(3)))
                 .andExpect(jsonPath("$.data.menus[0].children[0].menuCode").value("admin:menu:system.user"))
                 .andExpect(jsonPath("$.data.menus[0].children[0].path").value("/system/users"))
                 .andExpect(jsonPath("$.data.menus[1].menuCode").value("admin:menu:apps"))
                 .andExpect(jsonPath("$.data.menus[1].children", hasSize(1)))
-                .andExpect(jsonPath("$.data.menus[1].children[0].path").value("/apps/sites"));
+                .andExpect(jsonPath("$.data.menus[1].children[0].path").value("/agent"));
     }
 
     @Test
@@ -127,6 +127,6 @@ class AdminRbacSecurityMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data[0].children", hasSize(4)))
                 .andExpect(jsonPath("$.data[1].menuCode").value("admin:menu:apps"))
                 .andExpect(jsonPath("$.data[1].children", hasSize(1)))
-                .andExpect(jsonPath("$.data[1].children[0].path").value("/apps/sites"));
+                .andExpect(jsonPath("$.data[1].children[0].path").value("/agent"));
     }
 }

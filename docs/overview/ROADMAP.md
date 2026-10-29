@@ -32,7 +32,6 @@ last_verified: 2026-10-28
 
 | 主题 | 状态 | 理由 |
 |------|------|------|
-| Menu write API | DEFERRED_BY_DESIGN | 只读已够用；产品决定需要时再建 Issue |
 | Template 功能 | REMOVED（2026-10-27，PR #72） | 种子软删 + 后端/后台页移除，不再是延期项 |
 | Reservation 功能 | REMOVED（2026-10-27） | 整包删除；规格文档已于 2026-10-29 随历史文档一并移除，见 git 历史 |
 | Site runtime-status REAL | DEFERRED | UI 在 REAL 下已诚实占位；产品确认后再开 Issue |
@@ -43,6 +42,8 @@ last_verified: 2026-10-28
 | 主题 | 状态 | Issue |
 |------|------|-------|
 | Portal 双模式（CLI / Key）切换 | 进行中（UoW-1 后端 PR #109、UoW-2 前端 PR #114 已合入 dev） | [#110](https://github.com/hqjiayou/my-website/issues/110) |
+| 知识库向量按嵌入模型分库，检索跨库合并 | 未做 | [#126](https://github.com/hqjiayou/my-website/issues/126) |
+| 试聊与接入模型不一致、切换后无响应 | 调查已记录；对应改动在工作区，未提交 | [#127](https://github.com/hqjiayou/my-website/issues/127) |
 
 ## 建议下一阶段顺序
 

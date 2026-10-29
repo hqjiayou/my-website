@@ -1,7 +1,7 @@
 export default {
   list: {
     title: 'ロール管理',
-    description: '管理画面のロールを管理し、権限を割り当てます。',
+    description: 'ロールを管理します。メニューを選ぶと、そのページを開けます。',
     create: 'ロール作成',
     empty: 'ロールがありません',
     loading: '読み込み中…',
@@ -26,7 +26,7 @@ export default {
       edit: '編集',
       enable: '有効化',
       disable: '無効化',
-      assignPermissions: '権限割当',
+      assignPermissions: 'メニュー割当',
       delete: '削除',
     },
     badges: {
@@ -72,9 +72,9 @@ export default {
     },
   },
   permissions: {
-    title: '権限割当',
-    description: 'ロール「{{roleName}}」（{{roleCode}}）の権限を設定します。',
-    descriptionFallback: 'ロール権限を設定',
+    title: 'メニュー割当',
+    description: '「{{roleName}}」（{{roleCode}}）が開けるページを選びます。ボタンはページに従います。',
+    descriptionFallback: 'このロールが開けるページを選ぶ',
     backToList: '一覧へ戻る',
     loading: '読み込み中…',
     invalidId: '無効なロール ID',
@@ -93,7 +93,7 @@ export default {
     deselectAll: '選択解除',
     emptyGroup: '権限点がありません',
     actions: {
-      save: '権限バインドを保存',
+      save: '保存',
       saving: '保存中…',
       cancel: 'キャンセル',
     },

@@ -22,7 +22,12 @@ public final class AdminAiPreviewDtos {
             /** 可选：激活 agent-services skill id（内容仍在 Python skills/，前端只传 id）。 */
             @Size(max = 16) List<@Size(max = 64) String> skills,
             /** 可选：上轮 Todo 快照；上限与 agent-services 一致（§21.4）。 */
-            @Size(max = 20) List<@Valid AdminAiPreviewTodoItem> todos) {}
+            @Size(max = 20) List<@Valid AdminAiPreviewTodoItem> todos,
+            /**
+             * 试聊模式，与接入里的 CLI / KEY 对应。缺省时服务端在有 CLI 默认入口时用 CLI，否则 KEY。
+             * 试聊只调用该模式的主用入口。
+             */
+            @Size(max = 8) String mode) {}
 
     public record AdminAiPreviewHistoryMessage(
             @NotBlank @Size(max = 16) String role, @NotBlank @Size(max = 8000) String content) {}

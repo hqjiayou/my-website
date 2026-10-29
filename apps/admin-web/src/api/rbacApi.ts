@@ -3,7 +3,9 @@
  */
 import type {
   HttpMessageBody,
+  MenuCreateInput,
   MenuNodeDto,
+  MenuWriteInput,
   PermissionDto,
   PermissionListQuery,
   RoleCreateInput,
@@ -128,5 +130,19 @@ export const rbacApi = {
 
   listMenus() {
     return httpClient.get<HttpMessageBody<MenuNodeDto[]>>('/admin/menus').then(unwrapData)
+  },
+
+  createMenu(input: MenuCreateInput) {
+    return httpClient.post<HttpMessageBody<MenuNodeDto>, MenuCreateInput>('/admin/menus', input).then(unwrapData)
+  },
+
+  updateMenu(id: number, input: MenuWriteInput) {
+    return httpClient
+      .put<HttpMessageBody<MenuNodeDto>, MenuWriteInput>(`/admin/menus/${id}`, input)
+      .then(unwrapData)
+  },
+
+  deleteMenu(id: number) {
+    return httpClient.delete<HttpMessageBody<null>>(`/admin/menus/${id}`).then(unwrapData)
   },
 }

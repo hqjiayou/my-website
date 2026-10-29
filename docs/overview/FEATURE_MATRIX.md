@@ -12,7 +12,7 @@ last_verified: 2026-10-28
 | Agent login/refresh/logout/me（原 Site Auth） | ✅ | ✅ | ✅ auth | — | ✅ | ✅ | ✅*（路径 02 用到登录） | COMPLETE_V1 |
 | RBAC roles/permissions | ✅ | ✅ | ✅ | ✅ | — | ✅ | ❌ | COMPLETE_V1 |
 | Menu read | ✅ | ✅ | ✅ | ✅ | — | ✅ | ❌ | COMPLETE_V1 |
-| Menu write | ❌ | seed | ❌ | 只读 | — | — | ❌ | DEFERRED_BY_DESIGN |
+| Menu write | ✅ | seed 字段已够 | ✅ | ✅ 增删改 | — | ✅ 单测 | ❌ | COMPLETE_V1 |
 | Admin users CRUD | ✅ | ✅ | ✅ | ✅ rbacApi | — | ✅ | ✅*（路径 02） | COMPLETE_V1 |
 | Agent CRUD/status（原 Site） | ✅ | ✅ | ✅ | FORCE REAL | 登录后消费 | ✅+PG | ✅*（路径 01） | COMPLETE_V1 |
 | Site runtime-status | ❌ | ❌ | ❌ | 由 REAL API 推导（访问量 / 当日 AI 会话为 null） | — | — | ❌ | PLACEHOLDER |

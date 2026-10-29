@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     ai_model: str = Field(default="", validation_alias="AI_MODEL")
     ai_provider_api_key: str = Field(default="", validation_alias="AI_PROVIDER_API_KEY")
     ai_provider_base_url: str = Field(default="", validation_alias="AI_PROVIDER_BASE_URL")
+    # .env 里的这把钥匙不会自动进进程环境。未直配 AI_PROVIDER_API_KEY 时，Google 嵌入用它。
+    gemini_api_key: str = Field(
+        default="", validation_alias=AliasChoices("GEMINI_API_KEY", "GOOGLE_API_KEY")
+    )
     ai_fallback_models: str = Field(default="", validation_alias="AI_FALLBACK_MODELS")
 
     # 与 otel.py 同源。Settings 匹配别名时不区分大小写，且别名与字段名不一致时

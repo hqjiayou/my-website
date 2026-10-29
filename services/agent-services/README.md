@@ -1,6 +1,6 @@
 # agent-services — Python AI Execution Runtime（internal only）
 
-**Python 3.13 + FastAPI + Pydantic AI 2.54**（`pydantic-ai-slim[google,mcp]`，禁止 LangChain / LiteLLM）。原则：**Java owns business truth, Python owns AI execution**（ADR-0005）。
+**Python 3.13 + FastAPI + Pydantic AI 2.54**（`pydantic-ai-slim[google,mcp,openai]`，禁止 LangChain / LiteLLM）。原则：**Java owns business truth, Python owns AI execution**（ADR-0005）。CLI 入口的 `openai:` 规格走 OpenAI 兼容客户端，调用 proxy-services。
 
 - 设计：[`ADR-0004`](../../docs/decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](../../docs/decisions/ADR-0005-java-business-truth-python-ai-execution.md)（原《Agent 服务技术选型与架构设计 V1》已于 2026-10-29 移除，见 git 历史）
 - 决策：ADR-0004（无 Provider 诚实失败）、ADR-0005（职责边界）
@@ -166,7 +166,7 @@ uv run --extra dev python scripts/run_mcp_echo.py
 ## Skills（平台）
 
 - 目录：`skills/{id}/SKILL.md`。YAML frontmatter：`name`（与目录名一致，小写连字符，≤64）与 `description`（≤1024）；可选 `license`、`compatibility`、`metadata`、`allowed-tools`（只进 catalog，不做工具门控）。缺 `name` 回退目录名；缺 `description` 用正文首段。`version` 仍解析，但不是标准字段
-- 默认：`AGENT_DEFAULT_SKILLS`；请求体 `skills[]`；未知 id：`AGENT_SKILLS_UNKNOWN_POLICY=ignore|reject`
+- 默认：请求省略 `skills` 时合并 `AGENT_DEFAULT_SKILLS`；请求显式带了 `skills[]`（含空数组）则只用这一份。未知 id：`AGENT_SKILLS_UNKNOWN_POLICY=ignore|reject`
 - 注入上限：`AGENT_SKILLS_MAX_INSTRUCTION_CHARS`（默认 12000，须为正整数）。超出则按解析顺序整段跳过，并在提示末尾标记；第一个 skill 单独超限时截断该段
 - 目录 API：`GET /internal/v1/skills`（仅元数据）
 - 响应/SSE：`skillsApplied` / `skillsMissing`

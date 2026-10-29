@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 
 import { rbacApi } from '@/api/rbacApi'
 import {
@@ -17,6 +18,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 import type { PermissionDto } from '@/types/rbac'
 import { formatResourceType } from '@/utils/enumLabel'
 import { groupPermissionsByResourceType } from '@/router/permission'
+import { ROUTES } from '@/router/config/routePaths'
 import { isApiError } from '@/utils/http/apiError'
 
 type ResourceTab = 'MENU' | 'ACTION' | 'OTHER'
@@ -120,7 +122,18 @@ export function PermissionListPage() {
 
   return (
     <section>
-      <AdminPageHeader title={t('title')} description={t('description')} hint={t('hint')} />
+      <AdminPageHeader
+        title={t('title')}
+        description={t('description')}
+        hint={
+          <>
+            {t('hint')}{' '}
+            <Link to={ROUTES.system.roles} className="font-medium text-admin underline-offset-2 hover:underline">
+              {t('assignLink')}
+            </Link>
+          </>
+        }
+      />
 
       <FilterTabs tabs={tabs} activeKey={tab} onChange={handleTabChange} className="mb-4" />
 

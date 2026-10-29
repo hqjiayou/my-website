@@ -9,21 +9,10 @@ import { lazyNamed } from './lazyNamed'
 // ForbiddenPage 由 PermissionGuard 同步引用，路由侧保持 eager，避免重复拆包。
 const DashboardPage = lazyNamed(() => import('@/pages/dashboard/dashboardPage'), 'DashboardPage')
 
-const UserEditPage = lazyNamed(() => import('@/pages/users/userEditPage'), 'UserEditPage')
 const UserListPage = lazyNamed(() => import('@/pages/users/userListPage'), 'UserListPage')
-const UserRolePage = lazyNamed(() => import('@/pages/users/userRolePage'), 'UserRolePage')
 
-const RoleEditPage = lazyNamed(() => import('@/pages/roles/roleEditPage'), 'RoleEditPage')
 const RoleListPage = lazyNamed(() => import('@/pages/roles/roleListPage'), 'RoleListPage')
-const RolePermissionPage = lazyNamed(
-  () => import('@/pages/roles/rolePermissionPage'),
-  'RolePermissionPage',
-)
 
-const PermissionListPage = lazyNamed(
-  () => import('@/pages/permissions/permissionListPage'),
-  'PermissionListPage',
-)
 const MenuTreePage = lazyNamed(() => import('@/pages/menus/menuTreePage'), 'MenuTreePage')
 
 const SitesPage = lazyNamed(() => import('@/pages/apps/sites/sitesPage'), 'SitesPage')
@@ -61,8 +50,8 @@ const AgentRuntimePage = lazyNamed(
   'AgentRuntimePage',
 )
 const AgentBasicPage = lazyNamed(() => import('@/pages/apps/sites/agentBasicPage'), 'AgentBasicPage')
+const AgentAccessPage = lazyNamed(() => import('@/pages/apps/sites/agentAccessPage'), 'AgentAccessPage')
 const AgentThemePage = lazyNamed(() => import('@/pages/apps/sites/agentThemePage'), 'AgentThemePage')
-const AgentDomainPage = lazyNamed(() => import('@/pages/apps/sites/agentDomainPage'), 'AgentDomainPage')
 const AgentContentsPage = lazyNamed(
   () => import('@/pages/apps/sites/agentContentsPage'),
   'AgentContentsPage',
@@ -84,6 +73,10 @@ const OperationFilesPage = lazyNamed(
 )
 
 const AiSettingsPage = lazyNamed(() => import('@/pages/ai/settingsPage'), 'AiSettingsPage')
+const ProxyServicesPage = lazyNamed(
+  () => import('@/pages/ai/proxyServicesPage'),
+  'ProxyServicesPage',
+)
 const AiPromptsPage = lazyNamed(() => import('@/pages/ai/promptsPage'), 'AiPromptsPage')
 const AiKnowledgeBasesPage = lazyNamed(
   () => import('@/pages/ai/knowledgeBasesPage'),
@@ -112,25 +105,27 @@ export const adminRoutes = (
     <Route path={ROUTES.forbidden} element={<ForbiddenPage />} />
     <Route path={ROUTES.dashboard} element={<DashboardPage />} />
 
-    <Route path={ROUTES.system.userCreate} element={<UserEditPage />} />
-    <Route path={ROUTES.system.userEdit(':userId')} element={<UserEditPage />} />
-    <Route path={ROUTES.system.userRoles(':userId')} element={<UserRolePage />} />
+    <Route path={ROUTES.system.userCreate} element={<Navigate to={ROUTES.system.users} replace />} />
+    <Route path={ROUTES.system.userEdit(':userId')} element={<Navigate to={ROUTES.system.users} replace />} />
+    <Route path={ROUTES.system.userRoles(':userId')} element={<Navigate to={ROUTES.system.users} replace />} />
     <Route path={ROUTES.system.users} element={<UserListPage />} />
-    <Route path={ROUTES.system.roleCreate} element={<RoleEditPage />} />
-    <Route path={ROUTES.system.roleEdit(':roleId')} element={<RoleEditPage />} />
-    <Route path={ROUTES.system.rolePermissions(':roleId')} element={<RolePermissionPage />} />
+    <Route path={ROUTES.system.roleCreate} element={<Navigate to={ROUTES.system.roles} replace />} />
+    <Route path={ROUTES.system.roleEdit(':roleId')} element={<Navigate to={ROUTES.system.roles} replace />} />
+    <Route path={ROUTES.system.rolePermissions(':roleId')} element={<Navigate to={ROUTES.system.roles} replace />} />
     <Route path={ROUTES.system.roles} element={<RoleListPage />} />
-    <Route path={ROUTES.system.permissions} element={<PermissionListPage />} />
+    <Route path={ROUTES.system.permissions} element={<Navigate to={ROUTES.system.roles} replace />} />
     <Route path={ROUTES.system.menus} element={<MenuTreePage />} />
 
     <Route path={ROUTES.apps.sites} element={<SitesPage />} />
     <Route path={ROUTES.apps.agentCreate} element={<AgentCreatePage />} />
+    <Route path={ROUTES.apps.api} element={<ProxyServicesPage />} />
     <Route path={ROUTES.apps.agentDetailPattern} element={<AgentWorkspaceLayout />}>
       <Route index element={<Navigate to="agent" replace />} />
       <Route path="overview" element={<RedirectToAgent />} />
       <Route path="basic" element={<AgentBasicPage />} />
+      <Route path="access" element={<AgentAccessPage />} />
       <Route path="theme" element={<AgentThemePage />} />
-      <Route path="domain" element={<AgentDomainPage />} />
+      <Route path="domain" element={<Navigate to="../basic" replace />} />
       <Route path="contents" element={<AgentContentsPage />} />
       <Route path="ai" element={<RedirectToAgent />} />
       <Route path="agent" element={<AgentOverviewPage />} />

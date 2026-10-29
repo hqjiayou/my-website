@@ -21,7 +21,7 @@ export default {
       reset: '重置',
     },
     actions: {
-      manage: '进入站点管理',
+      manage: '打开智能体',
     },
   },
   files: {
@@ -39,7 +39,7 @@ export default {
       actions: '操作',
     },
     actions: {
-      manage: '进入站点管理',
+      manage: '打开智能体',
     },
   },
 } as const

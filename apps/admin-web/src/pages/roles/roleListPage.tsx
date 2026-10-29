@@ -2,34 +2,36 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { rbacApi } from '@/api/rbacApi'
-import { PageHeader } from '@/components/page'
-import { cn } from '@/lib/cn'
+import { AdminPageHeader, DataTable, FormDialog, StatusTag } from '@/components/admin'
+import {
+  adminDangerButtonClass,
+  adminFilterFieldClass,
+  adminGhostButtonClass,
+  adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+} from '@/components/admin/controls'
 import { isSuperAdminRole, PermissionGate, useHasPermission } from '@/router/permission'
-import { ROUTES } from '@/router/config/routePaths'
-import { PERMISSION_CODES, ROLE_STATUS, type RoleListQuery } from '@/types/rbac'
+import { PERMISSION_CODES, ROLE_STATUS, type RoleDto, type RoleListQuery } from '@/types/rbac'
 
-function statusClassName(status: string) {
-  return status === ROLE_STATUS.ACTIVE
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : 'border-slate-200 bg-slate-50 text-slate-600'
-}
+import { RoleEditPage } from './roleEditPage'
+import { RolePermissionPage } from './rolePermissionPage'
 
 export function RoleListPage() {
   const { t } = useTranslation('roles')
   const { t: tc } = useTranslation('common')
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const canCreate = useHasPermission(PERMISSION_CODES.roleCreate)
   const canUpdate = useHasPermission(PERMISSION_CODES.roleUpdate)
   const canDelete = useHasPermission(PERMISSION_CODES.roleDelete)
   const canAssign = useHasPermission(PERMISSION_CODES.rolePermissionView)
 
   const [filters, setFilters] = useState<RoleListQuery>({})
   const [draft, setDraft] = useState<RoleListQuery>({})
+  const [dialog, setDialog] = useState<
+    { kind: 'create' } | { kind: 'edit'; id: number } | { kind: 'permissions'; id: number } | null
+  >(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['roles', filters],
@@ -100,174 +102,158 @@ export function RoleListPage() {
 
   return (
     <section>
-      <PageHeader
-        title={t('list.title')}
-        description={t('list.description')}
-        action={
-          <PermissionGate code={PERMISSION_CODES.roleCreate}>
-            <button
-              type="button"
-              onClick={() => navigate(ROUTES.system.roleCreate)}
-              className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
-            >
-              <Plus className="h-4 w-4" />
-              {t('list.create')}
-            </button>
-          </PermissionGate>
-        }
+      <AdminPageHeader title={t('list.title')} description={t('list.description')} />
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <input
+          className={adminFilterFieldClass}
+          placeholder={t('list.filters.roleCode')}
+          value={draft.roleCode ?? ''}
+          onChange={(event) => setDraft((prev) => ({ ...prev, roleCode: event.target.value || undefined }))}
+        />
+        <input
+          className={adminFilterFieldClass}
+          placeholder={t('list.filters.roleName')}
+          value={draft.roleName ?? ''}
+          onChange={(event) => setDraft((prev) => ({ ...prev, roleName: event.target.value || undefined }))}
+        />
+        <select
+          className={adminFilterFieldClass}
+          value={draft.status ?? ''}
+          onChange={(event) => setDraft((prev) => ({ ...prev, status: event.target.value || undefined }))}
+        >
+          <option value="">{t('list.filters.allStatus')}</option>
+          <option value={ROLE_STATUS.ACTIVE}>{tc('enum.status.ACTIVE')}</option>
+          <option value={ROLE_STATUS.DISABLED}>{tc('enum.status.DISABLED')}</option>
+        </select>
+        <button type="button" onClick={applyFilters} className={adminPrimaryButtonClass}>
+          {t('list.filters.search')}
+        </button>
+        <button type="button" onClick={resetFilters} className={adminSecondaryButtonClass}>
+          {t('list.filters.reset')}
+        </button>
+        <PermissionGate code={PERMISSION_CODES.roleCreate}>
+          <button type="button" onClick={() => setDialog({ kind: 'create' })} className={adminPrimaryButtonClass}>
+            <Plus className="h-4 w-4" />
+            {t('list.create')}
+          </button>
+        </PermissionGate>
+      </div>
+
+      <DataTable
+        columns={[
+          { id: 'roleCode', header: t('list.columns.roleCode'), cell: (role) => <span className="font-medium">{role.roleCode}</span> },
+          { id: 'roleName', header: t('list.columns.roleName'), cell: (role) => role.roleName },
+          { id: 'status', header: t('list.columns.status'), cell: (role) => <StatusTag status={role.status} /> },
+          { id: 'description', header: t('list.columns.description'), cell: (role) => role.description || '—' },
+          {
+            id: 'actions',
+            header: t('list.columns.actions'),
+            cell: (role) => (
+              <RoleRowActions
+                role={role}
+                canUpdate={canUpdate}
+                canAssign={canAssign}
+                canDelete={canDelete}
+                onEdit={() => setDialog({ kind: 'edit', id: role.id })}
+                onPermissions={() => setDialog({ kind: 'permissions', id: role.id })}
+                onToggleStatus={() => toggleStatus(role)}
+                onDelete={() => handleDelete(role.id, role.roleCode)}
+              />
+            ),
+          },
+        ]}
+        data={roles}
+        rowKey={(role) => role.id}
+        isLoading={isPending}
+        isError={isError}
+        errorMessage={error instanceof Error ? error.message : t('list.error')}
+        emptyMessage={t('list.empty')}
+        onRetry={() => void refetch()}
       />
 
-      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-4">
-          <input
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-            placeholder={t('list.filters.roleCode')}
-            value={draft.roleCode ?? ''}
-            onChange={(event) => setDraft((prev) => ({ ...prev, roleCode: event.target.value || undefined }))}
-          />
-          <input
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-            placeholder={t('list.filters.roleName')}
-            value={draft.roleName ?? ''}
-            onChange={(event) => setDraft((prev) => ({ ...prev, roleName: event.target.value || undefined }))}
-          />
-          <select
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-            value={draft.status ?? ''}
-            onChange={(event) => setDraft((prev) => ({ ...prev, status: event.target.value || undefined }))}
-          >
-            <option value="">{t('list.filters.allStatus')}</option>
-            <option value={ROLE_STATUS.ACTIVE}>{tc('enum.status.ACTIVE')}</option>
-            <option value={ROLE_STATUS.DISABLED}>{tc('enum.status.DISABLED')}</option>
-          </select>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={applyFilters}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              {t('list.filters.search')}
-            </button>
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              {t('list.filters.reset')}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3">{t('list.columns.roleCode')}</th>
-                <th className="px-4 py-3">{t('list.columns.roleName')}</th>
-                <th className="px-4 py-3">{t('list.columns.status')}</th>
-                <th className="px-4 py-3">{t('list.columns.description')}</th>
-                <th className="px-4 py-3">{t('list.columns.actions')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {isPending ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                    {t('list.loading')}
-                  </td>
-                </tr>
-              ) : isError ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-rose-700">
-                    <p>{error instanceof Error ? error.message : t('list.error')}</p>
-                    <button type="button" onClick={() => void refetch()} className="mt-2 underline">
-                      {t('list.retry')}
-                    </button>
-                  </td>
-                </tr>
-              ) : roles.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                    {t('list.empty')}
-                  </td>
-                </tr>
-              ) : (
-                roles.map((role) => {
-                  const protectedRole = isSuperAdminRole(role.roleCode)
-                  return (
-                    <tr key={role.id}>
-                      <td className="px-4 py-3 font-medium text-slate-900">{role.roleCode}</td>
-                      <td className="px-4 py-3 text-slate-700">{role.roleName}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={cn(
-                            'inline-flex rounded-md border px-2 py-1 text-xs font-medium',
-                            statusClassName(role.status),
-                          )}
-                        >
-                          {tc(`enum.status.${role.status}`, { defaultValue: role.status })}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">{role.description || '—'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          {canUpdate && !protectedRole ? (
-                            <button
-                              type="button"
-                              onClick={() => navigate(ROUTES.system.roleEdit(role.id))}
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                              {t('list.actions.edit')}
-                            </button>
-                          ) : null}
-                          {canUpdate && !protectedRole ? (
-                            <button
-                              type="button"
-                              onClick={() => toggleStatus(role)}
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                            >
-                              {role.status === ROLE_STATUS.ACTIVE
-                                ? t('list.actions.disable')
-                                : t('list.actions.enable')}
-                            </button>
-                          ) : null}
-                          {canAssign && !protectedRole ? (
-                            <Link
-                              to={ROUTES.system.rolePermissions(role.id)}
-                              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                            >
-                              <KeyRound className="h-3.5 w-3.5" />
-                              {t('list.actions.assignPermissions')}
-                            </Link>
-                          ) : null}
-                          {canDelete && !protectedRole ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(role.id, role.roleCode)}
-                              className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              {t('list.actions.delete')}
-                            </button>
-                          ) : null}
-                          {protectedRole ? (
-                            <span className="text-xs text-slate-400">{t('list.badges.protected')}</span>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {canCreate ? <p className="mt-3 text-xs text-slate-500">{t('list.permissionHint')}</p> : null}
+      {dialog?.kind === 'create' ? (
+        <FormDialog
+          title={t('edit.createTitle')}
+          description={t('edit.createDescription')}
+          closeLabel={t('edit.actions.cancel')}
+          onClose={() => setDialog(null)}
+        >
+          <RoleEditPage roleId="new" onClose={() => setDialog(null)} />
+        </FormDialog>
+      ) : null}
+      {dialog?.kind === 'edit' ? (
+        <FormDialog
+          title={t('edit.editTitle')}
+          closeLabel={t('edit.actions.cancel')}
+          onClose={() => setDialog(null)}
+        >
+          <RoleEditPage roleId={String(dialog.id)} onClose={() => setDialog(null)} />
+        </FormDialog>
+      ) : null}
+      {dialog?.kind === 'permissions' ? (
+        <FormDialog
+          title={t('permissions.title')}
+          closeLabel={t('permissions.actions.cancel')}
+          onClose={() => setDialog(null)}
+          wide
+        >
+          <RolePermissionPage roleId={String(dialog.id)} onClose={() => setDialog(null)} />
+        </FormDialog>
+      ) : null}
     </section>
+  )
+}
+
+function RoleRowActions({
+  role,
+  canUpdate,
+  canAssign,
+  canDelete,
+  onEdit,
+  onPermissions,
+  onToggleStatus,
+  onDelete,
+}: {
+  role: RoleDto
+  canUpdate: boolean
+  canAssign: boolean
+  canDelete: boolean
+  onEdit: () => void
+  onPermissions: () => void
+  onToggleStatus: () => void
+  onDelete: () => void
+}) {
+  const { t } = useTranslation('roles')
+  const protectedRole = isSuperAdminRole(role.roleCode)
+  if (protectedRole) {
+    return <span className="text-xs text-admin-muted">{t('list.badges.protected')}</span>
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {canUpdate ? (
+        <button type="button" onClick={onEdit} className={adminGhostButtonClass}>
+          <Pencil className="h-3.5 w-3.5" />
+          {t('list.actions.edit')}
+        </button>
+      ) : null}
+      {canUpdate ? (
+        <button type="button" onClick={onToggleStatus} className={adminGhostButtonClass}>
+          {role.status === ROLE_STATUS.ACTIVE ? t('list.actions.disable') : t('list.actions.enable')}
+        </button>
+      ) : null}
+      {canAssign ? (
+        <button type="button" onClick={onPermissions} className={adminGhostButtonClass}>
+          <KeyRound className="h-3.5 w-3.5" />
+          {t('list.actions.assignPermissions')}
+        </button>
+      ) : null}
+      {canDelete ? (
+        <button type="button" onClick={onDelete} className={adminDangerButtonClass}>
+          <Trash2 className="h-3.5 w-3.5" />
+          {t('list.actions.delete')}
+        </button>
+      ) : null}
+    </div>
   )
 }

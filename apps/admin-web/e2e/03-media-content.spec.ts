@@ -25,7 +25,7 @@ test('media upload -> content with cover -> still listed after reload', async ({
     const agentId = await createAgentViaUi(page, agentName, agentCode)
 
     // --- upload media through the workspace Files page ---
-    await page.goto(`/apps/sites/${agentId}/files`)
+    await page.goto(`/agent/${agentId}/files`)
     await page.locator('input[type="file"]').setInputFiles({
       name: fileName,
       mimeType: 'image/png',
@@ -36,7 +36,7 @@ test('media upload -> content with cover -> still listed after reload', async ({
     await expect(mediaRow.getByText('Ready', { exact: true })).toBeVisible({ timeout: 30_000 })
 
     // --- create content and pick the uploaded media as cover ---
-    await page.goto(`/apps/sites/${agentId}/contents`)
+    await page.goto(`/agent/${agentId}/contents`)
     await page.getByRole('button', { name: 'Add Content' }).click()
     const editor = page.locator('article', {
       has: page.getByRole('heading', { name: 'Create Content' }),

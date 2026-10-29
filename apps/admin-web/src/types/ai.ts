@@ -15,6 +15,68 @@ export interface UpdateAiPromptProfileInput {
   version?: number | null
 }
 
+/** proxy-services 进程状态。不含管理密钥与客户端 key。 */
+export interface ProxyServicesStatus {
+  name: string
+  baseUrl: string
+  reachable: boolean
+  managementConfigured: boolean
+  accounts: ProxyServicesAccount[]
+}
+
+export interface ProxyServicesAccount {
+  name: string
+  provider: string
+  disabled: boolean
+  unavailable: boolean
+  /** 上游账号邮箱。没有时为 null。 */
+  email: string | null
+  /** 这次进程启动后的成功次数。 */
+  success: number
+  /** 这次进程启动后的失败次数。 */
+  failed: number
+  /** 上游观察到的额度已用百分比。没有观察时为 null。 */
+  usedPercent: number | null
+  /** 模型名 → 已用百分比。没有观察的模型不出现。 */
+  modelUsedPercent: Record<string, number>
+}
+
+/** CLIProxyAPI access.api-keys。调用代理的客户端 key，不是上游模型密钥。 */
+export interface ProxyServicesApiKeys {
+  apiKeys: string[]
+}
+
+export interface ProxyServicesApiKeyCreated {
+  apiKey: string
+}
+
+export type ProxyLoginProvider = 'codex' | 'claude' | 'antigravity' | 'meta'
+
+export interface ProxyServicesLogin {
+  provider: ProxyLoginProvider
+  url: string
+  state: string
+}
+
+export interface ProxyServicesLoginStatus {
+  status: 'wait' | 'ok' | 'error'
+  error: string
+}
+
+export interface ProxyServicesUsage {
+  apiBaseUrl: string
+  callable: boolean
+  accounts: ProxyServicesPublishedAccount[]
+}
+
+export interface ProxyServicesPublishedAccount {
+  name: string
+  provider: string
+  disabled: boolean
+  unavailable: boolean
+  modelIds: string[]
+}
+
 /** 平台模型入口。接口不返回 apiKey 正文。 */
 export interface AiModelEntry {
   id: number
@@ -226,6 +288,8 @@ export interface AiRunMeta {
   usage: AiRunUsage
   tools: AiToolCallTrace[]
   skillsApplied: string[]
+  /** 本轮请求的模型 spec。旧消息没有。 */
+  model?: string | null
 }
 
 export interface AiMessage {
@@ -274,6 +338,13 @@ export interface AiRuntimeLimits {
   historyMaxChars: number | null
 }
 
+/** 三个平台 harness 文件是否在。旧版 agent-services 未回报时可能缺省。 */
+export interface AiRuntimeHarness {
+  background: boolean
+  guardrails: boolean
+  toolGuidance: boolean
+}
+
 export interface AiRuntimeStatus {
   provider: string | null
   providerStatus: string | null
@@ -283,6 +354,7 @@ export interface AiRuntimeStatus {
   limits: AiRuntimeLimits
   retrievalStatus: string | null
   retrievalBlockedReason: string | null
+  harness?: AiRuntimeHarness | null
 }
 
 /** reachable=false 时 status 为 null，errorCode 说明原因。 */
@@ -317,8 +389,10 @@ export interface AiMcpReady {
 export interface AiPreviewChatInput {
   message: string
   history?: AiPreviewHistoryMessage[]
+  /** 含空数组：明确不注入 skill。缺省字段才会走服务端默认 skill。 */
   skills?: string[]
   todos?: AiPreviewTodoItem[]
+  mode?: 'CLI' | 'KEY'
 }
 
 /** 知识搜索工具的安全摘要：查询词与命中数（片段正文不进预览事件）。 */
@@ -333,6 +407,6 @@ export type AiPreviewAgentEvent =
   | { type: 'thinking'; delta: string }
   | { type: 'toolStart'; toolCallId: string; toolName: string }
   | { type: 'toolResult'; toolCallId: string; toolName: string; ok: boolean; summary?: AiSearchSummary }
-  | { type: 'done'; todos: AiPreviewTodoItem[]; usage: AiRunUsage | null }
+  | { type: 'done'; todos: AiPreviewTodoItem[]; usage: AiRunUsage | null; model: string | null }
   /** message：Java 推流前失败时为本地化文案；推流中为 agent-services 原始诊断（仅后台可见） */
   | { type: 'error'; errorCode: string; message?: string }

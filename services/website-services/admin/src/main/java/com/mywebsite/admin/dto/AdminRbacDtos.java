@@ -1,7 +1,10 @@
 package com.mywebsite.admin.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.List;
@@ -51,4 +54,25 @@ public final class AdminRbacDtos {
             Long userId, String userCode, String username, List<AdminRoleBindingDto> roles) {}
 
     public record AdminUserRoleUpdateRequest(@NotEmpty List<@NotBlank String> roleCodes) {}
+
+    /** 菜单编码固定落在 {@code admin:menu:} 命名空间，避免和 ACTION 权限码混用。 */
+    public record AdminMenuCreateRequest(
+            @NotBlank
+                    @Size(max = 128)
+                    @Pattern(regexp = "^admin:menu:[a-z][a-z0-9]*([.:][a-z0-9]+)*$")
+                    String menuCode,
+            @NotBlank @Size(max = 255) String menuName,
+            Long parentId,
+            @Size(max = 255) String path,
+            @Size(max = 128) String icon,
+            @NotNull @Min(0) @Max(9999) Integer sort,
+            @NotBlank @Pattern(regexp = "ACTIVE|DISABLED") String status) {}
+
+    public record AdminMenuUpdateRequest(
+            @NotBlank @Size(max = 255) String menuName,
+            Long parentId,
+            @Size(max = 255) String path,
+            @Size(max = 128) String icon,
+            @NotNull @Min(0) @Max(9999) Integer sort,
+            @NotBlank @Pattern(regexp = "ACTIVE|DISABLED") String status) {}
 }

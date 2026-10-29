@@ -1,12 +1,21 @@
 package com.mywebsite.admin.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.mywebsite.admin.constant.AdminRbacMessageKeys;
 import com.mywebsite.admin.dto.AdminMenuNodeDto;
+import com.mywebsite.admin.dto.AdminRbacDtos.AdminMenuCreateRequest;
+import com.mywebsite.admin.dto.AdminRbacDtos.AdminMenuUpdateRequest;
 import com.mywebsite.admin.entity.AdminPermissionEntity;
 import com.mywebsite.admin.mapper.AdminMenuMapper;
+import com.mywebsite.admin.mapper.AdminPermissionMapper;
 import com.mywebsite.admin.security.AdminCurrentAuthorizationSnapshot;
+import com.mywebsite.common.exception.BusinessException;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,12 +48,15 @@ class AdminMenuServiceImplTest {
     @Mock
     private AdminMenuMapper adminMenuMapper;
 
+    @Mock
+    private AdminPermissionMapper adminPermissionMapper;
+
     private AdminMenuServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminMenuServiceImpl(adminMenuMapper);
-        when(adminMenuMapper.selectAllActiveMenus()).thenReturn(sampleMenus());
+        service = new AdminMenuServiceImpl(adminMenuMapper, adminPermissionMapper);
+        lenient().when(adminMenuMapper.selectAllActiveMenus()).thenReturn(sampleMenus());
     }
 
     @Test
@@ -100,6 +112,67 @@ class AdminMenuServiceImplTest {
     @Test
     void emptyPermissionsYieldEmptyTreeForNonSuperAdmin() {
         assertThat(service.buildMenuTree(snapshot(false))).isEmpty();
+    }
+
+    @Test
+    void disabledParentDoesNotPromoteChildToSidebarRoot() {
+        when(adminMenuMapper.selectAllActiveMenus())
+                .thenReturn(List.of(menu(2L, 1L, CODE_USER, "用户", "/users", 10)));
+
+        assertThat(service.buildMenuTree(snapshot(true))).isEmpty();
+    }
+
+    @Test
+    void createRejectsCodeOutsideMenuNamespace() {
+        AdminMenuCreateRequest request =
+                new AdminMenuCreateRequest("admin:user:list", "用户", null, "/system/users", "user", 10, "ACTIVE");
+
+        BusinessException ex = catchThrowableOfType(BusinessException.class, () -> service.createMenu(request));
+        assertThat(ex).isNotNull();
+        assertThat(ex.getMessageKey()).isEqualTo(AdminRbacMessageKeys.MENU_CODE_INVALID);
+    }
+
+    @Test
+    void createRejectsMissingParent() {
+        when(adminPermissionMapper.selectById(99L)).thenReturn(null);
+        AdminMenuCreateRequest request =
+                new AdminMenuCreateRequest("admin:menu:extra", "额外", 99L, "/extra", "menu", 10, "ACTIVE");
+
+        BusinessException ex = catchThrowableOfType(BusinessException.class, () -> service.createMenu(request));
+        assertThat(ex).isNotNull();
+        assertThat(ex.getMessageKey()).isEqualTo(AdminRbacMessageKeys.MENU_PARENT_INVALID);
+    }
+
+    @Test
+    void updateRejectsMovingUnderOwnDescendant() {
+        when(adminPermissionMapper.selectById(1L)).thenReturn(menu(1L, null, CODE_SYSTEM, "系统", null, 10));
+        when(adminPermissionMapper.selectById(2L)).thenReturn(menu(2L, 1L, CODE_USER, "用户", "/users", 10));
+        when(adminMenuMapper.selectAllMenus()).thenReturn(sampleMenus());
+        AdminMenuUpdateRequest request = new AdminMenuUpdateRequest("系统", 2L, null, "setting", 10, "ACTIVE");
+
+        BusinessException ex = catchThrowableOfType(BusinessException.class, () -> service.updateMenu(1L, request));
+        assertThat(ex).isNotNull();
+        assertThat(ex.getMessageKey()).isEqualTo(AdminRbacMessageKeys.MENU_PARENT_INVALID);
+    }
+
+    @Test
+    void deleteRejectsWhenChildrenRemain() {
+        when(adminPermissionMapper.selectById(1L)).thenReturn(menu(1L, null, CODE_SYSTEM, "系统", null, 10));
+        when(adminPermissionMapper.selectCount(any())).thenReturn(2L);
+
+        BusinessException ex = catchThrowableOfType(BusinessException.class, () -> service.deleteMenu(1L));
+        assertThat(ex).isNotNull();
+        assertThat(ex.getMessageKey()).isEqualTo(AdminRbacMessageKeys.MENU_HAS_CHILDREN);
+    }
+
+    @Test
+    void deleteRemovesLeaf() {
+        when(adminPermissionMapper.selectById(5L)).thenReturn(menu(5L, null, CODE_CONTENT, "内容", "/content", 20));
+        when(adminPermissionMapper.selectCount(any())).thenReturn(0L);
+
+        service.deleteMenu(5L);
+
+        verify(adminPermissionMapper).deleteById(5L);
     }
 
     private static List<AdminPermissionEntity> sampleMenus() {

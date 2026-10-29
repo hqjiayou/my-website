@@ -148,6 +148,10 @@ class ChatRequest(BaseModel):
     knowledge_context: list[str] | None = Field(default=None, alias="knowledgeContext", max_length=4)
     memories: list[str] | None = Field(default=None, max_length=MAX_MEMORIES)
     memory_enabled: bool = Field(default=False, alias="memoryEnabled")
+    # 向量索引凭证，与回答模型分开。两种对话模式共用；都空时用进程嵌入模型。
+    embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
+    embedding_api_key: str | None = Field(default=None, alias="embeddingApiKey", max_length=4096)
+    embedding_base_url: str | None = Field(default=None, alias="embeddingBaseUrl", max_length=512)
 
     model_config = {"populate_by_name": True}
 

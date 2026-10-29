@@ -87,15 +87,19 @@ def _build_primary(spec: str, *, api_key: str, base_url: str) -> Model:
         # 未直配 key 时传 None，GoogleProvider 再读 GOOGLE_API_KEY 或 GEMINI_API_KEY。
         return _build_google_model(google_name, api_key=api_key or None, base_url=base_url or None)
     if spec.startswith("openai:") and (api_key or base_url):
-        # OpenAI-compatible 端点显式直配（本地模型 / 代理 / Foundry compatible）
+        # OpenAI-compatible 端点显式直配（本地模型 / 代理 / Foundry compatible）。
+        # 关掉 SDK 默认重试：上游 500 时默认会空等几十秒，试聊看起来像没响应。
+        from openai import AsyncOpenAI
         from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider
 
-        provider = OpenAIProvider(
+        client = AsyncOpenAI(
             api_key=api_key or None,
             base_url=base_url or None,
+            max_retries=0,
+            timeout=60.0,
         )
-        return OpenAIChatModel(spec.removeprefix("openai:"), provider=provider)
+        return OpenAIChatModel(spec.removeprefix("openai:"), provider=OpenAIProvider(openai_client=client))
     if spec.startswith("anthropic:") and api_key:
         return _build_anthropic(spec.removeprefix("anthropic:"), api_key=api_key, base_url=base_url)
     if spec.startswith("azure:") and (api_key or base_url):
@@ -265,8 +269,9 @@ def create_model_for_entry(
     """Java 模型入口。不用进程 AI_MODEL。
 
     入口 spec 或凭证建不起来时仍 BLOCKED，备援不得顶替（ADR-0004）。
-    构建成功后依次挂：请求带入的入口备援链（各自带凭证，可混 provider），
-    再挂 AI_FALLBACK_MODELS（走原生环境凭证，不使用入口 apiKey）。
+    构建成功后只挂请求带入的入口备援链（各自带凭证，可混 provider）。
+    进程 AI_FALLBACK_MODELS 只挂在没有入口、走 ``create_model`` 的路径上，
+    避免一条接不通的入口被环境变量里的另一个模型悄悄接上。
     """
     cleaned = spec.strip()
     if not cleaned:
@@ -286,10 +291,6 @@ def create_model_for_entry(
         )
     seen_specs: set[str] = set()
     chain = _build_entry_fallbacks(fallbacks, cleaned, seen_specs)
-    if settings is not None:
-        for env_spec, env_model in _build_fallbacks(settings, cleaned):
-            if env_spec in seen_specs:
-                continue
-            seen_specs.add(env_spec)
-            chain.append((env_spec, env_model))
+    # settings 保留给调用方传入，入口链不再读取其中的 AI_FALLBACK_MODELS。
+    del settings
     return _wrap_chain(primary, cleaned, chain)

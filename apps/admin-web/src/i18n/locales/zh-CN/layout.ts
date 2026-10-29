@@ -5,7 +5,7 @@ export default {
     emptyMenus: '暂无可见菜单',
   },
   header: {
-    subtitle: '多站点后台 · 响应式布局',
+    subtitle: '管理后台',
     logout: '退出登录',
     anonymous: '管理员',
   },

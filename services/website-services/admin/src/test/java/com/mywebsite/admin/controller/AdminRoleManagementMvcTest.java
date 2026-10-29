@@ -205,7 +205,7 @@ class AdminRoleManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.permissions", hasItem("admin:role:create")))
                 .andExpect(jsonPath("$.data.menus", org.hamcrest.Matchers.hasSize(2)))
                 .andExpect(jsonPath("$.data.menus[0].menuCode").value("admin:menu:system"))
-                .andExpect(jsonPath("$.data.menus[0].children", org.hamcrest.Matchers.hasSize(4)))
+                .andExpect(jsonPath("$.data.menus[0].children", org.hamcrest.Matchers.hasSize(3)))
                 .andExpect(jsonPath("$.data.menus[1].menuCode").value("admin:menu:apps"))
                 .andExpect(jsonPath("$.data.menus[1].children[0].menuCode").value("admin:menu:apps.sites"));
     }
@@ -218,7 +218,7 @@ class AdminRoleManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.permissions", hasItem("admin:role:list")))
                 .andExpect(jsonPath("$.data.permissions", hasItem("admin:permission:list")))
                 .andExpect(jsonPath("$.data.menus", org.hamcrest.Matchers.hasSize(2)))
-                .andExpect(jsonPath("$.data.menus[0].children", org.hamcrest.Matchers.hasSize(4)))
+                .andExpect(jsonPath("$.data.menus[0].children", org.hamcrest.Matchers.hasSize(3)))
                 .andExpect(jsonPath("$.data.menus[1].menuCode").value("admin:menu:apps"));
     }
 

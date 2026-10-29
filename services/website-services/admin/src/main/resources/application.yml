@@ -72,3 +72,8 @@ mywebsite:
     read-timeout-ms: ${AGENT_READ_TIMEOUT_MS:120000}
     internal-service-token: ${AGENT_INTERNAL_SERVICE_TOKEN:}
     retry-max-attempts: ${AGENT_RETRY_MAX_ATTEMPTS:1}
+  proxy-services:
+    base-url: ${PROXY_SERVICES_BASE_URL:http://127.0.0.1:8317}
+    management-key: ${PROXY_SERVICES_MANAGEMENT_KEY:}
+    connect-timeout-ms: ${PROXY_SERVICES_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${PROXY_SERVICES_READ_TIMEOUT_MS:3000}

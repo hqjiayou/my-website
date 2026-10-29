@@ -73,6 +73,8 @@ last_verified: 2026-10-28
 | `AGENT_READ_TIMEOUT_MS` | 否 | `120000` | 须大于工具超时 30s，并与站点 SSE 120s 对齐；POST 读超时不重试，避免对话副作用执行两次 |
 | `AGENT_RETRY_MAX_ATTEMPTS` | 否 | `1` | |
 | `AI_MODEL_ENTRY_SECRET` | 否 | `local-dev-model-entry-secret`（`application-local.yml`） | 模型入口 api_key 的 AES-GCM 口令；生产必须换成独立口令。空则明文兼容旧行。模型入口双模式（KEY/CLI，Flyway V35）由后台「模型入口」维护，不走环境变量 |
+| `PROXY_SERVICES_BASE_URL` | 否 | `http://127.0.0.1:8317`（根 compose 的 admin 为 `http://proxy-services:8317`） | admin 访问 proxy-services 的根地址 |
+| `PROXY_SERVICES_MANAGEMENT_KEY` | 否 | 空；`application-local.yml` 与本地 Compose 默认 `（本地自设随机值，无默认值）` | 与 proxy-services 的 `MANAGEMENT_PASSWORD` 相同。空则后台只能看进程是否可达 |
 
 ## 6. Gateway
 
@@ -92,7 +94,7 @@ last_verified: 2026-10-28
 | `PORT` | 否 | `3001` | |
 | `UVICORN_WORKERS` | 否 | `1` | |
 | `AI_MODEL` | 否 | 空 | 进程回退 spec（如 `google:gemini-3-flash-preview`）。Java `ai_model_entry` 有启用的默认入口时，对话用该入口的 spec 和 key；都没有 → BLOCKED（chat 503，ADR-0004） |
-| `AI_PROVIDER_API_KEY` | 视 Provider | 空 | OpenAI-compatible / Google 直配凭证；未直配时 Google Provider 读 `GOOGLE_API_KEY` 或 `GEMINI_API_KEY`（`config.py` 注释） |
+| `AI_PROVIDER_API_KEY` | 视 Provider | 空 | OpenAI-compatible / Google 直配凭证。未直配且嵌入模型是 Google 时，读同一份 `.env` 里的 `GEMINI_API_KEY` 或 `GOOGLE_API_KEY` |
 | `AI_PROVIDER_BASE_URL` | 否 | 空 | 直配时传给 Provider |
 | `AI_FALLBACK_MODELS` | 否 | 空 | 逗号分隔 fallback spec。进程主模型和 Java 模型入口在构建成功后都挂这条链；仅 Provider API 错误时切换。主模型或入口本身 BLOCKED 时不顶替。备用凭证走各 Provider 原生变量，不复用入口 apiKey |
 | `RETRIEVAL_DATABASE_URL` | 否 | 空 | 独立 `agent_retrieval` 库（专用 DB 用户，禁止读 Java 业务表）；缺失 → 检索 BLOCKED（问答仍可用） |

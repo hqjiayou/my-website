@@ -26,17 +26,22 @@ export function CopyableText({ value, className }: CopyableTextProps) {
   }
 
   return (
-    <span className={cn('inline-flex items-center gap-1.5', className)}>
-      <span className="font-medium text-slate-900">{value}</span>
-      <button
-        type="button"
-        onClick={() => void handleCopy()}
-        className="rounded p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-        title={t('actions.copy')}
-        aria-label={t('actions.copy')}
-      >
-        {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-      </button>
-    </span>
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      className={cn(
+        'inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-admin transition hover:bg-admin-surface-muted',
+        className,
+      )}
+      title={t('actions.copy')}
+      aria-label={`${t('actions.copy')} ${value}`}
+    >
+      <span className="min-w-0 break-all font-medium">{value}</span>
+      {copied ? (
+        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+      ) : (
+        <Copy className="h-3.5 w-3.5 shrink-0 text-admin-muted" />
+      )}
+    </button>
   )
 }

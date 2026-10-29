@@ -82,4 +82,4 @@
 
 ## Menu / 5E 现状
 
-Menu 只读已存在、写操作未完成；落点与「不另起平行实现」见 `.cursor/rules/backend-structure.mdc` 的 Menu / 5E 节，现状以 `docs/website-services/CURRENT_STATE.md` 为准。
+Menu 读写在现有 `AdminMenu*` 上。权限目录页不再作为入口；分配菜单走角色权限接口，服务端补上对应操作权限。落点见 `.cursor/rules/backend-structure.mdc` 的 Menu / 5E 节，现状以 `docs/website-services/CURRENT_STATE.md` 为准。

@@ -221,10 +221,10 @@ public class AgentAiServiceImpl implements AgentAiService {
         ChatPreparation preparation =
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
-        AgentChatResponse response = agentClient.chat(
-                buildAgentRequest(
-                        agentId, message, attachments, validated.documents(), preparation, memories,
-                        normalizeChatMode(request.mode())));
+        AgentChatRequest agentRequest = buildAgentRequest(
+                agentId, message, attachments, validated.documents(), preparation, memories,
+                normalizeChatMode(request.mode()));
+        AgentChatResponse response = agentClient.chat(agentRequest);
         persistTurn(
                 agentId,
                 agentUserId,
@@ -235,7 +235,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                 response.todos(),
                 response.runMeta(),
                 response.citations(),
-                response.extractedMemories());
+                response.extractedMemories(),
+                requestedModel(agentRequest));
 
         return new AgentAiChatResponseDto(
                 response.reply(),
@@ -257,7 +258,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         }
         boolean vectorDegraded = false;
         try {
-            AgentModelSelection selection = loadDefaultModel(agentId);
+            AgentModelSelection selection = embeddingSelection(agentId);
             AgentRetrievalSearchResult result = agentClient.searchRetrieval(new AgentRetrievalSearchRequest(
                     String.valueOf(agentId),
                     query,
@@ -381,6 +382,7 @@ public class AgentAiServiceImpl implements AgentAiService {
             String mode) {
         Long conversationId = preparation.conversation().getId();
         List<AgentModelSelection> chain = loadModelChain(agentId, mode);
+        AgentModelSelection embedding = embeddingSelection(agentId);
         return new AgentChatRequest(
                 String.valueOf(agentId),
                 message,
@@ -398,7 +400,10 @@ public class AgentAiServiceImpl implements AgentAiService {
                 memories == null || memories.isEmpty() ? null : memories,
                 Boolean.TRUE,
                 chain.size() > 1 ? List.copyOf(chain.subList(1, chain.size())) : null,
-                documents == null || documents.isEmpty() ? null : documents);
+                documents == null || documents.isEmpty() ? null : documents,
+                embedding == null ? null : embedding.embeddingSpec(),
+                embedding == null ? null : embedding.apiKey(),
+                embedding == null ? null : embedding.baseUrl());
     }
 
     private void persistTurn(
@@ -411,7 +416,8 @@ public class AgentAiServiceImpl implements AgentAiService {
             List<AgentTodoItem> todos,
             AgentRunMeta runMeta,
             List<AgentCitation> citations,
-            List<String> extractedMemories) {
+            List<String> extractedMemories,
+            String modelSpec) {
         conversationService.recordExchange(
                 preparation.conversation(),
                 userMessage,
@@ -419,7 +425,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                 todos,
                 runMeta,
                 userAttachments,
-                citations);
+                citations,
+                modelSpec);
         memoryService.storeExtracted(
                 agentId, agentUserId, preparation.conversation().getId(), extractedMemories);
     }
@@ -535,6 +542,14 @@ public class AgentAiServiceImpl implements AgentAiService {
         return new AgentAiModelModesDto(options);
     }
 
+    /** 本轮实际发给执行层的模型 spec；没有入口时不记。 */
+    private static String requestedModel(AgentChatRequest request) {
+        if (request.model() == null || !StringUtils.hasText(request.model().spec())) {
+            return null;
+        }
+        return request.model().spec().trim();
+    }
+
     /** spec（provider:model）取冒号后模型名作展示；无冒号用原文。 */
     private static String modelLabel(String spec) {
         if (spec == null) {
@@ -544,25 +559,36 @@ public class AgentAiServiceImpl implements AgentAiService {
         return idx >= 0 && idx + 1 < spec.length() ? spec.substring(idx + 1) : spec;
     }
 
-    /** 站点默认入口优先，否则全站默认。没有时不带 model，Python 回退进程 AI_MODEL。 */
-    private AgentModelSelection loadDefaultModel(long agentId) {
-        List<AgentModelSelection> chain = loadModelChain(agentId);
-        return chain.isEmpty() ? null : chain.get(0);
+    /**
+     * 向量索引用的凭证，与当前对话模式无关。站点 KEY 入口里第一把带 embedding spec 且能解密的 key，
+     * 否则全站同样的入口。都没有时返回 null，检索改用进程嵌入模型。CLI 入口不参与。
+     */
+    private AgentModelSelection embeddingSelection(long agentId) {
+        AgentModelSelection fromAgent = firstKeyEmbedding(enabledModelEntries(agentId));
+        if (fromAgent != null) {
+            return fromAgent;
+        }
+        return firstKeyEmbedding(enabledModelEntries(null));
+    }
+
+    private AgentModelSelection firstKeyEmbedding(List<AgentAiModelEntryEntity> entries) {
+        for (AgentAiModelEntryEntity entry : entries) {
+            if (!"KEY".equals(entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())) {
+                continue;
+            }
+            AgentModelSelection selection = toModelSelection(entry);
+            if (selection != null && StringUtils.hasText(selection.embeddingSpec())) {
+                return selection;
+            }
+        }
+        return null;
     }
 
     /**
      * 生效链（与 admin AdminAiModelEntryServiceImpl.selectionChain 同规则，两处须一致）：
      * 首元是主用（站点默认，否则全站默认），其后依次是同站其他启用入口、全站其他启用入口
      * （各组内默认在前、id 升序）。主用不存在或解密不出 key 时返回空列表，备援不得越过坏主用顶上；
-     * 解密不出 key 的备援跳过。
-     */
-    private List<AgentModelSelection> loadModelChain(long agentId) {
-        return loadModelChain(agentId, null);
-    }
-
-    /**
-     * 按模式组链（Portal 双模式）：先按模式过滤入口（备援封闭在模式内，不跨模式烧配额），
-     * 其余规则与整链一致——模式内无默认入口即空链。mode 为空时即整链（旧行为）。
+     * 解密不出 key 的备援跳过。mode 非空时先按模式过滤（备援封闭在模式内）；为空时即整链。
      */
     private List<AgentModelSelection> loadModelChain(long agentId, String mode) {
         List<AgentAiModelEntryEntity> agentEntries = enabledModelEntries(agentId);
@@ -635,8 +661,9 @@ public class AgentAiServiceImpl implements AgentAiService {
             return null;
         }
         String baseUrl = StringUtils.hasText(entry.getBaseUrl()) ? entry.getBaseUrl().trim() : null;
-        String embeddingSpec =
-                StringUtils.hasText(entry.getEmbeddingSpec()) ? entry.getEmbeddingSpec().trim() : null;
+        String embeddingSpec = "CLI".equals(entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())
+                ? null
+                : entry.getEmbeddingSpec().trim();
         return new AgentModelSelection(entry.getModelSpec().trim(), apiKey, baseUrl, embeddingSpec);
     }
 
@@ -814,7 +841,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                         doneTodos,
                         doneMeta.get(),
                         doneCitations.get(),
-                        doneMemories.get());
+                        doneMemories.get(),
+                        requestedModel(agentRequest));
                 sendEventQuietly(
                         emitter,
                         "CONVERSATION",
@@ -835,7 +863,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                             doneTodos,
                             doneMeta.get(),
                             doneCitations.get(),
-                            doneMemories.get());
+                            doneMemories.get(),
+                            requestedModel(agentRequest));
                 } catch (RuntimeException recordEx) {
                     log.warn("agent ai stream reply was not stored after client disconnect", recordEx);
                 }

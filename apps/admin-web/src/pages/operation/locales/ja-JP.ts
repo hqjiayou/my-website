@@ -21,7 +21,7 @@ export default {
       reset: 'リセット',
     },
     actions: {
-      manage: 'サイト管理へ',
+      manage: 'エージェントを開く',
     },
   },
   files: {
@@ -39,7 +39,7 @@ export default {
       actions: '操作',
     },
     actions: {
-      manage: 'サイト管理へ',
+      manage: 'エージェントを開く',
     },
   },
 } as const

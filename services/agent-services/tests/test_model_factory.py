@@ -170,7 +170,7 @@ def test_entry_uses_its_own_key_and_skips_process_fallbacks(monkeypatch: pytest.
     assert handle.spec == "google:gemini-3-flash-preview"
 
 
-def test_entry_request_attaches_process_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_entry_request_does_not_attach_process_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace
 
     from agent_services.api.internal import _execution_handle
@@ -196,8 +196,8 @@ def test_entry_request_attaches_process_fallbacks(monkeypatch: pytest.MonkeyPatc
     handle = _execution_handle(request, body)
     assert captured["api_key"] == "entry-key"
     assert captured["base_url"] == "https://generativelanguage.example/v1beta"
-    assert isinstance(handle.model, FallbackModel)
-    assert handle.fallback_specs == ("fake:backup",)
+    assert isinstance(handle.model, TestModel)
+    assert handle.fallback_specs == ()
     assert handle.spec == "google:gemini-3-flash-preview"
 
 
@@ -242,9 +242,8 @@ def test_entry_fallback_builder_does_not_receive_entry_api_key(
         settings=make_settings(ai_fallback_models="fake:backup", ai_provider_api_key="process-key"),
     )
     assert captured_primary["api_key"] == "entry-key"
-    assert captured_fallback == [("fake:backup", (), {})]
-    assert "entry-key" not in repr(captured_fallback)
-    assert handle.fallback_specs == ("fake:backup",)
+    assert captured_fallback == []
+    assert handle.fallback_specs == ()
 
 
 def test_entry_passes_anthropic_and_azure_keys(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -292,7 +291,7 @@ def test_entry_failure_does_not_echo_the_key(monkeypatch: pytest.MonkeyPatch) ->
 # ---- 入口备援链：各自带凭证建模、顺序固定、主用坏掉不顶替 ----
 
 
-def test_entry_chain_order_entry_fallbacks_then_env() -> None:
+def test_entry_chain_order_keeps_entry_fallbacks_only() -> None:
     handle = create_model_for_entry(
         spec="fake:primary",
         api_key="primary-key",
@@ -305,7 +304,7 @@ def test_entry_chain_order_entry_fallbacks_then_env() -> None:
     )
     assert handle.live
     assert isinstance(handle.model, FallbackModel)
-    assert handle.fallback_specs == ("fake:backup-one", "fake:backup-two", "fake:env-backup")
+    assert handle.fallback_specs == ("fake:backup-one", "fake:backup-two")
 
 
 def test_entry_chain_skips_duplicates_primary_and_unbuildable() -> None:
@@ -323,7 +322,7 @@ def test_entry_chain_skips_duplicates_primary_and_unbuildable() -> None:
     )
     assert handle.live
     assert isinstance(handle.model, FallbackModel)
-    # 与主用同 spec、建不起来的、重复的、与 env 重复的都只保留一份
+    # 与主用同 spec、建不起来的、重复的都只保留一份；进程备援不进入入口链
     assert handle.fallback_specs == ("fake:backup-one",)
 
 

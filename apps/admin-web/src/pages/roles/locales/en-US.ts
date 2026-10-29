@@ -1,7 +1,7 @@
 export default {
   list: {
     title: 'Roles',
-    description: 'Manage admin roles and assign permissions.',
+    description: 'Manage roles. A checked menu opens that page, including its buttons.',
     create: 'New role',
     empty: 'No roles',
     loading: 'Loading…',
@@ -26,7 +26,7 @@ export default {
       edit: 'Edit',
       enable: 'Enable',
       disable: 'Disable',
-      assignPermissions: 'Assign permissions',
+      assignPermissions: 'Assign menus',
       delete: 'Delete',
     },
     badges: {
@@ -72,9 +72,9 @@ export default {
     },
   },
   permissions: {
-    title: 'Assign permissions',
-    description: 'Configure permissions for role "{{roleName}}" ({{roleCode}}).',
-    descriptionFallback: 'Configure role permissions',
+    title: 'Assign menus',
+    description: 'Choose the pages "{{roleName}}" ({{roleCode}}) can open. Buttons follow the page.',
+    descriptionFallback: 'Choose pages for this role',
     backToList: 'Back to list',
     loading: 'Loading…',
     invalidId: 'Invalid role ID',
@@ -93,7 +93,7 @@ export default {
     deselectAll: 'Deselect all',
     emptyGroup: 'No permission points',
     actions: {
-      save: 'Save bindings',
+      save: 'Save',
       saving: 'Saving…',
       cancel: 'Cancel',
     },

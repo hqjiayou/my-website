@@ -5,7 +5,7 @@ export default {
     emptyMenus: 'No menus available',
   },
   header: {
-    subtitle: 'Multi-site admin · responsive shell',
+    subtitle: 'Admin',
     logout: 'Sign out',
     anonymous: 'Admin',
   },

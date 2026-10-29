@@ -1,0 +1,20 @@
+# proxy-services 覆盖项。完整字段见同目录 CLIProxyAPI/config.example.yaml（v8）。
+
+# 管理接口由 Compose 的 MANAGEMENT_PASSWORD 打开，不把口令写进本文件。
+
+# 要改路由、加上游 API key、改插件，把模板里对应段抄到本文件再重启。
+
+# 不要改子模块里的 config.example.yaml。
+
+#
+
+# access.api-keys 是客户端认证 key：admin「模型入口」CLI 模式的 apiKey 填同一把。
+
+# 不是任何上游 AI 服务商的账号密钥。使用前改成自己的随机值，且不要把真实值提交到公共分支。
+
+config-version: 8
+server:
+    port: 8317
+access:
+    api-keys:
+        - "CHANGE_ME-cliproxy-client-key"

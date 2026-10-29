@@ -1,5 +1,7 @@
 package com.mywebsite.admin.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 
@@ -12,9 +14,16 @@ public class AdminPermissionEntity extends AbstractAuditableEntity {
     private String resourceKey;
     private String description;
     private String status;
+    /** 菜单更新需要能把上级、路由、图标清空；其它权限行目前不走 updateById。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Long parentId;
+
     private Integer sortOrder;
+
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String routePath;
+
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String icon;
 
     public String getPermissionCode() {

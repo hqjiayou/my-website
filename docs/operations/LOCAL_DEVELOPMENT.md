@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: RUNBOOK
 status: CURRENT
-last_verified: 2026-10-28
+last_verified: 2026-10-29
 ```
 
 本地全栈启动的**单一权威**。命令、端口、参数默认值都以当前代码为准（出处见文末对照）；环境变量全表见 [`ENVIRONMENT_VARIABLES.md`](./ENVIRONMENT_VARIABLES.md)，本文不复制默认值。自架部署（根 `docker-compose.yml`）不是本地开发路径，见 [`SELF_HOSTING.md`](./SELF_HOSTING.md)。
@@ -18,7 +18,7 @@ last_verified: 2026-10-28
 | pnpm | 10 | 同上 `pnpm/action-setup` 的 `version: 10` |
 | Python | 3.13（`>=3.13,<3.14`） | `services/agent-services/pyproject.toml` 的 `requires-python` |
 | uv | 任意新版 | Python 依赖与运行入口 |
-| Docker | — | 只给仓库外 local-stack 基础设施与 E2E 栈用；Java/Python/前端进程都跑在宿主机 |
+| Docker | — | 仓库外 local-stack、E2E 栈，以及按需的 proxy-services；Java/Python/前端进程都跑在宿主机 |
 
 ## 1. 基础设施（仓库外 local-stack）
 
@@ -38,7 +38,7 @@ PostgreSQL、Redis、MinIO 由仓库外的 **local-stack** 提供，本仓库不
 
 MinIO 起不来时四个 Java 进程仍可启动，只是对象存储功能不可用。
 
-本地如需使用 Portal 的 AI 模型入口 CLI 代理池模式，可另起一个独立附加组件：[`addons/cliproxy/`](../../addons/cliproxy/README.md)（自包含 Compose，不与此处 local-stack 或根 `docker-compose.yml` 耦合，按需启停）。
+CLI 代理池进程是 [`services/proxy-services/`](../../services/proxy-services/README.md)，见 §4.1。
 
 ## 2. 两份 `.env`（互不读取）
 
@@ -92,6 +92,23 @@ uv run agent-services
 
 入口是 `agent_services.main:run`（`pyproject.toml` 的 `[project.scripts]`），默认端口 `3001`（`PORT` 可改，`UVICORN_WORKERS` 默认 1）。无 `AI_MODEL` 且 Java 也没给模型入口时进程可起，health 为 BLOCKED，chat 返回 503（ADR-0004）。
 
+## 4.1 proxy-services
+
+CLI 代理进程，源码直接在 [`services/proxy-services/`](../../services/proxy-services/README.md)。不进 Java。本地：
+
+```bash
+cd services/proxy-services
+docker compose up -d --build
+```
+
+| 项 | 值 |
+|----|----|
+| 进程名 | `proxy-services` |
+| API | `http://127.0.0.1:8317` |
+| 管理口令 | `PROXY_SERVICES_MANAGEMENT_KEY`，本地默认 `（本地自设随机值，无默认值）`（与 Compose 的 `MANAGEMENT_PASSWORD` 相同） |
+
+后台页 `/agent/api`（agent 菜单里的 API 管理）点新增后选择 GPT CLI（Codex）、Claude、Gemini（Antigravity）或 Muse（Meta）的图标并跳转登录，Cursor 没有登录入口。登录成功的账号成为面板，可选中查看成功/失败次数、额度和放出的模型。调用地址是 `http://127.0.0.1:8317/v1`，客户端 key 在同一页签发。请求里的 `model` 决定走哪个已登录账号。对话用模型入口 CLI 记录，`baseUrl` 填该地址，`apiKey` 填页面上任意一把客户端 key。自架 Compose 里 admin 用 `http://proxy-services:8317`。
+
 ## 5. 前端（两个）
 
 ```bash
@@ -130,6 +147,7 @@ GET http://localhost:8081/actuator/health   # admin：db UP
 GET http://localhost:8082/actuator/health   # agent-app：db、redis UP
 GET http://localhost:8080/actuator/health   # gateway UP（无注册中心时 discoveryClient 为 UNKNOWN，整体仍可 UP）
 GET http://localhost:3001/health            # agent-services 进程存活（无鉴权）
+GET http://localhost:8317/v1/models         # proxy-services（未带客户端 key 时 401 也表示进程在）
 GET http://localhost:3001/internal/v1/health # 需请求头 X-Internal-Service-Token；看 providerStatus / retrieval 状态
 GET http://localhost:8082/api/agent/ping    # agent-app 直连探活（gateway 经 http://localhost:8080/api/agent/ping）
 ```

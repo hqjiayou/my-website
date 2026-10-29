@@ -94,6 +94,7 @@ function toAgentEvent(event: string, payload: Record<string, unknown>): AiPrevie
         type: 'done',
         todos: Array.isArray(payload.todos) ? (payload.todos as AiPreviewTodoItem[]) : [],
         usage: toUsage(payload.usage),
+        model: typeof payload.model === 'string' && payload.model.trim() ? payload.model.trim() : null,
       }
     default:
       return null
@@ -104,6 +105,7 @@ export interface PreviewAdapterOptions {
   /** 每轮发送时读取最新选择，避免因选择变化重建 runtime（会丢失线程）。 */
   getSkills: () => string[]
   getTodos: () => AiPreviewTodoItem[]
+  getMode: () => 'CLI' | 'KEY'
   onAgentEvent: (event: AiPreviewAgentEvent) => void
 }
 
@@ -139,8 +141,9 @@ export function createJavaPreviewAdapter(
         {
           message,
           history: history.length ? history : undefined,
-          skills: skills.length ? skills : undefined,
+          skills,
           todos: todos.length ? todos : undefined,
+          mode: options.getMode(),
         },
         abortSignal,
       )
@@ -188,7 +191,10 @@ export function createJavaPreviewAdapter(
             const code = typeof payload?.errorCode === 'string' ? payload.errorCode : 'SYSTEM_ERROR'
             const message = typeof payload?.message === 'string' ? payload.message : undefined
             options.onAgentEvent({ type: 'error', errorCode: code, message })
-            throw new Error(code)
+            const shown = message || code
+            text = text ? `${text}\n${shown}` : shown
+            yield { content: [{ type: 'text' as const, text }] }
+            return
           } else if (payload) {
             const agentEvent = toAgentEvent(parsed.event, payload)
             if (agentEvent) options.onAgentEvent(agentEvent)

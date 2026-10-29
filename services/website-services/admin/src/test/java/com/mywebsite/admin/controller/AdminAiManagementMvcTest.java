@@ -257,6 +257,34 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     }
 
     @Test
+    void previewEmptySkillsStayEmptyAndDoesNotSendFallbacks() throws Exception {
+        String token = tokenFor(500L);
+        long agentId = createSite(token);
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        doAnswer(invocation -> {
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent("DONE", "{\"reply\":\"hi\"}");
+                    return null;
+                })
+                .when(agentClient)
+                .chatStream(captor.capture(), any());
+
+        String body = "{\"message\":\"hello\",\"skills\":[],\"mode\":\"CLI\"}";
+        MvcResult mvcResult = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(mvcResult)).andExpect(status().isOk());
+
+        AgentChatRequest sent = captor.getValue();
+        assertThat(sent.skills()).isEmpty();
+        assertThat(sent.fallbackModels()).isNull();
+        assertThat(sent.model()).isNull();
+    }
+
+    @Test
     void previewRejectsInvalidTodoStatus() throws Exception {
         String token = tokenFor(500L);
         long agentId = createSite(token);

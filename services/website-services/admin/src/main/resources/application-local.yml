@@ -25,6 +25,8 @@ mywebsite:
     model-entry-secret: ${AI_MODEL_ENTRY_SECRET:local-dev-model-entry-secret}
   agent:
     business-api-base-url: ${AGENT_BUSINESS_API_BASE_URL:http://127.0.0.1:8082}
+  proxy-services:
+    management-key: ${PROXY_SERVICES_MANAGEMENT_KEY:}
 
 storage:
   minio:

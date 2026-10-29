@@ -47,12 +47,27 @@ export interface PermissionListQuery {
 }
 
 export interface MenuNodeDto {
+  id?: number
   menuCode: string
   menuName: string
   path: string | null
   icon: string | null
   sort: number
+  status?: string
   children: MenuNodeDto[]
+}
+
+export interface MenuWriteInput {
+  menuName: string
+  parentId: number | null
+  path?: string
+  icon?: string
+  sort: number
+  status: string
+}
+
+export interface MenuCreateInput extends MenuWriteInput {
+  menuCode: string
 }
 
 export interface RolePermissionsDto {
@@ -152,6 +167,9 @@ export const PERMISSION_CODES = {
   rolePermissionUpdate: 'admin:role:permission:update',
   permissionList: 'admin:permission:list',
   menuList: 'admin:menu:list',
+  menuCreate: 'admin:menu:create',
+  menuUpdate: 'admin:menu:update',
+  menuDelete: 'admin:menu:delete',
   dashboardView: 'admin:dashboard:view',
   userList: 'admin:user:list',
   userDetail: 'admin:user:detail',
@@ -161,12 +179,12 @@ export const PERMISSION_CODES = {
   userStatus: 'admin:user:status',
   userRoleView: 'admin:user:role:view',
   userRoleUpdate: 'admin:user:role:update',
-  agentList: 'admin:site:list',
-  agentDetail: 'admin:site:detail',
-  agentCreate: 'admin:site:create',
-  agentUpdate: 'admin:site:update',
-  agentDelete: 'admin:site:delete',
-  agentStatus: 'admin:site:status',
+  agentList: 'admin:agent:list',
+  agentDetail: 'admin:agent:detail',
+  agentCreate: 'admin:agent:create',
+  agentUpdate: 'admin:agent:update',
+  agentDelete: 'admin:agent:delete',
+  agentStatus: 'admin:agent:status',
   mediaList: 'admin:media:list',
   mediaUpload: 'admin:media:upload',
   mediaDownload: 'admin:media:download',

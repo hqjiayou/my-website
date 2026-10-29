@@ -3,6 +3,7 @@ import {
   BarChart3,
   BookOpen,
   Bot,
+  Server,
   Braces,
   FileText,
   FolderKanban,
@@ -53,6 +54,7 @@ export const NAV_SECTIONS: NavSection[] = [
         labelKey: 'groups.myApp',
         children: [
           { labelKey: 'items.sites', path: ROUTES.apps.sites, icon: Layers3 },
+          { labelKey: 'items.proxyServices', path: ROUTES.apps.api, icon: Server },
           { labelKey: 'items.styleSettings', path: ROUTES.apps.style, icon: Palette },
         ],
       },
@@ -88,55 +90,57 @@ export function resolveNavTitleKey(pathname: string): string | undefined {
   if (pathname === ROUTES.apps.agentCreate || pathname.startsWith(`${ROUTES.apps.agentCreate}/`)) {
     return 'items.agentCreate'
   }
-  if (/^\/apps\/sites\/[^/]+\/?$/.test(pathname)) {
+  if (/^\/agent\/(?!api(?:\/|$)|create(?:\/|$))[^/]+\/?$/.test(pathname)) {
     return 'items.agentOverview'
   }
-  if (/^\/apps\/sites\/[^/]+\/agent\/?$/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/agent\/?$/.test(pathname)) {
     return 'items.agentOverview'
   }
-  if (/^\/apps\/sites\/[^/]+\/agent\/prompt(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/agent\/prompt(?:\/|$)/.test(pathname)) {
     return 'items.agentPrompt'
   }
-  if (/^\/apps\/sites\/[^/]+\/agent\/knowledge(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/agent\/knowledge(?:\/|$)/.test(pathname)) {
     return 'items.agentKnowledge'
   }
-  if (/^\/apps\/sites\/[^/]+\/agent\/conversations(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/agent\/conversations(?:\/|$)/.test(pathname)) {
     return 'items.agentConversations'
   }
-  if (/^\/apps\/sites\/[^/]+\/agent\/preview(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/agent\/preview(?:\/|$)/.test(pathname)) {
     return 'items.agentPreview'
   }
-  if (/^\/apps\/sites\/[^/]+\/agent\/runtime(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/agent\/runtime(?:\/|$)/.test(pathname)) {
     return 'items.agentRuntime'
   }
-  if (/^\/apps\/sites\/[^/]+\/basic(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/basic(?:\/|$)/.test(pathname)) {
     return 'items.agentBasic'
   }
-  if (/^\/apps\/sites\/[^/]+\/theme(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/access(?:\/|$)/.test(pathname)) {
+    return 'items.agentAccess'
+  }
+  if (/^\/agent\/[^/]+\/theme(?:\/|$)/.test(pathname)) {
     return 'items.agentTheme'
   }
-  if (/^\/apps\/sites\/[^/]+\/domain(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/domain(?:\/|$)/.test(pathname)) {
     return 'items.agentDomain'
   }
-  if (/^\/apps\/sites\/[^/]+\/contents(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/contents(?:\/|$)/.test(pathname)) {
     return 'items.agentContents'
   }
-  if (/^\/apps\/sites\/[^/]+\/files(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/files(?:\/|$)/.test(pathname)) {
     return 'items.agentFiles'
   }
 
+  let best: { labelKey: string; pathLength: number } | undefined
   for (const section of NAV_SECTIONS) {
     for (const entry of section.entries) {
-      if (isNavGroup(entry)) {
-        for (const child of entry.children) {
-          if (pathMatchesLeaf(pathname, child.path)) {
-            return child.labelKey
-          }
+      const leaves = isNavGroup(entry) ? entry.children : [entry]
+      for (const leaf of leaves) {
+        if (!pathMatchesLeaf(pathname, leaf.path)) continue
+        if (!best || leaf.path.length > best.pathLength) {
+          best = { labelKey: leaf.labelKey, pathLength: leaf.path.length }
         }
-      } else if (pathMatchesLeaf(pathname, entry.path)) {
-        return entry.labelKey
       }
     }
   }
-  return undefined
+  return best?.labelKey
 }

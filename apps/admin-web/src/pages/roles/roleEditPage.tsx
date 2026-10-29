@@ -3,25 +3,40 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { rbacApi } from '@/api/rbacApi'
+import {
+  adminFieldClass,
+  adminFormActionsClass,
+  adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+} from '@/components/admin/controls'
 import { PageHeader } from '@/components/page'
 import { ROUTES } from '@/router/config/routePaths'
 import { ROLE_STATUS } from '@/types/rbac'
 
 const roleCodePattern = /^[a-z][a-z0-9_]*$/
 
-export function RoleEditPage() {
+export function RoleEditPage({
+  roleId: roleIdProp,
+  onClose,
+}: {
+  roleId?: string
+  onClose?: () => void
+} = {}) {
   const { t } = useTranslation('roles')
   const { t: tc } = useTranslation('common')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { roleId } = useParams()
-  const isCreate = roleId === 'new'
+  const params = useParams()
+  const roleId = roleIdProp ?? params.roleId
+  const isCreate = roleId == null || roleId === 'new'
   const parsedId = isCreate ? null : Number(roleId)
+  const close = onClose ?? (() => navigate(ROUTES.system.roles))
+  const embedded = onClose != null
 
   const createSchema = z.object({
     roleCode: z
@@ -87,7 +102,7 @@ export function RoleEditPage() {
     onSuccess: () => {
       toast.success(t('edit.messages.created'))
       void queryClient.invalidateQueries({ queryKey: ['roles'] })
-      navigate(ROUTES.system.roles)
+      close()
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -98,7 +113,7 @@ export function RoleEditPage() {
       toast.success(t('edit.messages.updated'))
       void queryClient.invalidateQueries({ queryKey: ['roles'] })
       void queryClient.invalidateQueries({ queryKey: ['roles', parsedId] })
-      navigate(ROUTES.system.roles)
+      close()
     },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -122,19 +137,9 @@ export function RoleEditPage() {
     )
   }
 
-  return (
-    <section>
-      <PageHeader
-        title={isCreate ? t('edit.createTitle') : t('edit.editTitle')}
-        description={
-          isCreate
-            ? t('edit.createDescription')
-            : t('edit.editDescription', { roleCode: role?.roleCode ?? '' })
-        }
-      />
-
-      <div className="max-w-xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        {isCreate ? (
+  const form = (
+    <>
+      {isCreate ? (
           <form
             className="space-y-4"
             onSubmit={createForm.handleSubmit((values) => createMutation.mutate(values))}
@@ -161,7 +166,7 @@ export function RoleEditPage() {
             </Field>
             <FormActions
               submitting={createMutation.isPending}
-              cancelTo={ROUTES.system.roles}
+              onCancel={close}
               saveLabel={t('edit.actions.save')}
               savingLabel={t('edit.actions.saving')}
               cancelLabel={t('edit.actions.cancel')}
@@ -190,23 +195,36 @@ export function RoleEditPage() {
             </Field>
             <FormActions
               submitting={updateMutation.isPending}
-              cancelTo={ROUTES.system.roles}
+              onCancel={close}
               saveLabel={t('edit.actions.save')}
               savingLabel={t('edit.actions.saving')}
               cancelLabel={t('edit.actions.cancel')}
             />
           </form>
         )}
-      </div>
+    </>
+  )
+
+  if (embedded) return form
+
+  return (
+    <section>
+      <PageHeader
+        title={isCreate ? t('edit.createTitle') : t('edit.editTitle')}
+        description={
+          isCreate
+            ? t('edit.createDescription')
+            : t('edit.editDescription', { roleCode: role?.roleCode ?? '' })
+        }
+      />
+      <div className="max-w-xl">{form}</div>
     </section>
   )
 }
 
-const inputClassName =
-  'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:bg-slate-50 disabled:text-slate-500'
+const inputClassName = adminFieldClass
 
-const textareaClassName =
-  'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200'
+const textareaClassName = adminFieldClass
 
 function Field({
   label,
@@ -219,7 +237,7 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-slate-700">{label}</label>
+      <label className="mb-1.5 block text-sm font-medium text-admin">{label}</label>
       {children}
       {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
     </div>
@@ -228,32 +246,25 @@ function Field({
 
 function FormActions({
   submitting,
-  cancelTo,
+  onCancel,
   saveLabel,
   savingLabel,
   cancelLabel,
 }: {
   submitting: boolean
-  cancelTo: string
+  onCancel: () => void
   saveLabel: string
   savingLabel: string
   cancelLabel: string
 }) {
   return (
-    <div className="flex gap-2 pt-2">
-      <button
-        type="submit"
-        disabled={submitting}
-        className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-      >
+    <div className={adminFormActionsClass}>
+      <button type="button" onClick={onCancel} className={adminSecondaryButtonClass}>
+        {cancelLabel}
+      </button>
+      <button type="submit" disabled={submitting} className={adminPrimaryButtonClass}>
         {submitting ? savingLabel : saveLabel}
       </button>
-      <Link
-        to={cancelTo}
-        className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-      >
-        {cancelLabel}
-      </Link>
     </div>
   )
 }

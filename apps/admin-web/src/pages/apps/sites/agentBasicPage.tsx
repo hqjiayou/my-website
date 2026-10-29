@@ -5,6 +5,7 @@ import { useOutletContext } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { agentApi, SITE_TAG_PATTERN, SITE_TYPE_PRESETS, type Site } from '@/api'
+import { adminFieldClass, adminPrimaryButtonClass } from '@/components/admin/controls'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
@@ -24,7 +25,6 @@ function AgentBasicForm({ site }: { site: Site }) {
   const [agentName, setAgentName] = useState(site.agentName)
   const [agentType, setAgentType] = useState(site.agentType)
   const [customType, setCustomType] = useState(false)
-  const [defaultDomain, setDefaultDomain] = useState(site.defaultDomain ?? '')
   const [description, setDescription] = useState(site.description ?? '')
 
   const updateMutation = useMutation({
@@ -32,7 +32,7 @@ function AgentBasicForm({ site }: { site: Site }) {
       agentApi.updateSite(site.id, {
         agentName: agentName.trim(),
         agentType: agentType.trim(),
-        defaultDomain: defaultDomain.trim() || undefined,
+        defaultDomain: site.defaultDomain?.trim() || undefined,
         description: description.trim() || undefined,
         version: site.version,
       }),
@@ -73,37 +73,33 @@ function AgentBasicForm({ site }: { site: Site }) {
   }
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-base font-semibold text-slate-900">{t('detail.nav.basic')}</h2>
-      <p className="mt-1 text-sm text-slate-600">{t('basic.description')}</p>
+    <article className="rounded-xl border border-admin bg-admin-surface p-5 shadow-sm">
+      <h2 className="text-base font-semibold text-admin">{t('detail.nav.basic')}</h2>
+      <p className="mt-1 text-sm text-admin-muted">{t('basic.description')}</p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <label className="space-y-1.5 text-sm">
-          <span className="font-medium text-slate-700">{t('list.columns.agentName')}</span>
+        <label className="space-y-1.5 text-sm text-admin">
+          <span className="font-medium">{t('list.columns.agentName')}</span>
           <input
             value={agentName}
             onChange={(event) => setAgentName(event.target.value)}
             disabled={!canUpdate}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200 disabled:bg-slate-50"
+            className={adminFieldClass}
           />
         </label>
 
-        <label className="space-y-1.5 text-sm">
-          <span className="font-medium text-slate-700">{t('create.fields.agentCode')}</span>
-          <input
-            value={site.agentCode}
-            disabled
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-500"
-          />
+        <label className="space-y-1.5 text-sm text-admin">
+          <span className="font-medium">{t('create.fields.agentCode')}</span>
+          <input value={site.agentCode} disabled className={adminFieldClass} />
         </label>
 
-        <label className="space-y-1.5 text-sm">
-          <span className="font-medium text-slate-700">{t('create.fields.agentType')}</span>
+        <label className="space-y-1.5 text-sm text-admin">
+          <span className="font-medium">{t('create.fields.agentType')}</span>
           <select
             value={customType ? '__CUSTOM__' : agentType}
             onChange={(event) => handleTypeSelect(event.target.value)}
             disabled={!canUpdate}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200 disabled:bg-slate-50"
+            className={adminFieldClass}
           >
             {SITE_TYPE_PRESETS.map((value) => (
               <option key={value} value={value}>
@@ -120,41 +116,26 @@ function AgentBasicForm({ site }: { site: Site }) {
               value={agentType}
               onChange={(event) => setAgentType(event.target.value)}
               disabled={!canUpdate}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200 disabled:bg-slate-50"
+              className={adminFieldClass}
               placeholder={t('create.placeholders.customAgentType')}
             />
           ) : null}
         </label>
 
-        <label className="space-y-1.5 text-sm">
-          <span className="font-medium text-slate-700">{t('create.fields.defaultDomain')}</span>
-          <input
-            value={defaultDomain}
-            onChange={(event) => setDefaultDomain(event.target.value)}
-            disabled={!canUpdate}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200 disabled:bg-slate-50"
-          />
-        </label>
-
-        <label className="space-y-1.5 text-sm sm:col-span-2">
-          <span className="font-medium text-slate-700">{t('create.fields.agentDescription')}</span>
+        <label className="space-y-1.5 text-sm text-admin sm:col-span-2">
+          <span className="font-medium">{t('create.fields.agentDescription')}</span>
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             disabled={!canUpdate}
             rows={4}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-blue-200 disabled:bg-slate-50"
+            className={adminFieldClass}
           />
         </label>
       </div>
 
-      <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
-        <p className="font-medium text-slate-700">{t('basic.laterStage.title')}</p>
-        <p className="mt-1">{t('basic.laterStage.description')}</p>
-      </div>
-
       <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-admin-muted">
           {t('basic.versionLabel')}: {site.version}
         </p>
         {canUpdate ? (
@@ -162,12 +143,12 @@ function AgentBasicForm({ site }: { site: Site }) {
             type="button"
             onClick={handleSave}
             disabled={updateMutation.isPending}
-            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+            className={adminPrimaryButtonClass}
           >
             {updateMutation.isPending ? t('basic.actions.saving') : t('basic.actions.save')}
           </button>
         ) : (
-          <p className="text-xs text-slate-500">{t('basic.noPermission')}</p>
+          <p className="text-xs text-admin-muted">{t('basic.noPermission')}</p>
         )}
       </div>
     </article>

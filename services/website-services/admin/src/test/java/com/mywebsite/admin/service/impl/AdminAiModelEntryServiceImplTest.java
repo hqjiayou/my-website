@@ -61,6 +61,44 @@ class AdminAiModelEntryServiceImplTest {
     }
 
     @Test
+    void embeddingSelectionUsesKeyEntryAndSkipsCli() {
+        AdminAiModelEntryEntity cli = entry(2L, 10L, "openai:gpt", true);
+        cli.setMode("CLI");
+        cli.setEmbeddingSpec("google:gemini-embedding-001");
+        AdminAiModelEntryEntity key = entry(5L, 10L, "google:gemini-3-flash-preview", false);
+        key.setMode("KEY");
+        key.setEmbeddingSpec("google:gemini-embedding-001");
+        when(modelEntryMapper.selectList(any())).thenReturn(List.of(cli, key), List.of());
+
+        AgentModelSelection selection = service.embeddingSelection(10L);
+
+        assertThat(selection.spec()).isEqualTo("google:gemini-3-flash-preview");
+        assertThat(selection.embeddingSpec()).isEqualTo("google:gemini-embedding-001");
+        assertThat(selection.apiKey()).isEqualTo("key-5");
+    }
+
+    @Test
+    void embeddingSelectionIsNullWhenNoKeyHasEmbeddingSpec() {
+        AdminAiModelEntryEntity cli = entry(2L, 10L, "openai:gpt", true);
+        cli.setMode("CLI");
+        when(modelEntryMapper.selectList(any())).thenReturn(List.of(cli), List.of());
+
+        assertThat(service.embeddingSelection(10L)).isNull();
+    }
+
+    @Test
+    void chainStripsEmbeddingSpecFromCliEntry() {
+        AdminAiModelEntryEntity cli = entry(2L, 10L, "openai:gpt", true);
+        cli.setMode("CLI");
+        cli.setEmbeddingSpec("google:gemini-embedding-001");
+        when(modelEntryMapper.selectList(any())).thenReturn(List.of(cli), List.of());
+
+        List<AgentModelSelection> chain = service.selectionChain(10L);
+        assertThat(chain).hasSize(1);
+        assertThat(chain.get(0).embeddingSpec()).isNull();
+    }
+
+    @Test
     void chainOrdersAgentDefaultThenAgentOthersThenGlobal() {
         // mapper 已按「默认在前、id 升序」返回，service 只负责组链
         when(modelEntryMapper.selectList(any()))
@@ -128,6 +166,24 @@ class AdminAiModelEntryServiceImplTest {
 
         // 主用坏掉时备援不得顶上，整链不启用
         assertThat(service.selectionChain(10L)).isEmpty();
+    }
+
+    @Test
+    void chainStaysInsideTheRequestedMode() {
+        AdminAiModelEntryEntity cli = entry(2L, 10L, "openai:muse-wonder-1.0", true);
+        cli.setMode("CLI");
+        AdminAiModelEntryEntity key = entry(1L, null, "google:gemini-3-flash-preview", true);
+        key.setMode("KEY");
+        when(modelEntryMapper.selectList(any()))
+                .thenReturn(List.of(cli), List.of(key), List.of(cli), List.of(key));
+
+        assertThat(specs(service.selectionChain(10L, "CLI"))).containsExactly("openai:muse-wonder-1.0");
+        assertThat(specs(service.selectionChain(10L, "key"))).containsExactly("google:gemini-3-flash-preview");
+    }
+
+    @Test
+    void chainRejectsUnknownMode() {
+        assertThatThrownBy(() -> service.selectionChain(10L, "BOGUS")).isInstanceOf(BusinessException.class);
     }
 
     @Test

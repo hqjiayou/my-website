@@ -65,7 +65,7 @@ export async function createAgentViaUi(
   agentName: string,
   agentCode: string,
 ): Promise<string> {
-  await page.goto('/apps/sites/create')
+  await page.goto('/agent/create')
   await page.getByLabel('Site Name', { exact: true }).fill(agentName)
   await page.getByLabel('Site Code', { exact: true }).fill(agentCode)
   await page.getByRole('button', { name: 'Next' }).click()

@@ -379,6 +379,23 @@ def test_create_embedding_client_accepts_google_and_google_gla(monkeypatch: pyte
         assert captured["settings"] == {"dimensions": 768}
 
 
+def test_create_embedding_client_google_uses_gemini_key_when_provider_key_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _patch_google_embedding_stack(monkeypatch)
+    client, reason = create_embedding_client(
+        make_settings(
+            ai_embedding_model="google:gemini-embedding-001",
+            ai_provider_api_key="",
+            gemini_api_key="test-gemini-key",
+            ai_embedding_dimensions=768,
+        )
+    )
+    assert reason is None
+    assert isinstance(client, GoogleEmbeddingClient)
+    assert captured["api_key"] == "test-gemini-key"
+
+
 def test_create_embedding_client_google_without_credentials_is_blocked(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)

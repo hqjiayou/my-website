@@ -71,7 +71,6 @@ class AdminRbacSeedVerifyPgTest {
             "admin:menu:system",
             "admin:menu:system.user",
             "admin:menu:system.role",
-            "admin:menu:system.permission",
             "admin:menu:system.menu",
             "admin:menu:apps",
             "admin:menu:apps.sites",
@@ -90,7 +89,8 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-kb:delete",
             "admin:ai-conversation:list",
             "admin:ai-model:read",
-            "admin:ai-model:update");
+            "admin:ai-model:update",
+            "admin:menu:ai.proxyservices");
 
     /**
      * 不硬编码总数：运行时统计 infra 迁移目录（{@code classpath:db/migration}，与本类
@@ -166,13 +166,22 @@ class AdminRbacSeedVerifyPgTest {
                 Integer.class);
         assertThat(disabledMenuView).isEqualTo(1);
 
+        Integer disabledPermissionMenu = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*) FROM admin_permission
+                WHERE permission_code = 'admin:menu:system.permission'
+                  AND status = 'DISABLED' AND deleted = FALSE
+                """,
+                Integer.class);
+        assertThat(disabledPermissionMenu).isEqualTo(1);
+
         Map<String, Object> appsSitesMenu = jdbcTemplate.queryForMap(
                 """
                 SELECT permission_code, route_path, parent_id
                 FROM admin_permission
                 WHERE permission_code = 'admin:menu:apps.sites' AND deleted = FALSE
                 """);
-        assertThat(appsSitesMenu.get("route_path")).isEqualTo("/apps/sites");
+        assertThat(appsSitesMenu.get("route_path")).isEqualTo("/agent");
         Long appsParentId = jdbcTemplate.queryForObject(
                 """
                 SELECT id FROM admin_permission
@@ -180,6 +189,14 @@ class AdminRbacSeedVerifyPgTest {
                 """,
                 Long.class);
         assertThat(appsSitesMenu.get("parent_id")).isEqualTo(appsParentId);
+        Map<String, Object> apiMenu = jdbcTemplate.queryForMap(
+                """
+                SELECT route_path, parent_id
+                FROM admin_permission
+                WHERE permission_code = 'admin:menu:ai.proxyservices' AND deleted = FALSE
+                """);
+        assertThat(apiMenu.get("route_path")).isEqualTo("/agent/api");
+        assertThat(apiMenu.get("parent_id")).isEqualTo(appsParentId);
 
         List<Map<String, Object>> adminBindings = jdbcTemplate.queryForList(
                 """

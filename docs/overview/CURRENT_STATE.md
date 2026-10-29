@@ -35,14 +35,14 @@ supersedes:
 | **Auth Admin** | PARTIAL | 登录/刷新/登出/注册门控 REAL；XFF：gateway 集成断言已落地（`GatewayXForwardedTrustBoundaryTest`），prod 以 prod profile 收窄 trusted-proxies |
 | **Auth Agent（原 Auth Site）** | BACKEND_COMPLETE | login/refresh/logout/me + aud 隔离；前端登录在 `apps/agent-portal`（#3 已结案） |
 | **RBAC** | COMPLETE_V1 | roles/permissions/me/menus 读；Method Security |
-| **Menu write** | DEFERRED_BY_DESIGN | 只读已落地；勿平行架构 |
+| **Menu write** | COMPLETE_V1 | `POST/PUT/DELETE /api/admin/menus`；权限目录页已撤下，角色按菜单分配并带上该页操作权限 |
 | **Agent Core（原 Site Core）** | COMPLETE_V1 | CRUD/status/乐观锁/软删；runtime-status 非 Core |
 | **Template** | REMOVED（2026-10-27，PR #72） | 行业种子模板经 Flyway V30 软删，Java Template 后端与后台模板管理页已移除；不要再按 COMPLETE 引用 |
 | **Appearance** | COMPLETE_V1 | 字段：`primaryColor` / `fontStyle` / `buttonStyle` / `heroLayout`（**不是** heroStyle / logoPlaceholder） |
 | **Media** | COMPLETE_V1 | 服务端 object key；MIME；站点归属 |
 | **Content** | COMPLETE_V1 | CMS CRUD/status |
 | **Reservation** | REMOVED（2026-10-27） | 功能整包删除（代码零残留）；删除前规格文档已于 2026-10-29 随历史文档一并移除，见 git 历史；`STATUS_ENUMS` 中的状态闭集仅作历史记录 |
-| **AI** | PARTIAL_ADMIN_SCOPE；LIVE 已实证（2026-10-25 kou 本机环境 Portal 以 Gemini 真实回复；2026-10-27 M11 真模型 eval 通过） | admin Prompt/KB/会话/预览 FORCE REAL；平台模型入口在 Java `ai_model_entry`（后台「模型入口」维护，响应不含 key；启用的默认入口随对话注入 Python，没有则回退进程 `AI_MODEL`）；模型入口**双模式（KEY / CLI）已合入**（PR #109 后端 + PR #114 Portal 前端，Flyway V35，Issue #110 进行中）；站点聊天经 `apps/agent-portal`；部署环境需各自配置 `AI_PROVIDER_API_KEY`，两边都没有模型时诚实 503。Agent 平台（无业务工具）：每次对话由 `assemble_harness` 把平台 background、护栏、生效的运行上限、技能正文、函数工具说明和 MCP 服务器名送进系统提示，并按历史字符预算裁剪送模记忆（不写 URL，不改写下一轮；超预算时把被裁掉的前缀摘要进系统提示，摘要失败则只裁剪，不回写会话；未做摘要落库与跨轮复用）；`GET /internal/v1/health` 的 `harness` 只报告这三个平台文件是否存在，`provider` 仍是进程环境模型；MCP（配置驱动，`transport` 支持 http/sse/stdio，深检 `GET /internal/v1/mcp/ready`，连接失败 `MCP_UNAVAILABLE`）/ Skills（目录 + 预览可选）/ Todo（站点会话 V20 持久化、预览前端回传）已端到端接通；运行预算（Python `AGENT_BUDGET_EXCEEDED` → Java `ErrorCode` 1008 / HTTP 422）/ 工具超时 / 历史字符预算 / Fallback 模型（进程 `AI_MODEL` 与构建成功的模型入口都挂 `AI_FALLBACK_MODELS`，仅 Provider API 错误时切换；入口本身 BLOCKED 时不顶替，备用凭证不使用入口 apiKey）/ Agent OTel / 运行轨迹（V21 `agent_ai_message.agent_meta`，后台会话可见）/ 后台“运行时”面板，见 Agent 设计 V1 §19–§24。多模態輸入 v1（傳圖）已落地（分支） |
+| **AI** | PARTIAL_ADMIN_SCOPE；LIVE 已实证（2026-10-25 kou 本机环境 Portal 以 Gemini 真实回复；2026-10-27 M11 真模型 eval 通过） | admin Prompt/KB/会话/预览 FORCE REAL；平台模型入口在 Java `ai_model_entry`（后台「模型入口」维护，响应不含 key；启用的默认入口随对话注入 Python，没有则回退进程 `AI_MODEL`）；模型入口**双模式（KEY / CLI）已合入**（PR #109 后端 + PR #114 Portal 前端，Flyway V35，Issue #110 进行中；向量索引不跟随模式，只用 KEY 入口的 embedding spec 与其 key，没有则用进程嵌入模型，CLI 客户端 key 不参与嵌入）；站点聊天经 `apps/agent-portal`；部署环境需各自配置 `AI_PROVIDER_API_KEY`，两边都没有模型时诚实 503。Agent 平台（无业务工具）：每次对话由 `assemble_harness` 把平台 background、护栏、生效的运行上限、技能正文、函数工具说明和 MCP 服务器名送进系统提示，并按历史字符预算裁剪送模记忆（不写 URL，不改写下一轮；超预算时把被裁掉的前缀摘要进系统提示，摘要失败则只裁剪，不回写会话；未做摘要落库与跨轮复用）；`GET /internal/v1/health` 的 `harness` 只报告这三个平台文件是否存在，`provider` 仍是进程环境模型；MCP（配置驱动，`transport` 支持 http/sse/stdio，深检 `GET /internal/v1/mcp/ready`，连接失败 `MCP_UNAVAILABLE`）/ Skills（目录 + 预览可选）/ Todo（站点会话 V20 持久化、预览前端回传）已端到端接通；运行预算（Python `AGENT_BUDGET_EXCEEDED` → Java `ErrorCode` 1008 / HTTP 422）/ 工具超时 / 历史字符预算 / Fallback 模型（进程 `AI_MODEL` 挂 `AI_FALLBACK_MODELS`；带了模型入口的请求只走入口备援链，不再追加进程备援。仅 Provider API 错误时切换；入口本身 BLOCKED 时不顶替。后台试聊只调用所选模式的主用入口）/ Agent OTel / 运行轨迹（V21 `agent_ai_message.agent_meta`，后台会话可见）/ 后台“运行时”面板，见 Agent 设计 V1 §19–§24。多模態輸入 v1（傳圖）已落地（分支） |
 | **Mock 策略** | admin-web 无 mock 数据源；`VITE_USE_MOCK` 不再生效 | 见 [`../rules/MOCK_POLICY.md`](../rules/MOCK_POLICY.md) |
 | **Testing** | Vertical/Contract 有；Browser E2E 套件已落地（Playwright，PR #111） | 禁止称 MockMvc/build 为 Browser E2E；套件首次 CI 实跑待 Actions 额度恢复补验（见下表） |
 | **External** | PostgreSQL / Redis /（可选 MinIO）/ AI Provider | AI Provider 缺失 → 诚实 503 |
@@ -63,7 +63,7 @@ supersedes:
 | Site runtime-status REAL | **DEFERRED**（无独立端点；由现有 REAL API 推导，访问量 / 当日 AI 会话为 null） | — |
 | Admin user mutation error feedback | **RESOLVED（文档漂移）** — 全局 `mutations.onError`→`handleApiError` | — |
 | Orphan mocks / dead userApi | **RESOLVED in worktree**（待与 FORCE REAL WIP 同交；非 Tracker） | — |
-| Menu write | **DEFERRED_BY_DESIGN** | — |
+| Menu write | **COMPLETE_V1** | `POST/PUT/DELETE /api/admin/menus` |
 
 ---
 

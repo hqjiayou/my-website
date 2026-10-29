@@ -20,6 +20,13 @@ import type {
   AiPreviewSkill,
   AiModelEntry,
   AiModelEntryWriteInput,
+  ProxyLoginProvider,
+  ProxyServicesApiKeyCreated,
+  ProxyServicesApiKeys,
+  ProxyServicesLogin,
+  ProxyServicesLoginStatus,
+  ProxyServicesStatus,
+  ProxyServicesUsage,
   AiPromptProfile,
   AiMcpReady,
   AiRuntime,
@@ -59,6 +66,54 @@ function aiBase(agentId: number) {
 }
 
 export const aiApi = {
+  getProxyServicesUsage(): Promise<ProxyServicesUsage> {
+    return httpClient
+      .get<HttpMessageBody<ProxyServicesUsage>>('/admin/ai/proxy-services/usage')
+      .then(unwrapData)
+  },
+
+  getProxyServices(): Promise<ProxyServicesStatus> {
+    return httpClient
+      .get<HttpMessageBody<ProxyServicesStatus>>('/admin/ai/proxy-services')
+      .then(unwrapData)
+  },
+
+  listProxyApiKeys(): Promise<ProxyServicesApiKeys> {
+    return httpClient
+      .get<HttpMessageBody<ProxyServicesApiKeys>>('/admin/ai/proxy-services/api-keys')
+      .then(unwrapData)
+  },
+
+  createProxyApiKey(apiKey: string): Promise<ProxyServicesApiKeyCreated> {
+    return httpClient
+      .post<HttpMessageBody<ProxyServicesApiKeyCreated>, { apiKey: string }>('/admin/ai/proxy-services/api-keys', {
+        apiKey,
+      })
+      .then(unwrapData)
+  },
+
+  deleteProxyApiKey(apiKey: string): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null | void>>('/admin/ai/proxy-services/api-keys', { data: { apiKey } })
+      .then(unwrapVoid)
+  },
+
+  startProxyLogin(provider: ProxyLoginProvider): Promise<ProxyServicesLogin> {
+    return httpClient
+      .post<HttpMessageBody<ProxyServicesLogin>, { provider: ProxyLoginProvider }>('/admin/ai/proxy-services/logins', {
+        provider,
+      })
+      .then(unwrapData)
+  },
+
+  proxyLoginStatus(state: string): Promise<ProxyServicesLoginStatus> {
+    return httpClient
+      .get<HttpMessageBody<ProxyServicesLoginStatus>>('/admin/ai/proxy-services/logins/status', {
+        params: { state },
+      })
+      .then(unwrapData)
+  },
+
   listModelEntries(): Promise<AiModelEntry[]> {
     return httpClient.get<HttpMessageBody<AiModelEntry[]>>('/admin/ai/model-entries').then(unwrapData)
   },

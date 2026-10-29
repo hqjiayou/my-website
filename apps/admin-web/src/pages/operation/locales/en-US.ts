@@ -21,7 +21,7 @@ export default {
       reset: 'Reset',
     },
     actions: {
-      manage: 'Open site workspace',
+      manage: 'Open agent',
     },
   },
   files: {
@@ -39,7 +39,7 @@ export default {
       actions: 'Actions',
     },
     actions: {
-      manage: 'Open site workspace',
+      manage: 'Open agent',
     },
   },
 } as const

@@ -82,7 +82,11 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         if (request == null || !StringUtils.hasText(request.message())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId);
+        String mode = previewMode(agentId, request.mode());
+        // 试聊只打该模式的主用入口。同模式其他入口和进程 AI_FALLBACK_MODELS 不参与，
+        // 失败就停在用户保存的那条上，不再换成另一种接入的回复。
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, mode);
+        AgentModelSelection embedding = modelEntryService.embeddingSelection(agentId);
         AgentChatRequest agentRequest = new AgentChatRequest(
                 String.valueOf(agentId),
                 request.message().trim(),
@@ -98,8 +102,11 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 null,
                 null,
                 null,
-                chain.size() > 1 ? List.copyOf(chain.subList(1, chain.size())) : null,
-                null);
+                null,
+                null,
+                embedding == null ? null : embedding.embeddingSpec(),
+                embedding == null ? null : embedding.apiKey(),
+                embedding == null ? null : embedding.baseUrl());
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter));
         return emitter;
@@ -157,11 +164,12 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
      * 面板上的模型名是这次对话会用的入口，不是进程环境变量。
      * 状态用 CONFIGURED：库里有入口，并不表示刚才探测过供应商。
      * 检索状态保持 Python 的原话，不根据错误文案改成可用。
-     * 备援列显示入口链在主用之后的 specs（各入口自带 key，主用运行期 API 错误时 Python 顺链切换）；
-     * 进程级 AI_FALLBACK_MODELS 不在面板上，因为入口链在前、进程备援在后且面板无从得知其凭证状态。
+     * 备援列是同一模式里主用之后的入口。试聊本身不走这些备援；用户端同模式对话才会接着试。
+     * 有 CLI 默认入口时面板跟试聊的缺省模式一样先看 CLI。
      */
     private AgentRuntimeStatus overlayEntry(long agentId, AgentRuntimeStatus status) {
-        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId);
+        String mode = modelEntryService.selectionChain(agentId, "CLI").isEmpty() ? "KEY" : "CLI";
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, mode);
         if (chain.isEmpty() || !StringUtils.hasText(chain.get(0).spec())) {
             return status;
         }
@@ -232,8 +240,12 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         return new AgentPromptProfile(profile.getSystemPrompt(), temperature);
     }
 
+    /**
+     * 缺省 skills 保持 null，Python 仍合并进程默认 skill。
+     * 请求里带了数组（含空数组）则原样下发，表示用户明确选择，不再补默认 skill。
+     */
     private static List<String> normalizeSkills(List<String> skills) {
-        if (skills == null || skills.isEmpty()) {
+        if (skills == null) {
             return null;
         }
         List<String> normalized = new ArrayList<>();
@@ -246,7 +258,15 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 normalized.add(id);
             }
         }
-        return normalized.isEmpty() ? null : normalized;
+        return normalized;
+    }
+
+    /** 缺省模式：这条智能体有 CLI 默认入口就用 CLI，否则用 KEY。与概览上优先展示的接入一致。 */
+    private String previewMode(long agentId, String requested) {
+        if (StringUtils.hasText(requested)) {
+            return AdminAiModelEntryServiceImpl.normalizeMode(requested);
+        }
+        return modelEntryService.selectionChain(agentId, "CLI").isEmpty() ? "KEY" : "CLI";
     }
 
     private static List<AgentChatHistoryMessage> toHistory(List<AdminAiPreviewHistoryMessage> history) {

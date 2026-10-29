@@ -20,19 +20,20 @@ test('user without role is denied; after admin role assignment the agent list op
 
   const admin = await loginAsAdmin(browser)
   try {
-    // --- create the user through the UI (no roles are assigned here) ---
-    await admin.page.goto('/system/users/new')
+    // --- create the user through the list dialog ---
+    await admin.page.goto('/system/users')
+    await admin.page.getByRole('button', { name: 'New user' }).click()
     await fieldByLabelText(admin.page, 'Username').fill(username)
     await admin.page.locator('input[type="password"]').fill(password)
     await fieldByLabelText(admin.page, 'Display name').fill(displayName)
     await admin.page.getByRole('button', { name: 'Save' }).click()
-    await admin.page.waitForURL('**/system/users')
+    await expect(admin.page.getByText('User created')).toBeVisible()
 
     // --- before: the new user is denied on the agent list route ---
     const deniedContext = await newContext(browser)
     const deniedPage = await deniedContext.newPage()
     await login(deniedPage, username, password)
-    await deniedPage.goto('/apps/sites')
+    await deniedPage.goto('/agent')
     await expect(deniedPage.getByRole('heading', { name: 'Access denied' })).toBeVisible()
     await deniedContext.close()
 
@@ -42,7 +43,6 @@ test('user without role is denied; after admin role assignment the agent list op
     const row = admin.page.locator('tr', { hasText: username })
     await expect(row).toBeVisible()
     await row.getByText('Assign roles').click()
-    await admin.page.waitForURL(/\/system\/users\/\d+\/roles$/)
     const adminRoleCard = admin.page
       .locator('label')
       .filter({ has: admin.page.getByText('admin', { exact: true }) })
@@ -54,7 +54,7 @@ test('user without role is denied; after admin role assignment the agent list op
     const allowedContext = await newContext(browser)
     const allowedPage = await allowedContext.newPage()
     await login(allowedPage, username, password)
-    await allowedPage.goto('/apps/sites')
+    await allowedPage.goto('/agent')
     await expect(allowedPage.getByRole('heading', { name: 'Site Management' })).toBeVisible()
     await expect(allowedPage.getByRole('heading', { name: 'Access denied' })).toHaveCount(0)
     await allowedContext.close()

@@ -64,7 +64,7 @@ class AdminAuthMeServiceImplTest {
         when(permissionQueryService.loadForUserCode(userCode)).thenReturn(Optional.of(snapshot));
 
         List<AdminMenuNodeDto> menus =
-                List.of(new AdminMenuNodeDto("admin:menu:system", "系统", null, null, 10, List.of()));
+                List.of(new AdminMenuNodeDto("admin:menu:system", "系统", null, null, 10, List.of(), 1L, "ACTIVE"));
         when(adminMenuService.buildMenuTree(snapshot)).thenReturn(menus);
 
         AdminAuthMeServiceImpl service =

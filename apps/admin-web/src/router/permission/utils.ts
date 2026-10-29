@@ -49,34 +49,20 @@ export function resolveRoutePermission(pathname: string): string | undefined {
     return ROUTE_PERMISSIONS[pathname]
   }
 
-  if (/^\/system\/roles\/\d+\/edit$/.test(pathname)) {
-    return PERMISSION_CODES.roleDetail
-  }
-
-  if (/^\/system\/roles\/\d+\/permissions$/.test(pathname)) {
-    return PERMISSION_CODES.rolePermissionView
-  }
-
-  if (/^\/system\/users\/\d+\/edit$/.test(pathname)) {
-    return PERMISSION_CODES.userDetail
-  }
-
-  if (/^\/system\/users\/\d+\/roles$/.test(pathname)) {
-    return PERMISSION_CODES.userRoleView
-  }
+  // 用户/角色的新建、编辑、分配已改在列表弹层里完成，旧地址只跳回列表，这里不再单独要权限。
 
   // 站点媒体：list；须先于通用 workspace detail 匹配
-  if (/^\/apps\/sites\/\d+\/files(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/\d+\/files(?:\/|$)/.test(pathname)) {
     return PERMISSION_CODES.mediaList
   }
 
   // 站点内容：list；须先于通用 workspace detail 匹配
-  if (/^\/apps\/sites\/\d+\/contents(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/\d+\/contents(?:\/|$)/.test(pathname)) {
     return PERMISSION_CODES.contentList
   }
 
   // 站点 Workspace（含子页）需 detail；create 已在 ROUTE_PERMISSIONS 精确登记
-  if (/^\/apps\/sites\/\d+(\/.*)?$/.test(pathname)) {
+  if (/^\/agent\/\d+(\/.*)?$/.test(pathname)) {
     return PERMISSION_CODES.agentDetail
   }
 

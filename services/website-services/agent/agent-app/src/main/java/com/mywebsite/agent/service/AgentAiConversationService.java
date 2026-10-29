@@ -46,6 +46,7 @@ public interface AgentAiConversationService {
     /**
      * 同上。{@code citations} 非空时写入 ASSISTANT {@code agent_meta} 的 {@code citations} 字段，并保留已有 run meta。
      * null 或空列表不改变 {@code agent_meta}：空 run meta 仍为 null，非空 run meta 仍只写观测 JSON。
+     * 不写本轮模型。
      */
     void recordExchange(
             AgentAiConversationEntity conversation,
@@ -55,6 +56,20 @@ public interface AgentAiConversationService {
             AgentRunMeta runMeta,
             List<AgentAttachmentDto> userAttachments,
             List<AgentCitation> citations);
+
+    /**
+     * 同上，并把 {@code modelSpec}（provider:model）写入 ASSISTANT {@code agent_meta.model}。
+     * null 或空白不写该字段，旧消息保持没有模型记录。
+     */
+    void recordExchange(
+            AgentAiConversationEntity conversation,
+            String userMessage,
+            String reply,
+            List<AgentTodoItem> todos,
+            AgentRunMeta runMeta,
+            List<AgentAttachmentDto> userAttachments,
+            List<AgentCitation> citations,
+            String modelSpec);
 
     List<AgentAiConversationDto> listConversations(long agentId, long agentUserId);
 

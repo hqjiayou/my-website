@@ -179,6 +179,13 @@ def _parse_default_skills(raw: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def default_skill_ids_for_request(skills: list[str] | None, configured: str) -> list[str] | None:
+    """省略 skills 时用进程默认；请求显式带了数组（含空数组）就只用这一份。"""
+    if skills is not None:
+        return None
+    return _parse_default_skills(configured)
+
+
 def _harness_dir(request: Request) -> str | None:
     raw = request.app.state.settings.agent_harness_dir.strip()
     return raw or None
@@ -189,13 +196,32 @@ def _skills_dir(request: Request) -> str:
     return settings.agent_skills_dir.strip() or default_skills_directory()
 
 
+def chat_embedding_credentials(body: ChatRequest) -> tuple[str | None, str | None, str | None]:
+    """对话检索的嵌入凭证与回答模型分开。
+
+    请求显式带了 embedding spec 和 key 时用这一套（两种对话模式共用）。
+    否则才退回主用入口自己的 embedding spec；入口没带时返回空，调用方用进程嵌入模型。
+    """
+    if (
+        body.embedding_spec
+        and body.embedding_spec.strip()
+        and body.embedding_api_key
+        and body.embedding_api_key.strip()
+    ):
+        return body.embedding_spec, body.embedding_api_key, body.embedding_base_url
+    selection = body.model_selection
+    if selection is None or not (selection.embedding_spec and selection.embedding_spec.strip()):
+        return None, None, None
+    return selection.embedding_spec, selection.api_key, selection.base_url
+
+
 def _prepare_execution(request: Request, body: ChatRequest, agent_id: str, model: Model | None):
     settings = request.app.state.settings
     skills_dir = _skills_dir(request)
     resolution = resolve_skills(
         skills_dir=skills_dir,
         requested_skill_ids=body.skills,
-        default_skill_ids=_parse_default_skills(settings.agent_default_skills),
+        default_skill_ids=default_skill_ids_for_request(body.skills, settings.agent_default_skills),
     )
     policy = (settings.agent_skills_unknown_policy or "ignore").strip().lower()
     if policy == "reject" and resolution.has_missing:
@@ -206,11 +232,8 @@ def _prepare_execution(request: Request, body: ChatRequest, agent_id: str, model
         )
     todo_store = todo_store_from_request(body.todos)
     selection = body.model_selection
-    embedder = (
-        _request_embedder(request, selection.embedding_spec, selection.api_key, selection.base_url)
-        if selection is not None
-        else None
-    )
+    embedding_spec, embedding_api_key, embedding_base_url = chat_embedding_credentials(body)
+    embedder = _request_embedder(request, embedding_spec, embedding_api_key, embedding_base_url)
     collector = KnowledgeSearchCollector()
     toolsets = build_execution_toolsets(
         _business_settings(settings, body.business_api_base_url),

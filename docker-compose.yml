@@ -80,9 +80,13 @@ services:
       <<: *java-db
       AGENT_BUSINESS_API_BASE_URL: "http://agent-service:8082"
       AI_MODEL_ENTRY_SECRET: "${AI_MODEL_ENTRY_SECRET:-local-dev-model-entry-secret}"
+      PROXY_SERVICES_BASE_URL: "http://proxy-services:8317"
+      PROXY_SERVICES_MANAGEMENT_KEY: "${PROXY_SERVICES_MANAGEMENT_KEY:-}"
     depends_on:
       postgres:
         condition: service_healthy
+      proxy-services:
+        condition: service_started
     healthcheck:
       <<: *java-health
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/actuator/health >/dev/null"]
@@ -210,6 +214,28 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  proxy-services:
+    build:
+      context: services/proxy-services
+      dockerfile: Dockerfile
+    image: mywebsite-proxy-services:local
+    restart: unless-stopped
+    environment:
+      MANAGEMENT_PASSWORD: "${PROXY_SERVICES_MANAGEMENT_KEY:?PROXY_SERVICES_MANAGEMENT_KEY must be set to a local random value (proxy management password)}"
+    ports:
+      # 只绑回环：本机 admin 与 OAuth 回调。compose 网络内用服务名 proxy-services。
+      - "127.0.0.1:8317:8317"
+      - "127.0.0.1:8085:8085"
+      - "127.0.0.1:1455:1455"
+      - "127.0.0.1:54545:54545"
+      - "127.0.0.1:51121:51121"
+      - "127.0.0.1:11451:11451"
+    volumes:
+      - ./services/proxy-services/config.yaml:/CLIProxyAPI/config.yaml
+      - ./services/proxy-services/auths:/root/.cli-proxy-api
+      - ./services/proxy-services/logs:/CLIProxyAPI/logs
+      - ./services/proxy-services/plugins:/CLIProxyAPI/plugins
 
   web:
     build:

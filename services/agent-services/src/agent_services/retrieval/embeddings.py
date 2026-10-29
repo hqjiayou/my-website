@@ -185,9 +185,13 @@ def _google_embedding_model_name(spec: str) -> str | None:
 
 def create_embedding_client(settings: Settings) -> tuple[EmbeddingClient | None, str | None]:
     """返回 (client, blocked_reason)；两者互斥。"""
+    spec = settings.ai_embedding_model
+    api_key = settings.ai_provider_api_key
+    if _google_embedding_model_name(spec.strip()) and not api_key.strip():
+        api_key = settings.gemini_api_key
     return create_embedding_client_for(
-        spec=settings.ai_embedding_model,
-        api_key=settings.ai_provider_api_key,
+        spec=spec,
+        api_key=api_key,
         base_url=settings.ai_provider_base_url,
         dimensions=settings.ai_embedding_dimensions,
     )

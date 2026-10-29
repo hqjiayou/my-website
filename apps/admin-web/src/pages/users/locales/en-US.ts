@@ -96,7 +96,8 @@ export default {
     selectAll: 'Select all',
     clearAll: 'Clear all',
     atLeastOne: 'Select at least one role',
-    cannotAssignSuperAdmin: 'super_admin cannot be assigned from this page.',
+    cannotAssignSuperAdmin:
+      'Super administrator is not listed here and cannot be assigned in this dialog. The checked system administrator is the admin role.',
     messages: {
       saved: 'User roles saved',
       restrictedSelf: 'You cannot change your own role bindings.',

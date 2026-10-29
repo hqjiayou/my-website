@@ -15,6 +15,7 @@ import type {
   GatewayAccessKeyIssueResponse,
 } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
+import { modelIdFromSpec } from '@/utils/modelSpec'
 
 type Draft = {
   id: number | null
@@ -290,8 +291,12 @@ function ModeChainSection({ mode, chain }: { mode: string; chain: AiModelEntry[]
               >
                 {index === 0 ? t('settings.chainPrimary') : t('settings.chainFallback', { n: index })}
               </span>
-              <span className="font-medium text-slate-900">{entry.displayName}</span>
-              <span className="text-slate-500">{entry.modelSpec}</span>
+              <span className="font-medium text-slate-900">
+                {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
+              </span>
+              <span className="text-slate-500">
+                {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
+              </span>
               <span className="text-xs text-slate-400">
                 {entry.agentId == null ? t('settings.agentPlatform') : null}
               </span>
@@ -301,6 +306,17 @@ function ModeChainSection({ mode, chain }: { mode: string; chain: AiModelEntry[]
       )}
     </div>
   )
+}
+
+function cliModelSpec(modelId: string) {
+  const trimmed = modelId.trim()
+  if (!trimmed) return trimmed
+  return trimmed.includes(':') ? trimmed : `openai:${trimmed}`
+}
+
+function cliModels(account: { provider: string; modelIds: string[] }) {
+  if (account.provider === 'claude') return account.modelIds
+  return account.modelIds.filter((id) => !id.toLowerCase().startsWith('claude'))
 }
 
 export function AiSettingsPage() {
@@ -317,6 +333,14 @@ export function AiSettingsPage() {
   const sitesQuery = useQuery({
     queryKey: ['sites', 'model-entry-options'],
     queryFn: () => agentApi.listSites({ pageNum: 1, pageSize: 100 }),
+  })
+  const usageQuery = useQuery({
+    queryKey: ['ai', 'proxy-services', 'usage'],
+    queryFn: () => aiApi.getProxyServicesUsage(),
+  })
+  const keysQuery = useQuery({
+    queryKey: ['ai', 'proxy-services', 'api-keys'],
+    queryFn: () => aiApi.listProxyApiKeys(),
   })
 
   const saveMutation = useMutation({
@@ -388,15 +412,23 @@ export function AiSettingsPage() {
   const cliChain = computeChain(entries.filter((entry) => (entry.mode ?? 'KEY') === 'CLI'), scopeAgentId)
   const aliasTrimmed = draft?.alias.trim() ?? ''
   const aliasInvalid = aliasTrimmed !== '' && !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(aliasTrimmed.toLowerCase())
+  const cliAccounts = (usageQuery.data?.accounts ?? []).filter(
+    (account) => !account.disabled && !account.unavailable,
+  )
+  const cliBaseUrl = usageQuery.data?.apiBaseUrl ?? ''
+  const clientKeys = keysQuery.data?.apiKeys ?? []
+  const cliModelId = modelIdFromSpec(draft?.modelSpec ?? '')
+  const cliReady = Boolean(cliBaseUrl) && cliAccounts.some((account) => cliModels(account).length > 0) && clientKeys.length > 0
 
   function submitDraft() {
     if (!draft || !canUpdate) return
     const body: AiModelEntryWriteInput = {
-      displayName: draft.displayName.trim(),
-      modelSpec: draft.modelSpec.trim(),
-      baseUrl: draft.baseUrl.trim() || null,
+      displayName:
+        draft.mode === 'CLI' ? modelIdFromSpec(draft.modelSpec).trim() || draft.displayName.trim() : draft.displayName.trim(),
+      modelSpec: draft.mode === 'CLI' ? cliModelSpec(draft.modelSpec) : draft.modelSpec.trim(),
+      baseUrl: draft.mode === 'CLI' ? usageQuery.data?.apiBaseUrl || draft.baseUrl.trim() || null : draft.baseUrl.trim() || null,
       agentId: draft.agentId.trim() === '' ? null : Number(draft.agentId),
-      embeddingSpec: draft.embeddingSpec.trim() || null,
+      embeddingSpec: draft.mode === 'CLI' ? null : draft.embeddingSpec.trim() || null,
       enabled: draft.enabled,
       defaultEntry: draft.defaultEntry,
       mode: draft.mode,
@@ -423,13 +455,17 @@ export function AiSettingsPage() {
                   onClick={() => setDraft(draftFromEntry(entry))}
                 >
                   <span>
-                    <span className="font-medium text-slate-900">{entry.displayName}</span>
+                    <span className="font-medium text-slate-900">
+                      {(entry.mode ?? 'KEY') === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
+                    </span>
                     {entry.alias ? (
                       <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
                         {entry.alias}
                       </span>
                     ) : null}
-                    <span className="ml-2 text-slate-500">{entry.modelSpec}</span>
+                    <span className="ml-2 text-slate-500">
+                      {(entry.mode ?? 'KEY') === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
+                    </span>
                   </span>
                   <span className="flex flex-wrap items-center gap-1">
                     {entry.defaultEntry ? (
@@ -520,16 +556,116 @@ export function AiSettingsPage() {
                 onChange={(event) => setDraft({ ...draft, displayName: event.target.value })}
               />
             </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-800">{t('settings.spec')}</span>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                value={draft.modelSpec}
-                disabled={!canUpdate}
-                placeholder={t('settings.specHint')}
-                onChange={(event) => setDraft({ ...draft, modelSpec: event.target.value })}
-              />
-            </label>
+            {draft.mode === 'CLI' ? (
+              cliReady ? (
+                <>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-800">{t('settings.cliModel')}</span>
+                    <select
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      value={cliModelId}
+                      disabled={!canUpdate}
+                      onChange={(event) => setDraft({ ...draft, modelSpec: event.target.value })}
+                    >
+                      {cliAccounts.map((account) => {
+                        const ids = cliModels(account)
+                        if (ids.length === 0) return null
+                        const label =
+                          account.provider === 'codex'
+                            ? t('proxyServices.providerCodex')
+                            : account.provider === 'claude'
+                              ? t('proxyServices.providerClaude')
+                              : account.provider === 'antigravity'
+                                ? t('proxyServices.providerGemini')
+                                : account.provider === 'meta'
+                                  ? t('proxyServices.providerMuse')
+                                  : account.provider
+                        return (
+                          <optgroup key={account.name} label={label}>
+                            {ids.map((id) => (
+                              <option key={`${account.name}-${id}`} value={id}>
+                                {id}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )
+                      })}
+                    </select>
+                    <span className="mt-1 block text-xs text-slate-500">{t('settings.cliModelHint')}</span>
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-800">{t('settings.cliKey')}</span>
+                    <select
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      value={draft.apiKey}
+                      disabled={!canUpdate}
+                      onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
+                    >
+                      <option value="">{draft.id == null ? t('settings.cliKeyPick') : t('settings.apiKeyKeep')}</option>
+                      {clientKeys.map((key) => (
+                        <option key={key} value={key}>
+                          {key}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-1 block text-xs text-slate-500">{t('settings.cliKeyHint')}</span>
+                  </label>
+                  <p className="text-xs text-slate-500">{t('settings.cliAddressFixed', { baseUrl: cliBaseUrl })}</p>
+                </>
+              ) : (
+                <p className="text-sm text-slate-600">{t('settings.cliNeedProxy')}</p>
+              )
+            ) : (
+              <>
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-800">{t('settings.spec')}</span>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={draft.modelSpec}
+                    disabled={!canUpdate}
+                    placeholder={t('settings.specHint')}
+                    onChange={(event) => setDraft({ ...draft, modelSpec: event.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-800">{t('settings.apiKey')}</span>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    type="password"
+                    autoComplete="new-password"
+                    value={draft.apiKey}
+                    disabled={!canUpdate}
+                    placeholder={draft.id == null ? '' : t('settings.apiKeyKeep')}
+                    onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
+                  />
+                  {draft.apiKeyHint ? (
+                    <span className="mt-1 block text-xs text-slate-500">
+                      {t('settings.apiKeyHint', { hint: draft.apiKeyHint })}
+                    </span>
+                  ) : null}
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-800">{t('settings.embeddingSpec')}</span>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={draft.embeddingSpec}
+                    disabled={!canUpdate}
+                    placeholder={t('settings.embeddingSpecHint')}
+                    onChange={(event) => setDraft({ ...draft, embeddingSpec: event.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-800">{t('settings.baseUrl')}</span>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    value={draft.baseUrl}
+                    disabled={!canUpdate}
+                    placeholder={t('settings.baseUrlHint')}
+                    onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })}
+                  />
+                </label>
+              </>
+            )}
             <label className="block">
               <span className="text-sm font-medium text-slate-800">{t('settings.alias')}</span>
               <input
@@ -541,23 +677,6 @@ export function AiSettingsPage() {
               <span className="mt-1 block text-xs text-slate-500">{t('settings.aliasHint')}</span>
               {aliasInvalid ? (
                 <span className="mt-1 block text-xs text-rose-600">{t('settings.aliasInvalid')}</span>
-              ) : null}
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-800">{t('settings.apiKey')}</span>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                type="password"
-                autoComplete="new-password"
-                value={draft.apiKey}
-                disabled={!canUpdate}
-                placeholder={draft.id == null ? '' : t('settings.apiKeyKeep')}
-                onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
-              />
-              {draft.apiKeyHint ? (
-                <span className="mt-1 block text-xs text-slate-500">
-                  {t('settings.apiKeyHint', { hint: draft.apiKeyHint })}
-                </span>
               ) : null}
             </label>
             <label className="block">
@@ -588,26 +707,6 @@ export function AiSettingsPage() {
                 <option value="CLI">{t('settings.modeCli')}</option>
               </select>
               <span className="mt-1 block text-xs text-slate-500">{t('settings.modeHint')}</span>
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-800">{t('settings.embeddingSpec')}</span>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                value={draft.embeddingSpec}
-                disabled={!canUpdate}
-                placeholder={t('settings.embeddingSpecHint')}
-                onChange={(event) => setDraft({ ...draft, embeddingSpec: event.target.value })}
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-800">{t('settings.baseUrl')}</span>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                value={draft.baseUrl}
-                disabled={!canUpdate}
-                placeholder={t('settings.baseUrlHint')}
-                onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })}
-              />
             </label>
             <label className="flex items-center gap-2 text-sm text-slate-800">
               <input

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { aiApi } from '@/api/apps/aiApi'
 import type { AiRuntimeLimits } from '@/types/ai'
 
+import { modelIdFromSpec } from '@/utils/modelSpec'
+
 const LIMIT_KEYS: Array<keyof AiRuntimeLimits> = [
   'maxRequests',
   'maxToolCalls',
@@ -127,14 +129,14 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
         <div className="rounded-xl border border-slate-200 p-3">
           <dt className="mb-1 font-medium text-slate-800">{t('aiWorkspace.runtime.provider')}</dt>
           <dd className="flex items-center gap-2">
-            <span className="font-mono text-xs">{status.provider ?? '—'}</span>
+            <span className="font-mono text-xs">{status.provider ? modelIdFromSpec(status.provider) : '—'}</span>
             <span className={`rounded px-1.5 py-0.5 text-xs ${statusClass(status.providerStatus)}`}>
               {status.providerStatus ?? '—'}
             </span>
           </dd>
           <dd className="mt-2 text-xs text-slate-500">
             {t('aiWorkspace.runtime.fallbacks', {
-              ids: status.fallbackProviders.length ? status.fallbackProviders.join(', ') : '—',
+              ids: status.fallbackProviders.length ? status.fallbackProviders.map(modelIdFromSpec).join(', ') : '—',
             })}
           </dd>
           <dd className="mt-2 flex items-center gap-2 text-xs">

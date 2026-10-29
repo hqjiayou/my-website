@@ -56,10 +56,9 @@ alwaysApply: false
 
 ## Menu / 5E
 
-- **只读已落地**：现有 `AdminMenuController`、`AdminMenuService`/`AdminMenuServiceImpl`、`AdminMenuMapper`、`AdminMenu*Dto`（菜单树组装在 ServiceImpl；无独立平行 Menu Entity 架构）。
-- **写操作未完成**：后续写能力在上述现有结构与 permission 模型上扩展。
+- **读写都在现有类型上**：`AdminMenuController`、`AdminMenuService`/`AdminMenuServiceImpl`、`AdminMenuMapper`、`AdminMenuNodeDto`。菜单行就是 `admin_permission` 且 `resource_type = MENU`。侧栏用 `buildMenuTree`（仅 ACTIVE）；管理列表含停用。
+- 权限目录页不再作为入口。把菜单赋给角色仍走角色权限接口；服务端按菜单补上对应操作权限，不另做绑定表。
 - 禁止另起 `admin.menu.processor.*` / manager / helper 平行架构。
-- 涉及 Menu 写操作时，先读现有 Menu 实现与阶段 5E 设计/路线图文档。
 
 ## AI 域（摘要）
 

@@ -52,6 +52,14 @@ def test_resolve_skill_instructions_merges_request_and_defaults(tmp_path: Path) 
     assert resolution.missing_ids == ("missing",)
 
 
+def test_explicit_skill_list_skips_process_defaults() -> None:
+    from agent_services.api.internal import default_skill_ids_for_request
+
+    assert default_skill_ids_for_request(None, "orchestration") == ["orchestration"]
+    assert default_skill_ids_for_request([], "orchestration") is None
+    assert default_skill_ids_for_request(["demo"], "orchestration") is None
+
+
 def test_unknown_skill_ids_are_tracked(tmp_path: Path) -> None:
     clear_skills_cache()
     resolution = resolve_skills(
@@ -140,15 +148,23 @@ def test_chat_includes_skills_applied_and_missing(tmp_path: Path) -> None:
             blocked_reason=None,
         ),
     )
-    response = TestClient(app).post(
+    explicit = TestClient(app).post(
         "/internal/v1/chat",
         headers=TOKEN_HEADER,
         json={"agentId": "1", "message": "hello", "skills": ["missing-x"]},
     )
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["skillsApplied"] == ["demo"]
-    assert data["skillsMissing"] == ["missing-x"]
+    assert explicit.status_code == 200
+    explicit_data = explicit.json()["data"]
+    assert explicit_data["skillsApplied"] == []
+    assert explicit_data["skillsMissing"] == ["missing-x"]
+
+    omitted = TestClient(app).post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={"agentId": "1", "message": "hello"},
+    )
+    assert omitted.status_code == 200
+    assert omitted.json()["data"]["skillsApplied"] == ["demo"]
 
 
 def test_reject_unknown_skills_returns_400(tmp_path: Path) -> None:

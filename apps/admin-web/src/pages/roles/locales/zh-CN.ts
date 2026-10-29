@@ -1,7 +1,7 @@
 export default {
   list: {
     title: '角色管理',
-    description: '维护后台角色，并为角色分配权限。',
+    description: '维护后台角色。勾选菜单后，这个角色就能打开对应页面。',
     create: '新建角色',
     empty: '暂无角色',
     loading: '加载中…',
@@ -26,7 +26,7 @@ export default {
       edit: '编辑',
       enable: '启用',
       disable: '停用',
-      assignPermissions: '分配权限',
+      assignPermissions: '分配菜单',
       delete: '删除',
     },
     badges: {
@@ -72,9 +72,9 @@ export default {
     },
   },
   permissions: {
-    title: '分配权限',
-    description: '为角色「{{roleName}}」（{{roleCode}}）配置权限。',
-    descriptionFallback: '配置角色权限',
+    title: '分配菜单',
+    description: '勾选「{{roleName}}」（{{roleCode}}）能打开的页面。按钮跟着页面走，不用再逐个勾。',
+    descriptionFallback: '勾选这个角色能打开的页面',
     backToList: '返回列表',
     loading: '加载中…',
     invalidId: '无效的角色 ID',
@@ -93,7 +93,7 @@ export default {
     deselectAll: '取消全选',
     emptyGroup: '暂无权限点',
     actions: {
-      save: '保存权限绑定',
+      save: '保存',
       saving: '保存中…',
       cancel: '取消',
     },

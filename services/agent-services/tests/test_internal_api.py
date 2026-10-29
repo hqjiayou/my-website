@@ -365,3 +365,38 @@ def test_chat_falls_back_to_request_fallback_models_on_api_error(monkeypatch) ->
     assert response.json()["data"]["reply"] == "from-backup"
     assert "backup-key" not in response.text
     assert "primary-key" not in response.text
+
+
+def test_chat_embedding_credentials_prefer_explicit_key_over_chat_model() -> None:
+    from agent_services.api.internal import chat_embedding_credentials
+    from agent_services.schemas.chat import ChatRequest, ModelSelection
+
+    body = ChatRequest(
+        agentId="1",
+        message="hi",
+        model=ModelSelection(
+            spec="openai:gpt",
+            apiKey="proxy-key",
+            baseUrl="http://127.0.0.1:8317/v1",
+        ),
+        embeddingSpec="google:gemini-embedding-001",
+        embeddingApiKey="embed-key",
+        embeddingBaseUrl="https://embed.example",
+    )
+    assert chat_embedding_credentials(body) == (
+        "google:gemini-embedding-001",
+        "embed-key",
+        "https://embed.example",
+    )
+
+
+def test_chat_embedding_credentials_skip_chat_model_without_embedding_spec() -> None:
+    from agent_services.api.internal import chat_embedding_credentials
+    from agent_services.schemas.chat import ChatRequest, ModelSelection
+
+    body = ChatRequest(
+        agentId="1",
+        message="hi",
+        model=ModelSelection(spec="openai:gpt", apiKey="proxy-key"),
+    )
+    assert chat_embedding_credentials(body) == (None, None, None)

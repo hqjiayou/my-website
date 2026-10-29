@@ -17,7 +17,7 @@ test('admin login -> create agent -> still listed after reload', async ({ browse
     const agentId = await createAgentViaUi(page, agentName, agentCode)
     expect(Number(agentId)).toBeGreaterThan(0)
 
-    await page.goto('/apps/sites')
+    await page.goto('/agent')
     await expect(page.getByText(agentName)).toBeVisible()
     await expect(page.getByText(agentCode)).toBeVisible()
 
