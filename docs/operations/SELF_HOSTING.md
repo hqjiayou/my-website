@@ -37,6 +37,8 @@ cp .env.example .env
 |------|----------|
 | `POSTGRES_PASSWORD`、`REDIS_PASSWORD`、`AGENT_RETRIEVAL_PASSWORD` | `openssl rand -hex 24` |
 | `AGENT_INTERNAL_SERVICE_TOKEN` | `openssl rand -hex 32` |
+| `PROXY_SERVICES_MANAGEMENT_KEY` | `openssl rand -hex 24`（必填：不填 Compose 直接報錯；admin 與 proxy-services 共用此值） |
+| `AI_MODEL_ENTRY_SECRET` | `openssl rand -hex 24`（不填會回退到已知默認值 `local-dev-model-entry-secret`；換值後已存的模型入口要重存 api_key） |
 | `AI_PROVIDER_API_KEY` | Google AI Studio 的 Gemini key |
 | `AI_MODEL` | 保持 `google:gemini-3-flash-preview`，除非明确改 provider |
 | `VITE_PORTAL_AGENT_ID` | 先留空。管理后台建好站点后填数字 ID，然后重建 `web` |
