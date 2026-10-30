@@ -21,6 +21,7 @@ import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentChatHistoryMessage;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
 import com.mywebsite.agent.dto.AgentPromptProfile;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
 import com.mywebsite.agent.dto.AgentTodoItem;
@@ -97,7 +98,10 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             emitter.complete();
             return emitter;
         }
-        AgentModelSelection embedding = modelEntryService.embeddingSelection(agentId);
+        List<AgentModelSelection> embeddingClasses = modelEntryService.embeddingClasses(agentId);
+        AgentModelSelection embedding = embeddingClasses == null || embeddingClasses.isEmpty()
+                ? null
+                : embeddingClasses.get(0);
         AgentChatRequest agentRequest = new AgentChatRequest(
                 String.valueOf(agentId),
                 request.message().trim(),
@@ -117,7 +121,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 null,
                 embedding == null ? null : embedding.embeddingSpec(),
                 embedding == null ? null : embedding.apiKey(),
-                embedding == null ? null : embedding.baseUrl());
+                embedding == null ? null : embedding.baseUrl(),
+                AgentEmbeddingClassUtils.wire(embeddingClasses));
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter));
         return emitter;

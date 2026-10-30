@@ -26,7 +26,9 @@ public record AgentChatRequest(
         // 向量索引凭证，与回答模型分开。两种对话模式共用；都空时 Python 用进程嵌入模型。
         String embeddingSpec,
         String embeddingApiKey,
-        String embeddingBaseUrl) {
+        String embeddingBaseUrl,
+        // 已登记的嵌入类。有值时执行层按类检索；不传时仍只用上面那一套。
+        List<AgentEmbeddingClass> embeddingClasses) {
 
     public AgentChatRequest(
             String agentId,
@@ -64,6 +66,7 @@ public record AgentChatRequest(
                 documents,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -99,6 +102,7 @@ public record AgentChatRequest(
                 memories,
                 memoryEnabled,
                 fallbackModels,
+                null,
                 null,
                 null,
                 null,

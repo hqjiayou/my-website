@@ -275,7 +275,7 @@ export function ChatPage() {
       // 存儲不可用時僅本次會話生效
     }
   }
-  const [entryByMode, setEntryByMode] = useState<Record<string, string | null>>(() => {
+  const [entryByMode, setEntryByMode] = useState<Record<string, string | null>>((): Record<string, string | null> => {
     if (!site.ok) return {}
     const read = (value: string) => {
       try {
@@ -798,7 +798,7 @@ export function ChatPage() {
           content: '',
           pending: true,
           createdAt: new Date().toISOString(),
-          requestedModel: pickedEntry?.modelSpec ?? modeEntries[0]?.modelSpec ?? null,
+          requestedModel: entryId ? (pickedEntry?.modelSpec ?? null) : (modeEntries[0]?.modelSpec ?? null),
         },
       ]
     })
@@ -940,8 +940,12 @@ export function ChatPage() {
         markStopped()
         return
       }
-      if (error instanceof ApiError && error.code === 1009) rememberEntry(null)
-      markFailed(errorMessage(error))
+      if (error instanceof ApiError && error.code === 1009) {
+        rememberEntry(null)
+        markFailed(sseErrorText('MODEL_ENTRY_UNAVAILABLE'))
+      } else {
+        markFailed(errorMessage(error))
+      }
     } finally {
       if (generation.current === gen) {
         sendingRef.current = false

@@ -49,8 +49,15 @@ public interface AdminAiModelEntryService {
     record ChainCandidate(Long id, String displayName, String modelSpec) {}
 
     /**
-     * 向量索引用的凭证，与当前对话模式无关。站点 KEY 入口里第一把带 embedding spec 且能解密的 key，
-     * 否则全站同样的入口。都没有时返回 null，检索改用进程嵌入模型。CLI 入口不参与。
+     * 已登记的嵌入类：站点启用的 KEY 入口里带 embedding spec 且能解密的，再接全站同样的入口。
+     * 同一模型名只留先出现的一把，{@code google-gla:} 与 {@code google:} 算同一类，最多 4 类。
+     * CLI 入口不参与。都没有时返回空列表，检索改用进程嵌入模型。
+     */
+    List<AgentModelSelection> embeddingClasses(long agentId);
+
+    /**
+     * {@link #embeddingClasses(long)} 的第一类。都没有时返回 null。
+     * 单类调用方仍用这一把，和以前「第一把 KEY embedding」一致。
      */
     AgentModelSelection embeddingSelection(long agentId);
 }

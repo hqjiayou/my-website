@@ -173,7 +173,10 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   })
   const entries = modelQuery.data?.entries ?? []
   const picked = entries.find((item) => item.id === modelEntryId) ?? null
-  const activeSpec = picked?.modelSpec ?? (modelQuery.data?.available ? modelQuery.data.modelSpec : '') ?? ''
+  const namedMissing = modelQuery.data != null && modelEntryId != null && picked == null
+  const activeSpec = namedMissing
+    ? ''
+    : (picked?.modelSpec ?? (modelQuery.data?.available ? modelQuery.data.modelSpec : '') ?? '')
   const activeModel = activeSpec ? (mode === 'CLI' ? modelIdFromSpec(activeSpec) : activeSpec) : ''
   useEffect(() => {
     selection.setRequestedSpec(activeSpec)
@@ -290,9 +293,11 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
       <p className="mb-3 text-sm text-muted-foreground">
         {modelQuery.isPending
           ? t('aiWorkspace.loading')
-          : activeModel
-            ? t('aiWorkspace.preview.using', { model: activeModel })
-            : t('aiWorkspace.preview.noEntry')}
+          : namedMissing
+            ? t('aiWorkspace.preview.errors.MODEL_ENTRY_UNAVAILABLE')
+            : activeModel
+              ? t('aiWorkspace.preview.using', { model: activeModel })
+              : t('aiWorkspace.preview.noEntry')}
       </p>
       <p className="mb-3 text-sm text-muted-foreground">{t('aiWorkspace.preview.hint')}</p>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">

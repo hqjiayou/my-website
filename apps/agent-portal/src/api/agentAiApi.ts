@@ -180,7 +180,7 @@ export function sseErrorText(errorCode: string): string {
     case 'AGENT_BUDGET_EXCEEDED':
       return '本次對話已達到用量上限'
     case 'MODEL_ENTRY_UNAVAILABLE':
-      return '所選模型已不可用，已改回該模式的預設入口'
+      return '所選模型已不可用，這一輪不會改用預設入口'
     case 'SYSTEM_ERROR':
       return '服務暫時發生錯誤，請稍後重試'
     default:

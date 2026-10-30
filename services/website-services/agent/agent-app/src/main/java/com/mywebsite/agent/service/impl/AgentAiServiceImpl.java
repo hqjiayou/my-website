@@ -42,6 +42,7 @@ import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
 import com.mywebsite.agent.service.AgentAiRateLimitService;
 import com.mywebsite.agent.service.AgentAiService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
+import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
 import com.mywebsite.agent.utils.AgentModelChainUtils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -261,14 +262,16 @@ public class AgentAiServiceImpl implements AgentAiService {
         }
         boolean vectorDegraded = false;
         try {
-            AgentModelSelection selection = embeddingSelection(agentId);
+            List<AgentModelSelection> embeddingClasses = embeddingClasses(agentId);
+            AgentModelSelection selection = embeddingClasses.isEmpty() ? null : embeddingClasses.get(0);
             AgentRetrievalSearchResult result = agentClient.searchRetrieval(new AgentRetrievalSearchRequest(
                     String.valueOf(agentId),
                     query,
                     clampTopK(request.topK()),
                     selection == null ? null : selection.embeddingSpec(),
                     selection == null ? null : selection.apiKey(),
-                    selection == null ? null : selection.baseUrl()));
+                    selection == null ? null : selection.baseUrl(),
+                    AgentEmbeddingClassUtils.wire(embeddingClasses)));
             if (!result.degraded() && !result.hits().isEmpty()) {
                 List<AgentKnowledgeSearchResponseDto.Hit> hits = result.hits().stream()
                         .map(hit -> new AgentKnowledgeSearchResponseDto.Hit(
@@ -401,7 +404,8 @@ public class AgentAiServiceImpl implements AgentAiService {
             // 执行层让进程环境模型顶替作答（Issue #145 F1，ADR-0004）。
             throw new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED);
         }
-        AgentModelSelection embedding = embeddingSelection(agentId);
+        List<AgentModelSelection> embeddingClasses = embeddingClasses(agentId);
+        AgentModelSelection embedding = embeddingClasses.isEmpty() ? null : embeddingClasses.get(0);
         return new AgentChatRequest(
                 String.valueOf(agentId),
                 message,
@@ -422,7 +426,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                 documents == null || documents.isEmpty() ? null : documents,
                 embedding == null ? null : embedding.embeddingSpec(),
                 embedding == null ? null : embedding.apiKey(),
-                embedding == null ? null : embedding.baseUrl());
+                embedding == null ? null : embedding.baseUrl(),
+                AgentEmbeddingClassUtils.wire(embeddingClasses));
     }
 
     private void persistTurn(
@@ -582,28 +587,28 @@ public class AgentAiServiceImpl implements AgentAiService {
     }
 
     /**
-     * 向量索引用的凭证，与当前对话模式无关。站点 KEY 入口里第一把带 embedding spec 且能解密的 key，
-     * 否则全站同样的入口。都没有时返回 null，检索改用进程嵌入模型。CLI 入口不参与。
+     * 已登记的嵌入类，与当前对话模式无关。站点 KEY 入口里带 embedding spec 且能解密的，再接全站同样的入口。
+     * 同一模型名只留先出现的一把，最多 4 类。都没有时返回空列表，检索改用进程嵌入模型。CLI 入口不参与。
      */
-    private AgentModelSelection embeddingSelection(long agentId) {
-        AgentModelSelection fromAgent = firstKeyEmbedding(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId));
-        if (fromAgent != null) {
-            return fromAgent;
-        }
-        return firstKeyEmbedding(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null));
+    private List<AgentModelSelection> embeddingClasses(long agentId) {
+        List<AgentModelSelection> raw = new ArrayList<>();
+        raw.addAll(keyEmbeddings(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId)));
+        raw.addAll(keyEmbeddings(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null)));
+        return AgentEmbeddingClassUtils.dedupe(raw);
     }
 
-    private AgentModelSelection firstKeyEmbedding(List<AgentAiModelEntryEntity> entries) {
+    private List<AgentModelSelection> keyEmbeddings(List<AgentAiModelEntryEntity> entries) {
+        List<AgentModelSelection> found = new ArrayList<>();
         for (AgentAiModelEntryEntity entry : entries) {
             if (!"KEY".equals(AgentModelChainUtils.entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())) {
                 continue;
             }
             AgentModelSelection selection = AgentModelChainUtils.toModelSelection(entry, modelEntryCipher);
             if (selection != null && StringUtils.hasText(selection.embeddingSpec())) {
-                return selection;
+                found.add(selection);
             }
         }
-        return null;
+        return found;
     }
 
     /**

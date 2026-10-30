@@ -26,7 +26,7 @@
 
 ## 检索
 
-派生索引在独立库 `agent_retrieval`，不是知识库正文的真相源。分类键是嵌入模型名。与进程 `AI_EMBEDDING_DIMENSIONS` 同维度的类写在 `chunks`，用列 `embedding_model` 分开；维度不同则另建 `chunks_d<维度>`。新增一类只建自己的表或只替换该类里这一份文档，不删除其它类。补上模型名列时，还没有模型名的存量行记为进程 `AI_EMBEDDING_MODEL`。确认重建维度时仍只重建遗留的 `chunks` 表。Java 和接入页这次不改，调用方不传 `embeddingClasses` 时继续只查原来那一类。
+派生索引在独立库 `agent_retrieval`，不是知识库正文的真相源。分类键是嵌入模型名。与进程 `AI_EMBEDDING_DIMENSIONS` 同维度的类写在 `chunks`，用列 `embedding_model` 分开；维度不同则另建 `chunks_d<维度>`。新增一类只建自己的表或只替换该类里这一份文档，不删除其它类。补上模型名列时，还没有模型名的存量行记为进程 `AI_EMBEDDING_MODEL`。确认重建维度时仍只重建遗留的 `chunks` 表。Java 把已登记的 KEY embedding spec 收成 `embeddingClasses` 送来；调用方不传时继续只查原来那一类。多类重嵌不走这条重建，避免清掉同表里的其它类。
 
 ## 两类失败（务必区分）
 

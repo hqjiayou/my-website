@@ -6,9 +6,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -21,6 +23,7 @@ import com.mywebsite.admin.service.AdminAiKnowledgeService.ReembedConflictExcept
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.client.AgentDimensionChangeRequiredException;
+import com.mywebsite.agent.dto.AgentEmbeddingClass;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentOcrPdfRequest;
 import com.mywebsite.agent.dto.AgentOcrPdfResult;
@@ -83,6 +86,14 @@ class AdminAiKnowledgeServiceImplTest {
                 new com.mywebsite.infra.properties.StorageProperties(),
                 baseMapper,
                 linkMapper);
+        // 旧用例只桩 embeddingSelection。登记类在没单独桩时就是这一把，空 spec 则没有类。
+        lenient().doAnswer(invocation -> {
+            AgentModelSelection selection = modelEntryService.embeddingSelection(invocation.getArgument(0));
+            if (selection == null || selection.embeddingSpec() == null || selection.embeddingSpec().isBlank()) {
+                return List.of();
+            }
+            return List.of(selection);
+        }).when(modelEntryService).embeddingClasses(anyLong());
     }
 
     @Test
@@ -540,6 +551,89 @@ class AdminAiKnowledgeServiceImplTest {
         // failedDoc 非 INDEXED，恒不计入。
         assertThat(overview.staleDocuments()).isEqualTo(1);
         verify(modelEntryService, times(1)).embeddingSelection(1L);
+    }
+
+    @Test
+    void detailIsStaleWhenANewEmbeddingClassIsRegistered() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        doc.setIndexEmbeddingSpec("openai:embed-a");
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
+                .when(modelEntryService)
+                .embeddingClasses(1L);
+
+        assertThat(service.getDocument(1L, 11L).indexStale()).isTrue();
+    }
+
+    @Test
+    void reindexFillsOnlyTheMissingClassAndRecordsBoth() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        doc.setIndexEmbeddingSpec("openai:embed-a");
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
+                .when(modelEntryService)
+                .embeddingClasses(1L);
+
+        var detail = service.reindexDocument(1L, 11L);
+
+        ArgumentCaptor<AgentRetrievalDocument> captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getValue().embeddingClasses())
+                .extracting(AgentEmbeddingClass::embeddingSpec)
+                .containsExactly("openai:embed-b");
+        assertThat(detail.indexEmbeddingSpec()).isEqualTo("openai:embed-a\nopenai:embed-b");
+        assertThat(detail.indexStatus()).isEqualTo(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        assertThat(detail.indexStale()).isFalse();
+    }
+
+    @Test
+    void changedContentRewritesEveryRegisteredClass() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        doc.setIndexEmbeddingSpec("openai:embed-a");
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(knowledgeMapper.updateById(any(AdminAiKnowledgeDocumentEntity.class))).thenReturn(1);
+        doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
+                .when(modelEntryService)
+                .embeddingClasses(1L);
+
+        service.updateDocument(
+                1L,
+                11L,
+                new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUpdateRequest(
+                        "title-11", "changed", AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE, null));
+
+        ArgumentCaptor<AgentRetrievalDocument> captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getValue().embeddingClasses())
+                .extracting(AgentEmbeddingClass::embeddingSpec)
+                .containsExactly("openai:embed-a", "openai:embed-b");
+    }
+
+    @Test
+    void reembedSkipsLegacyRecreateWhenASiteHasMultipleClasses() {
+        when(knowledgeMapper.selectList(any()))
+                .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
+        doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
+                .when(modelEntryService)
+                .embeddingClasses(1L);
+
+        var result = service.reembedAll();
+
+        assertThat(result.recreatedSchema()).isFalse();
+        assertThat(result.dimensions()).isNull();
+        assertThat(result.documents()).isEqualTo(1);
+        verify(agentClient, never()).prepareReembed(any(), org.mockito.ArgumentMatchers.anyBoolean());
+        ArgumentCaptor<AgentRetrievalDocument> captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getValue().embeddingClasses())
+                .extracting(AgentEmbeddingClass::embeddingSpec)
+                .containsExactly("openai:embed-a", "openai:embed-b");
     }
 
     private static AdminAiKnowledgeDocumentEntity document(long agentId, long id, String status) {

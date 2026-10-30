@@ -84,6 +84,43 @@ class AdminAiModelEntryServiceImplTest {
         when(modelEntryMapper.selectList(any())).thenReturn(List.of(cli), List.of());
 
         assertThat(service.embeddingSelection(10L)).isNull();
+        assertThat(service.embeddingClasses(10L)).isEmpty();
+    }
+
+    @Test
+    void embeddingClassesKeepsDistinctModelsAndCollapsesGoogleAliases() {
+        AdminAiModelEntryEntity first = entry(1L, 10L, "openai:chat-a", true);
+        first.setMode("KEY");
+        first.setEmbeddingSpec("google-gla:gemini-embedding-001");
+        AdminAiModelEntryEntity alias = entry(2L, 10L, "openai:chat-b", false);
+        alias.setMode("KEY");
+        alias.setEmbeddingSpec("google:gemini-embedding-001");
+        AdminAiModelEntryEntity second = entry(3L, 10L, "openai:chat-c", false);
+        second.setMode("KEY");
+        second.setEmbeddingSpec("openai:text-embedding-3-small");
+        AdminAiModelEntryEntity third = entry(4L, 10L, "openai:chat-d", false);
+        third.setMode("KEY");
+        third.setEmbeddingSpec("openai:text-embedding-3-large");
+        AdminAiModelEntryEntity fourth = entry(5L, 10L, "openai:chat-e", false);
+        fourth.setMode("KEY");
+        fourth.setEmbeddingSpec("openai:embed-extra");
+        AdminAiModelEntryEntity dropped = entry(6L, 10L, "openai:chat-f", false);
+        dropped.setMode("KEY");
+        dropped.setEmbeddingSpec("openai:embed-dropped");
+        AdminAiModelEntryEntity cli = entry(7L, 10L, "openai:cli", false);
+        cli.setMode("CLI");
+        cli.setEmbeddingSpec("openai:cli-embed");
+        when(modelEntryMapper.selectList(any()))
+                .thenReturn(List.of(cli, first, alias, second, third, fourth, dropped), List.of());
+
+        List<AgentModelSelection> classes = service.embeddingClasses(10L);
+
+        assertThat(classes).extracting(AgentModelSelection::embeddingSpec)
+                .containsExactly(
+                        "google-gla:gemini-embedding-001",
+                        "openai:text-embedding-3-small",
+                        "openai:text-embedding-3-large",
+                        "openai:embed-extra");
     }
 
     @Test
