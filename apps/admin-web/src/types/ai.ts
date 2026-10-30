@@ -294,8 +294,12 @@ export interface AiRunMeta {
   usage: AiRunUsage
   tools: AiToolCallTrace[]
   skillsApplied: string[]
-  /** 本轮请求的模型 spec。旧消息没有。 */
+  /** 本轮实际作答的模型名（执行层回报）。旧消息没有；旧消息的该字段曾是请求值。 */
   model?: string | null
+  /** 本轮请求的主用入口 spec；与 model 不同即发生过备援切换。旧消息没有。 */
+  requestedModel?: string | null
+  /** 本轮模式（CLI / KEY）。旧消息没有。 */
+  mode?: string | null
 }
 
 export interface AiMessage {

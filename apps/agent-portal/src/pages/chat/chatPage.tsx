@@ -209,13 +209,35 @@ export function ChatPage() {
 
   // 雙模式（Key 直連 / CLI 代理池）：記住上次選擇；可用性由服務端 model-modes 決定，
   // 選中的模式未配置時自動退到另一可用模式（不改使用者的保存偏好）。
+  // 偏好按 agent 分開存（Issue #145 F7）：全域鍵會讓在 A 站切的模式串擾到 B 站；
+  // 舊全域鍵只作遷移回退讀一次。
+  const modeStorageKey = site.ok ? `portal-ai-mode:${site.agentId}` : 'portal-ai-mode'
   const [mode, setMode] = useState<string>(() => {
     try {
-      return window.localStorage.getItem('portal-ai-mode') || 'KEY'
+      return (
+        window.localStorage.getItem(modeStorageKey) ||
+        window.localStorage.getItem('portal-ai-mode') ||
+        'KEY'
+      )
     } catch {
       return 'KEY'
     }
   })
+  const [modeNotice, setModeNotice] = useState<string | null>(null)
+  // 舊全域鍵一次性遷移：讀到後寫進本 agent 的鍵並刪全域鍵，避免存量偏好繼續串擾其他站點
+  useEffect(() => {
+    try {
+      const legacy = window.localStorage.getItem('portal-ai-mode')
+      if (legacy && !window.localStorage.getItem(modeStorageKey)) {
+        window.localStorage.setItem(modeStorageKey, legacy)
+      }
+      if (legacy) window.localStorage.removeItem('portal-ai-mode')
+    } catch {
+      // 存储不可用时忽略
+    }
+    // 只在挂载时迁移一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [modelModes, setModelModes] = useState<AgentAiModelModes | null>(null)
   useEffect(() => {
     if (!site.ok) return
@@ -235,9 +257,17 @@ export function ChatPage() {
   const effectiveMode =
     modeOption(mode)?.available === false && modeOption(otherMode)?.available ? otherMode : mode
   const selectMode = (value: string) => {
+    // 對話中途切換要讓使用者看見（Issue #145 F7）：之前的回覆來自原模式的模型，
+    // 之後的由新模式回答，歷史在新模型眼裡是連續的——這一點必須明示，不能靜默翻轉。
+    if (value !== effectiveMode && messages.length > 0) {
+      const label = modeOption(value)?.label
+      setModeNotice(
+        `已切換到 ${value === 'KEY' ? 'Key' : 'CLI'} 模式${label ? `（${label}）` : ''}，後續訊息將由該模式的模型回答；先前回覆來自原模式。`,
+      )
+    }
     setMode(value)
     try {
-      window.localStorage.setItem('portal-ai-mode', value)
+      window.localStorage.setItem(modeStorageKey, value)
     } catch {
       // 存儲不可用時僅本次會話生效
     }
@@ -312,6 +342,11 @@ export function ChatPage() {
     conversationRef.current = routeId
     if (!routeId) loadToken.current += 1
   }, [routeId])
+
+  // 切換提示只屬於當前對話，換對話即清
+  useEffect(() => {
+    setModeNotice(null)
+  }, [selectedId])
 
   const loadConversations = useCallback(async (agentId: string, isCurrent: () => boolean = () => true) => {
     setListLoading(true)
@@ -1124,6 +1159,14 @@ export function ChatPage() {
             ))}
           </ul>
         ) : null}
+      {modelModes && effectiveMode !== mode ? (
+        <p className="mb-1 text-right text-xs text-gpt-muted">
+          所選模式尚未配置，已自動使用 {effectiveMode === 'KEY' ? 'Key' : 'CLI'} 模式
+        </p>
+      ) : null}
+      {modeNotice ? (
+        <p className="mb-1 text-right text-xs text-gpt-muted">{modeNotice}</p>
+      ) : null}
       <div className="mb-2 flex items-center justify-end">
         <div className="flex rounded-full border border-gpt-line bg-gpt-canvas p-0.5 text-xs" role="group" aria-label="模型模式">
           {(['KEY', 'CLI'] as const).map((value) => {

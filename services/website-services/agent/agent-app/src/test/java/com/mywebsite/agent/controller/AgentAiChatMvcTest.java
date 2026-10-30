@@ -70,13 +70,19 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
         doThrow(new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED))
                 .when(agentClient)
                 .chat(any());
+        // 模式必填 + 所选模式要有可用入口后（Issue #145），给 agent 10 种一条 KEY 默认入口，
+        // 否则请求会在组链守卫处 BLOCKED、到不了被 mock 的 agentClient。
+        jdbcTemplate.update("DELETE FROM agent_model_entry");
+        jdbcTemplate.update(
+                "INSERT INTO agent_model_entry (display_name, model_spec, api_key, agent_id, enabled, is_default, mode)"
+                        + " VALUES ('Test Key', 'google:test-model', 'test-api-key', 10, TRUE, TRUE, 'KEY')");
     }
 
     @Test
     void chatWithoutTokenIsUnauthorized() throws Exception {
         mockMvc.perform(post("/api/agent/10/ai/chat")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"message\":\"hello\"}"))
+                        .content("{\"message\":\"hello\",\"mode\":\"KEY\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -88,7 +94,7 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .header(HttpHeaders.ACCEPT_LANGUAGE, "en-US")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"message\":\"hello\"}"))
+                        .content("{\"message\":\"hello\",\"mode\":\"KEY\"}"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()))
                 .andExpect(jsonPath("$.data").value(nullValue()));
@@ -103,7 +109,7 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .header(HttpHeaders.ACCEPT_LANGUAGE, "en-US")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"message\":\"hello\"}"))
+                        .content("{\"message\":\"hello\",\"mode\":\"KEY\"}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value(ErrorCode.AGENT_BUDGET_EXCEEDED.getCode()))
                 .andExpect(jsonPath("$.data").value(nullValue()));
@@ -292,7 +298,7 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
         mockMvc.perform(post("/api/agent/999/ai/chat")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"message\":\"hello\"}"))
+                        .content("{\"message\":\"hello\",\"mode\":\"KEY\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(ErrorCode.FORBIDDEN.getCode()));
     }
@@ -313,7 +319,7 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
         String body = mockMvc.perform(post("/api/agent/10/ai/chat")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"message\":\"hello\"}"))
+                        .content("{\"message\":\"hello\",\"mode\":\"KEY\"}"))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -392,6 +398,7 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
     private static String chatJson(String message, List<Map<String, String>> attachments) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("message", message);
+        body.put("mode", "KEY");
         if (attachments != null) {
             body.put("attachments", attachments);
         }
@@ -410,6 +417,7 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
             throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("message", message);
+        body.put("mode", "KEY");
         body.put("documents", documents);
         return new ObjectMapper().writeValueAsString(body);
     }

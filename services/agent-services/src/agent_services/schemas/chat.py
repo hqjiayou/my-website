@@ -250,6 +250,8 @@ class ChatSuccessData(BaseModel):
     citations: list[ChatCitation] | None = None
     searches: list[SearchSummaryItem] | None = None
     extracted_memories: list[str] = Field(default_factory=list, alias="extractedMemories")
+    # 实际产生回复的模型名（Provider 回报）；备援切换后与请求 spec 不同，Java 据此记 actual
+    model: str | None = None
 
     model_config = {"populate_by_name": True}
 

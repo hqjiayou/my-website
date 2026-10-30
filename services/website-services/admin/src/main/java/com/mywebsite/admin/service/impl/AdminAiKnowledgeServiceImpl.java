@@ -762,12 +762,22 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 failed.isEmpty() ? REEMBED_SUCCESS : REEMBED_PARTIAL);
     }
 
+    /**
+     * OCR 转写链的模式口径（Issue #145 F4a）：先 KEY 链、空了才 CLI 链。
+     * 不再用不分模式的整链——双模式各有默认时整链排序只剩 id 序，烧哪边的
+     * 配额不可预测。转写是后台批处理，直连 Key 可预测优先，代理兜底。
+     */
+    private List<AgentModelSelection> ocrChain(long agentId) {
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, "KEY");
+        return chain.isEmpty() ? modelEntryService.selectionChain(agentId, "CLI") : chain;
+    }
+
     @Override
     public String transcribeScannedPdf(long agentId, byte[] pdfBytes) {
         if (pdfBytes == null || pdfBytes.length == 0) {
             return "";
         }
-        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId);
+        List<AgentModelSelection> chain = ocrChain(agentId);
         if (chain.isEmpty()) {
             log.info("KB OCR skipped for agent {}: no usable model entry chain", agentId);
             return "";
@@ -797,7 +807,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         if (imageBytes == null || imageBytes.length == 0 || mediaType == null || mediaType.isBlank()) {
             return "";
         }
-        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId);
+        List<AgentModelSelection> chain = ocrChain(agentId);
         if (chain.isEmpty()) {
             log.info("KB image OCR skipped for agent {}: no usable model entry chain", agentId);
             return "";

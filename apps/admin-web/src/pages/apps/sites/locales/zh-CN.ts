@@ -270,7 +270,7 @@ export default {
     loadError: '接入信息没有读出来。',
     noPermission: '当前账号看不到模型入口。',
     cliTitle: 'CLI',
-    cliDescription: '先选已经登录的账号，再选这个账号放出的模型。客户端 key 只用来进入代理，不决定模型。地址在 API 管理里定好，这里不能改。',
+    cliDescription: '先选已经登录的账号，再选这个账号放出的模型。客户端 key 只用来进入代理，不决定模型。地址在 API 管理里定好，这里不能改。注意：账号只用来筛选模型清单，不是绑定——实际调用由代理按模型名在所有已登录账号间路由，账号增删或额度变化会直接影响这个接入能不能用。',
     keyTitle: 'API key',
     keyDescription: '供应商 key 在 API 管理里保存。这里只选这个智能体用哪一条。',
     pickSavedKey: '先选择一条 API key',
@@ -548,6 +548,9 @@ export default {
     runMeta: {
       usage: '{{requests}} 次模型请求 · {{toolCalls}} 次工具 · tokens 输入 {{inputTokens}} / 输出 {{outputTokens}}',
       skills: 'skills：{{ids}}',
+      modelActual: '实际作答：{{model}}',
+      modelRequested: '请求主用：{{model}}（已由备援接手）',
+      mode: '模式：{{mode}}',
     },
     runtime: {
       hint: 'agent-services 当前生效的平台配置（全平台共享，只读；不显示凭证）。',
@@ -584,7 +587,7 @@ export default {
       modeKey: 'API key 直连',
       using: '这次试聊只调用 {{model}}。失败会写在对话里，不会改用另一种接入。',
       noEntry: '这个模式还没有保存默认入口。到接入里保存后再试。',
-      hint: '预览使用当前站点 Prompt，不写入会话表。前端不会直传 systemPrompt。',
+      hint: '预览使用当前站点 Prompt，不写入会话表。前端不会直传 systemPrompt。注意：试聊只测所选模式的主用入口，不走备援；正式对话主用失败时会顺链换备援回答，所以试聊结果不能完全代表正式对话。',
       empty: '输入一条消息开始预览。',
       placeholder: '输入预览消息…',
       send: '发送',

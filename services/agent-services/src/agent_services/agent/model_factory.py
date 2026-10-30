@@ -81,6 +81,15 @@ def _build_google_model(model_name: str, *, api_key: str | None, base_url: str |
     return GoogleModel(model_name, provider=provider)
 
 
+# 入口直配覆盖的 spec 前缀（Issue #145 F9）：覆盖外的真实厂商 spec 走原生推断会
+# 改用进程环境凭证、忽略入口自带 key，故入口路径先拦。fake:/test:/fail: 为无凭证测试模型（fail: 在生产走原生推断必然失败、结果同为 BLOCKED）。
+_ENTRY_DIRECT_PREFIXES = ("google:", "google-gla:", "openai:", "anthropic:", "azure:", "fake:", "test:", "fail:")
+
+
+def _entry_spec_supported(spec: str) -> bool:
+    return spec.startswith(_ENTRY_DIRECT_PREFIXES)
+
+
 def _build_primary(spec: str, *, api_key: str, base_url: str) -> Model:
     google_name = _google_model_name(spec)
     if google_name is not None:
@@ -104,8 +113,9 @@ def _build_primary(spec: str, *, api_key: str, base_url: str) -> Model:
         return _build_anthropic(spec.removeprefix("anthropic:"), api_key=api_key, base_url=base_url)
     if spec.startswith("azure:") and (api_key or base_url):
         return _build_azure(spec.removeprefix("azure:"), api_key=api_key, base_url=base_url)
-    # 其余 spec 走 Pydantic AI 原生推断，
-    # 凭证由各 Provider 的原生环境变量提供。fallback 同样不走这里的直配。
+    # 其余 spec 走 Pydantic AI 原生推断，凭证由各 Provider 的原生环境变量提供。
+    # 入口路径不得走到这里：create_model_for_entry / _build_entry_fallbacks 已用
+    # _entry_spec_supported 拦下直配覆盖外的 spec（Issue #145 F9）。
     from pydantic_ai.models import infer_model
 
     return infer_model(spec)
@@ -233,18 +243,22 @@ def _wrap_chain(
 def _build_entry_fallbacks(
     fallbacks: list[EntryFallback] | None, primary_spec: str, seen_specs: set[str]
 ) -> list[tuple[str, Model]]:
-    """入口备援逐个以自带凭证建模；与主用同 spec 或已在链上的跳过，建不起来记 warning 跳过。"""
+    """入口备援逐个以自带凭证建模；与主用同 spec 或已在链上的跳过，建不起来记 warning 跳过。
+
+    按 spec 去重是既定契约（test_entry_chain_skips_duplicates_primary_and_unbuildable
+    锁住）：同 spec 视为同一上游模型，不因 key 不同重复入链。
+    """
     built: list[tuple[str, Model]] = []
     for entry in fallbacks or []:
         cleaned = entry.spec.strip()
+        api_key = (entry.api_key or "").strip()
+        base_url = (entry.base_url or "").strip()
         if not cleaned or cleaned == primary_spec or cleaned in seen_specs:
             continue
         try:
-            model = _build_primary(
-                cleaned,
-                api_key=(entry.api_key or "").strip(),
-                base_url=(entry.base_url or "").strip(),
-            )
+            if not _entry_spec_supported(cleaned):
+                raise ValueError(f"unsupported entry spec: {cleaned.split(':', 1)[0]}:")
+            model = _build_primary(cleaned, api_key=api_key, base_url=base_url)
         except Exception as exc:  # noqa: BLE001 — 单个备援坏掉不拖垮整链，不回显密钥
             logger.warning(
                 "Ignoring unbuildable AI model entry fallback %s: %s",
@@ -280,8 +294,19 @@ def create_model_for_entry(
             spec="blocked",
             blocked_reason="AI model is not configured (missing AI_MODEL).",
         )
+    if not _entry_spec_supported(cleaned):
+        return ModelHandle(
+            model=None,
+            spec=cleaned,
+            blocked_reason=(
+                "AI model entry spec is not supported for direct configuration "
+                f"(covers google:/google-gla:/openai:/anthropic:/azure:): {cleaned.split(':', 1)[0]}:"
+            ),
+        )
     try:
-        primary = _build_primary(cleaned, api_key=api_key.strip(), base_url=(base_url or "").strip())
+        primary = _build_primary(
+            cleaned, api_key=api_key.strip(), base_url=(base_url or "").strip()
+        )
     except Exception as exc:  # noqa: BLE001 — 入口 spec/凭证错误映射 BLOCKED，不回显密钥
         logger.warning("AI model entry failed for %s", public_model_spec(cleaned), exc_info=exc)
         return ModelHandle(

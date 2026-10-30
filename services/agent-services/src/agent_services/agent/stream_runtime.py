@@ -34,6 +34,7 @@ from agent_services.agent.runtime import (
     build_run_kwargs,
     build_user_prompt,
     mcp_unavailable_message,
+    model_identity_line,
     prepare_history_summary,
     reply_citations,
     tool_succeeded,
@@ -130,7 +131,13 @@ async def stream_chat_events(
     yield AgentStreamEvent(type=AgentStreamEventType.START, data=start_data)
 
     run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
-    agent = build_agent(model, system_prompt, toolsets, resolved_budget)
+    identity = model_identity_line(model)
+    agent = build_agent(
+        model,
+        f"{system_prompt}\n\n{identity}" if identity else system_prompt,
+        toolsets,
+        resolved_budget,
+    )
 
     output: _StreamOutput | None = None
     try:

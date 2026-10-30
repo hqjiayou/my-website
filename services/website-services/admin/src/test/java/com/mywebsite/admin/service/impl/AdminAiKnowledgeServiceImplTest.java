@@ -321,7 +321,8 @@ class AdminAiKnowledgeServiceImplTest {
 
     @Test
     void transcribeScannedPdfReturnsEmptyWhenChainEmpty() {
-        when(modelEntryService.selectionChain(7L)).thenReturn(List.of());
+        when(modelEntryService.selectionChain(7L, "KEY")).thenReturn(List.of());
+        when(modelEntryService.selectionChain(7L, "CLI")).thenReturn(List.of());
 
         assertThat(service.transcribeScannedPdf(7L, new byte[] {1})).isEmpty();
         verify(agentClient, never()).ocrPdf(any());
@@ -332,7 +333,7 @@ class AdminAiKnowledgeServiceImplTest {
         AgentModelSelection primary = new AgentModelSelection("google:gemini", "k", null);
         AgentModelSelection fallback = new AgentModelSelection("google:gemini-b", "k2", null);
         byte[] pdf = "%PDF-fixture".getBytes(StandardCharsets.UTF_8);
-        when(modelEntryService.selectionChain(7L)).thenReturn(List.of(primary, fallback));
+        when(modelEntryService.selectionChain(7L, "KEY")).thenReturn(List.of(primary, fallback));
         // 严格模式下 when 式打桩本身会被计为一次可校验调用，captor+verify 会误报；
         // 改用 doAnswer 在打桩里直接截获请求参数，不再走 verify。
         java.util.concurrent.atomic.AtomicReference<AgentOcrPdfRequest> sent =
@@ -354,7 +355,8 @@ class AdminAiKnowledgeServiceImplTest {
 
     @Test
     void transcribeImageReturnsEmptyWhenChainEmpty() {
-        when(modelEntryService.selectionChain(7L)).thenReturn(List.of());
+        when(modelEntryService.selectionChain(7L, "KEY")).thenReturn(List.of());
+        when(modelEntryService.selectionChain(7L, "CLI")).thenReturn(List.of());
 
         assertThat(service.transcribeImage(7L, new byte[] {1}, "image/png")).isEmpty();
         verify(agentClient, never()).ocrImage(any());
@@ -364,7 +366,7 @@ class AdminAiKnowledgeServiceImplTest {
     void transcribeImageSendsChainMediaTypeAndReturnsTrimmedText() {
         AgentModelSelection primary = new AgentModelSelection("google:gemini", "k", null);
         byte[] png = new byte[] {(byte) 0x89, 'P', 'N', 'G'};
-        when(modelEntryService.selectionChain(7L)).thenReturn(List.of(primary));
+        when(modelEntryService.selectionChain(7L, "KEY")).thenReturn(List.of(primary));
         java.util.concurrent.atomic.AtomicReference<
                         com.mywebsite.agent.dto.AgentOcrImageRequest>
                 sent = new java.util.concurrent.atomic.AtomicReference<>();
@@ -384,7 +386,7 @@ class AdminAiKnowledgeServiceImplTest {
 
     @Test
     void transcribeScannedPdfSwallowsClientFailure() {
-        when(modelEntryService.selectionChain(7L))
+        when(modelEntryService.selectionChain(7L, "KEY"))
                 .thenReturn(List.of(new AgentModelSelection("google:gemini", "k", null)));
         when(agentClient.ocrPdf(any())).thenThrow(new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED));
 

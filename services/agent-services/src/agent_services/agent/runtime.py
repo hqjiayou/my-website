@@ -233,6 +233,27 @@ class ChatReply:
     tools: list[dict[str, object]] = field(default_factory=list)
     citations: list[dict[str, object]] | None = None
     extracted_memories: list[str] = field(default_factory=list)
+    # 实际产生回复的模型名（Provider 回报的 model_name）；与请求 spec 不同时即发生过备援切换
+    model: str | None = None
+
+
+def model_identity_line(model: object) -> str | None:
+    """给系统提示注入本轮模型身份（Issue #145 F3）。
+
+    模型自报身份原本只有训练先验；注入后至少与实际驱动模型一致。
+    FallbackModel 等包装取不到单一名字时不注入，不编造。
+    """
+    name = getattr(model, "model_name", None)
+    if not isinstance(name, str) or not name.strip():
+        return None
+    # pydantic-ai FallbackModel 的 model_name 是合成名（fallback:a,b），不是任何
+    # 真实模型：注入它会让模型自称一串假名，整条链有备援时宁可不注入。
+    if name.strip().lower().startswith("fallback:"):
+        return None
+    return (
+        f"You are currently powered by the model '{name.strip()}'. "
+        "If the user asks which model you are, answer with this name."
+    )
 
 
 @dataclass(frozen=True)
@@ -440,7 +461,13 @@ async def run_chat(
 
     needs_mcp_context = execution_needs_agent_context(toolsets or [])
     try:
-        agent = build_agent(model, harness.system_prompt, toolsets, resolved_budget)
+        identity = model_identity_line(model)
+        agent = build_agent(
+            model,
+            f"{harness.system_prompt}\n\n{identity}" if identity else harness.system_prompt,
+            toolsets,
+            resolved_budget,
+        )
         if needs_mcp_context:
             # 设计 §19.5：async with agent；用 entered 区分「连接失败」与「进入后运行失败」
             entered = False
@@ -479,6 +506,7 @@ async def run_chat(
             assistant_reply=text,
             existing=memories,
         )
+    served = getattr(getattr(result, "response", None), "model_name", None)
     return ChatReply(
         reply=text,
         usage=usage_to_api(result.usage),
@@ -489,4 +517,5 @@ async def run_chat(
             knowledge_collector.chunks if knowledge_collector is not None else None,
         ),
         extracted_memories=extracted,
+        model=served.strip() if isinstance(served, str) and served.strip() else None,
     )

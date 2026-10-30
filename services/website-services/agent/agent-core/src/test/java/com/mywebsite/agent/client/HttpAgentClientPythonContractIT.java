@@ -60,6 +60,7 @@ class HttpAgentClientPythonContractIT {
         builder.directory(agentServicesDir.toFile());
         builder.environment().put("AGENT_INTERNAL_SERVICE_TOKEN", TOKEN);
         builder.environment().put("AGENT_CONTRACT_USE_TEST_MODEL", "true");
+        builder.environment().put("AI_ALLOW_PROCESS_MODEL", "true");
         builder.environment().put("PORT", String.valueOf(port));
         builder.redirectErrorStream(true);
         pythonProcess = builder.start();
@@ -380,6 +381,7 @@ class HttpAgentClientPythonContractIT {
             builder.directory(agentServicesDir.toFile());
             builder.environment().put("AGENT_INTERNAL_SERVICE_TOKEN", TOKEN);
             builder.environment().put("AGENT_CONTRACT_USE_TEST_MODEL", "true");
+        builder.environment().put("AI_ALLOW_PROCESS_MODEL", "true");
             builder.environment().put("PORT", String.valueOf(ephemeralPort));
             builder.environment().putAll(extraEnv);
             builder.redirectErrorStream(true);

@@ -138,7 +138,7 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
             AgentRunMeta runMeta,
             List<AgentAttachmentDto> userAttachments,
             List<AgentCitation> citations) {
-        recordExchange(conversation, userMessage, reply, todos, runMeta, userAttachments, citations, null);
+        recordExchange(conversation, userMessage, reply, todos, runMeta, userAttachments, citations, null, null);
     }
 
     @Override
@@ -151,7 +151,8 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
             AgentRunMeta runMeta,
             List<AgentAttachmentDto> userAttachments,
             List<AgentCitation> citations,
-            String modelSpec) {
+            String requestedModelSpec,
+            String mode) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         conversation.setAgentTodos(writeTodos(todos));
         if (conversation.getId() == null) {
@@ -167,7 +168,7 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
                 conversation,
                 AgentAiMessageEntity.ROLE_ASSISTANT,
                 reply,
-                writeAgentMeta(withModel(runMeta, modelSpec), citations),
+                writeAgentMeta(withAttribution(runMeta, requestedModelSpec, mode), citations),
                 null);
     }
 
@@ -698,20 +699,34 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
         }
     }
 
-    /** 本轮请求的模型 spec 记在 run meta 上；空白则保持原样。 */
-    private static AgentRunMeta withModel(AgentRunMeta runMeta, String modelSpec) {
-        if (!StringUtils.hasText(modelSpec)) {
+    /**
+     * 归属只补 requestedModel 与 mode，绝不覆盖执行层回报的实际作答 model
+     * （备援切换后 actual 与 requested 不同，覆盖即失真，Issue #145 F2）。
+     * 两项都空白则保持原样。
+     */
+    private static AgentRunMeta withAttribution(AgentRunMeta runMeta, String requestedModelSpec, String mode) {
+        boolean hasRequested = StringUtils.hasText(requestedModelSpec);
+        boolean hasMode = StringUtils.hasText(mode);
+        if (!hasRequested && !hasMode) {
             return runMeta;
         }
-        String model = modelSpec.trim();
+        String requested = hasRequested ? requestedModelSpec.trim() : null;
+        String resolvedMode = hasMode ? mode.trim() : null;
         if (runMeta == null) {
-            return new AgentRunMeta(null, null, null, null, model);
+            return new AgentRunMeta(null, null, null, null, null, requested, resolvedMode);
         }
-        if (model.equals(runMeta.model())) {
+        if ((requested == null || requested.equals(runMeta.requestedModel()))
+                && (resolvedMode == null || resolvedMode.equals(runMeta.mode()))) {
             return runMeta;
         }
         return new AgentRunMeta(
-                runMeta.usage(), runMeta.tools(), runMeta.skillsApplied(), runMeta.searches(), model);
+                runMeta.usage(),
+                runMeta.tools(),
+                runMeta.skillsApplied(),
+                runMeta.searches(),
+                runMeta.model(),
+                requested != null ? requested : runMeta.requestedModel(),
+                resolvedMode != null ? resolvedMode : runMeta.mode());
     }
 
     /** 观测数据序列化失败不得让已成功的一轮回滚：记日志后存 NULL。 */
