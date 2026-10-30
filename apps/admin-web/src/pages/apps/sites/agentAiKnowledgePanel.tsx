@@ -318,19 +318,26 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
         id: 'indexStatus',
         header: t('aiWorkspace.knowledge.columns.index'),
         cell: (item) => (
-          <span
-            className={
-              item.indexStatus === 'INDEXED'
-                ? 'text-success-emphasis'
-                : item.indexStatus === 'FAILED'
-                  ? 'text-danger-emphasis'
-                  : 'text-muted-foreground'
-            }
-            title={item.indexStatus === 'FAILED' ? (item.indexError ?? undefined) : undefined}
-          >
-            {t(`aiWorkspace.knowledge.indexStatus.${item.indexStatus}`, {
-              defaultValue: item.indexStatus,
-            })}
+          <span>
+            <span
+              className={
+                item.indexStatus === 'INDEXED'
+                  ? 'text-success-emphasis'
+                  : item.indexStatus === 'FAILED'
+                    ? 'text-danger-emphasis'
+                    : 'text-muted-foreground'
+              }
+              title={item.indexStatus === 'FAILED' ? (item.indexError ?? undefined) : undefined}
+            >
+              {t(`aiWorkspace.knowledge.indexStatus.${item.indexStatus}`, {
+                defaultValue: item.indexStatus,
+              })}
+            </span>
+            {item.indexStale ? (
+              <span className="ml-2 rounded bg-warning/[0.12] px-1.5 py-0.5 text-xs font-medium text-warning-emphasis">
+                {t('aiWorkspace.knowledge.indexStale')}
+              </span>
+            ) : null}
           </span>
         ),
       },
@@ -371,7 +378,9 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 {t('aiWorkspace.knowledge.downloadOriginal')}
               </button>
             ) : null}
-            {item.owned && item.status === 'ACTIVE' && item.indexStatus !== 'INDEXED' ? (
+            {item.owned &&
+            item.status === 'ACTIVE' &&
+            (item.indexStatus !== 'INDEXED' || item.indexStale) ? (
               <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
                 <button
                   type="button"

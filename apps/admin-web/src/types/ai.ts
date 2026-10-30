@@ -151,6 +151,10 @@ export interface AiKnowledgeListItem {
   indexStatus: string
   indexError: string | null
   indexedAt: string | null
+  /** 最近一次成功索引时所用的 embedding spec；为 null 表示未索引过或用了进程默认嵌入模型。 */
+  indexEmbeddingSpec: string | null
+  /** 已索引但所用 embedding 模型与当前 selection 不一致（存量索引已过期，需重索引/重嵌修复）。 */
+  indexStale: boolean
   sourceFormat: string | null
   originalFilename: string | null
   fileSizeBytes: number | null
@@ -183,6 +187,8 @@ export interface AiKnowledgeOverview {
   indexedDocuments: number
   failedDocuments: number
   pendingDocuments: number
+  /** 已索引文档中，所用 embedding 模型与当前 selection 不一致的数量。 */
+  staleDocuments: number
   originalBytes: number
   sites: AiKnowledgeAgentStat[]
   recentFailures: AiKnowledgeFailure[]

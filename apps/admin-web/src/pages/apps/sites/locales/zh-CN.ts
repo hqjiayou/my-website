@@ -531,6 +531,7 @@ export default {
         FAILED: '索引失败',
         PENDING: '待索引',
       },
+      indexStale: '索引模型已变更',
     },
     conversations: {
       empty: '暂无会话',

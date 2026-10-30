@@ -3,6 +3,7 @@ package com.mywebsite.admin.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
@@ -28,6 +29,7 @@ import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.List;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -387,6 +389,155 @@ class AdminAiKnowledgeServiceImplTest {
         when(agentClient.ocrPdf(any())).thenThrow(new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED));
 
         assertThat(service.transcribeScannedPdf(7L, new byte[] {1})).isEmpty();
+    }
+
+    // ---------- index_embedding_spec 落库 ----------
+
+    @Test
+    void reindexRecordsOwnerSelectionSpecOnSuccess() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(modelEntryService.embeddingSelection(1L)).thenReturn(selection("openai:embed-a"));
+
+        var detail = service.reindexDocument(1L, 11L);
+
+        assertThat(detail.indexEmbeddingSpec()).isEqualTo("openai:embed-a");
+        assertThat(detail.indexStatus()).isEqualTo(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        assertThat(detail.indexedAt()).isNotNull();
+    }
+
+    @Test
+    void reindexRecordsNullSpecWhenSelectionIsNull() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(modelEntryService.embeddingSelection(1L)).thenReturn(null);
+
+        var detail = service.reindexDocument(1L, 11L);
+
+        assertThat(detail.indexEmbeddingSpec()).isNull();
+        assertThat(detail.indexStatus()).isEqualTo(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        assertThat(detail.indexedAt()).isNotNull();
+    }
+
+    @Test
+    void failedReindexDoesNotOverwritePreviouslyRecordedSpec() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(modelEntryService.embeddingSelection(1L)).thenReturn(selection("openai:embed-a"));
+
+        service.reindexDocument(1L, 11L);
+        assertThat(doc.getIndexEmbeddingSpec()).isEqualTo("openai:embed-a");
+
+        // 第二次同步时所有者分区 upsert 失败：FAILED 不得覆盖已记录的 spec。
+        org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED))
+                .when(agentClient)
+                .upsertRetrievalDocument(any());
+
+        var detail = service.reindexDocument(1L, 11L);
+
+        assertThat(detail.indexStatus()).isEqualTo(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED);
+        assertThat(detail.indexEmbeddingSpec()).isEqualTo("openai:embed-a");
+    }
+
+    @Test
+    void nonActiveStatusClearsRecordedSpec() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        doc.setIndexEmbeddingSpec("openai:embed-a");
+        doc.setIndexedAt(OffsetDateTime.now());
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(knowledgeMapper.updateById(any())).thenReturn(1);
+
+        var detail = service.updateDocument(
+                1L,
+                11L,
+                new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUpdateRequest(
+                        "t2", "c2", AdminAiKnowledgeDocumentEntity.STATUS_DISABLED, null));
+
+        assertThat(detail.indexStatus()).isEqualTo(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING);
+        assertThat(detail.indexEmbeddingSpec()).isNull();
+        assertThat(detail.indexedAt()).isNull();
+        assertThat(detail.indexStale()).isFalse();
+    }
+
+    // ---------- indexStale 检出 ----------
+
+    @Test
+    void detailIsStaleWhenRecordedSpecDiffersFromCurrentSelection() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        doc.setIndexEmbeddingSpec("openai:embed-a");
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(modelEntryService.embeddingSelection(1L)).thenReturn(selection("openai:embed-b"));
+
+        assertThat(service.getDocument(1L, 11L).indexStale()).isTrue();
+    }
+
+    @Test
+    void detailIsNotStaleWhenSpecsMatch() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        doc.setIndexEmbeddingSpec("openai:embed-a");
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(modelEntryService.embeddingSelection(1L)).thenReturn(selection("openai:embed-a"));
+
+        assertThat(service.getDocument(1L, 11L).indexStale()).isFalse();
+    }
+
+    @Test
+    void detailIsNotStaleWhenNotYetIndexed() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+
+        assertThat(service.getDocument(1L, 11L).indexStale()).isFalse();
+        verify(modelEntryService, never()).embeddingSelection(anyLong());
+    }
+
+    @Test
+    void reindexClearsStaleOnceSpecMatchesCurrentSelection() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        doc.setIndexEmbeddingSpec("openai:embed-a");
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(modelEntryService.embeddingSelection(1L)).thenReturn(selection("openai:embed-b"));
+
+        assertThat(service.getDocument(1L, 11L).indexStale()).isTrue();
+
+        var detail = service.reindexDocument(1L, 11L);
+
+        assertThat(detail.indexStale()).isFalse();
+        assertThat(detail.indexEmbeddingSpec()).isEqualTo("openai:embed-b");
+    }
+
+    @Test
+    void overviewStaleDocumentsCountMatchesPerDocumentDetermination() {
+        AdminAiKnowledgeDocumentEntity staleDoc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        staleDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        staleDoc.setIndexEmbeddingSpec("openai:embed-a");
+        AdminAiKnowledgeDocumentEntity freshDoc = document(1L, 12L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        freshDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
+        freshDoc.setIndexEmbeddingSpec("openai:embed-b");
+        AdminAiKnowledgeDocumentEntity failedDoc = document(2L, 21L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        failedDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED);
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(staleDoc, freshDoc, failedDoc));
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of());
+        when(modelEntryService.embeddingSelection(1L)).thenReturn(selection("openai:embed-b"));
+
+        var overview = service.knowledgeOverview();
+
+        // staleDoc 记录 embed-a、当前 selection 是 embed-b → stale；freshDoc 记录与当前一致 → 不 stale；
+        // failedDoc 非 INDEXED，恒不计入。
+        assertThat(overview.staleDocuments()).isEqualTo(1);
+        verify(modelEntryService, times(1)).embeddingSelection(1L);
     }
 
     private static AdminAiKnowledgeDocumentEntity document(long agentId, long id, String status) {

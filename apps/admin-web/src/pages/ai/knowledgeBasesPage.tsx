@@ -298,10 +298,16 @@ function KnowledgeOverviewSection() {
       value: overview.failedDocuments,
       valueClassName: overview.failedDocuments > 0 ? 'text-danger-emphasis' : 'text-admin',
     },
+    {
+      key: 'stale',
+      label: t('knowledgeBases.overview.stale'),
+      value: overview.staleDocuments,
+      valueClassName: overview.staleDocuments > 0 ? 'text-warning-emphasis' : 'text-admin',
+    },
   ]
   return (
     <>
-      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((stat) => (
           <div key={stat.key} className="rounded-xl border border-admin bg-admin-surface p-4">
             <div className={cn('text-[23px] font-bold leading-none tabular-nums', stat.valueClassName)}>

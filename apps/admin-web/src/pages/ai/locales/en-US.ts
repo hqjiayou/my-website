@@ -99,6 +99,7 @@ export default {
       indexed: 'Indexed',
       failed: 'Index failed',
       pending: 'Pending',
+      stale: 'Index model changed',
       storage: 'Originals stored',
       site: 'Site',
       recentFailures: 'Recent index failures',

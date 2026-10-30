@@ -54,6 +54,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,8 +130,11 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
         Page<AdminAiKnowledgeDocumentEntity> page =
                 knowledgeMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
+        Map<Long, AgentModelSelection> selectionCache = new LinkedHashMap<>();
         return new PageResult<>(
-                page.getRecords().stream().map(entity -> toListItem(entity, agentId)).toList(),
+                page.getRecords().stream()
+                        .map(entity -> toListItem(entity, agentId, isIndexStale(entity, selectionCache)))
+                        .toList(),
                 page.getTotal(),
                 (int) page.getCurrent(),
                 (int) page.getSize());
@@ -139,7 +143,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     @Override
     public AdminAiKnowledgeDetailDto getDocument(long agentId, long documentId) {
         requireSite(agentId);
-        return toDetail(requireDocumentInSite(agentId, documentId));
+        AdminAiKnowledgeDocumentEntity entity = requireDocumentInSite(agentId, documentId);
+        return toDetail(entity, isIndexStale(entity, new LinkedHashMap<>()));
     }
 
     @Override
@@ -156,7 +161,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
         AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(agentId, entity.getId());
         syncDerivedIndex(saved);
-        return toDetail(saved);
+        return toDetail(saved, isIndexStale(saved, new LinkedHashMap<>()));
     }
 
     @Override
@@ -207,7 +212,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
         AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(agentId, entity.getId());
         syncDerivedIndex(saved);
-        return toDetail(saved);
+        return toDetail(saved, isIndexStale(saved, new LinkedHashMap<>()));
     }
 
     @Override
@@ -224,6 +229,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         long failed = documents.stream()
                 .filter(doc -> AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED.equals(doc.getIndexStatus()))
                 .count();
+        // 按 agentId 分组缓存 selection，避免逐篇重复查库（全平台聚合，agent 数远小于文档数）
+        Map<Long, AgentModelSelection> staleSelectionCache = new LinkedHashMap<>();
+        long stale = documents.stream().filter(doc -> isIndexStale(doc, staleSelectionCache)).count();
         long originalBytes = documents.stream()
                 .mapToLong(doc -> doc.getFileSizeBytes() == null ? 0L : doc.getFileSizeBytes())
                 .sum();
@@ -275,6 +283,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 indexed,
                 failed,
                 documents.size() - indexed - failed,
+                stale,
                 originalBytes,
                 agentStats,
                 recentFailures);
@@ -578,7 +587,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
         AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(agentId, documentId);
         syncDerivedIndex(saved);
-        return toDetail(saved);
+        return toDetail(saved, isIndexStale(saved, new LinkedHashMap<>()));
     }
 
     @Override
@@ -590,7 +599,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         syncDerivedIndex(entity);
-        return toDetail(entity);
+        return toDetail(entity, isIndexStale(entity, new LinkedHashMap<>()));
     }
 
     @Override
@@ -722,7 +731,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 attempted++;
                 try {
                     upsertDerivedIndex(document, selection);
-                    recordIndexOutcome(document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null);
+                    recordIndexOutcome(
+                            document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null, selection);
                 } catch (RuntimeException ex) {
                     recordIndexOutcome(document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED, indexError(ex));
                     failed.add(new AdminAiKnowledgeReembedFailureDto(
@@ -831,9 +841,11 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     private void syncDerivedIndex(AdminAiKnowledgeDocumentEntity entity) {
         List<Long> targets = partitionAgentIds(entity);
         if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
+            // 先取所有者分区的 selection：既用于本次 upsert，也用于成功后落 indexEmbeddingSpec，避免重复查库。
+            AgentModelSelection ownerSelection = modelEntryService.embeddingSelection(entity.getAgentId());
             RuntimeException ownerFailure = null;
             try {
-                upsertDerivedIndexForSite(entity, entity.getAgentId());
+                upsertDerivedIndexForSite(entity, entity.getAgentId(), ownerSelection);
             } catch (RuntimeException ex) {
                 ownerFailure = ex;
             }
@@ -854,7 +866,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 }
             }
             if (ownerFailure == null) {
-                recordIndexOutcome(entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null);
+                recordIndexOutcome(
+                        entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null, ownerSelection);
             } else {
                 log.warn(
                         "KB derived index sync failed (agentId={}, documentId={}); index may lag",
@@ -882,7 +895,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
     /** 以目标站点的 KEY 嵌入入口 upsert。没有则不带凭证，由进程嵌入模型写入。不跟随对话主用入口。 */
     private void upsertDerivedIndexForSite(AdminAiKnowledgeDocumentEntity entity, long targetAgentId) {
-        AgentModelSelection selection = modelEntryService.embeddingSelection(targetAgentId);
+        upsertDerivedIndexForSite(entity, targetAgentId, modelEntryService.embeddingSelection(targetAgentId));
+    }
+
+    /** 同上，selection 已由调用方取得时直接复用，避免重复查库（所有者分区落 indexEmbeddingSpec 时用）。 */
+    private void upsertDerivedIndexForSite(
+            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, AgentModelSelection selection) {
         agentClient.upsertRetrievalDocument(retrievalDocument(entity, targetAgentId, selection));
     }
 
@@ -898,19 +916,30 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 selection == null ? null : selection.baseUrl());
     }
 
+    /** FAILED/PENDING 场景不涉及所有者 selection，走不带 selection 的重载（FAILED 保留旧 spec，PENDING 清空）。 */
+    private void recordIndexOutcome(
+            AdminAiKnowledgeDocumentEntity entity, String indexStatus, String indexError) {
+        recordIndexOutcome(entity, indexStatus, indexError, null);
+    }
+
     /**
-     * 落库索引结果（定向更新三列，不动乐观锁 version）：INDEXED 时写 indexedAt 并清 error；
-     * FAILED 时保留上次 indexedAt 只记 error；PENDING（未在索引中）清两者。
+     * 落库索引结果（定向更新四列，不动乐观锁 version）：INDEXED 时写 indexedAt、清 error，
+     * 并把 indexEmbeddingSpec 落为当次所有者分区 {@code ownerSelection} 的 embeddingSpec（无文本或
+     * selection 为 null 时写 NULL）；FAILED 时保留上次 indexedAt/indexEmbeddingSpec 只记 error；
+     * PENDING（未在索引中）清 indexedAt/indexEmbeddingSpec 两者。
      * 同步更新内存实体，让本次请求的返回 DTO 立刻反映新状态。
      */
     private void recordIndexOutcome(
-            AdminAiKnowledgeDocumentEntity entity, String indexStatus, String indexError) {
-        OffsetDateTime indexedAt =
-                AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(indexStatus)
-                        ? OffsetDateTime.now(ZoneOffset.UTC)
-                        : AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING.equals(indexStatus)
-                                ? null
-                                : entity.getIndexedAt();
+            AdminAiKnowledgeDocumentEntity entity,
+            String indexStatus,
+            String indexError,
+            AgentModelSelection ownerSelection) {
+        boolean indexed = AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(indexStatus);
+        boolean pending = AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING.equals(indexStatus);
+        OffsetDateTime indexedAt = indexed ? OffsetDateTime.now(ZoneOffset.UTC) : pending ? null : entity.getIndexedAt();
+        String embeddingSpec = indexed
+                ? normalizeSelectionSpec(ownerSelection)
+                : pending ? null : entity.getIndexEmbeddingSpec();
         String error =
                 indexError == null ? null : indexError.substring(0, Math.min(indexError.length(), 500));
         knowledgeMapper.update(
@@ -919,10 +948,46 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                         .eq(AdminAiKnowledgeDocumentEntity::getId, entity.getId())
                         .set(AdminAiKnowledgeDocumentEntity::getIndexStatus, indexStatus)
                         .set(AdminAiKnowledgeDocumentEntity::getIndexError, error)
-                        .set(AdminAiKnowledgeDocumentEntity::getIndexedAt, indexedAt));
+                        .set(AdminAiKnowledgeDocumentEntity::getIndexedAt, indexedAt)
+                        .set(AdminAiKnowledgeDocumentEntity::getIndexEmbeddingSpec, embeddingSpec));
         entity.setIndexStatus(indexStatus);
         entity.setIndexError(error);
         entity.setIndexedAt(indexedAt);
+        entity.setIndexEmbeddingSpec(embeddingSpec);
+    }
+
+    /** selection 为 null 或其 embeddingSpec 无文本 → null；否则原文。供落库与 stale 比较共用。 */
+    private static String normalizeSelectionSpec(AgentModelSelection selection) {
+        if (selection == null) {
+            return null;
+        }
+        return textOrNull(selection.embeddingSpec());
+    }
+
+    private static String textOrNull(String value) {
+        return StringUtils.hasText(value) ? value : null;
+    }
+
+    /**
+     * 文档 {@code indexStatus == INDEXED} 且记录的 embedding spec 与当前 {@code embeddingSelection}
+     * 不一致时为 stale（索引所用模型已变更）。非 INDEXED 文档恒为 false。{@code selectionCache}
+     * 按 agentId 缓存 selection，供批量调用（列表/总览）复用，不逐篇重复查库。
+     */
+    private boolean isIndexStale(AdminAiKnowledgeDocumentEntity entity, Map<Long, AgentModelSelection> selectionCache) {
+        if (!AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(entity.getIndexStatus())) {
+            return false;
+        }
+        // Map.computeIfAbsent 对返回 null 的映射函数不会记忆结果（会重复调用）；selection 为 null
+        // 是合法结果（无可用嵌入入口），须显式按 containsKey 缓存，否则失去缓存效果。
+        Long agentId = entity.getAgentId();
+        AgentModelSelection currentSelection;
+        if (selectionCache.containsKey(agentId)) {
+            currentSelection = selectionCache.get(agentId);
+        } else {
+            currentSelection = modelEntryService.embeddingSelection(agentId);
+            selectionCache.put(agentId, currentSelection);
+        }
+        return !Objects.equals(textOrNull(entity.getIndexEmbeddingSpec()), normalizeSelectionSpec(currentSelection));
     }
 
     private void removeFromDerivedIndex(long agentId, long documentId) {
@@ -985,7 +1050,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     private static AdminAiKnowledgeListItemDto toListItem(
-            AdminAiKnowledgeDocumentEntity entity, long viewerAgentId) {
+            AdminAiKnowledgeDocumentEntity entity, long viewerAgentId, boolean indexStale) {
         return new AdminAiKnowledgeListItemDto(
                 entity.getId(),
                 entity.getAgentId(),
@@ -996,6 +1061,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 entity.getIndexStatus(),
                 entity.getIndexError(),
                 entity.getIndexedAt(),
+                entity.getIndexEmbeddingSpec(),
+                indexStale,
                 entity.getSourceFormat(),
                 entity.getOriginalFilename(),
                 entity.getFileSizeBytes(),
@@ -1005,7 +1072,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 entity.getUpdatedAt());
     }
 
-    private static AdminAiKnowledgeDetailDto toDetail(AdminAiKnowledgeDocumentEntity entity) {
+    private static AdminAiKnowledgeDetailDto toDetail(AdminAiKnowledgeDocumentEntity entity, boolean indexStale) {
         return new AdminAiKnowledgeDetailDto(
                 entity.getId(),
                 entity.getAgentId(),
@@ -1017,6 +1084,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 entity.getIndexStatus(),
                 entity.getIndexError(),
                 entity.getIndexedAt(),
+                entity.getIndexEmbeddingSpec(),
+                indexStale,
                 entity.getSourceFormat(),
                 entity.getOriginalFilename(),
                 entity.getFileSizeBytes(),

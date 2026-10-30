@@ -99,6 +99,7 @@ export default {
       indexed: 'インデックス済み',
       failed: 'インデックス失敗',
       pending: '未インデックス',
+      stale: 'インデックスモデルが変更されました',
       storage: '元ファイル容量',
       site: 'サイト',
       recentFailures: '最近のインデックス失敗',

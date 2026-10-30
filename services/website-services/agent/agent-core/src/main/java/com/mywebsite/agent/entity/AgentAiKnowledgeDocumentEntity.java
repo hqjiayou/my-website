@@ -13,6 +13,8 @@ public class AgentAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     private String title;
     private String content;
     private String status;
+    /** 与 admin {@code AdminAiKnowledgeDocumentEntity} 同表双映射的列：admin 侧写入，本侧只声明、不读写。 */
+    private String indexEmbeddingSpec;
 
     public Long getAgentId() {
         return agentId;
@@ -44,5 +46,13 @@ public class AgentAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getIndexEmbeddingSpec() {
+        return indexEmbeddingSpec;
+    }
+
+    public void setIndexEmbeddingSpec(String indexEmbeddingSpec) {
+        this.indexEmbeddingSpec = indexEmbeddingSpec;
     }
 }

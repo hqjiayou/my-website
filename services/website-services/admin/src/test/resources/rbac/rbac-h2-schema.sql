@@ -311,6 +311,7 @@ CREATE TABLE IF NOT EXISTS agent_ai_knowledge_document (
     index_status        VARCHAR(16) NOT NULL DEFAULT 'PENDING',
     index_error         VARCHAR(500),
     indexed_at          TIMESTAMP,
+    index_embedding_spec VARCHAR(256),
     source_format       VARCHAR(16),
     original_filename   VARCHAR(255),
     storage_bucket      VARCHAR(64),

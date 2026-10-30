@@ -23,6 +23,8 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     private String indexStatus;
     private String indexError;
     private java.time.OffsetDateTime indexedAt;
+    /** 最近一次成功写入所有者分区时所用的 embedding spec；NULL=未索引过或用了进程默认嵌入模型。 */
+    private String indexEmbeddingSpec;
     private Long baseId;
     private String sourceFormat;
     private String originalFilename;
@@ -93,6 +95,14 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public void setIndexedAt(java.time.OffsetDateTime indexedAt) {
         this.indexedAt = indexedAt;
+    }
+
+    public String getIndexEmbeddingSpec() {
+        return indexEmbeddingSpec;
+    }
+
+    public void setIndexEmbeddingSpec(String indexEmbeddingSpec) {
+        this.indexEmbeddingSpec = indexEmbeddingSpec;
     }
 
     public String getSourceFormat() {

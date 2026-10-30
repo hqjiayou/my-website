@@ -534,6 +534,7 @@ export default {
         FAILED: 'Index failed',
         PENDING: 'Pending',
       },
+      indexStale: 'Index model changed',
     },
     conversations: {
       empty: 'No conversations',

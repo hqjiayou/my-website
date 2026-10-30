@@ -534,6 +534,7 @@ export default {
         FAILED: 'インデックス失敗',
         PENDING: '未インデックス',
       },
+      indexStale: 'インデックスモデルが変更されました',
     },
     conversations: {
       empty: '会話がありません',

@@ -19,6 +19,8 @@ public final class AdminAiKnowledgeDtos {
             String indexStatus,
             String indexError,
             OffsetDateTime indexedAt,
+            String indexEmbeddingSpec,
+            boolean indexStale,
             String sourceFormat,
             String originalFilename,
             Long fileSizeBytes,
@@ -38,6 +40,8 @@ public final class AdminAiKnowledgeDtos {
             String indexStatus,
             String indexError,
             OffsetDateTime indexedAt,
+            String indexEmbeddingSpec,
+            boolean indexStale,
             String sourceFormat,
             String originalFilename,
             Long fileSizeBytes,
@@ -73,6 +77,8 @@ public final class AdminAiKnowledgeDtos {
             long indexedDocuments,
             long failedDocuments,
             long pendingDocuments,
+            /** 已索引文档中，记录的 embedding spec 与当前 embeddingSelection 不一致的数量（存量索引已过期）。 */
+            long staleDocuments,
             long originalBytes,
             List<AdminAiKnowledgeAgentStatDto> sites,
             List<AdminAiKnowledgeFailureDto> recentFailures) {}

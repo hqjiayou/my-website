@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS agent_ai_knowledge_document (
     title               VARCHAR(255) NOT NULL,
     content             TEXT NOT NULL,
     status              VARCHAR(16) NOT NULL,
+    index_embedding_spec VARCHAR(256),
     created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     created_by          BIGINT,
     updated_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),

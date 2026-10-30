@@ -96,6 +96,7 @@ export default {
       indexed: '已索引',
       failed: '索引失败',
       pending: '待索引',
+      stale: '索引模型已变更',
       storage: '原档用量',
       site: '站点',
       recentFailures: '最近索引失败',
