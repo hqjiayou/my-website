@@ -16,11 +16,11 @@ export function EmptyModulePage({ namespace }: EmptyModulePageProps) {
   const hints = Array.isArray(hintsUnknown) ? (hintsUnknown as string[]) : []
 
   return (
-    <section>
+    <section className="admin-content-form">
       <AdminPageHeader title={t('title')} description={t('description')} />
-      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6">
-        <p className="text-sm text-slate-600">{tLayout('emptyModule.initLead')}</p>
-        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-700">
+      <div className="rounded-xl border border-dashed border-border bg-card p-6">
+        <p className="text-sm text-muted-foreground">{tLayout('emptyModule.initLead')}</p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-foreground">
           {hints.map((hint) => (
             <li key={hint}>{hint}</li>
           ))}
