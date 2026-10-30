@@ -12,7 +12,7 @@ public class AdminProxyServicesProperties {
 
     private int connectTimeoutMs = 2000;
 
-    private int readTimeoutMs = 3000;
+    private int readTimeoutMs = 10000;
 
     public String getBaseUrl() {
         return baseUrl;

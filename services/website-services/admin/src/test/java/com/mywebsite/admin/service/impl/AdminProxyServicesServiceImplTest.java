@@ -39,7 +39,7 @@ class AdminProxyServicesServiceImplTest {
         try {
             AdminProxyServicesProperties properties = new AdminProxyServicesProperties();
             properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
-            properties.setManagementKey("local-dev-proxy-management-key");
+            properties.setManagementKey("test-management-key");
             var status = new AdminProxyServicesServiceImpl(properties, new ObjectMapper()).status();
             assertThat(status.name()).isEqualTo("proxy-services");
             assertThat(status.reachable()).isTrue();
@@ -62,7 +62,7 @@ class AdminProxyServicesServiceImplTest {
         properties.setBaseUrl("http://127.0.0.1:1");
         properties.setConnectTimeoutMs(200);
         properties.setReadTimeoutMs(200);
-        properties.setManagementKey("local-dev-proxy-management-key");
+        properties.setManagementKey("test-management-key");
         var status = new AdminProxyServicesServiceImpl(properties, new ObjectMapper()).status();
         assertThat(status.reachable()).isFalse();
         assertThat(status.accounts()).isEmpty();
@@ -73,7 +73,7 @@ class AdminProxyServicesServiceImplTest {
         AtomicReference<List<String>> stored = new AtomicReference<>(new ArrayList<>(List.of("client-key-1")));
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/v8/management/config/access/api-keys", exchange -> {
-            if (!"Bearer local-dev-proxy-management-key".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+            if (!"Bearer test-management-key".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
                 exchange.sendResponseHeaders(401, -1);
                 exchange.close();
                 return;
@@ -123,7 +123,7 @@ class AdminProxyServicesServiceImplTest {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/v8/management/oauth/auth-url", exchange -> {
             path.set(exchange.getRequestURI().getRawQuery());
-            if (!"Bearer local-dev-proxy-management-key".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+            if (!"Bearer test-management-key".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
                 exchange.sendResponseHeaders(401, -1);
                 exchange.close();
                 return;
@@ -194,7 +194,7 @@ class AdminProxyServicesServiceImplTest {
         server.start();
         try {
             var usage = service(server.getAddress().getPort()).usage();
-            assertThat(modelsAuth.get()).isEqualTo("Bearer local-dev-proxy-management-key");
+            assertThat(modelsAuth.get()).isEqualTo("Bearer test-management-key");
             assertThat(usage.callable()).isTrue();
             assertThat(usage.apiBaseUrl()).isEqualTo("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
             assertThat(usage.accounts()).hasSize(1);
@@ -223,7 +223,7 @@ class AdminProxyServicesServiceImplTest {
     private static AdminProxyServicesServiceImpl service(int port) {
         AdminProxyServicesProperties properties = new AdminProxyServicesProperties();
         properties.setBaseUrl("http://127.0.0.1:" + port);
-        properties.setManagementKey("local-dev-proxy-management-key");
+        properties.setManagementKey("test-management-key");
         return new AdminProxyServicesServiceImpl(properties, new ObjectMapper());
     }
 
