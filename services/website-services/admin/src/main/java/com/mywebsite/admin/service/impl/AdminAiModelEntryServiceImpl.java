@@ -10,6 +10,7 @@ import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiModelEntryService.ChainCandidate;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.infra.crypto.ModelEntryCipher;
@@ -183,26 +184,32 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
     }
 
     @Override
+    public List<AgentModelSelection> embeddingClasses(long agentId) {
+        List<AgentModelSelection> raw = new ArrayList<>();
+        raw.addAll(keyEmbeddings(enabledEntries(agentId)));
+        raw.addAll(keyEmbeddings(enabledEntries(null)));
+        return AgentEmbeddingClassUtils.dedupe(raw);
+    }
+
+    @Override
     public AgentModelSelection embeddingSelection(long agentId) {
-        AgentModelSelection fromAgent = firstKeyEmbedding(enabledEntries(agentId));
-        if (fromAgent != null) {
-            return fromAgent;
-        }
-        return firstKeyEmbedding(enabledEntries(null));
+        List<AgentModelSelection> classes = embeddingClasses(agentId);
+        return classes.isEmpty() ? null : classes.get(0);
     }
 
     /** 启用列表已是默认在前、id 升序。跳过 CLI 和没填 embedding spec 的入口。 */
-    private AgentModelSelection firstKeyEmbedding(List<AdminAiModelEntryEntity> entries) {
+    private List<AgentModelSelection> keyEmbeddings(List<AdminAiModelEntryEntity> entries) {
+        List<AgentModelSelection> found = new ArrayList<>();
         for (AdminAiModelEntryEntity entry : entries) {
             if (!"KEY".equals(entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())) {
                 continue;
             }
             AgentModelSelection selection = toSelection(entry);
             if (selection != null && StringUtils.hasText(selection.embeddingSpec())) {
-                return selection;
+                found.add(selection);
             }
         }
-        return null;
+        return found;
     }
 
     /** 作用域内启用入口：默认在前，其余 id 升序（与 listEntries 的展示序一致）。 */

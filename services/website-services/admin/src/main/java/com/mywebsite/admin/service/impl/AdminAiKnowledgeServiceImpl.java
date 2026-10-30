@@ -35,6 +35,7 @@ import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.client.AgentDimensionChangeRequiredException;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
 import com.mywebsite.agent.dto.AgentOcrImageRequest;
 import com.mywebsite.agent.dto.AgentOcrPdfRequest;
 import com.mywebsite.agent.dto.AgentOcrPdfResult;
@@ -130,7 +131,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
         Page<AdminAiKnowledgeDocumentEntity> page =
                 knowledgeMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
-        Map<Long, AgentModelSelection> selectionCache = new LinkedHashMap<>();
+        Map<Long, List<AgentModelSelection>> selectionCache = new LinkedHashMap<>();
         return new PageResult<>(
                 page.getRecords().stream()
                         .map(entity -> toListItem(entity, agentId, isIndexStale(entity, selectionCache)))
@@ -230,7 +231,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 .filter(doc -> AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED.equals(doc.getIndexStatus()))
                 .count();
         // 按 agentId 分组缓存 selection，避免逐篇重复查库（全平台聚合，agent 数远小于文档数）
-        Map<Long, AgentModelSelection> staleSelectionCache = new LinkedHashMap<>();
+        Map<Long, List<AgentModelSelection>> staleSelectionCache = new LinkedHashMap<>();
         long stale = documents.stream().filter(doc -> isIndexStale(doc, staleSelectionCache)).count();
         long originalBytes = documents.stream()
                 .mapToLong(doc -> doc.getFileSizeBytes() == null ? 0L : doc.getFileSizeBytes())
@@ -576,6 +577,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         requireSite(agentId);
         requireStatus(request.status());
         AdminAiKnowledgeDocumentEntity entity = requireDocumentInSite(agentId, documentId);
+        boolean contentUnchanged = Objects.equals(entity.getTitle(), request.title().trim())
+                && Objects.equals(entity.getContent(), request.content());
         entity.setTitle(request.title().trim());
         entity.setContent(request.content());
         entity.setStatus(request.status());
@@ -586,7 +589,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
 
         AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(agentId, documentId);
-        syncDerivedIndex(saved);
+        syncDerivedIndex(saved, contentUnchanged);
         return toDetail(saved, isIndexStale(saved, new LinkedHashMap<>()));
     }
 
@@ -598,7 +601,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         if (!AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        syncDerivedIndex(entity);
+        syncDerivedIndex(entity, true);
         return toDetail(entity, isIndexStale(entity, new LinkedHashMap<>()));
     }
 
@@ -678,61 +681,73 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             return new AdminAiKnowledgeReembedResultDto(0, 0, null, false, List.of(), REEMBED_SUCCESS);
         }
 
-        Map<SelectionGroup, List<Long>> sitesBySelection = new LinkedHashMap<>();
-        Map<Long, AgentModelSelection> selectionBySite = new LinkedHashMap<>();
+        Map<Long, List<AgentModelSelection>> classesBySite = new LinkedHashMap<>();
+        boolean multiClass = false;
         for (Long agentId : documentsBySite.keySet()) {
-            AgentModelSelection selection = modelEntryService.embeddingSelection(agentId);
-            selectionBySite.put(agentId, selection);
-            sitesBySelection.computeIfAbsent(new SelectionGroup(selection), ignored -> new ArrayList<>()).add(agentId);
-        }
-
-        Map<Long, Integer> dimensionsBySite = new LinkedHashMap<>();
-        Integer columnDimensions = null;
-        AgentModelSelection confirmSelection = null;
-        boolean sawSelection = false;
-        for (Map.Entry<SelectionGroup, List<Long>> group : sitesBySelection.entrySet()) {
-            Probe probe = probeSelection(group.getKey().selection());
-            if (!sawSelection) {
-                confirmSelection = group.getKey().selection();
-                sawSelection = true;
-            }
-            if (probe.columnDimensions() != null) {
-                columnDimensions = probe.columnDimensions();
-            }
-            for (Long agentId : group.getValue()) {
-                dimensionsBySite.put(agentId, probe.dimensions());
+            List<AgentModelSelection> classes = registeredClasses(agentId);
+            classesBySite.put(agentId, classes);
+            if (classes.size() > 1) {
+                multiClass = true;
             }
         }
 
-        if (new LinkedHashSet<>(dimensionsBySite.values()).size() > 1) {
-            List<AdminAiKnowledgeReembedConflictDto> conflicts = new ArrayList<>();
-            for (Map.Entry<Long, Integer> entry : dimensionsBySite.entrySet()) {
-                conflicts.add(new AdminAiKnowledgeReembedConflictDto(entry.getKey(), entry.getValue()));
-            }
-            throw new ReembedConflictException(conflicts);
-        }
-
-        int dimensions = dimensionsBySite.values().iterator().next();
+        Integer dimensions = null;
         boolean recreatedSchema = false;
-        if (columnDimensions == null || columnDimensions != dimensions) {
-            AgentReembedPrepareResult recreated = agentClient.prepareReembed(confirmSelection, true);
-            dimensions = recreated.dimensions();
-            recreatedSchema = recreated.recreated();
+        // 多类的表由 upsert 按向量长度另建。confirm 重建只会 DROP 遗留 chunks，同维度的其它类会被清掉。
+        // 有站点登记了两类及以上时，整批都不走这条重建。
+        if (!multiClass) {
+            Map<SelectionGroup, List<Long>> sitesBySelection = new LinkedHashMap<>();
+            for (Map.Entry<Long, List<AgentModelSelection>> site : classesBySite.entrySet()) {
+                AgentModelSelection selection = site.getValue().isEmpty() ? null : site.getValue().get(0);
+                sitesBySelection
+                        .computeIfAbsent(new SelectionGroup(selection), ignored -> new ArrayList<>())
+                        .add(site.getKey());
+            }
+            Map<Long, Integer> dimensionsBySite = new LinkedHashMap<>();
+            Integer columnDimensions = null;
+            AgentModelSelection confirmSelection = null;
+            boolean sawSelection = false;
+            for (Map.Entry<SelectionGroup, List<Long>> group : sitesBySelection.entrySet()) {
+                Probe probe = probeSelection(group.getKey().selection());
+                if (!sawSelection) {
+                    confirmSelection = group.getKey().selection();
+                    sawSelection = true;
+                }
+                if (probe.columnDimensions() != null) {
+                    columnDimensions = probe.columnDimensions();
+                }
+                for (Long agentId : group.getValue()) {
+                    dimensionsBySite.put(agentId, probe.dimensions());
+                }
+            }
+            if (new LinkedHashSet<>(dimensionsBySite.values()).size() > 1) {
+                List<AdminAiKnowledgeReembedConflictDto> conflicts = new ArrayList<>();
+                for (Map.Entry<Long, Integer> entry : dimensionsBySite.entrySet()) {
+                    conflicts.add(new AdminAiKnowledgeReembedConflictDto(entry.getKey(), entry.getValue()));
+                }
+                throw new ReembedConflictException(conflicts);
+            }
+            dimensions = dimensionsBySite.values().iterator().next();
+            if (columnDimensions == null || !columnDimensions.equals(dimensions)) {
+                AgentReembedPrepareResult recreated = agentClient.prepareReembed(confirmSelection, true);
+                dimensions = recreated.dimensions();
+                recreatedSchema = recreated.recreated();
+            }
         }
 
         List<AdminAiKnowledgeReembedFailureDto> failed = new ArrayList<>();
         int attempted = 0;
         for (Map.Entry<Long, List<AdminAiKnowledgeDocumentEntity>> agent : documentsBySite.entrySet()) {
-            AgentModelSelection selection = selectionBySite.get(agent.getKey());
+            List<AgentModelSelection> classes = classesBySite.get(agent.getKey());
             for (AdminAiKnowledgeDocumentEntity document : agent.getValue()) {
                 if (!AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(document.getStatus())) {
                     continue;
                 }
                 attempted++;
                 try {
-                    upsertDerivedIndex(document, selection);
+                    upsertDerivedIndex(document, classes);
                     recordIndexOutcome(
-                            document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null, selection);
+                            document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null, classes);
                 } catch (RuntimeException ex) {
                     recordIndexOutcome(document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED, indexError(ex));
                     failed.add(new AdminAiKnowledgeReembedFailureDto(
@@ -849,13 +864,21 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
      * 链接分区的失败只记日志（其健康在消费站点的实际检索中体现）。
      */
     private void syncDerivedIndex(AdminAiKnowledgeDocumentEntity entity) {
+        syncDerivedIndex(entity, false);
+    }
+
+    /**
+     * {@code allowFillMissing} 为真且正文没变、文档已是 INDEXED、记下的类名是当前登记的真子集时，
+     * 只补缺的类。正文变了必须整份重写。失败不把文档标成 INDEXED，已记下的类名保留。
+     */
+    private void syncDerivedIndex(AdminAiKnowledgeDocumentEntity entity, boolean allowFillMissing) {
         List<Long> targets = partitionAgentIds(entity);
         if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
-            // 先取所有者分区的 selection：既用于本次 upsert，也用于成功后落 indexEmbeddingSpec，避免重复查库。
-            AgentModelSelection ownerSelection = modelEntryService.embeddingSelection(entity.getAgentId());
+            List<AgentModelSelection> ownerClasses = registeredClasses(entity.getAgentId());
+            List<AgentModelSelection> toWrite = classesToWrite(entity, ownerClasses, allowFillMissing);
             RuntimeException ownerFailure = null;
             try {
-                upsertDerivedIndexForSite(entity, entity.getAgentId(), ownerSelection);
+                upsertDerivedIndexForSite(entity, entity.getAgentId(), toWrite);
             } catch (RuntimeException ex) {
                 ownerFailure = ex;
             }
@@ -877,7 +900,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             }
             if (ownerFailure == null) {
                 recordIndexOutcome(
-                        entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null, ownerSelection);
+                        entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null, ownerClasses);
             } else {
                 log.warn(
                         "KB derived index sync failed (agentId={}, documentId={}); index may lag",
@@ -903,27 +926,46 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
     }
 
-    /** 以目标站点的 KEY 嵌入入口 upsert。没有则不带凭证，由进程嵌入模型写入。不跟随对话主用入口。 */
+    /** 以目标站点已登记的嵌入类 upsert。没有则不带凭证，由进程嵌入模型写入。不跟随对话主用入口。 */
     private void upsertDerivedIndexForSite(AdminAiKnowledgeDocumentEntity entity, long targetAgentId) {
-        upsertDerivedIndexForSite(entity, targetAgentId, modelEntryService.embeddingSelection(targetAgentId));
+        upsertDerivedIndexForSite(entity, targetAgentId, registeredClasses(targetAgentId));
     }
 
-    /** 同上，selection 已由调用方取得时直接复用，避免重复查库（所有者分区落 indexEmbeddingSpec 时用）。 */
     private void upsertDerivedIndexForSite(
-            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, AgentModelSelection selection) {
-        agentClient.upsertRetrievalDocument(retrievalDocument(entity, targetAgentId, selection));
+            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, List<AgentModelSelection> classes) {
+        agentClient.upsertRetrievalDocument(retrievalDocument(entity, targetAgentId, classes));
     }
 
     private static AgentRetrievalDocument retrievalDocument(
-            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, AgentModelSelection selection) {
+            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, List<AgentModelSelection> classes) {
+        List<AgentModelSelection> registered = classes == null ? List.of() : classes;
+        AgentModelSelection first = registered.isEmpty() ? null : registered.get(0);
         return new AgentRetrievalDocument(
                 String.valueOf(targetAgentId),
                 sourceId(entity.getId()),
                 entity.getTitle(),
                 entity.getContent(),
-                selection == null ? null : selection.embeddingSpec(),
-                selection == null ? null : selection.apiKey(),
-                selection == null ? null : selection.baseUrl());
+                first == null ? null : first.embeddingSpec(),
+                first == null ? null : first.apiKey(),
+                first == null ? null : first.baseUrl(),
+                AgentEmbeddingClassUtils.wire(registered));
+    }
+
+    private List<AgentModelSelection> registeredClasses(long agentId) {
+        List<AgentModelSelection> classes = modelEntryService.embeddingClasses(agentId);
+        return classes == null ? List.of() : classes;
+    }
+
+    private static List<AgentModelSelection> classesToWrite(
+            AdminAiKnowledgeDocumentEntity entity,
+            List<AgentModelSelection> ownerClasses,
+            boolean allowFillMissing) {
+        if (allowFillMissing
+                && AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(entity.getIndexStatus())
+                && AgentEmbeddingClassUtils.isProperSubset(entity.getIndexEmbeddingSpec(), ownerClasses)) {
+            return AgentEmbeddingClassUtils.missing(entity.getIndexEmbeddingSpec(), ownerClasses);
+        }
+        return ownerClasses;
     }
 
     /** FAILED/PENDING 场景不涉及所有者 selection，走不带 selection 的重载（FAILED 保留旧 spec，PENDING 清空）。 */
@@ -934,8 +976,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
     /**
      * 落库索引结果（定向更新四列，不动乐观锁 version）：INDEXED 时写 indexedAt、清 error，
-     * 并把 indexEmbeddingSpec 落为当次所有者分区 {@code ownerSelection} 的 embeddingSpec（无文本或
-     * selection 为 null 时写 NULL）；FAILED 时保留上次 indexedAt/indexEmbeddingSpec 只记 error；
+     * 并把 indexEmbeddingSpec 落为当次所有者分区已登记的嵌入类名（没有登记时写 NULL）；
+     * FAILED 时保留上次 indexedAt/indexEmbeddingSpec 只记 error；
      * PENDING（未在索引中）清 indexedAt/indexEmbeddingSpec 两者。
      * 同步更新内存实体，让本次请求的返回 DTO 立刻反映新状态。
      */
@@ -943,12 +985,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             AdminAiKnowledgeDocumentEntity entity,
             String indexStatus,
             String indexError,
-            AgentModelSelection ownerSelection) {
+            List<AgentModelSelection> ownerClasses) {
         boolean indexed = AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(indexStatus);
         boolean pending = AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING.equals(indexStatus);
         OffsetDateTime indexedAt = indexed ? OffsetDateTime.now(ZoneOffset.UTC) : pending ? null : entity.getIndexedAt();
         String embeddingSpec = indexed
-                ? normalizeSelectionSpec(ownerSelection)
+                ? AgentEmbeddingClassUtils.canonical(ownerClasses)
                 : pending ? null : entity.getIndexEmbeddingSpec();
         String error =
                 indexError == null ? null : indexError.substring(0, Math.min(indexError.length(), 500));
@@ -966,38 +1008,17 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         entity.setIndexEmbeddingSpec(embeddingSpec);
     }
 
-    /** selection 为 null 或其 embeddingSpec 无文本 → null；否则原文。供落库与 stale 比较共用。 */
-    private static String normalizeSelectionSpec(AgentModelSelection selection) {
-        if (selection == null) {
-            return null;
-        }
-        return textOrNull(selection.embeddingSpec());
-    }
-
-    private static String textOrNull(String value) {
-        return StringUtils.hasText(value) ? value : null;
-    }
-
     /**
-     * 文档 {@code indexStatus == INDEXED} 且记录的 embedding spec 与当前 {@code embeddingSelection}
-     * 不一致时为 stale（索引所用模型已变更）。非 INDEXED 文档恒为 false。{@code selectionCache}
-     * 按 agentId 缓存 selection，供批量调用（列表/总览）复用，不逐篇重复查库。
+     * 文档 {@code indexStatus == INDEXED} 且记下的类名与当前已登记的类不一致时为 stale。
+     * 新登记一类也算。非 INDEXED 文档恒为 false。按 agentId 缓存，供列表和总览复用。
      */
-    private boolean isIndexStale(AdminAiKnowledgeDocumentEntity entity, Map<Long, AgentModelSelection> selectionCache) {
+    private boolean isIndexStale(
+            AdminAiKnowledgeDocumentEntity entity, Map<Long, List<AgentModelSelection>> selectionCache) {
         if (!AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(entity.getIndexStatus())) {
             return false;
         }
-        // Map.computeIfAbsent 对返回 null 的映射函数不会记忆结果（会重复调用）；selection 为 null
-        // 是合法结果（无可用嵌入入口），须显式按 containsKey 缓存，否则失去缓存效果。
-        Long agentId = entity.getAgentId();
-        AgentModelSelection currentSelection;
-        if (selectionCache.containsKey(agentId)) {
-            currentSelection = selectionCache.get(agentId);
-        } else {
-            currentSelection = modelEntryService.embeddingSelection(agentId);
-            selectionCache.put(agentId, currentSelection);
-        }
-        return !Objects.equals(textOrNull(entity.getIndexEmbeddingSpec()), normalizeSelectionSpec(currentSelection));
+        List<AgentModelSelection> current = selectionCache.computeIfAbsent(entity.getAgentId(), this::registeredClasses);
+        return !AgentEmbeddingClassUtils.matchesStored(entity.getIndexEmbeddingSpec(), current);
     }
 
     private void removeFromDerivedIndex(long agentId, long documentId) {
@@ -1012,8 +1033,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
     }
 
-    private void upsertDerivedIndex(AdminAiKnowledgeDocumentEntity entity, AgentModelSelection selection) {
-        agentClient.upsertRetrievalDocument(retrievalDocument(entity, entity.getAgentId(), selection));
+    private void upsertDerivedIndex(AdminAiKnowledgeDocumentEntity entity, List<AgentModelSelection> classes) {
+        agentClient.upsertRetrievalDocument(retrievalDocument(entity, entity.getAgentId(), classes));
     }
 
     /** 从文档的全部目标分区移除（所有者 + 共享链接站点），逐个 best-effort。 */

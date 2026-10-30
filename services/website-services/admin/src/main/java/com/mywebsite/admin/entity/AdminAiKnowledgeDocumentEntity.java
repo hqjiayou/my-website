@@ -23,7 +23,7 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     private String indexStatus;
     private String indexError;
     private java.time.OffsetDateTime indexedAt;
-    /** 最近一次成功写入所有者分区时所用的 embedding spec；NULL=未索引过或用了进程默认嵌入模型。 */
+    /** 所有者分区已成功写入的嵌入类名。多类换行分隔；NULL=未索引过或用了进程默认嵌入模型。 */
     private String indexEmbeddingSpec;
     private Long baseId;
     private String sourceFormat;

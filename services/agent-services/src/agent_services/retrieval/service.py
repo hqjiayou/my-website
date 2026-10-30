@@ -62,7 +62,8 @@ class EmbeddingClass:
 DEFAULT_TOP_K = 4
 DEFAULT_MIN_SCORE = RETRIEVAL_MIN_SCORE_DEFAULT
 DEFAULT_SCORE_RATIO_FLOOR = RETRIEVAL_SCORE_RATIO_FLOOR_DEFAULT
-MAX_UPSERT_CHUNKS = 256
+# 1000 字一块时，二十多万字的表格抽取会超过 256 块，索引在嵌入前就被 400 拒绝。
+MAX_UPSERT_CHUNKS = 512
 # 与检索 topK 上限一致：词法通道在向量窗口之外另取候选，再和向量结果一起截到 top_k。
 LEXICAL_CANDIDATE_LIMIT = 20
 MAX_CODE_TOKENS = 32
@@ -541,7 +542,10 @@ class RetrievalService:
         embedder: EmbeddingClient | None = None,
         confirm_recreate: bool = False,
     ) -> ReembedPrepared:
-        """按 upsert 的 embedder 回退解析探针维度，必要时建表或重建。"""
+        """探针单套 embedder 的维度，必要时建或重建遗留 chunks 表。
+
+        多类索引的表由 upsert 按向量长度另建，不经过这里。确认重建只 DROP 遗留 chunks。
+        """
         client = embedder or self._embedder
         if client is None:
             raise RuntimeError("Embedding client is not configured.")
