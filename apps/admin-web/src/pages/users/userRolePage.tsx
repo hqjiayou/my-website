@@ -77,12 +77,12 @@ export function UserRolePage({
   const readOnly = isSelf || protectedUser
 
   if (!Number.isFinite(parsedUserId)) {
-    return <p className="text-sm text-slate-500">{t('roles.invalidId')}</p>
+    return <p className="text-sm text-muted-foreground">{t('roles.invalidId')}</p>
   }
 
   if (isRolesError || isUserError || isUserRolesError) {
     return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
         <p>
           {(rolesError instanceof Error && rolesError.message) ||
             (userError instanceof Error && userError.message) ||
@@ -105,7 +105,7 @@ export function UserRolePage({
   }
 
   if (isRolesPending || isUserPending || isUserRolesPending || !user || !userRoles) {
-    return <p className="text-sm text-slate-500">{t('roles.loading')}</p>
+    return <p className="text-sm text-muted-foreground">{t('roles.loading')}</p>
   }
 
   return (
@@ -203,7 +203,7 @@ function UserRoleEditor({
     assignableRoles.length > 0 && assignableRoles.every((role) => selectedCodes.has(role.roleCode))
 
   return (
-    <section>
+    <section className="admin-content-form">
       {embedded ? null : (
         <AdminPageHeader
           title={t('roles.title')}
@@ -212,7 +212,7 @@ function UserRoleEditor({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-card-muted"
             >
               {t('roles.back')}
             </button>
@@ -221,7 +221,7 @@ function UserRoleEditor({
       )}
 
       {restrictionHint ? (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mb-4 rounded-lg border border-warning/35 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis">
           {restrictionHint}
         </div>
       ) : null}
@@ -280,7 +280,7 @@ function UserRoleEditor({
             ))}
           </div>
         )}
-        {localError ? <p className="mt-3 text-xs text-red-600">{localError}</p> : null}
+        {localError ? <p className="mt-3 text-xs text-danger-emphasis">{localError}</p> : null}
       </div>
 
       <div className={adminFormActionsClass}>
