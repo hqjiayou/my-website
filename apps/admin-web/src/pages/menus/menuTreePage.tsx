@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { rbacApi } from '@/api/rbacApi'
 import { AdminPageHeader, DataTable, FormDialog, StatusTag } from '@/components/admin'
 import {
-  adminDangerButtonClass,
+  adminDangerGhostButtonClass,
   adminFieldClass,
   adminFormActionsClass,
   adminGhostButtonClass,
@@ -162,7 +162,7 @@ export function MenuTreePage() {
   }
 
   return (
-    <section>
+    <section className="admin-content-data">
       <AdminPageHeader
         title={t('title')}
         description={t('description')}
@@ -265,7 +265,7 @@ export function MenuTreePage() {
               </select>
             </label>
           </div>
-          {formError ? <p className="mt-3 text-sm text-rose-700">{formError}</p> : null}
+          {formError ? <p className="mt-3 text-sm text-danger-emphasis">{formError}</p> : null}
           <div className={adminFormActionsClass}>
             <button
               type="button"
@@ -324,7 +324,7 @@ export function MenuTreePage() {
                     type="button"
                     disabled={item.node.children.length > 0 || deleteMutation.isPending}
                     onClick={() => handleDelete(item.node)}
-                    className={adminDangerButtonClass}
+                    className={adminDangerGhostButtonClass}
                   >
                     {t('actions.remove')}
                   </button>
