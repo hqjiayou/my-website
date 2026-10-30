@@ -452,7 +452,7 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexedAt(OffsetDateTime.now());
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(knowledgeMapper.updateById(any())).thenReturn(1);
+        when(knowledgeMapper.updateById(any(AdminAiKnowledgeDocumentEntity.class))).thenReturn(1);
 
         var detail = service.updateDocument(
                 1L,

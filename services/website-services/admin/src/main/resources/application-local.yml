@@ -26,7 +26,7 @@ mywebsite:
   agent:
     business-api-base-url: ${AGENT_BUSINESS_API_BASE_URL:http://127.0.0.1:8082}
   proxy-services:
-    management-key: ${PROXY_SERVICES_MANAGEMENT_KEY:}
+    management-key: ${PROXY_INTERNAL_SERVICE_TOKEN:}
 
 storage:
   minio:

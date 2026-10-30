@@ -81,7 +81,7 @@ services:
       AGENT_BUSINESS_API_BASE_URL: "http://agent-service:8082"
       AI_MODEL_ENTRY_SECRET: "${AI_MODEL_ENTRY_SECRET:-local-dev-model-entry-secret}"
       PROXY_SERVICES_BASE_URL: "http://proxy-services:8317"
-      PROXY_SERVICES_MANAGEMENT_KEY: "${PROXY_SERVICES_MANAGEMENT_KEY:-}"
+      PROXY_INTERNAL_SERVICE_TOKEN: "${PROXY_INTERNAL_SERVICE_TOKEN:-}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -222,7 +222,7 @@ services:
     image: mywebsite-proxy-services:local
     restart: unless-stopped
     environment:
-      MANAGEMENT_PASSWORD: "${PROXY_SERVICES_MANAGEMENT_KEY:?PROXY_SERVICES_MANAGEMENT_KEY must be set to a local random value (proxy management password)}"
+      MANAGEMENT_PASSWORD: "${PROXY_INTERNAL_SERVICE_TOKEN:?PROXY_INTERNAL_SERVICE_TOKEN must be set to a local random value (proxy management password)}"
     ports:
       # 只绑回环：本机 admin 与 OAuth 回调。compose 网络内用服务名 proxy-services。
       - "127.0.0.1:8317:8317"

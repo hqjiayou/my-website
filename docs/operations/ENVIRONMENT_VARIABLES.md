@@ -74,7 +74,7 @@ last_verified: 2026-10-30
 | `AGENT_RETRY_MAX_ATTEMPTS` | 否 | `1` | |
 | `AI_MODEL_ENTRY_SECRET` | 否 | `local-dev-model-entry-secret`（`application-local.yml`） | 模型入口 api_key 的 AES-GCM 口令；生产必须换成独立口令。空则明文兼容旧行。模型入口双模式（KEY/CLI，Flyway V35）由后台「模型入口」维护，不走环境变量 |
 | `PROXY_SERVICES_BASE_URL` | 否 | `http://127.0.0.1:8317`（根 compose 的 admin 为 `http://proxy-services:8317`） | admin 访问 proxy-services 的根地址 |
-| `PROXY_SERVICES_MANAGEMENT_KEY` | 否 | 空；`application-local.yml` 与本地 Compose 默认 `（本地自设随机值，无默认值）` | 与 proxy-services 的 `MANAGEMENT_PASSWORD` 相同。空则后台只能看进程是否可达 |
+| `PROXY_INTERNAL_SERVICE_TOKEN` | 否 | 空；`application-local.yml` 与本地 Compose 默认 `（本地自设随机值，无默认值）` | 与 `services/proxy-services/.env` 同名变量相同，形式与 `AGENT_INTERNAL_SERVICE_TOKEN` 一致。Compose 把它注入进程为 `MANAGEMENT_PASSWORD`。空则后台只能看进程是否可达 |
 
 ## 6. Gateway
 
@@ -149,4 +149,4 @@ last_verified: 2026-10-30
 
 ## 9. 根 compose（自架部署）读的 `.env`
 
-出处：仓库根 `docker-compose.yml`。只列与启动直接相关者，全量以该文件 `${}` 引用为准：`POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD`、`REDIS_PASSWORD`、`AGENT_INTERNAL_SERVICE_TOKEN`、`AI_MODEL`、`AI_PROVIDER_API_KEY`、`RETRIEVAL_DATABASE_URL`、`AGENT_RETRIEVAL_DB` / `AGENT_RETRIEVAL_USER` / `AGENT_RETRIEVAL_PASSWORD`、`AI_EMBEDDING_MODEL` / `AI_EMBEDDING_DIMENSIONS`（默认 `1536`）、`AI_MODEL_ENTRY_SECRET`（默认 `local-dev-model-entry-secret`）、`PROXY_SERVICES_MANAGEMENT_KEY`（无默认，Compose 以 `${...:?}` 强制要求，注入 proxy-services 为 `MANAGEMENT_PASSWORD`）、`AUTH_JWT_PRIVATE_KEY_PATH` / `AUTH_JWT_PUBLIC_KEY_PATH` / `AUTH_JWT_KEY_ID`、`SECURITY_REFRESH_COOKIE_SECURE`（默认 `false`）、`FLYWAY_ENABLED`（默认 `true`）、`VITE_PORTAL_AGENT_ID`（默认空）。细节见 [`SELF_HOSTING.md`](./SELF_HOSTING.md)。
+出处：仓库根 `docker-compose.yml`。只列与启动直接相关者，全量以该文件 `${}` 引用为准：`POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD`、`REDIS_PASSWORD`、`AGENT_INTERNAL_SERVICE_TOKEN`、`AI_MODEL`、`AI_PROVIDER_API_KEY`、`RETRIEVAL_DATABASE_URL`、`AGENT_RETRIEVAL_DB` / `AGENT_RETRIEVAL_USER` / `AGENT_RETRIEVAL_PASSWORD`、`AI_EMBEDDING_MODEL` / `AI_EMBEDDING_DIMENSIONS`（默认 `1536`）、`AI_MODEL_ENTRY_SECRET`（默认 `local-dev-model-entry-secret`）、`PROXY_INTERNAL_SERVICE_TOKEN`（无默认，Compose 以 `${...:?}` 强制要求，注入 proxy-services 为 `MANAGEMENT_PASSWORD`）、`AUTH_JWT_PRIVATE_KEY_PATH` / `AUTH_JWT_PUBLIC_KEY_PATH` / `AUTH_JWT_KEY_ID`、`SECURITY_REFRESH_COOKIE_SECURE`（默认 `false`）、`FLYWAY_ENABLED`（默认 `true`）、`VITE_PORTAL_AGENT_ID`（默认空）。细节见 [`SELF_HOSTING.md`](./SELF_HOSTING.md)。
