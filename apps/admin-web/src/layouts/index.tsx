@@ -11,6 +11,7 @@ import { Sidebar } from './components/sidebar'
 /**
  * 后台基础布局：Sidebar + Header + Main 三栏组合。
  * 仅负责壳层结构与偏好同步，业务菜单等内容由各自模块注入。
+ * 内容最大宽类在 theme.css：admin-content-data / admin-content-form / admin-content-doc。
  */
 export function AdminLayout() {
   const sidebarCollapsed = useAdminPreferencesStore((state) => state.preferences.sidebarCollapsed)
@@ -19,7 +20,7 @@ export function AdminLayout() {
     <div className="min-h-screen bg-admin-page text-admin">
       <SystemThemeSync />
       <Sidebar />
-      <div className={cn('transition-[padding] duration-200', sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-72')}>
+      <div className={cn('transition-[padding] duration-200 ease-out', sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64')}>
         <Header />
         <MainContainer />
       </div>

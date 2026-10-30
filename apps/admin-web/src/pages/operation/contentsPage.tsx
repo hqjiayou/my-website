@@ -11,8 +11,7 @@ import {
   listOperationContents,
   type OperationContentRow,
 } from '@/api/operation/contentApi'
-import { DataTable, type DataTableColumn } from '@/components/admin'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader, DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 
@@ -108,7 +107,7 @@ export function OperationContentsPage() {
 
   return (
     <section>
-      <PageHeader title={t('contents.title')} description={t('contents.description')} />
+      <AdminPageHeader title={t('contents.title')} description={t('contents.description')} />
 
       <p className="mb-3 text-xs text-slate-500">{t('contents.aggregateNotice')}</p>
 

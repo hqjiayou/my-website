@@ -14,7 +14,7 @@ import {
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader } from '@/components/admin'
 import { PermissionGate } from '@/router/permission'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
@@ -267,7 +267,7 @@ export function UserEditPage({
 
   return (
     <section>
-      <PageHeader
+      <AdminPageHeader
         title={isCreate ? t('edit.createTitle') : t('edit.editTitle')}
         description={
           isCreate

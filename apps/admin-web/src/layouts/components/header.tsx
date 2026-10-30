@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 
+import { adminDangerGhostButtonMdClass } from '@/components/admin/controls'
 import type { FontSize, PageDensity, PrimaryColor, ThemeMode } from '@/config/preferences'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/i18n/constants'
 import { cn } from '@/lib/cn'
@@ -21,7 +22,9 @@ export function Header() {
   const { t: tLayout } = useTranslation('layout')
   const { toggleSidebar } = useLayoutStore()
   const sidebarCollapsed = useAdminPreferencesStore((state) => state.preferences.sidebarCollapsed)
+  const pageDensity = useAdminPreferencesStore((state) => state.preferences.pageDensity)
   const setSidebarCollapsed = useAdminPreferencesStore((state) => state.setSidebarCollapsed)
+  const setPageDensity = useAdminPreferencesStore((state) => state.setPageDensity)
   const user = useAuthStore((state) => state.user)
   const menus = useAuthStore((state) => state.menus)
   const logout = useAuthStore((state) => state.logout)
@@ -35,6 +38,8 @@ export function Header() {
   const menuTitle = resolveMenuTitle(menus, location.pathname)
   const pageTitle = titleKey ? tNav(titleKey) : menuTitle ?? tLayout('fallbackPageTitle')
   const displayName = user?.displayName || user?.username || tLayout('header.anonymous')
+  const avatarLabel = displayName.trim().slice(0, 1).toUpperCase()
+  const densities: PageDensity[] = ['compact', 'default', 'comfortable']
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -62,29 +67,41 @@ export function Header() {
           <button
             type="button"
             onClick={toggleSidebar}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-admin text-admin-muted transition hover:bg-admin-surface-muted lg:hidden"
+            className="admin-icon-button admin-focus-ring lg:hidden"
           >
-            <Menu className="h-4 w-4" />
+            <Menu className="h-5 w-5" />
           </button>
 
           <button
             type="button"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="hidden h-9 w-9 items-center justify-center rounded-md border border-admin text-admin-muted transition hover:bg-admin-surface-muted lg:inline-flex"
+            className="admin-icon-button admin-focus-ring hidden lg:inline-flex"
             aria-label={sidebarCollapsed ? tLayout('preferences.sidebar.collapsed') : tLayout('sidebar.title')}
           >
-            {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
 
-          <div className="mr-auto min-w-0">
-            <p className="truncate text-sm font-semibold text-admin">{pageTitle}</p>
-            <p className="truncate text-xs text-admin-muted">{tLayout('header.subtitle')}</p>
+          <nav className="mr-auto min-w-0 text-sm" aria-label={tLayout('header.subtitle')}>
+            <p className="truncate font-medium text-primary">{pageTitle}</p>
+          </nav>
+
+          <div className="admin-seg hidden lg:flex" role="group" aria-label={tLayout('preferences.pageDensity.label')}>
+            {densities.map((density) => (
+              <button
+                key={density}
+                type="button"
+                className={cn('admin-focus-ring', pageDensity === density && 'is-on')}
+                onClick={() => setPageDensity(density)}
+              >
+                {tLayout(`preferences.pageDensity.${density}`)}
+              </button>
+            ))}
           </div>
 
-          <label className="admin-focus-within hidden items-center gap-2 rounded-lg border border-admin bg-admin-surface-muted px-3 py-1.5 text-sm text-admin-muted transition md:flex admin-control">
+          <label className="admin-focus-within hidden h-9 w-60 items-center gap-2 rounded-lg border border-admin bg-admin-surface-muted px-3 text-sm text-admin-muted transition md:flex">
             <Search className="h-4 w-4 shrink-0" />
             <input
-              className="w-40 border-none bg-transparent text-sm text-admin outline-none placeholder:text-admin-muted"
+              className="w-full border-none bg-transparent text-sm text-admin outline-none placeholder:text-admin-muted"
               placeholder={tLayout('search.placeholder')}
             />
           </label>
@@ -93,21 +110,24 @@ export function Header() {
             <button
               type="button"
               onClick={() => setUserMenuOpen((open) => !open)}
-              className="inline-flex max-w-[12rem] items-center gap-2 rounded-lg border border-admin bg-admin-surface px-2.5 py-1.5 text-sm text-admin transition hover:bg-admin-surface-muted admin-control"
+              className="admin-focus-ring inline-flex max-w-[12rem] items-center gap-2 rounded-lg px-1.5 py-1 text-sm text-admin transition hover:bg-primary/7"
             >
+              <span className="admin-avatar" aria-hidden>
+                {avatarLabel}
+              </span>
               <span className="truncate">{displayName}</span>
               <ChevronDown className={cn('h-4 w-4 shrink-0 text-admin-muted transition', userMenuOpen && 'rotate-180')} />
             </button>
 
             {userMenuOpen ? (
-              <div className="absolute right-0 z-30 mt-2 w-48 overflow-hidden rounded-lg border border-admin bg-admin-surface py-1 shadow-lg">
+              <div className="shadow-admin-pop absolute right-0 z-30 mt-2 w-[200px] overflow-hidden rounded-lg border border-admin bg-admin-surface py-1">
                 <button
                   type="button"
                   onClick={() => {
                     setUserMenuOpen(false)
                     setAppearanceOpen(true)
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-admin transition hover:bg-admin-surface-muted"
+                  className="admin-focus-ring flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-admin transition hover:bg-admin-surface-muted"
                 >
                   <Settings2 className="h-4 w-4 text-admin-muted" />
                   {tLayout('userMenu.appearance')}
@@ -115,7 +135,7 @@ export function Header() {
                 <button
                   type="button"
                   onClick={() => void handleLogout()}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 transition hover:bg-rose-50"
+                  className="admin-focus-ring flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-admin-danger transition hover:bg-admin-danger-muted"
                 >
                   <LogOut className="h-4 w-4" />
                   {tLayout('userMenu.logout')}
@@ -160,12 +180,12 @@ function AppearanceDrawer({ open, onClose }: { open: boolean; onClose: () => voi
     <>
       <button
         type="button"
-        className="fixed inset-0 z-40 bg-slate-900/40"
+        className="admin-overlay fixed inset-0 z-40"
         aria-label={t('preferences.close')}
         onClick={onClose}
       />
       <aside
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-admin bg-admin-surface shadow-xl"
+        className="shadow-admin-overlay fixed inset-y-0 right-0 z-50 flex w-full max-w-[560px] flex-col border-l border-admin bg-admin-surface"
         role="dialog"
         aria-modal="true"
         aria-labelledby="appearance-settings-title"
@@ -180,7 +200,7 @@ function AppearanceDrawer({ open, onClose }: { open: boolean; onClose: () => voi
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-admin text-admin-muted transition hover:bg-admin-surface-muted"
+            className="admin-icon-button admin-focus-ring"
           >
             <X className="h-4 w-4" />
           </button>
@@ -252,7 +272,7 @@ function AppearanceDrawer({ open, onClose }: { open: boolean; onClose: () => voi
           <button
             type="button"
             onClick={handleClearLocal}
-            className="w-full rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+            className={cn(adminDangerGhostButtonMdClass, 'w-full')}
           >
             {t('preferences.clearLocal')}
           </button>

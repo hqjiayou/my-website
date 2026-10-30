@@ -18,7 +18,7 @@ import {
   type HeroLayout,
   type AgentFontStyle,
 } from '@/api'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { AgentAppearancePreview } from '@/pages/apps/style/agentAppearancePreview'
 import { PermissionGate, useHasPermission } from '@/router/permission'
@@ -84,7 +84,7 @@ export function StyleSettingsPage() {
   if (sites.length === 0) {
     return (
       <section>
-        <PageHeader title={t('title')} description={t('description')} />
+        <AdminPageHeader title={t('title')} description={t('description')} />
         <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
           {t('messages.noSites')}
         </div>
@@ -94,7 +94,7 @@ export function StyleSettingsPage() {
 
   return (
     <section>
-      <PageHeader
+      <AdminPageHeader
         title={t('title')}
         description={t('description')}
         action={

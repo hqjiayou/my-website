@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { aiApi } from '@/api/apps/aiApi'
 import { agentApi } from '@/api/apps/agentApi'
 import { CopyableText } from '@/components/admin/copyableText'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader } from '@/components/admin'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import type {
   AiModelEntry,
@@ -395,7 +395,7 @@ export function AiSettingsPage() {
   if (isError) {
     return (
       <section>
-        <PageHeader title={t('settings.title')} description={t('settings.description')} />
+        <AdminPageHeader title={t('settings.title')} description={t('settings.description')} />
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           <p>{error instanceof Error ? error.message : t('error')}</p>
           <button type="button" className="mt-2 underline" onClick={() => void refetch()}>
@@ -441,7 +441,7 @@ export function AiSettingsPage() {
 
   return (
     <section>
-      <PageHeader title={t('settings.title')} description={t('settings.description')} />
+      <AdminPageHeader title={t('settings.title')} description={t('settings.description')} />
       <div className="space-y-4">
         <p className="text-sm text-slate-600">{t('settings.fallbackHint')}</p>
         <article className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -31,25 +31,28 @@ export function AdminPageHeader({
   return (
     <header className={cn('mb-6', className)}>
       {breadcrumbs && breadcrumbs.length > 0 ? (
-        <nav className="mb-2 flex flex-wrap items-center gap-1 text-xs text-slate-500" aria-label={t('breadcrumb')}>
-          {breadcrumbs.map((item, index) => (
-            <span key={`${item.label}-${index}`} className="inline-flex items-center gap-1">
-              {index > 0 ? <span className="text-slate-300">/</span> : null}
-              {item.to ? (
-                <Link to={item.to} className="transition hover:text-slate-700">
-                  {item.label}
-                </Link>
-              ) : (
-                <span className="text-slate-700">{item.label}</span>
-              )}
-            </span>
-          ))}
+        <nav className="mb-2 flex flex-wrap items-center gap-2 text-sm text-admin-muted" aria-label={t('breadcrumb')}>
+          {breadcrumbs.map((item, index) => {
+            const isCurrent = index === breadcrumbs.length - 1
+            return (
+              <span key={`${item.label}-${index}`} className="inline-flex items-center gap-2">
+                {index > 0 ? <span aria-hidden>›</span> : null}
+                {item.to && !isCurrent ? (
+                  <Link to={item.to} className="transition hover:text-admin">
+                    {item.label}
+                  </Link>
+                ) : (
+                  <span className={isCurrent ? 'font-medium text-primary' : undefined}>{item.label}</span>
+                )}
+              </span>
+            )
+          })}
         </nav>
       ) : null}
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-semibold text-admin">{title}</h1>
+          <h1 className="text-xl font-semibold leading-[1.3] text-admin">{title}</h1>
           {description ? <p className="mt-1 text-sm text-admin-muted">{description}</p> : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}

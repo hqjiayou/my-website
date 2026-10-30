@@ -46,18 +46,13 @@ export function Sidebar() {
         to={item.path}
         end
         title={compact ? item.label : undefined}
-        className={({ isActive }) =>
-          cn(
-            'flex items-center rounded-lg text-sm font-medium transition-colors admin-control',
-            compact ? 'justify-center px-2' : 'gap-3 px-3',
-            isActive
-              ? 'bg-admin-primary text-admin-on-primary shadow-sm'
-              : 'text-admin-muted hover:bg-admin-surface-muted hover:text-admin',
-          )
-        }
+        className={cn(
+          'admin-nav-item admin-focus-ring flex items-center text-sm font-medium',
+          compact ? 'justify-center px-0' : 'gap-3 px-3',
+        )}
       >
-        <item.icon className="h-4 w-4 shrink-0 opacity-90" />
-        {!compact ? <span>{item.label}</span> : null}
+        <item.icon className="h-4.5 w-4.5 shrink-0" />
+        {!compact ? <span className="truncate">{item.label}</span> : null}
       </NavLink>
     )
   }
@@ -65,7 +60,7 @@ export function Sidebar() {
   function renderGroup(group: SidebarGroup) {
     if (sidebarCollapsed) {
       return (
-        <div key={group.id} className="space-y-1">
+        <div key={group.id} className="flex flex-col gap-1">
           {group.children.map((child) => renderLeafLink(child, true))}
         </div>
       )
@@ -75,28 +70,27 @@ export function Sidebar() {
     const activeChild = sidebarGroupHasActiveChild(group, location.pathname)
 
     return (
-      <div key={group.id} className="space-y-1">
+      <div key={group.id}>
         <button
           type="button"
           onClick={() => toggleGroup(group)}
           className={cn(
-            'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] transition-colors admin-control',
-            activeChild ? 'text-admin' : 'text-admin-muted hover:text-admin',
+            'admin-nav-group-title admin-focus-ring mb-1 flex w-full items-center justify-between px-3 text-left',
             activeChild && 'cursor-default',
           )}
           aria-expanded={expanded}
         >
-          <span>{group.label}</span>
+          <span className="truncate">{group.label}</span>
           <ChevronDown
             className={cn(
-              'h-3.5 w-3.5 shrink-0 text-admin-muted transition-transform duration-200',
+              'h-3.5 w-3.5 shrink-0 transition-transform duration-200',
               expanded ? 'rotate-0' : '-rotate-90',
               activeChild && 'opacity-40',
             )}
           />
         </button>
         {expanded ? (
-          <div className="relative ml-2 space-y-0.5 border-l border-admin pl-3">
+          <div className="flex flex-col gap-0.5">
             {group.children.map((child) => renderLeafLink(child))}
           </div>
         ) : null}
@@ -109,41 +103,46 @@ export function Sidebar() {
       <div
         aria-hidden
         className={cn(
-          'fixed inset-0 z-30 bg-slate-900/40 transition-opacity lg:hidden',
+          'admin-overlay fixed inset-0 z-40 transition-opacity lg:hidden',
           isSidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={closeSidebar}
       />
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-admin bg-admin-surface p-4 shadow-sm transition-all duration-200 lg:translate-x-0',
-          sidebarCollapsed ? 'w-16 px-2' : 'w-72',
+          'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-admin bg-admin-sidebar transition-all duration-200 ease-out lg:translate-x-0',
+          sidebarCollapsed ? 'w-16' : 'w-64',
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className={cn('mb-6 flex shrink-0 items-center', sidebarCollapsed ? 'justify-center' : 'justify-between')}>
-          {!sidebarCollapsed ? (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-admin-muted">{tLayout('sidebar.kicker')}</p>
-              <p className="text-lg font-semibold tracking-tight text-admin">{tLayout('sidebar.title')}</p>
-            </div>
-          ) : (
-            <p className="text-xs font-bold text-admin" title={tLayout('sidebar.title')}>
-              MW
-            </p>
+        <div
+          className={cn(
+            'flex h-16 shrink-0 items-center gap-3 border-b border-admin px-4 max-lg:pr-12',
+            sidebarCollapsed && 'justify-center px-2',
           )}
+        >
+          <span className="admin-brand-mark" title={tLayout('sidebar.title')}>
+            MW
+          </span>
+          {!sidebarCollapsed ? (
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-admin-muted">{tLayout('sidebar.kicker')}</p>
+              <p className="truncate text-[15px] font-semibold leading-tight text-admin">{tLayout('sidebar.title')}</p>
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={closeSidebar}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-admin text-admin-muted transition hover:bg-admin-surface-muted lg:hidden"
+            className="admin-icon-button admin-focus-ring absolute top-4 right-2 lg:hidden"
+            aria-label={tLayout('preferences.close')}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <nav className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+        <nav className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
           {sidebarEntries.length === 0 ? (
-            <p className={cn('text-sm text-admin-muted', sidebarCollapsed ? 'px-0 text-center' : 'px-3')}>
+            <p className={cn('text-sm text-admin-muted', sidebarCollapsed ? 'text-center' : 'px-3')}>
               {sidebarCollapsed ? '—' : tLayout('sidebar.emptyMenus')}
             </p>
           ) : (

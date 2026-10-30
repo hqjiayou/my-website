@@ -20,8 +20,7 @@ import {
   type MediaListItem,
   type UpdateContentInput,
 } from '@/api'
-import { DataTable, type DataTableColumn } from '@/components/admin'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader, DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -380,7 +379,7 @@ export function AgentContentsPage() {
 
   return (
     <section>
-      <PageHeader
+      <AdminPageHeader
         title={t('workspace.nav.contents')}
         description={t('contentManagement.description')}
         action={

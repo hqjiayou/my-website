@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 
 import { agentApi } from '@/api'
 import { aiApi } from '@/api/apps/aiApi'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader } from '@/components/admin'
 import { AgentAiKnowledgePanel } from '@/pages/apps/sites/agentAiKnowledgePanel'
 import { PermissionGate } from '@/router/permission'
 import type { AiKnowledgeReembedConflict, AiKnowledgeReembedResult } from '@/types/ai'
@@ -43,7 +43,7 @@ export function AiKnowledgeBasesPage() {
 
   return (
     <section>
-      <PageHeader
+      <AdminPageHeader
         title={t('knowledgeBases.title')}
         description={t('knowledgeBases.description')}
         action={

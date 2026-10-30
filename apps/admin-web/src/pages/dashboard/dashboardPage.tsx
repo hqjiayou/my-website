@@ -1,13 +1,13 @@
 import { useTranslation } from 'react-i18next'
 
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader } from '@/components/admin'
 
 export function DashboardPage() {
   const { t } = useTranslation('dashboard')
 
   return (
     <section>
-      <PageHeader title={t('title')} description={t('description')} />
+      <AdminPageHeader title={t('title')} description={t('description')} />
 
       <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600 shadow-sm">
         <p className="font-medium text-slate-800">{t('notConnected.title')}</p>

@@ -5,8 +5,7 @@ import { Link } from 'react-router-dom'
 
 import { MEDIA_STATUS } from '@/api/apps/mediaApi'
 import { listOperationMedia, type OperationMediaRow } from '@/api/operation/fileApi'
-import { DataTable, type DataTableColumn } from '@/components/admin'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader, DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 
@@ -103,7 +102,7 @@ export function OperationFilesPage() {
 
   return (
     <section>
-      <PageHeader title={t('files.title')} description={t('files.description')} />
+      <AdminPageHeader title={t('files.title')} description={t('files.description')} />
 
       <p className="mb-3 text-xs text-slate-500">{t('files.aggregateNotice')}</p>
 

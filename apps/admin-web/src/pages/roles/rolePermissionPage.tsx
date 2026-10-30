@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 
 import { rbacApi } from '@/api/rbacApi'
 import { adminFormActionsClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { isSuperAdminRole, useHasPermission } from '@/router/permission'
@@ -176,7 +176,7 @@ function RoleMenuEditor({
           {t('permissions.description', { roleName, roleCode })}
         </p>
       ) : (
-        <PageHeader
+        <AdminPageHeader
           title={t('permissions.title')}
           description={t('permissions.description', { roleName, roleCode })}
         />

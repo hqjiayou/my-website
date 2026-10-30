@@ -2,7 +2,7 @@ import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useOutletContext } from 'react-router-dom'
 
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader } from '@/components/admin'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
@@ -29,7 +29,7 @@ function agentPanelPage(
 
     return (
       <section>
-        <PageHeader title={t(`workspace.nav.${navKey}`)} description={t('aiWorkspace.description')} />
+        <AdminPageHeader title={t(`workspace.nav.${navKey}`)} description={t('aiWorkspace.description')} />
         {allowed ? (
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <Panel agentId={site.id} />

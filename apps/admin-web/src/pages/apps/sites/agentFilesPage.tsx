@@ -13,8 +13,7 @@ import {
   type MediaListItem,
   type MediaListQuery,
 } from '@/api'
-import { DataTable, type DataTableColumn } from '@/components/admin'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader, DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -185,7 +184,7 @@ export function AgentFilesPage() {
 
   return (
     <section>
-      <PageHeader
+      <AdminPageHeader
         title={t('workspace.nav.files')}
         description={t('filesManagement.description')}
         action={

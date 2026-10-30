@@ -14,7 +14,7 @@ import {
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader } from '@/components/admin'
 import { ROUTES } from '@/router/config/routePaths'
 import { ROLE_STATUS } from '@/types/rbac'
 
@@ -209,7 +209,7 @@ export function RoleEditPage({
 
   return (
     <section>
-      <PageHeader
+      <AdminPageHeader
         title={isCreate ? t('edit.createTitle') : t('edit.editTitle')}
         description={
           isCreate
