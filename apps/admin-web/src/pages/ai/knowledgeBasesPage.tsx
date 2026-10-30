@@ -42,7 +42,7 @@ export function AiKnowledgeBasesPage() {
   }
 
   return (
-    <section>
+    <section className="admin-content-data">
       <AdminPageHeader
         title={t('knowledgeBases.title')}
         description={t('knowledgeBases.description')}
@@ -50,7 +50,7 @@ export function AiKnowledgeBasesPage() {
           <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
             <button
               type="button"
-              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
               disabled={reembedMutation.isPending}
               onClick={startReembed}
             >
@@ -62,7 +62,7 @@ export function AiKnowledgeBasesPage() {
         }
       />
       {conflicts ? (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="mb-4 rounded-lg border border-warning/35 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis">
           <p>{t('knowledgeBases.reembed.conflicts')}</p>
           <ul className="mt-2 list-disc pl-5">
             {conflicts.map((conflict) => (
@@ -74,7 +74,7 @@ export function AiKnowledgeBasesPage() {
         </div>
       ) : null}
       {result ? (
-        <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+        <div className="mb-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground">
           <p>{t('knowledgeBases.reembed.usage')}</p>
           <p className="mt-2">
             {t('knowledgeBases.reembed.sites')} {result.sites}
@@ -103,7 +103,7 @@ export function AiKnowledgeBasesPage() {
       ) : null}
       <KnowledgeOverviewSection />
       <KnowledgeBasesAdminSection />
-      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <article className="rounded-xl border border-border bg-card p-5">
         <AiAgentScope>{(agentId) => <AgentAiKnowledgePanel agentId={agentId} />}</AiAgentScope>
       </article>
     </section>
@@ -154,9 +154,9 @@ function KnowledgeBasesAdminSection() {
     return null
   }
   return (
-    <article className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-900">{t('knowledgeBases.bases.title')}</h2>
-      <p className="mt-1 text-xs text-slate-500">{t('knowledgeBases.bases.hint')}</p>
+    <article className="mb-4 rounded-xl border border-border bg-card p-5">
+      <h2 className="text-sm font-semibold text-foreground">{t('knowledgeBases.bases.title')}</h2>
+      <p className="mt-1 text-xs text-muted-foreground">{t('knowledgeBases.bases.hint')}</p>
       <div className="mt-3 space-y-3">
         {bases.map((base) => {
           const candidates = sites.filter(
@@ -164,35 +164,35 @@ function KnowledgeBasesAdminSection() {
           )
           const chosen = linkTargets[base.id] ?? (candidates[0] ? String(candidates[0].id) : '')
           return (
-            <div key={base.id} className="rounded-lg border border-slate-100 px-3 py-2">
+            <div key={base.id} className="rounded-lg border border-border px-3 py-2">
               <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-medium text-slate-900">{base.name}</span>
+                <span className="font-medium text-foreground">{base.name}</span>
                 {base.isDefault ? (
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                  <span className="rounded bg-card-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                     {t('knowledgeBases.bases.defaultBadge')}
                   </span>
                 ) : null}
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-muted-foreground">
                   {t('knowledgeBases.bases.owner')} {base.ownerAgentName ?? `#${base.agentId}`}
                   {' · '}
                   {t('knowledgeBases.bases.documents')} {base.documentCount}
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-slate-500">{t('knowledgeBases.bases.sharedWith')}</span>
+                <span className="text-xs text-muted-foreground">{t('knowledgeBases.bases.sharedWith')}</span>
                 {base.linkedAgentIds.length === 0 ? (
-                  <span className="text-xs text-slate-400">{t('knowledgeBases.bases.none')}</span>
+                  <span className="text-xs text-muted-foreground">{t('knowledgeBases.bases.none')}</span>
                 ) : (
                   base.linkedAgentIds.map((linkedAgentId) => (
                     <span
                       key={linkedAgentId}
-                      className="flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-800"
+                      className="flex items-center gap-1 rounded bg-info-muted px-2 py-0.5 text-xs text-primary"
                     >
                       {agentName(linkedAgentId)}
                       <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
                         <button
                           type="button"
-                          className="text-blue-600"
+                          className="text-primary"
                           title={t('knowledgeBases.bases.unlink')}
                           onClick={() =>
                             unlinkMutation.mutate({ baseId: base.id, targetAgentId: linkedAgentId })
@@ -208,7 +208,7 @@ function KnowledgeBasesAdminSection() {
                   <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
                     <span className="flex items-center gap-1">
                       <select
-                        className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                        className="rounded-lg border border-border px-2 py-1 text-xs"
                         value={chosen}
                         onChange={(event) =>
                           setLinkTargets((prev) => ({ ...prev, [base.id]: event.target.value }))
@@ -222,7 +222,7 @@ function KnowledgeBasesAdminSection() {
                       </select>
                       <button
                         type="button"
-                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs disabled:opacity-50"
+                        className="rounded-lg border border-border px-2 py-1 text-xs disabled:opacity-50"
                         disabled={linkMutation.isPending || !chosen}
                         onClick={() =>
                           linkMutation.mutate({ baseId: base.id, targetAgentId: Number(chosen) })
@@ -278,20 +278,20 @@ function KnowledgeOverviewSection() {
     { label: t('knowledgeBases.overview.storage'), value: formatBytes(overview.originalBytes) },
   ]
   return (
-    <article className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-900">{t('knowledgeBases.overview.title')}</h2>
+    <article className="mb-4 rounded-xl border border-border bg-card p-5">
+      <h2 className="text-sm font-semibold text-foreground">{t('knowledgeBases.overview.title')}</h2>
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {stats.map((stat) => (
-          <div key={stat.label} className="rounded-lg bg-slate-50 px-3 py-2">
-            <div className="text-xs text-slate-500">{stat.label}</div>
-            <div className="mt-0.5 text-lg font-semibold text-slate-900">{stat.value}</div>
+          <div key={stat.label} className="rounded-lg bg-card-muted px-3 py-2">
+            <div className="text-xs text-muted-foreground">{stat.label}</div>
+            <div className="mt-0.5 text-lg font-semibold text-foreground">{stat.value}</div>
           </div>
         ))}
       </div>
       {overview.sites.length > 0 ? (
         <table className="mt-4 w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-slate-500">
+            <tr className="text-left text-xs text-muted-foreground">
               <th className="py-1 pr-3 font-medium">{t('knowledgeBases.overview.site')}</th>
               <th className="py-1 pr-3 font-medium">{t('knowledgeBases.overview.total')}</th>
               <th className="py-1 pr-3 font-medium">{t('knowledgeBases.overview.indexed')}</th>
@@ -301,7 +301,7 @@ function KnowledgeOverviewSection() {
           </thead>
           <tbody>
             {overview.sites.map((site) => (
-              <tr key={site.agentId} className="border-t border-slate-100">
+              <tr key={site.agentId} className="border-t border-border">
                 <td className="py-1.5 pr-3">{site.agentName ?? `#${site.agentId}`}</td>
                 <td className="py-1.5 pr-3">{site.totalDocuments}</td>
                 <td className="py-1.5 pr-3">{site.indexedDocuments}</td>
@@ -315,13 +315,13 @@ function KnowledgeOverviewSection() {
       {overview.recentFailures.length > 0 ? (
         <div className="mt-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-red-700">
+            <h3 className="text-sm font-medium text-danger-emphasis">
               {t('knowledgeBases.overview.recentFailures')}
             </h3>
             <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
               <button
                 type="button"
-                className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium disabled:opacity-50"
+                className="rounded-lg border border-border px-3 py-1 text-xs font-medium disabled:opacity-50"
                 disabled={retryMutation.isPending}
                 onClick={() => {
                   if (window.confirm(t('knowledgeBases.overview.retryConfirm'))) {
@@ -335,16 +335,16 @@ function KnowledgeOverviewSection() {
               </button>
             </PermissionGate>
           </div>
-          <ul className="mt-2 space-y-1 text-sm text-slate-700">
+          <ul className="mt-2 space-y-1 text-sm text-foreground">
             {overview.recentFailures.map((failure) => (
               <li key={failure.documentId}>
                 <span className="font-medium">{failure.title}</span>
-                <span className="text-slate-500">
+                <span className="text-muted-foreground">
                   {' · '}
                   {failure.agentName ?? `#${failure.agentId}`}
                 </span>
                 {failure.indexError ? (
-                  <span className="block truncate text-xs text-red-600" title={failure.indexError}>
+                  <span className="block truncate text-xs text-danger-emphasis" title={failure.indexError}>
                     {failure.indexError}
                   </span>
                 ) : null}
