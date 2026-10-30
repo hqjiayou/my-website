@@ -147,7 +147,8 @@ class AgentAiModelChainTest {
     }
 
     private AgentChatRequest capturedRequest() {
-        service.chat(10L, new AgentAiChatRequestDto("hello", null, null));
+        // 模式必填后（Issue #145 F4c）：无 mode 的旧调用已不存在；未标 mode 的入口按 KEY 归属
+        service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY"));
         ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
         verify(agentClient).chat(captor.capture());
         return captor.getValue();
@@ -191,7 +192,8 @@ class AgentAiModelChainTest {
     }
 
     @Test
-    void chatSendsNoModelWhenPrimaryKeyUndecryptable() {
+    @MockitoSettings(strictness = Strictness.LENIENT)
+    void chatBlockedWhenPrimaryKeyUndecryptable() {
         when(modelEntryCipher.decrypt("enc:key-3")).thenReturn("");
         when(modelEntryMapper.selectList(any()))
                 .thenReturn(
@@ -200,11 +202,13 @@ class AgentAiModelChainTest {
                                 entry(4L, 10L, "openai:agent-alt", false)),
                         List.of(entry(1L, null, "google:global-default", true)));
 
-        AgentChatRequest request = capturedRequest();
-
-        // 主用坏掉时备援不得顶上：整链不带，Python 回退进程模型
-        assertThat(request.model()).isNull();
-        assertThat(request.fallbackModels()).isNull();
+        // 主用坏掉时备援不得顶上、进程模型更不得顶上：整链为空直接 BLOCKED（Issue #145 F1）
+        assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY")))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode())
+                                .isEqualTo(com.mywebsite.common.enums.ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()));
+        verify(agentClient, org.mockito.Mockito.never()).chat(any());
     }
 
     @Test
@@ -229,17 +233,31 @@ class AgentAiModelChainTest {
     }
 
     @Test
-    void chatWithCliModeButNoCliDefaultSendsNoModel() {
+    @MockitoSettings(strictness = Strictness.LENIENT)
+    void chatWithCliModeButNoCliDefaultBlocked() {
         when(modelEntryMapper.selectList(any()))
                 .thenReturn(
                         List.of(entry(3L, 10L, "google:agent-key-default", true, "KEY")),
                         List.of(entry(1L, null, "google:global-key-default", true, "KEY")));
 
-        AgentChatRequest request = capturedRequest("CLI");
+        // 模式内无默认：不跨模式顶 KEY 主用，也不许进程模型顶上（Issue #145 F1）
+        assertThatThrownBy(() -> capturedRequest("CLI"))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode())
+                                .isEqualTo(com.mywebsite.common.enums.ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()));
+        verify(agentClient, org.mockito.Mockito.never()).chat(any());
+    }
 
-        // 模式内无默认：不跨模式顶 KEY 主用，整链不带
-        assertThat(request.model()).isNull();
-        assertThat(request.fallbackModels()).isNull();
+    @Test
+    @MockitoSettings(strictness = Strictness.LENIENT)
+    void chatWithoutModeRejected() {
+        // 模式必填（Issue #145 F4c）：空 mode 不再等于整链混搭
+        assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null)))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode())
+                                .isEqualTo(com.mywebsite.common.enums.ErrorCode.BAD_REQUEST.getCode()));
     }
 
     @Test

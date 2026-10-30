@@ -400,3 +400,20 @@ def test_chat_embedding_credentials_skip_chat_model_without_embedding_spec() -> 
         model=ModelSelection(spec="openai:gpt", apiKey="proxy-key"),
     )
     assert chat_embedding_credentials(body) == (None, None, None)
+
+
+def test_chat_without_entry_is_blocked_when_process_model_fallback_disabled() -> None:
+    # Issue #145 F1：没带模型入口 + 进程顶替关 → 诚实 BLOCKED，不许进程模型作答
+    handle = ModelHandle(
+        model=TestModel(custom_output_text="ghost"),
+        spec="test:model",
+        blocked_reason=None,
+    )
+    app = create_app(make_settings(ai_allow_process_model=False), model_handle=handle)
+    response = TestClient(app).post(
+        "/internal/v1/chat",
+        headers=TOKEN_HEADER,
+        json={"agentId": "10", "message": "hi"},
+    )
+    assert response.status_code == 503
+    assert response.json()["errorCode"] == "EXTERNAL_DEPENDENCY_BLOCKED"

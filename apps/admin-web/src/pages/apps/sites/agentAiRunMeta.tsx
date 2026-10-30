@@ -2,6 +2,12 @@ import { useTranslation } from 'react-i18next'
 
 import type { AiRunMeta, AiRunUsage } from '@/types/ai'
 
+/** spec（provider:model）取冒号后模型段，与执行层回报的裸 model_name 同口径比较。 */
+function modelPartOfSpec(spec: string): string {
+  const idx = spec.indexOf(':')
+  return idx >= 0 ? spec.slice(idx + 1) : spec
+}
+
 export function AiRunUsageLine({ usage }: { usage: AiRunUsage }) {
   const { t } = useTranslation('sites')
   return <p className="font-mono text-xs text-muted-foreground">{t('aiWorkspace.runMeta.usage', { ...usage })}</p>
@@ -32,6 +38,19 @@ export function AiRunMetaSummary({ meta }: { meta: AiRunMeta }) {
         <p className="text-xs text-muted-foreground">
           {t('aiWorkspace.runMeta.skills', { ids: meta.skillsApplied.join(', ') })}
         </p>
+      ) : null}
+      {meta.model ? (
+        <p className="font-mono text-xs text-muted-foreground">
+          {t('aiWorkspace.runMeta.modelActual', { model: meta.model })}
+        </p>
+      ) : null}
+      {meta.requestedModel && meta.model && modelPartOfSpec(meta.requestedModel) !== meta.model ? (
+        <p className="font-mono text-xs text-muted-foreground">
+          {t('aiWorkspace.runMeta.modelRequested', { model: meta.requestedModel })}
+        </p>
+      ) : null}
+      {meta.mode ? (
+        <p className="text-xs text-muted-foreground">{t('aiWorkspace.runMeta.mode', { mode: meta.mode })}</p>
       ) : null}
     </div>
   )

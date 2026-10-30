@@ -91,9 +91,23 @@ def _model_handle(request: Request) -> ModelHandle:
 
 
 def _execution_handle(request: Request, body: ChatRequest) -> ModelHandle:
-    """请求里带了 Java 模型入口就用那一条；否则用进程启动时的 AI_MODEL。"""
+    """请求里带了 Java 模型入口就用那一条。
+
+    没带入口时只有显式开启 AI_ALLOW_PROCESS_MODEL（本机调试）才用进程模型；
+    否则返回 BLOCKED handle——所选模式无入口是「未配置」，不许进程环境模型
+    静默顶替（Issue #145 F1，ADR-0004）。
+    """
     selection = body.model_selection
     if selection is None:
+        if not request.app.state.settings.ai_allow_process_model:
+            return ModelHandle(
+                model=None,
+                spec="blocked",
+                blocked_reason=(
+                    "AI model is not configured for this request "
+                    "(no model entry selected; process model fallback is disabled)."
+                ),
+            )
         return _model_handle(request)
     return create_model_for_entry(
         spec=selection.spec,
@@ -408,6 +422,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         if collector.searches
         else None,
         extracted_memories=outcome.extracted_memories,
+        model=outcome.model,
     )
     payload = data.model_dump(by_alias=True)
     # 有采用才出现，与 SSE 加法字段一致；不要把 null 写进既有响应。

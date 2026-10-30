@@ -58,8 +58,10 @@ public interface AgentAiConversationService {
             List<AgentCitation> citations);
 
     /**
-     * 同上，并把 {@code modelSpec}（provider:model）写入 ASSISTANT {@code agent_meta.model}。
-     * null 或空白不写该字段，旧消息保持没有模型记录。
+     * 同上，并记录本轮归属：{@code requestedModelSpec}（请求的主用入口 spec）写入
+     * {@code agent_meta.requestedModel}、{@code mode} 写入 {@code agent_meta.mode}。
+     * 执行层回报的实际作答模型在 {@code runMeta.model}，**不得**被请求值覆盖
+     * （备援切换后两者不同，正是事后排查的依据，Issue #145 F2）。null 或空白不写对应字段。
      */
     void recordExchange(
             AgentAiConversationEntity conversation,
@@ -69,7 +71,8 @@ public interface AgentAiConversationService {
             AgentRunMeta runMeta,
             List<AgentAttachmentDto> userAttachments,
             List<AgentCitation> citations,
-            String modelSpec);
+            String requestedModelSpec,
+            String mode);
 
     List<AgentAiConversationDto> listConversations(long agentId, long agentUserId);
 

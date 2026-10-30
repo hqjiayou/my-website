@@ -389,3 +389,29 @@ async def test_entry_chain_falls_back_on_api_error(monkeypatch: pytest.MonkeyPat
     outcome = await run_chat(handle.model, agent_id="1", message="hi")  # type: ignore[arg-type]
     assert isinstance(outcome, ChatReply)
     assert outcome.reply == "from-backup"
+
+
+def test_entry_with_unsupported_spec_is_blocked_not_env_fallback() -> None:
+    # Issue #145 F9：直配覆盖外的厂商 spec 不许走原生推断用进程环境凭证
+    handle = create_model_for_entry(
+        spec="deepseek:deepseek-chat",
+        api_key="entry-key",
+        base_url=None,
+        settings=make_settings(),
+    )
+    assert not handle.live
+    assert handle.blocked_reason is not None
+    assert "not supported" in handle.blocked_reason
+
+
+def test_identity_line_skips_fallback_wrapper() -> None:
+    # Issue #145 审查 H3：FallbackModel 的 model_name 是合成名，不得注入系统提示
+    from pydantic_ai.models.fallback import FallbackModel
+    from pydantic_ai.models.test import TestModel
+
+    from agent_services.agent.runtime import model_identity_line
+
+    wrapped = FallbackModel(TestModel(), TestModel())
+    assert model_identity_line(wrapped) is None
+    single = model_identity_line(TestModel())
+    assert single is not None and "test" in single

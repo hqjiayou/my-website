@@ -22,6 +22,7 @@ import com.mywebsite.infra.crypto.ModelEntryCipher;
 import com.mywebsite.infra.service.LocalizedMessageService;
 import com.mywebsite.agent.dto.AgentAiChatRequestDto;
 import com.mywebsite.agent.entity.AgentAiConversationEntity;
+import com.mywebsite.agent.entity.AgentAiModelEntryEntity;
 import com.mywebsite.agent.mapper.AgentAiKnowledgeDocumentMapper;
 import com.mywebsite.agent.mapper.AgentAiModelEntryMapper;
 import com.mywebsite.agent.service.AgentAiConversationService;
@@ -123,8 +124,19 @@ class AgentAiMemoryInjectionTest {
                         AgentRunMeta.EMPTY,
                         List.of(),
                         List.of("  likes   tea  ")));
+        // 模式必填且该模式要有可用入口（Issue #145）：给一条 KEY 默认入口
+        AgentAiModelEntryEntity entry = new AgentAiModelEntryEntity();
+        entry.setId(3L);
+        entry.setAgentId(10L);
+        entry.setModelSpec("google:test-model");
+        entry.setApiKey("enc:key-3");
+        entry.setEnabled(true);
+        entry.setDefaultEntry(true);
+        entry.setMode("KEY");
+        when(modelEntryMapper.selectList(any())).thenReturn(List.of(entry), List.of());
+        when(modelEntryCipher.decrypt("enc:key-3")).thenReturn("key-3");
 
-        service.chat(10L, new AgentAiChatRequestDto("hello", null, null));
+        service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY"));
 
         ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
         verify(agentClient).chat(captor.capture());
@@ -132,7 +144,7 @@ class AgentAiMemoryInjectionTest {
         assertThat(captor.getValue().memoryEnabled()).isTrue();
         InOrder order = inOrder(conversationService, memoryService);
         order.verify(conversationService)
-                .recordExchange(any(), any(), any(), any(), any(), any(), any(), any());
+                .recordExchange(any(), any(), any(), any(), any(), any(), any(), any(), any());
         order.verify(memoryService)
                 .storeExtracted(10L, 200L, 77L, List.of("  likes   tea  "));
     }
@@ -158,6 +170,7 @@ class AgentAiMemoryInjectionTest {
                 "hello",
                 List.of(),
                 new AgentChatRequest("10", "hello"),
+                "KEY",
                 org.mockito.Mockito.mock(SseEmitter.class));
 
         verify(memoryService).storeExtracted(10L, 200L, 77L, List.of("likes tea"));

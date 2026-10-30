@@ -53,6 +53,10 @@ class Settings(BaseSettings):
         default="", validation_alias=AliasChoices("GEMINI_API_KEY", "GOOGLE_API_KEY")
     )
     ai_fallback_models: str = Field(default="", validation_alias="AI_FALLBACK_MODELS")
+    # 请求未带 Java 模型入口时，是否允许用进程 AI_MODEL 顶替作答。默认关：
+    # 入口驱动的调用（门户/试聊/OCR）没选到入口就是未配置，必须诚实 BLOCKED，
+    # 不能由部署环境的模型静默顶上（Issue #145 F1）。仅本机调试可显式打开。
+    ai_allow_process_model: bool = Field(default=False, validation_alias="AI_ALLOW_PROCESS_MODEL")
 
     # 与 otel.py 同源。Settings 匹配别名时不区分大小写，且别名与字段名不一致时
     # 构造参数 deployment_environment= 会被 extra=ignore 丢掉，所以两个名字都接受。

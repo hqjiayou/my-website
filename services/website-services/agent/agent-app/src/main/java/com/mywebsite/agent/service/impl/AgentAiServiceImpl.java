@@ -219,12 +219,13 @@ public class AgentAiServiceImpl implements AgentAiService {
         String message = validated.message();
         List<AgentAttachmentDto> attachments = toAgentAttachments(validated.attachments());
 
+        // mode 先校验：非法请求不要先建对话行（审查 L1）
+        String mode = normalizeChatMode(request.mode());
         ChatPreparation preparation =
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
         AgentChatRequest agentRequest = buildAgentRequest(
-                agentId, message, attachments, validated.documents(), preparation, memories,
-                normalizeChatMode(request.mode()));
+                agentId, message, attachments, validated.documents(), preparation, memories, mode);
         AgentChatResponse response = agentClient.chat(agentRequest);
         persistTurn(
                 agentId,
@@ -237,7 +238,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                 response.runMeta(),
                 response.citations(),
                 response.extractedMemories(),
-                requestedModel(agentRequest));
+                requestedModel(agentRequest),
+                mode);
 
         return new AgentAiChatResponseDto(
                 response.reply(),
@@ -347,18 +349,20 @@ public class AgentAiServiceImpl implements AgentAiService {
         String message = validated.message();
         List<AgentAttachmentDto> attachments = toAgentAttachments(validated.attachments());
 
+        // mode 先校验：非法请求不要先建对话行（审查 L1）
+        String mode = normalizeChatMode(request.mode());
         ChatPreparation preparation =
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
         AgentChatRequest agentRequest =
                 buildAgentRequest(
-                        agentId, message, attachments, validated.documents(), preparation, memories,
-                        normalizeChatMode(request.mode()));
+                        agentId, message, attachments, validated.documents(), preparation, memories, mode);
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         List<AgentAttachmentDto> stored = storedAttachments(attachments, validated);
         agentAiStreamExecutor.execute(
-                () -> forwardStream(agentId, agentUserId, preparation, message, stored, agentRequest, emitter));
+                () -> forwardStream(
+                        agentId, agentUserId, preparation, message, stored, agentRequest, mode, emitter));
         return emitter;
     }
 
@@ -383,6 +387,11 @@ public class AgentAiServiceImpl implements AgentAiService {
             String mode) {
         Long conversationId = preparation.conversation().getId();
         List<AgentModelSelection> chain = loadModelChain(agentId, mode);
+        if (chain.isEmpty()) {
+            // 所选模式无可用入口即未配置：诚实 BLOCKED，绝不把 model=null 发给
+            // 执行层让进程环境模型顶替作答（Issue #145 F1，ADR-0004）。
+            throw new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED);
+        }
         AgentModelSelection embedding = embeddingSelection(agentId);
         return new AgentChatRequest(
                 String.valueOf(agentId),
@@ -418,7 +427,8 @@ public class AgentAiServiceImpl implements AgentAiService {
             AgentRunMeta runMeta,
             List<AgentCitation> citations,
             List<String> extractedMemories,
-            String modelSpec) {
+            String requestedModelSpec,
+            String mode) {
         conversationService.recordExchange(
                 preparation.conversation(),
                 userMessage,
@@ -427,7 +437,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                 runMeta,
                 userAttachments,
                 citations,
-                modelSpec);
+                requestedModelSpec,
+                mode);
         memoryService.storeExtracted(
                 agentId, agentUserId, preparation.conversation().getId(), extractedMemories);
     }
@@ -511,10 +522,14 @@ public class AgentAiServiceImpl implements AgentAiService {
         return StringUtils.hasText(content) ? title + "\n" + content : title;
     }
 
-    /** 聊天请求模式：空 = 不分模式（整链）；只接受 KEY / CLI，其余拒绝。 */
+    /**
+     * 聊天请求模式必填：只接受 KEY / CLI，空或其余一律拒绝。
+     * 旧口径「空 = 不分模式（整链）」会把 CLI 与 KEY 混进一条备援链，与
+     * 「备援封闭在模式内」的定案相悖（Issue #145 F4c），故收紧为必填。
+     */
     static String normalizeChatMode(String raw) {
         if (!StringUtils.hasText(raw)) {
-            return null;
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         String value = raw.trim().toUpperCase(java.util.Locale.ROOT);
         if (!value.equals("KEY") && !value.equals("CLI")) {
@@ -749,6 +764,7 @@ public class AgentAiServiceImpl implements AgentAiService {
             String userMessage,
             List<AgentAttachmentDto> userAttachments,
             AgentChatRequest agentRequest,
+            String mode,
             SseEmitter emitter) {
         StringBuilder doneReply = new StringBuilder();
         List<AgentTodoItem> doneTodos = new ArrayList<>();
@@ -788,7 +804,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                         doneMeta.get(),
                         doneCitations.get(),
                         doneMemories.get(),
-                        requestedModel(agentRequest));
+                        requestedModel(agentRequest),
+                        mode);
                 sendEventQuietly(
                         emitter,
                         "CONVERSATION",
@@ -810,7 +827,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                             doneMeta.get(),
                             doneCitations.get(),
                             doneMemories.get(),
-                            requestedModel(agentRequest));
+                            requestedModel(agentRequest),
+                            mode);
                 } catch (RuntimeException recordEx) {
                     log.warn("agent ai stream reply was not stored after client disconnect", recordEx);
                 }

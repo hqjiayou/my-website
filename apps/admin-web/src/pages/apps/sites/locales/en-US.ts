@@ -271,7 +271,7 @@ export default {
     loadError: 'Could not load access settings.',
     noPermission: 'This account cannot see model entries.',
     cliTitle: 'CLI',
-    cliDescription: 'Pick a signed-in account, then a model that account publishes. The client key only enters the proxy. It does not choose the model. The address is fixed in API keys and cannot be edited here.',
+    cliDescription: 'Pick a signed-in account, then a model that account publishes. The client key only enters the proxy. It does not choose the model. The address is fixed in API keys and cannot be edited here. Note: the account only filters the model list — it is not a binding. At runtime the proxy routes by model name across all signed-in accounts, so account changes or quota shifts directly affect this access.',
     keyTitle: 'API key',
     keyDescription: 'Provider keys are saved under API keys. Here you only choose which one this agent uses.',
     pickSavedKey: 'Choose an API key first',
@@ -551,6 +551,9 @@ export default {
     runMeta: {
       usage: '{{requests}} model requests · {{toolCalls}} tool calls · tokens in {{inputTokens}} / out {{outputTokens}}',
       skills: 'Skills: {{ids}}',
+      modelActual: 'Answered by: {{model}}',
+      modelRequested: 'Requested primary: {{model}} (a fallback answered)',
+      mode: 'Mode: {{mode}}',
     },
     runtime: {
       hint: 'Platform configuration currently in effect in agent-services (shared across sites, read-only; no credentials shown).',
@@ -587,7 +590,7 @@ export default {
       modeKey: 'API key',
       using: 'This try chat calls only {{model}}. A failure stays in the thread and does not switch to the other access mode.',
       noEntry: 'This mode has no saved default entry. Save one on Access, then try again.',
-      hint: 'Preview uses this site’s prompt and does not write conversations. The browser never sends systemPrompt.',
+      hint: 'Preview uses this site’s prompt and does not write conversations. The browser never sends systemPrompt. Note: preview only exercises the primary entry of the selected mode, with no fallbacks; production chat falls back down the chain when the primary fails, so preview results do not fully represent production behavior.',
       empty: 'Send a message to start the preview.',
       placeholder: 'Preview message…',
       send: 'Send',

@@ -96,7 +96,8 @@ last_verified: 2026-10-30
 | `AI_MODEL` | 否 | 空 | 进程回退 spec（如 `google:gemini-3-flash-preview`）。Java `ai_model_entry` 有启用的默认入口时，对话用该入口的 spec 和 key；都没有 → BLOCKED（chat 503，ADR-0004） |
 | `AI_PROVIDER_API_KEY` | 视 Provider | 空 | OpenAI-compatible / Google 直配凭证。未直配且嵌入模型是 Google 时，读同一份 `.env` 里的 `GEMINI_API_KEY` 或 `GOOGLE_API_KEY` |
 | `AI_PROVIDER_BASE_URL` | 否 | 空 | 直配时传给 Provider |
-| `AI_FALLBACK_MODELS` | 否 | 空 | 逗号分隔 fallback spec。进程主模型和 Java 模型入口在构建成功后都挂这条链；仅 Provider API 错误时切换。主模型或入口本身 BLOCKED 时不顶替。备用凭证走各 Provider 原生变量，不复用入口 apiKey |
+| `AI_FALLBACK_MODELS` | 否 | 空 | 逗号分隔 fallback spec。**只挂进程主模型**（无入口路径）；Java 模型入口的备援来自请求带入的入口链，不读此变量。仅 Provider API 错误时切换。主模型或入口本身 BLOCKED 时不顶替。备用凭证走各 Provider 原生变量，不复用入口 apiKey |
+| `AI_ALLOW_PROCESS_MODEL` | 否 | `false` | 请求未带 Java 模型入口时，是否允许用进程 `AI_MODEL` 顶替作答。默认关：入口驱动的对话（门户/试聊/OCR）没选到入口即 BLOCKED，不许环境模型静默顶上（Issue #145 F1）。仅本机调试可设 `true` |
 | `RETRIEVAL_DATABASE_URL` | 否 | 空 | 独立 `agent_retrieval` 库（专用 DB 用户，禁止读 Java 业务表）；缺失 → 检索 BLOCKED（问答仍可用） |
 | `AI_EMBEDDING_MODEL` | 否 | 空 | 例 `openai:text-embedding-3-small`；缺失 → 检索 BLOCKED |
 | `AI_EMBEDDING_DIMENSIONS` | 否 | `1536` | 必须与向量列一致（如 gemini-embedding-001 可设 768） |

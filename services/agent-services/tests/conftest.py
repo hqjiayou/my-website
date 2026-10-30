@@ -18,6 +18,9 @@ def make_settings(**overrides: object) -> Settings:
         "ai_fallback_models": "",
         # 显式关闭，避免 shell/CI 残留 AGENT_CONTRACT_USE_TEST_MODEL 污染 BLOCKED 契约测试
         "agent_contract_use_test_model": False,
+        # 测试夹具代表本机调试形态：无入口时允许进程模型（注入 handle）作答；
+        # 闸门关闭形态由 test_internal_api 的专用用例以 False 覆盖验证（Issue #145 F1）
+        "ai_allow_process_model": True,
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]

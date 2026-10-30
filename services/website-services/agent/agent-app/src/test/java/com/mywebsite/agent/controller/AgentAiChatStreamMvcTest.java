@@ -51,6 +51,12 @@ class AgentAiChatStreamMvcTest extends AbstractAgentSpringBootTest {
     @BeforeEach
     void setUp() throws Exception {
         privateKey = AgentTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
+        // 模式必填 + 所选模式要有可用入口后（Issue #145），给 agent 10 种一条 KEY 默认入口，
+        // 否则请求会在组链守卫处 BLOCKED、到不了被 mock 的 agentClient。
+        jdbcTemplate.update("DELETE FROM agent_model_entry");
+        jdbcTemplate.update(
+                "INSERT INTO agent_model_entry (display_name, model_spec, api_key, agent_id, enabled, is_default, mode)"
+                        + " VALUES ('Test Key', 'google:test-model', 'test-api-key', 10, TRUE, TRUE, 'KEY')");
     }
 
     @Test
@@ -199,7 +205,7 @@ class AgentAiChatStreamMvcTest extends AbstractAgentSpringBootTest {
         MvcResult mvcResult = mockMvc.perform(post("/api/agent/10/ai/chat/stream")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"message\":\"hello\"}"))
+                        .content("{\"message\":\"hello\",\"mode\":\"KEY\"}"))
                 .andExpect(request().asyncStarted())
                 .andReturn();
         return mockMvc.perform(asyncDispatch(mvcResult))
