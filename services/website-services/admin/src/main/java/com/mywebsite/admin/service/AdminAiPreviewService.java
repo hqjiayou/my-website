@@ -1,6 +1,7 @@
 package com.mywebsite.admin.service;
 
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewChatRequest;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewModelDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewSkillDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpReadyDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
@@ -10,6 +11,12 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public interface AdminAiPreviewService {
 
     SseEmitter previewStream(long agentId, AdminAiPreviewChatRequest request);
+
+    /**
+     * 回填「该模式实际会用哪个模型」；与 previewStream 共用同一判定路径（只读，不调 Python）。
+     * {@code mode} 缺省时用服务端默认判定。
+     */
+    AdminAiPreviewModelDto previewModel(long agentId, String mode);
 
     /** 预览可选 skill 目录；agent-services 不可用时抛 EXTERNAL_DEPENDENCY_BLOCKED / SYSTEM_ERROR。 */
     List<AdminAiPreviewSkillDto> listSkills(long agentId);

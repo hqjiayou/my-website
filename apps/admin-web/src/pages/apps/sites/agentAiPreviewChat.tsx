@@ -11,7 +11,6 @@ import { useTranslation } from 'react-i18next'
 
 import { aiApi } from '@/api/apps/aiApi'
 import type {
-  AiModelEntry,
   AiPreviewAgentEvent,
   AiPreviewTodoItem,
   AiPreviewTodoStatus,
@@ -46,17 +45,6 @@ const EMPTY_TRACE: RunTrace = {
   tools: [],
   usage: null,
   model: null,
-}
-
-function entryForMode(entries: AiModelEntry[], agentId: number, mode: 'CLI' | 'KEY') {
-  const enabled = entries.filter(
-    (entry) => entry.enabled && (entry.mode ?? 'KEY') === mode && (entry.agentId == null || entry.agentId === agentId),
-  )
-  return (
-    enabled.find((entry) => entry.agentId === agentId && entry.defaultEntry) ??
-    enabled.find((entry) => entry.agentId == null && entry.defaultEntry) ??
-    null
-  )
 }
 
 type RunError = { errorCode: string; message?: string }
@@ -154,25 +142,24 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   const [selection] = useState(createPreviewSelection)
   const [mode, setMode] = useState<'CLI' | 'KEY'>('CLI')
   const [modeChosen, setModeChosen] = useState(false)
-  const entriesQuery = useQuery({
-    queryKey: ['ai', 'model-entries'],
-    queryFn: () => aiApi.listModelEntries(),
+  // 首次挂载不带 mode，拿服务端默认判定；用户切换 CLI/KEY 后带 mode 重查，与 previewStream 同一路径回填。
+  const modelQuery = useQuery({
+    queryKey: ['sites', agentId, 'ai', 'preview', 'model', modeChosen ? mode : 'default'],
+    queryFn: () => aiApi.getPreviewModel(agentId, modeChosen ? mode : undefined),
   })
-  const activeEntry = entryForMode(entriesQuery.data ?? [], agentId, mode)
-  const activeModel = activeEntry
-    ? activeEntry.mode === 'CLI'
-      ? modelIdFromSpec(activeEntry.modelSpec)
-      : activeEntry.modelSpec
+  const activeModel = modelQuery.data?.available
+    ? mode === 'CLI'
+      ? modelIdFromSpec(modelQuery.data.modelSpec ?? '')
+      : modelQuery.data.modelSpec ?? ''
     : ''
   const servedModel = trace.model ? modelIdFromSpec(trace.model) : ''
 
   useEffect(() => {
-    if (modeChosen || !entriesQuery.data) return
-    const next = entryForMode(entriesQuery.data, agentId, 'CLI') ? 'CLI' : 'KEY'
-    selection.setMode(next)
-    setMode(next)
+    if (modeChosen || !modelQuery.data) return
+    selection.setMode(modelQuery.data.mode)
+    setMode(modelQuery.data.mode)
     setModeChosen(true)
-  }, [agentId, entriesQuery.data, modeChosen, selection])
+  }, [modeChosen, modelQuery.data, selection])
 
   const chooseMode = (next: 'CLI' | 'KEY') => {
     selection.setMode(next)
@@ -241,7 +228,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
         ))}
       </div>
       <p className="mb-3 text-sm text-muted-foreground">
-        {entriesQuery.isPending
+        {modelQuery.isPending
           ? t('aiWorkspace.loading')
           : activeModel
             ? t('aiWorkspace.preview.using', { model: activeModel })

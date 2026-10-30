@@ -51,4 +51,12 @@ public final class AdminAiPreviewDtos {
      * {@code reachable=true} 且 {@code probe.ok=false} 表示进程可达但某个 MCP 不通。
      */
     public record AdminAiMcpReadyDto(boolean reachable, String errorCode, AgentMcpReady probe) {}
+
+    /**
+     * 试聊「实际会用哪个模型」回填：{@code mode}/{@code modelSpec}/{@code available} 与
+     * {@code previewStream} 走同一个 previewMode + selectionChain 判定路径算出，不是另一份近似规则。
+     * {@code mode} 请求缺省时为服务端按默认判定选出的模式；{@code modelSpec} 为该模式链首 spec，
+     * 无链时为 null；{@code available} 即链是否非空（含默认入口 key 解密失败导致整链为空的场景）。
+     */
+    public record AdminAiPreviewModelDto(String mode, String modelSpec, boolean available) {}
 }

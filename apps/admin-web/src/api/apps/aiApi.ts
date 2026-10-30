@@ -17,6 +17,7 @@ import type {
   AiMessage,
   AiPreviewChatInput,
   AiPreviewHistoryMessage,
+  AiPreviewModelBackfill,
   AiPreviewSkill,
   AiModelEntry,
   AiModelEntryWriteInput,
@@ -372,6 +373,14 @@ export const aiApi = {
   listPreviewSkills(agentId: number): Promise<AiPreviewSkill[]> {
     return httpClient
       .get<HttpMessageBody<AiPreviewSkill[]>>(`${aiBase(agentId)}/preview/skills`)
+      .then(unwrapData)
+  },
+
+  /** mode 缺省时拿服务端默认判定与其模型；给了就按该模式回填。 */
+  getPreviewModel(agentId: number, mode?: 'CLI' | 'KEY'): Promise<AiPreviewModelBackfill> {
+    const qs = toQueryString({ mode })
+    return httpClient
+      .get<HttpMessageBody<AiPreviewModelBackfill>>(`${aiBase(agentId)}/preview/model${qs}`)
       .then(unwrapData)
   },
 

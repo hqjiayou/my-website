@@ -1,6 +1,7 @@
 package com.mywebsite.admin.controller;
 
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewChatRequest;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewModelDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewSkillDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpReadyDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -49,6 +51,15 @@ public class AdminAiPreviewController {
     public SseEmitter previewStream(
             @PathVariable long agentId, @Valid @RequestBody AdminAiPreviewChatRequest request) {
         return adminAiPreviewService.previewStream(agentId, request);
+    }
+
+    @GetMapping("/preview/model")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:read')")
+    @Operation(summary = "试聊回填：该模式实际会用哪个模型（与 previewStream 同一判定路径，只读）")
+    public ResponseEntity<HttpMessageBody<AdminAiPreviewModelDto>> previewModel(
+            @PathVariable long agentId, @RequestParam(required = false) String mode) {
+        return ResponseEntity.ok(
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAiPreviewService.previewModel(agentId, mode)));
     }
 
     @GetMapping("/runtime")
