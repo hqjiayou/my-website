@@ -81,7 +81,7 @@ export function Header() {
             <p className="truncate text-xs text-admin-muted">{tLayout('header.subtitle')}</p>
           </div>
 
-          <label className="hidden items-center gap-2 rounded-lg border border-admin bg-admin-surface-muted px-3 py-1.5 text-sm text-admin-muted transition focus-within:ring-2 focus-within:ring-[rgb(var(--admin-primary)/0.25)] md:flex admin-control">
+          <label className="admin-focus-within hidden items-center gap-2 rounded-lg border border-admin bg-admin-surface-muted px-3 py-1.5 text-sm text-admin-muted transition md:flex admin-control">
             <Search className="h-4 w-4 shrink-0" />
             <input
               className="w-40 border-none bg-transparent text-sm text-admin outline-none placeholder:text-admin-muted"
@@ -235,7 +235,7 @@ function AppearanceDrawer({ open, onClose }: { open: boolean; onClose: () => voi
           <div className="space-y-2">
             <p className="text-sm font-medium text-admin">{t('language.label')}</p>
             <select
-              className="w-full rounded-lg border border-admin bg-admin-surface px-3 py-2 text-sm text-admin outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--admin-primary)/0.35)]"
+              className="admin-field-chrome w-full rounded-lg border border-admin bg-admin-surface px-3 py-2 text-sm text-admin outline-none"
               value={preferences.locale}
               onChange={(event) => setLocale(event.target.value as SupportedLocale)}
             >

@@ -49,7 +49,7 @@ export function DataTable<T>({
   const totalPages = pagination ? Math.max(1, Math.ceil(pagination.total / pagination.pageSize)) : 1
 
   return (
-    <div className={cn('overflow-hidden rounded-xl border border-admin bg-admin-surface shadow-sm', className)}>
+    <div className={cn('overflow-hidden rounded-xl border border-admin bg-admin-surface', className)}>
       <div className="overflow-x-auto">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-admin-surface-muted text-xs uppercase tracking-wide text-admin-muted">
