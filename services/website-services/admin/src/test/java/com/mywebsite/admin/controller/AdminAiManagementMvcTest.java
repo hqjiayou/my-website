@@ -21,10 +21,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mywebsite.admin.entity.AdminAiConversationEntity;
 import com.mywebsite.admin.entity.AdminAiMessageEntity;
+import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
 import com.mywebsite.admin.mapper.AdminAiConversationMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminAiMessageMapper;
+import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.admin.mapper.AdminAiPromptProfileMapper;
 import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
 import com.mywebsite.admin.testsupport.AdminTestJwtSigner;
@@ -74,6 +76,9 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
 
     @Autowired
     private AdminAiPromptProfileMapper promptProfileMapper;
+
+    @Autowired
+    private AdminAiModelEntryMapper modelEntryMapper;
 
     @MockBean
     private AgentClient agentClient;
@@ -260,6 +265,21 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     void previewEmptySkillsStayEmptyAndDoesNotSendFallbacks() throws Exception {
         String token = tokenFor(500L);
         long agentId = createSite(token);
+        // 先给站点配一个 CLI 默认入口：链为空已改为诚实 BLOCKED（见 previewStreamBlocksWhenModeChainEmpty），
+        // 本用例关注的是 skills=[] 原样透传、不发进程默认 skills，与模型选择无关。
+        ObjectNode cliEntry = MAPPER.createObjectNode();
+        cliEntry.put("displayName", "CLI default");
+        cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
+        cliEntry.put("apiKey", "client-key");
+        cliEntry.put("agentId", agentId);
+        cliEntry.put("mode", "CLI");
+        cliEntry.put("enabled", true);
+        cliEntry.put("defaultEntry", true);
+        mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(cliEntry)))
+                .andExpect(status().isOk());
         ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
@@ -281,7 +301,26 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         AgentChatRequest sent = captor.getValue();
         assertThat(sent.skills()).isEmpty();
         assertThat(sent.fallbackModels()).isNull();
-        assertThat(sent.model()).isNull();
+        assertThat(sent.model().spec()).isEqualTo("openai:muse-wonder-1.0");
+    }
+
+    @Test
+    void previewStreamBlocksWhenModeChainEmpty() throws Exception {
+        String token = tokenFor(500L);
+        long agentId = createSite(token);
+        // 站点无任何模型入口：所选模式链为空 → SSE ERROR 携带 EXTERNAL_DEPENDENCY_BLOCKED，
+        // 且不向 agent-services 发起请求（不再以 model=null 落进程模型应答）。
+        String body = "{\"message\":\"hello\",\"mode\":\"CLI\"}";
+        MvcResult mvcResult = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(mvcResult))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("EXTERNAL_DEPENDENCY_BLOCKED")));
+        org.mockito.Mockito.verify(agentClient, org.mockito.Mockito.never()).chatStream(any(), any());
     }
 
     @Test
@@ -410,6 +449,89 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         mockMvc.perform(asyncDispatch(mvcResult))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("EXTERNAL_DEPENDENCY_BLOCKED")));
+    }
+
+    @Test
+    void previewModelBackfillMatchesSelectionChainJudgment() throws Exception {
+        String token = tokenFor(500L);
+        long agentId = createSite(token);
+
+        // 没有任何入口：mode 缺省按 previewMode 默认判定落到 KEY（CLI 链空），该模式也不可用。
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/preview/model")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mode").value("KEY"))
+                .andExpect(jsonPath("$.data.modelSpec").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.available").value(false));
+
+        ObjectNode cliEntry = MAPPER.createObjectNode();
+        cliEntry.put("displayName", "CLI default");
+        cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
+        cliEntry.put("apiKey", "client-key");
+        cliEntry.put("agentId", agentId);
+        cliEntry.put("mode", "CLI");
+        cliEntry.put("enabled", true);
+        cliEntry.put("defaultEntry", true);
+        MvcResult cliCreated = mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(cliEntry)))
+                .andExpect(status().isOk())
+                .andReturn();
+        long cliId =
+                MAPPER.readTree(cliCreated.getResponse().getContentAsString()).path("data").path("id").asLong();
+
+        ObjectNode keyEntry = MAPPER.createObjectNode();
+        keyEntry.put("displayName", "KEY default");
+        keyEntry.put("modelSpec", "openai:gpt-4o-mini");
+        keyEntry.put("apiKey", "sk-live-key");
+        keyEntry.put("enabled", true);
+        keyEntry.put("defaultEntry", true);
+        MvcResult keyCreated = mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(keyEntry)))
+                .andExpect(status().isOk())
+                .andReturn();
+        long keyId =
+                MAPPER.readTree(keyCreated.getResponse().getContentAsString()).path("data").path("id").asLong();
+
+        // mode 缺省：CLI 链非空 → 落到 CLI，与 previewStream 的默认判定（previewMode）同一路径。
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/preview/model")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mode").value("CLI"))
+                .andExpect(jsonPath("$.data.modelSpec").value("openai:muse-wonder-1.0"))
+                .andExpect(jsonPath("$.data.available").value(true));
+
+        // 显式指定 KEY（大小写不敏感），归一化后回显，链首 spec 为该站未命中时的全站默认入口。
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/preview/model")
+                        .param("mode", "key")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mode").value("KEY"))
+                .andExpect(jsonPath("$.data.modelSpec").value("openai:gpt-4o-mini"))
+                .andExpect(jsonPath("$.data.available").value(true));
+
+        // 默认入口 key 无法解密（toSelection 为 null）：该模式 available=false、modelSpec=null——
+        // 旧前端只看 enabled/defaultEntry 标志位会误报「正在使用该模型」，新口径与后端组链一致。
+        AdminAiModelEntryEntity broken = modelEntryMapper.selectById(keyId);
+        broken.setApiKey("enc:v1:not-a-valid-ciphertext");
+        modelEntryMapper.updateById(broken);
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/preview/model")
+                        .param("mode", "KEY")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mode").value("KEY"))
+                .andExpect(jsonPath("$.data.modelSpec").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.available").value(false));
+
+        mockMvc.perform(delete("/api/admin/ai/model-entries/" + cliId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/admin/ai/model-entries/" + keyId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk());
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mywebsite.admin.constant.AdminAgentMessageKeys;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewChatRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewHistoryMessage;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewModelDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewSkillDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewTodoItem;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpReadyDto;
@@ -86,6 +87,14 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         // 试聊只打该模式的主用入口。同模式其他入口和进程 AI_FALLBACK_MODELS 不参与，
         // 失败就停在用户保存的那条上，不再换成另一种接入的回复。
         List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, mode);
+        if (chain.isEmpty()) {
+            // 所选模式无可用入口（含默认入口 key 解密失败导致整链为空）：诚实失败，
+            // 不再以 model=null 发起 Python 请求落进程模型应答（与 forwardStream 的 BLOCKED 口径一致）。
+            SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
+            sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"EXTERNAL_DEPENDENCY_BLOCKED\"}");
+            emitter.complete();
+            return emitter;
+        }
         AgentModelSelection embedding = modelEntryService.embeddingSelection(agentId);
         AgentChatRequest agentRequest = new AgentChatRequest(
                 String.valueOf(agentId),
@@ -110,6 +119,15 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter));
         return emitter;
+    }
+
+    @Override
+    public AdminAiPreviewModelDto previewModel(long agentId, String mode) {
+        requireSite(agentId);
+        String resolvedMode = previewMode(agentId, mode);
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, resolvedMode);
+        String modelSpec = chain.isEmpty() ? null : chain.get(0).spec();
+        return new AdminAiPreviewModelDto(resolvedMode, modelSpec, !chain.isEmpty());
     }
 
     @Override
@@ -168,7 +186,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
      * 有 CLI 默认入口时面板跟试聊的缺省模式一样先看 CLI。
      */
     private AgentRuntimeStatus overlayEntry(long agentId, AgentRuntimeStatus status) {
-        String mode = modelEntryService.selectionChain(agentId, "CLI").isEmpty() ? "KEY" : "CLI";
+        String mode = defaultMode(agentId);
         List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, mode);
         if (chain.isEmpty() || !StringUtils.hasText(chain.get(0).spec())) {
             return status;
@@ -266,6 +284,11 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         if (StringUtils.hasText(requested)) {
             return AdminAiModelEntryServiceImpl.normalizeMode(requested);
         }
+        return defaultMode(agentId);
+    }
+
+    /** previewMode 缺省分支与 overlayEntry 面板共用：有 CLI 默认入口就用 CLI，否则用 KEY。 */
+    private String defaultMode(long agentId) {
         return modelEntryService.selectionChain(agentId, "CLI").isEmpty() ? "KEY" : "CLI";
     }
 
