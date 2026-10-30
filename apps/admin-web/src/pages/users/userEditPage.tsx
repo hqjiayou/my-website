@@ -145,16 +145,16 @@ export function UserEditPage({
   })
 
   if (!isCreate && !Number.isFinite(parsedId)) {
-    return <p className="text-sm text-slate-500">{t('edit.invalidId')}</p>
+    return <p className="text-sm text-muted-foreground">{t('edit.invalidId')}</p>
   }
 
   if (!isCreate && isUserPending) {
-    return <p className="text-sm text-slate-500">{t('edit.loading')}</p>
+    return <p className="text-sm text-muted-foreground">{t('edit.loading')}</p>
   }
 
   if (!isCreate && isUserError) {
     return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
         <p>{userError instanceof Error ? userError.message : t('edit.loadError')}</p>
         <button type="button" onClick={() => void refetch()} className="mt-2 underline">
           {t('edit.retry')}
@@ -166,7 +166,7 @@ export function UserEditPage({
   const form = (
     <>
       {formLocked ? (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mb-4 rounded-lg border border-warning/35 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis">
           {t('edit.messages.protectedHint')}
         </div>
       ) : null}
@@ -229,7 +229,7 @@ export function UserEditPage({
             <Field label={t('edit.fields.username')}>
               <input className={inputClassName} value={user?.username ?? ''} readOnly disabled />
               {isSelf ? (
-                <span className="mt-1.5 inline-flex rounded-md border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-xs text-sky-700">
+                <span className="mt-1.5 inline-flex rounded-md border border-info/35 bg-info-muted px-1.5 py-0.5 text-xs text-info-emphasis">
                   {t('list.badges.self')}
                 </span>
               ) : null}
@@ -266,7 +266,7 @@ export function UserEditPage({
   if (embedded) return form
 
   return (
-    <section>
+    <section className="admin-content-form">
       <AdminPageHeader
         title={isCreate ? t('edit.createTitle') : t('edit.editTitle')}
         description={
@@ -295,7 +295,7 @@ function Field({
     <div>
       <label className="mb-1.5 block text-sm font-medium text-admin">{label}</label>
       {children}
-      {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+      {error ? <p className="mt-1 text-xs text-danger-emphasis">{error}</p> : null}
     </div>
   )
 }
