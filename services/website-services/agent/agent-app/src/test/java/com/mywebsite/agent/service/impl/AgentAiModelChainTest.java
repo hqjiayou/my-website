@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -284,5 +285,70 @@ class AgentAiModelChainTest {
         assertThat(modes.modes().get(1).mode()).isEqualTo("CLI");
         assertThat(modes.modes().get(1).available()).isFalse();
         assertThat(modes.modes().get(1).label()).isNull();
+        assertThat(modes.modes().get(0).entries()).hasSize(1);
+        assertThat(modes.modes().get(0).entries().get(0).id()).isEqualTo(3L);
+        assertThat(modes.modes().get(0).entries().get(0).modelSpec()).isEqualTo("google:gemini-key");
+        assertThat(modes.modes().get(1).entries()).isEmpty();
+    }
+
+    @Test
+    void chatPinsNamedEntryAsPrimaryAndKeepsTheRestAsFallback() {
+        when(modelEntryMapper.selectList(any()))
+                .thenReturn(
+                        List.of(
+                                entry(3L, 10L, "google:agent-default", true),
+                                entry(4L, 10L, "openai:agent-alt", false)),
+                        List.of(entry(1L, null, "google:global-default", true)));
+
+        service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY", 4L));
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        verify(agentClient).chat(captor.capture());
+        AgentChatRequest request = captor.getValue();
+
+        assertThat(request.model().spec()).isEqualTo("openai:agent-alt");
+        assertThat(request.fallbackModels())
+                .extracting(selection -> selection.spec())
+                .containsExactly("google:agent-default", "google:global-default");
+    }
+
+    @Test
+    @MockitoSettings(strictness = Strictness.LENIENT)
+    void chatRejectsNamedEntryThatIsNotOnTheChain() {
+        when(modelEntryMapper.selectList(any()))
+                .thenReturn(List.of(entry(3L, 10L, "google:agent-default", true)), List.of());
+
+        assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY", 99L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(com.mywebsite.common.enums.ErrorCode.MODEL_ENTRY_UNAVAILABLE.getCode());
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
+    @MockitoSettings(strictness = Strictness.LENIENT)
+    void chatRejectsNamedEntryWhoseKeyCannotBeDecrypted() {
+        AgentAiModelEntryEntity broken = entry(4L, 10L, "openai:agent-alt", false);
+        broken.setApiKey("");
+        when(modelEntryMapper.selectList(any()))
+                .thenReturn(List.of(entry(3L, 10L, "google:agent-default", true), broken), List.of());
+
+        assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY", 4L)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(com.mywebsite.common.enums.ErrorCode.MODEL_ENTRY_UNAVAILABLE.getCode());
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
+    @MockitoSettings(strictness = Strictness.LENIENT)
+    void modelModesIncludesGlobalDefaultWhenTheAgentHasNone() {
+        when(modelEntryMapper.selectList(any()))
+                .thenReturn(List.of(), List.of(entry(1L, null, "google:global-default", true, "KEY")), List.of(), List.of());
+
+        var modes = service.modelModes(10L);
+
+        assertThat(modes.modes().get(0).available()).isTrue();
+        assertThat(modes.modes().get(0).entries()).extracting(item -> item.id()).containsExactly(1L);
+        assertThat(modes.modes().get(0).entries().get(0).modelSpec()).isEqualTo("google:global-default");
     }
 }

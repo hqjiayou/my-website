@@ -10,8 +10,8 @@ services:
     restart: unless-stopped
     environment:
       # 打开管理接口，并允许经 Docker 端口映射访问（进程看到的来源不是容器内回环）。
-      # 口令与 admin 的 PROXY_SERVICES_MANAGEMENT_KEY 保持一致。端口只绑 127.0.0.1。
-      MANAGEMENT_PASSWORD: ${PROXY_SERVICES_MANAGEMENT_KEY:?PROXY_SERVICES_MANAGEMENT_KEY must be set to a local random value (proxy management password)}
+      # 口令与 admin 的 PROXY_INTERNAL_SERVICE_TOKEN 保持一致。进程只认 MANAGEMENT_PASSWORD。端口只绑 127.0.0.1。
+      MANAGEMENT_PASSWORD: ${PROXY_INTERNAL_SERVICE_TOKEN:?PROXY_INTERNAL_SERVICE_TOKEN must be set to a local random value (proxy management password)}
     ports:
       - "127.0.0.1:8317:8317"
       - "127.0.0.1:8085:8085"

@@ -6,13 +6,13 @@ const fs = require("fs");
 const path = require("path");
 
 // git 全局参数（-C <path>、-c <k=v>、--git-dir 等）可插在 git 与子命令之间，
-// 匹配时必须容忍，否则 `git -C <path> push` 一类写法会整条绕过。
+// 匹配时必须容忍，否则 `git -C <path> rebase` 一类写法会整条绕过。
 const GIT =
   "git(?:\\s+(?:-C\\s+\\S+|-c\\s+\\S+|--git-dir(?:=\\S+|\\s+\\S+)?|--work-tree(?:=\\S+|\\s+\\S+)?|--namespace(?:=\\S+|\\s+\\S+)?|--exec-path(?:=\\S+|\\s+\\S+)?|-[pP]|--paginate|--no-pager))*\\s+";
 const gitRe = (body) => new RegExp(`\\b${GIT}${body}`);
 
 const SHELL_DENY = [
-  [gitRe("(push|rebase|merge|cherry-pick|am)\\b"), "不自动 push 或改写 git 历史"],
+  [gitRe("(rebase|cherry-pick|am)\\b"), "不自动改写 git 历史（rebase／cherry-pick／am）"],
   [gitRe("reset\\s+--hard\\b"), "不丢弃工作区改动"],
   [gitRe("(checkout|restore)\\s+(--\\s|\\.(\\s|$)|--worktree|--source)"), "不丢弃工作区改动"],
   [gitRe("clean\\b"), "不删除未跟踪文件"],

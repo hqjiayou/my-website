@@ -38,9 +38,11 @@ from agent_services.config import Settings
 from agent_services.retrieval.embeddings import (
     EmbeddingClient,
     create_embedding_client_for,
+    embedding_class_name,
 )
 from agent_services.retrieval.service import (
     DimensionChangeRequired,
+    EmbeddingClass,
     ReembedPrepared,
     RetrievalChunkLimitExceeded,
     RetrievalService,
@@ -50,6 +52,7 @@ from agent_services.schemas.chat import (
     ChatRequest,
     ChatSuccessData,
     ChatUsage,
+    EmbeddingClassCredentials,
     SearchSummaryItem,
     ToolTraceItem,
 )
@@ -210,6 +213,23 @@ def _skills_dir(request: Request) -> str:
     return settings.agent_skills_dir.strip() or default_skills_directory()
 
 
+def _embedding_classes_for(
+    request: Request, classes: list[EmbeddingClassCredentials] | None
+) -> list[EmbeddingClass] | None:
+    """把请求里登记的类变成可调用的嵌入客户端。省略时返回 None，走原来的单套凭证。"""
+    if not classes:
+        return None
+    resolved: list[EmbeddingClass] = []
+    for item in classes:
+        resolved.append(
+            EmbeddingClass(
+                embedding_class_name(item.embedding_spec),
+                _request_embedder(request, item.embedding_spec, item.api_key, item.base_url),
+            )
+        )
+    return resolved
+
+
 def chat_embedding_credentials(body: ChatRequest) -> tuple[str | None, str | None, str | None]:
     """对话检索的嵌入凭证与回答模型分开。
 
@@ -247,7 +267,12 @@ def _prepare_execution(request: Request, body: ChatRequest, agent_id: str, model
     todo_store = todo_store_from_request(body.todos)
     selection = body.model_selection
     embedding_spec, embedding_api_key, embedding_base_url = chat_embedding_credentials(body)
-    embedder = _request_embedder(request, embedding_spec, embedding_api_key, embedding_base_url)
+    embedding_classes = _embedding_classes_for(request, body.embedding_classes)
+    embedder = (
+        None
+        if embedding_classes
+        else _request_embedder(request, embedding_spec, embedding_api_key, embedding_base_url)
+    )
     collector = KnowledgeSearchCollector()
     toolsets = build_execution_toolsets(
         _business_settings(settings, body.business_api_base_url),
@@ -256,6 +281,8 @@ def _prepare_execution(request: Request, body: ChatRequest, agent_id: str, model
         model=model,
         retrieval=_retrieval_service_or_none(request),
         retrieval_embedder=embedder,
+        retrieval_embedding_model=None if embedding_classes else embedding_spec,
+        retrieval_embedding_classes=embedding_classes,
         retrieval_model_selection=selection,
         knowledge_collector=collector,
     )
@@ -613,12 +640,19 @@ async def upsert_retrieval_document(
         )
     service = _require_retrieval_service(request)
     try:
+        embedding_classes = _embedding_classes_for(request, body.embedding_classes)
         chunk_count = await service.upsert_document(
             agent_id=agent_id,
             source_id=source_id,
             title=body.title,
             content=body.content,
-            embedder=_request_embedder(request, body.embedding_spec, body.api_key, body.base_url),
+            embedder=(
+                None
+                if embedding_classes
+                else _request_embedder(request, body.embedding_spec, body.api_key, body.base_url)
+            ),
+            embedding_model=None if embedding_classes else body.embedding_spec,
+            embedding_classes=embedding_classes,
         )
     except RetrievalChunkLimitExceeded as exc:
         raise InternalApiError(status_code=400, error_code="BAD_REQUEST", message=str(exc)) from exc
@@ -716,11 +750,18 @@ async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> di
             message="agentId is required.",
         )
     service = _require_retrieval_service(request)
+    embedding_classes = _embedding_classes_for(request, body.embedding_classes)
     chunks = await service.retrieve_chunks(
         agent_id=agent_id,
         query=query,
         top_k=body.top_k,
-        embedder=_request_embedder(request, body.embedding_spec, body.api_key, body.base_url),
+        embedder=(
+            None
+            if embedding_classes
+            else _request_embedder(request, body.embedding_spec, body.api_key, body.base_url)
+        ),
+        embedding_model=None if embedding_classes else body.embedding_spec,
+        embedding_classes=embedding_classes,
         model_selection=body.model_selection,
     )
     payload = RetrievalSearchResponse(

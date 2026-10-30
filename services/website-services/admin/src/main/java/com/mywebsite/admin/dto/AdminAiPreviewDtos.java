@@ -25,9 +25,11 @@ public final class AdminAiPreviewDtos {
             @Size(max = 20) List<@Valid AdminAiPreviewTodoItem> todos,
             /**
              * 试聊模式，与接入里的 CLI / KEY 对应。缺省时服务端在有 CLI 默认入口时用 CLI，否则 KEY。
-             * 试聊只调用该模式的主用入口。
+             * 试聊只调用该模式的主用入口；带了 {@code modelEntryId} 时只调用这一条，不改默认入口。
              */
-            @Size(max = 8) String mode) {}
+            @Size(max = 8) String mode,
+            /** 这一轮点名的入口。空则用该模式链首。不在链上时这一轮失败。 */
+            Long modelEntryId) {}
 
     public record AdminAiPreviewHistoryMessage(
             @NotBlank @Size(max = 16) String role, @NotBlank @Size(max = 8000) String content) {}
@@ -57,6 +59,15 @@ public final class AdminAiPreviewDtos {
      * {@code previewStream} 走同一个 previewMode + selectionChain 判定路径算出，不是另一份近似规则。
      * {@code mode} 请求缺省时为服务端按默认判定选出的模式；{@code modelSpec} 为该模式链首 spec，
      * 无链时为 null；{@code available} 即链是否非空（含默认入口 key 解密失败导致整链为空的场景）。
+     * {@code entries} 与 {@code previewStream} 同一条链，供菜单选择下一轮入口。
      */
-    public record AdminAiPreviewModelDto(String mode, String modelSpec, boolean available) {}
+    public record AdminAiPreviewModelDto(
+            String mode, String modelSpec, boolean available, List<Entry> entries) {
+
+        public AdminAiPreviewModelDto(String mode, String modelSpec, boolean available) {
+            this(mode, modelSpec, available, List.of());
+        }
+
+        public record Entry(Long id, String displayName, String modelSpec) {}
+    }
 }

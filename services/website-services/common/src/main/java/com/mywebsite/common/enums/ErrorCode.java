@@ -22,7 +22,12 @@ public enum ErrorCode {
      * 422；Agent 单轮运行预算超限（请求数 / 工具调用数 / Token）。
      * 对应 agent-services {@code AGENT_BUDGET_EXCEEDED}；非依赖故障，也非入参错误。
      */
-    AGENT_BUDGET_EXCEEDED(1008, "common.error.agent-budget-exceeded");
+    AGENT_BUDGET_EXCEEDED(1008, "common.error.agent-budget-exceeded"),
+    /**
+     * 400；点名的模型入口不在该模式的生效链上（停用、删除、模式不符，或解不开 key）。
+     * 这一轮失败，不得改走该模式的默认入口。
+     */
+    MODEL_ENTRY_UNAVAILABLE(1009, "common.error.model-entry-unavailable");
 
     private final int code;
 

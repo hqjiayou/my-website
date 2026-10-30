@@ -111,6 +111,8 @@ export interface AgentAiMessage {
   citations?: AgentAiCitation[] | null
   /** 僅 ASSISTANT。無過程記錄時為 null。 */
   process?: AgentAiMessageProcess | null
+  /** 僅 ASSISTANT。這一輪請求的入口 spec；舊消息為 null。 */
+  requestedModel?: string | null
 }
 
 export interface AgentAiChatRequest {
@@ -118,15 +120,24 @@ export interface AgentAiChatRequest {
   conversationId?: string
   attachments?: AgentAiAttachment[]
   documents?: AgentAiDocument[]
-  /** 雙模式：KEY 直連 / CLI 代理池。缺省時服務端按整鏈（舊行為）。 */
+  /** 雙模式：KEY 直連 / CLI 代理池。必填。 */
   mode?: string
+  /** 下一輪點名的入口。不傳則用該模式的預設入口。 */
+  modelEntryId?: number
 }
 
 /** Portal 雙模式可用性（GET /ai/model-modes）：available=false 表示該模式尚未配置入口。 */
+export interface AgentAiModelEntryOption {
+  id: number
+  displayName: string
+  modelSpec: string
+}
+
 export interface AgentAiModelModeOption {
   mode: string
   available: boolean
   label: string | null
+  entries?: AgentAiModelEntryOption[]
 }
 
 export interface AgentAiModelModes {

@@ -16,13 +16,17 @@
 - `GET /internal/v1/skills` — 技能目录（只元数据）
 - `PUT /internal/v1/retrieval/documents` — 写入派生索引文档（`siteId`、`sourceId`、`title`、`content`）；成功 `{"ok":true,"data":{"chunks"}}`
 - `DELETE /internal/v1/retrieval/documents` — 删除派生索引文档（query `siteId`、`sourceId`）；成功 `{"ok":true,"data":null}`
-- `POST /internal/v1/retrieval/search` — `{siteId, query, topK?}` → `{hits:[{sourceId,chunkIndex,score,content}], degraded}`；嵌入或向量库失败时 **200**、`hits=[]`、`degraded=true`（不回 500）。`query` 上限与文档 `content` 相同；`topK` 缺省 4，大于 20 夹制到 20
+- `POST /internal/v1/retrieval/search` — `{agentId, query, topK?}` → `{hits:[{sourceId,chunkIndex,score,content}], degraded}`；嵌入或向量库失败时 **200**、`hits=[]`、`degraded=true`（不回 500）。`query` 上限与文档 `content` 相同；`topK` 缺省 4，大于 20 夹制到 20。可选 `embeddingClasses`（最多 4 类，按嵌入模型名去重，`google-gla:` 与 `google:` 算同一类）。不传时仍只用请求里的一套 `embeddingSpec`（没有则用进程嵌入模型），排序与原来一致。传了多类时，每一类各自嵌问题，类内做余弦并套绝对分门槛和相对裁剪，类之间按名次合并（不比各类余弦），字面命中作为另一路名次并入，合成后再走现有重排。某一类嵌问题失败则跳过该类向量命中且 `degraded=true`，其它类和字面命中仍返回；全部类失败才整次降级
 
 业务工具（`BUSINESS_API_BASE_URL` 配置时）：`get_site_info` / `list_site_contents` 只读回调 Java internal API。预约工具与 `reservation-assistant` 技能已于 2026-10-27 随预约功能下架移除。
 
 - 请求上限（纵深防御，§21.4）：`message`/history 单条 ≤16000 字符、history ≤50、skills ≤16、todos ≤20；超限或字段非法 → **400** `BAD_REQUEST`（扁平体，非 FastAPI 422）
 
 公开探活：`GET /health`（无鉴权，只报进程存活）
+
+## 检索
+
+派生索引在独立库 `agent_retrieval`，不是知识库正文的真相源。分类键是嵌入模型名。与进程 `AI_EMBEDDING_DIMENSIONS` 同维度的类写在 `chunks`，用列 `embedding_model` 分开；维度不同则另建 `chunks_d<维度>`。新增一类只建自己的表或只替换该类里这一份文档，不删除其它类。补上模型名列时，还没有模型名的存量行记为进程 `AI_EMBEDDING_MODEL`。确认重建维度时仍只重建遗留的 `chunks` 表。Java 和接入页这次不改，调用方不传 `embeddingClasses` 时继续只查原来那一类。
 
 ## 两类失败（务必区分）
 

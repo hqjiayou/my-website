@@ -589,6 +589,9 @@ export default {
     preview: {
       modeCli: 'CLI proxy',
       modeKey: 'API key',
+      nextEntry: 'Next message',
+      entryDefault: 'This mode’s default entry',
+      entryUnavailable: 'Unavailable',
       using: 'This try chat calls only {{model}}. A failure stays in the thread and does not switch to the other access mode.',
       noEntry: 'This mode has no saved default entry. Save one on Access, then try again.',
       hint: 'Preview uses this site’s prompt and does not write conversations. The browser never sends systemPrompt. Note: preview only exercises the primary entry of the selected mode, with no fallbacks; production chat falls back down the chain when the primary fails, so preview results do not fully represent production behavior.',
@@ -601,6 +604,8 @@ export default {
         AGENT_BUDGET_EXCEEDED:
           'Run budget exceeded (requests / tool calls / tokens); the run was stopped and partial output is not saved.',
         REQUEST_FAILED: 'The preview request was rejected.',
+        MODEL_ENTRY_UNAVAILABLE:
+          'That entry is no longer on this mode’s chain. This turn will not switch to the default entry.',
         SYSTEM_ERROR: 'Preview failed (system error).',
       },
       skills: {

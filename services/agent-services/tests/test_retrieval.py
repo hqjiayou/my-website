@@ -476,7 +476,9 @@ class FakeStore:
         self.recreate_calls: list[int] = []
         self.ensure_calls: list[int] = []
 
-    async def upsert_document(self, *, agent_id, source_id, title, chunks, embeddings) -> int:
+    async def upsert_document(
+        self, *, agent_id, source_id, title, chunks, embeddings, embedding_model: str = ""
+    ) -> int:
         assert len(chunks) == len(embeddings)
         self.docs[(agent_id, source_id)] = list(chunks)
         return len(chunks)
@@ -484,7 +486,7 @@ class FakeStore:
     async def delete_document(self, *, agent_id, source_id) -> None:
         self.docs.pop((agent_id, source_id), None)
 
-    async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+    async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
         self.search_calls.append(agent_id)
         self.search_top_ks.append(top_k)
         results = []
@@ -497,7 +499,9 @@ class FakeStore:
                 )
         return results[:top_k]
 
-    async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
+    async def search_lexical(
+        self, *, agent_id, tokens, limit, embedding_models=None
+    ) -> list[RetrievedChunk]:
         return []
 
     async def current_dimensions(self) -> int | None:
@@ -814,10 +818,12 @@ def test_vector_failure_does_not_return_lexical_hits() -> None:
             super().__init__()
             self.lexical_calls = 0
 
-        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
             raise RuntimeError("db down")
 
-        async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
+        async def search_lexical(
+            self, *, agent_id, tokens, limit, embedding_models=None
+        ) -> list[RetrievedChunk]:
             self.lexical_calls += 1
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
 
@@ -838,7 +844,9 @@ def test_embedder_failure_does_not_call_lexical_search() -> None:
             super().__init__()
             self.lexical_calls = 0
 
-        async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
+        async def search_lexical(
+            self, *, agent_id, tokens, limit, embedding_models=None
+        ) -> list[RetrievedChunk]:
             self.lexical_calls += 1
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
 
@@ -932,7 +940,7 @@ def test_retrieval_search_drops_hits_below_min_score() -> None:
     """查询不含代码 token。store 已给出 0.9 与 0.2 时，响应只留 0.9，且不改字段。"""
 
     class TwoScoreStore(FakeStore):
-        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
             self.search_calls.append(agent_id)
             self.search_top_ks.append(top_k)
             return [
@@ -965,7 +973,7 @@ def test_retrieval_search_drops_hits_below_min_score() -> None:
 
 async def test_retrieval_min_score_zero_keeps_low_vector_hits() -> None:
     class TwoScoreStore(FakeStore):
-        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
             return [
                 RetrievedChunk("kb:hi", 0, "relevant", 0.9),
                 RetrievedChunk("kb:lo", 0, "unrelated", 0.2),
@@ -1019,7 +1027,7 @@ async def test_retrieval_search_prunes_relative_tail() -> None:
     """min_score 关闭时相对裁剪仍生效：0.60 的命中在，0.10 的同批尾巴被丢弃。"""
 
     class TwoScoreStore(FakeStore):
-        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
             return [
                 RetrievedChunk("kb:hi", 0, "relevant", 0.6),
                 RetrievedChunk("kb:lo", 0, "unrelated", 0.1),
@@ -1034,7 +1042,7 @@ async def test_retrieval_search_keeps_close_scores_for_multi_doc() -> None:
     """多文档问题的两条命中分数接近（0.433/0.430）时相对裁剪不误伤。"""
 
     class TwoScoreStore(FakeStore):
-        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
             return [
                 RetrievedChunk("kb:a", 0, "spec", 0.433),
                 RetrievedChunk("kb:b", 0, "warranty", 0.430),
@@ -1066,12 +1074,14 @@ def test_retrieval_search_surfaces_code_token_below_vector_threshold() -> None:
             self.lexical_sites: list[str] = []
             self.lexical_tokens: list[list[str]] = []
 
-        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
             self.search_calls.append(agent_id)
             self.search_top_ks.append(top_k)
             return [RetrievedChunk("kb:other", 0, "unrelated prose", 0.9)]
 
-        async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
+        async def search_lexical(
+            self, *, agent_id, tokens, limit, embedding_models=None
+        ) -> list[RetrievedChunk]:
             self.lexical_sites.append(agent_id)
             self.lexical_tokens.append(list(tokens))
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
@@ -1100,10 +1110,12 @@ def test_retrieval_search_surfaces_code_token_below_vector_threshold() -> None:
 
 async def test_same_chunk_score_is_max_of_cosine_and_code_coverage() -> None:
     class BothStore(FakeStore):
-        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.4)]
 
-        async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
+        async def search_lexical(
+            self, *, agent_id, tokens, limit, embedding_models=None
+        ) -> list[RetrievedChunk]:
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.1)]
 
     service = RetrievalService(FakeEmbedder(), BothStore())
@@ -1111,10 +1123,12 @@ async def test_same_chunk_score_is_max_of_cosine_and_code_coverage() -> None:
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:code", 1.0)]
 
     class CosineWins(FakeStore):
-        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
             return [RetrievedChunk("kb:code", 0, "only ABCD here", 0.92)]
 
-        async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
+        async def search_lexical(
+            self, *, agent_id, tokens, limit, embedding_models=None
+        ) -> list[RetrievedChunk]:
             return [RetrievedChunk("kb:code", 0, "only ABCD here", 0.1)]
 
     cosine_hits = await RetrievalService(FakeEmbedder(), CosineWins()).search(
@@ -1164,7 +1178,7 @@ _EXPECTED_CITATIONS = [
 
 
 class _ManyHitStore(FakeStore):
-    async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+    async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
         self.search_calls.append(agent_id)
         self.search_top_ks.append(top_k)
         return list(_CITATION_HITS)
@@ -1302,11 +1316,13 @@ class _LexicalV2Store(FakeStore):
         self.chunk = chunk
         self.lexical_tokens: list[list[str]] = []
 
-    async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+    async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
         self.search_calls.append(agent_id)
         return []
 
-    async def search_lexical(self, *, agent_id, tokens, limit) -> list[RetrievedChunk]:
+    async def search_lexical(
+        self, *, agent_id, tokens, limit, embedding_models=None
+    ) -> list[RetrievedChunk]:
         self.lexical_tokens.append(list(tokens))
         return [self.chunk]
 
@@ -1337,7 +1353,7 @@ _RERANK_HITS = [
 
 
 class _RerankStore(FakeStore):
-    async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+    async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
         return list(_RERANK_HITS)
 
 
@@ -1554,7 +1570,7 @@ async def test_rerank_cutoff_disabled_keeps_legacy_append() -> None:
     """裁门关时维持重排语义：模型没提到的候选按原序补在后面，不丢弃。"""
 
     class FiveHitStore(FakeStore):
-        async def search(self, *, agent_id, embedding, top_k) -> list[RetrievedChunk]:
+        async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
             return [
                 RetrievedChunk("kb:a", 0, "alpha", 0.9),
                 RetrievedChunk("kb:b", 0, "beta", 0.85),

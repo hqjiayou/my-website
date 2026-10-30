@@ -3,6 +3,7 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useAuiState,
   useLocalRuntime,
 } from '@assistant-ui/react'
 import { useQuery } from '@tanstack/react-query'
@@ -38,6 +39,16 @@ interface RunTrace {
   model: string | null
 }
 
+function PreviewAssistantLabel() {
+  const spec = useAuiState((state) => {
+    if (state.message.role !== 'assistant') return ''
+    const value = state.message.metadata?.custom?.requestedModel
+    return typeof value === 'string' ? value : ''
+  })
+  if (!spec) return null
+  return <p className="mb-1 font-mono text-[11px] text-muted-foreground">{spec}</p>
+}
+
 const EMPTY_TRACE: RunTrace = {
   skillsApplied: [],
   skillsMissing: [],
@@ -55,6 +66,7 @@ const KNOWN_ERROR_CODES = new Set([
   'AGENT_BUDGET_EXCEEDED',
   'REQUEST_FAILED',
   'SYSTEM_ERROR',
+  'MODEL_ENTRY_UNAVAILABLE',
 ])
 
 const TODO_STATUS_CLASS: Record<AiPreviewTodoStatus, string> = {
@@ -75,6 +87,8 @@ function createPreviewSelection() {
   let skills: string[] = []
   let todos: AiPreviewTodoItem[] = []
   let mode: 'CLI' | 'KEY' = 'CLI'
+  const entryByMode: Record<'CLI' | 'KEY', number | null> = { CLI: null, KEY: null }
+  let requestedSpec = ''
   return {
     getSkills: () => skills,
     setSkills: (next: string[]) => {
@@ -88,6 +102,15 @@ function createPreviewSelection() {
     setMode: (next: 'CLI' | 'KEY') => {
       mode = next
     },
+    getModelEntryId: () => entryByMode[mode],
+    setModelEntryId: (id: number | null) => {
+      entryByMode[mode] = id
+    },
+    entryFor: (next: 'CLI' | 'KEY') => entryByMode[next],
+    setRequestedSpec: (spec: string) => {
+      requestedSpec = spec
+    },
+    getRequestedSpec: () => requestedSpec,
   }
 }
 
@@ -142,16 +165,19 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   const [selection] = useState(createPreviewSelection)
   const [mode, setMode] = useState<'CLI' | 'KEY'>('CLI')
   const [modeChosen, setModeChosen] = useState(false)
+  const [modelEntryId, setModelEntryId] = useState<number | null>(null)
   // 首次挂载不带 mode，拿服务端默认判定；用户切换 CLI/KEY 后带 mode 重查，与 previewStream 同一路径回填。
   const modelQuery = useQuery({
     queryKey: ['sites', agentId, 'ai', 'preview', 'model', modeChosen ? mode : 'default'],
     queryFn: () => aiApi.getPreviewModel(agentId, modeChosen ? mode : undefined),
   })
-  const activeModel = modelQuery.data?.available
-    ? mode === 'CLI'
-      ? modelIdFromSpec(modelQuery.data.modelSpec ?? '')
-      : modelQuery.data.modelSpec ?? ''
-    : ''
+  const entries = modelQuery.data?.entries ?? []
+  const picked = entries.find((item) => item.id === modelEntryId) ?? null
+  const activeSpec = picked?.modelSpec ?? (modelQuery.data?.available ? modelQuery.data.modelSpec : '') ?? ''
+  const activeModel = activeSpec ? (mode === 'CLI' ? modelIdFromSpec(activeSpec) : activeSpec) : ''
+  useEffect(() => {
+    selection.setRequestedSpec(activeSpec)
+  }, [activeSpec, selection])
   const servedModel = trace.model ? modelIdFromSpec(trace.model) : ''
 
   useEffect(() => {
@@ -165,6 +191,13 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
     selection.setMode(next)
     setMode(next)
     setModeChosen(true)
+    setModelEntryId(selection.entryFor(next))
+  }
+
+  const chooseEntry = (raw: string) => {
+    const next = raw ? Number(raw) : null
+    selection.setModelEntryId(next)
+    setModelEntryId(next)
   }
 
   const updateTodos = useCallback(
@@ -189,8 +222,14 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
         getSkills: selection.getSkills,
         getTodos: selection.getTodos,
         getMode: selection.getMode,
+        getModelEntryId: selection.getModelEntryId,
+        getRequestedSpec: selection.getRequestedSpec,
         onAgentEvent: (event) => {
           if (event.type === 'error') {
+            if (event.errorCode === 'MODEL_ENTRY_UNAVAILABLE') {
+              selection.setModelEntryId(null)
+              setModelEntryId(null)
+            }
             setRunError({ errorCode: event.errorCode, message: event.message })
             return
           }
@@ -226,6 +265,27 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             {value === 'CLI' ? t('aiWorkspace.preview.modeCli') : t('aiWorkspace.preview.modeKey')}
           </button>
         ))}
+        {entries.length > 0 ? (
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            {t('aiWorkspace.preview.nextEntry')}
+            <select
+              aria-label={t('aiWorkspace.preview.nextEntry')}
+              value={modelEntryId ?? ''}
+              onChange={(event) => chooseEntry(event.target.value)}
+              className="max-w-[16rem] rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-foreground"
+            >
+              <option value="">{t('aiWorkspace.preview.entryDefault')}</option>
+              {entries.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.displayName}
+                </option>
+              ))}
+              {modelEntryId != null && !picked ? (
+                <option value={modelEntryId}>{t('aiWorkspace.preview.entryUnavailable')}</option>
+              ) : null}
+            </select>
+          </label>
+        ) : null}
       </div>
       <p className="mb-3 text-sm text-muted-foreground">
         {modelQuery.isPending
@@ -244,6 +304,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             <ThreadPrimitive.Messages>
               {() => (
                 <MessagePrimitive.Root className="mb-3 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
+                  <PreviewAssistantLabel />
                   <MessagePrimitive.Content />
                 </MessagePrimitive.Root>
               )}

@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
+from agent_services.retrieval.embeddings import limit_embedding_class_specs
 from agent_services.schemas.todo import MAX_TODO_ITEMS, TodoItem
 
 # 纵深防御上限（§21.4）：Java DTO 先行校验，这里防止 internal 调用方失误撑爆上下文
@@ -117,6 +118,16 @@ class ChatDocument(BaseModel):
     truncated: bool = False
 
 
+class EmbeddingClassCredentials(BaseModel):
+    """登记的一类嵌入模型。分类键是 embeddingSpec，不是 api key。"""
+
+    embedding_spec: str = Field(alias="embeddingSpec", min_length=1, max_length=256)
+    api_key: str | None = Field(default=None, alias="apiKey", max_length=4096)
+    base_url: str | None = Field(default=None, alias="baseUrl", max_length=512)
+
+    model_config = {"populate_by_name": True}
+
+
 class ModelSelection(BaseModel):
     """Java 模型入口带入的本次凭证。缺失时回退进程 AI_MODEL。"""
 
@@ -152,6 +163,10 @@ class ChatRequest(BaseModel):
     embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
     embedding_api_key: str | None = Field(default=None, alias="embeddingApiKey", max_length=4096)
     embedding_base_url: str | None = Field(default=None, alias="embeddingBaseUrl", max_length=512)
+    # 省略时仍只用上面这一套。登记多类时检索按名次合并，上限 4。
+    embedding_classes: list[EmbeddingClassCredentials] | None = Field(
+        default=None, alias="embeddingClasses"
+    )
 
     model_config = {"populate_by_name": True}
 
@@ -161,6 +176,13 @@ class ChatRequest(BaseModel):
         cls, value: list[ChatAttachment] | None
     ) -> list[ChatAttachment] | None:
         return limit_attachment_list(value)
+
+    @field_validator("embedding_classes")
+    @classmethod
+    def cap_embedding_classes(
+        cls, value: list[EmbeddingClassCredentials] | None
+    ) -> list[EmbeddingClassCredentials] | None:
+        return limit_embedding_class_specs(value)
 
     @field_validator("knowledge_context")
     @classmethod

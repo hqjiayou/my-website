@@ -15,6 +15,7 @@ import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminAiPromptProfileMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
+import com.mywebsite.admin.service.AdminAiModelEntryService.ChainCandidate;
 import com.mywebsite.admin.service.AdminAiPreviewService;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentChatHistoryMessage;
@@ -84,14 +85,15 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         String mode = previewMode(agentId, request.mode());
-        // 试聊只打该模式的主用入口。同模式其他入口和进程 AI_FALLBACK_MODELS 不参与，
-        // 失败就停在用户保存的那条上，不再换成另一种接入的回复。
-        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, mode);
-        if (chain.isEmpty()) {
-            // 所选模式无可用入口（含默认入口 key 解密失败导致整链为空）：诚实失败，
-            // 不再以 model=null 发起 Python 请求落进程模型应答（与 forwardStream 的 BLOCKED 口径一致）。
+        // 试聊只打这一条。同模式其他入口和进程 AI_FALLBACK_MODELS 不参与。
+        // 点了入口就用这一条，不改默认入口；不在链上则失败，不改走链首。
+        AgentModelSelection primary = previewPrimary(agentId, mode, request.modelEntryId());
+        if (primary == null) {
             SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
-            sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"EXTERNAL_DEPENDENCY_BLOCKED\"}");
+            String errorCode = request.modelEntryId() == null
+                    ? "EXTERNAL_DEPENDENCY_BLOCKED"
+                    : "MODEL_ENTRY_UNAVAILABLE";
+            sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"" + errorCode + "\"}");
             emitter.complete();
             return emitter;
         }
@@ -105,7 +107,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 toHistory(request.history()),
                 normalizeSkills(request.skills()),
                 toTodos(request.todos()),
-                chain.isEmpty() ? null : chain.get(0),
+                primary,
                 callbackBaseUrl(),
                 knowledgeSnippets(agentId, request.message().trim()),
                 null,
@@ -125,9 +127,31 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     public AdminAiPreviewModelDto previewModel(long agentId, String mode) {
         requireSite(agentId);
         String resolvedMode = previewMode(agentId, mode);
-        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, resolvedMode);
-        String modelSpec = chain.isEmpty() ? null : chain.get(0).spec();
-        return new AdminAiPreviewModelDto(resolvedMode, modelSpec, !chain.isEmpty());
+        List<ChainCandidate> candidates = modelEntryService.chainCandidates(agentId, resolvedMode);
+        String modelSpec = candidates.isEmpty() ? null : candidates.get(0).modelSpec();
+        List<AdminAiPreviewModelDto.Entry> entries = candidates.stream()
+                .map(item -> new AdminAiPreviewModelDto.Entry(item.id(), item.displayName(), item.modelSpec()))
+                .toList();
+        return new AdminAiPreviewModelDto(resolvedMode, modelSpec, !candidates.isEmpty(), entries);
+    }
+
+    /**
+     * 没点名时用链首。点了名必须在链上；不在链上返回 null，由调用方报 MODEL_ENTRY_UNAVAILABLE，不改用链首。
+     * 链为空且没点名时也返回 null，调用方报 EXTERNAL_DEPENDENCY_BLOCKED。
+     */
+    private AgentModelSelection previewPrimary(long agentId, String mode, Long entryId) {
+        if (entryId == null) {
+            List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, mode);
+            return chain.isEmpty() ? null : chain.get(0);
+        }
+        try {
+            return modelEntryService.selectionOnChain(agentId, mode, entryId);
+        } catch (BusinessException ex) {
+            if (ex.getCode() == ErrorCode.MODEL_ENTRY_UNAVAILABLE.getCode()) {
+                return null;
+            }
+            throw ex;
+        }
     }
 
     @Override

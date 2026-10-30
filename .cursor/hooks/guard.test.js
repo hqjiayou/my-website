@@ -5,14 +5,12 @@ const assert = require("node:assert");
 const { shellVerdict, fileVerdict } = require("./guard.js");
 
 const denyCmds = [
-  "git push origin dev",
-  "git -C /repo push origin dev",
-  "git -c user.name=x push",
-  "git --git-dir=/repo/.git push",
-  "git --git-dir /repo/.git push origin dev",
-  "git -C /repo -c user.name=x push",
   "git rebase dev",
-  "git -C /repo merge dev",
+  "git -C /repo rebase dev",
+  "git cherry-pick abc",
+  "git -C /repo cherry-pick abc",
+  "git am",
+  "git -C /repo am",
   "git reset --hard HEAD",
   "git -C /repo reset --hard",
   "git checkout -- src/App.tsx",
@@ -54,6 +52,14 @@ test("ask: 正常 Conventional Commits 标题仍走确认", () => {
 });
 
 const allowCmds = [
+  "git push origin dev",
+  "git -C /repo push origin dev",
+  "git -c user.name=x push",
+  "git --git-dir=/repo/.git push",
+  "git --git-dir /repo/.git push origin dev",
+  "git -C /repo -c user.name=x push",
+  "git merge dev",
+  "git -C /repo merge dev",
   "git status",
   "git -C /repo log --oneline -3",
   "git -C /repo diff --stat",
@@ -94,9 +100,9 @@ test("file ask: 改 hooks 本身", () => {
   assert.strictEqual((fileVerdict("Write", ".cursor/hooks.json", "/repo") || [])[0], "ask");
 });
 
-test("deny: git -P（--no-pager 短写）与环境变量前缀写法", () => {
-  assert.strictEqual((shellVerdict("git -P push") || [])[0], "deny");
-  assert.strictEqual((shellVerdict("GIT_SSH=ssh git push") || [])[0], "deny");
+test("allow: git -P（--no-pager 短写）与环境变量前缀的 push", () => {
+  assert.strictEqual(shellVerdict("git -P push"), null);
+  assert.strictEqual(shellVerdict("GIT_SSH=ssh git push"), null);
 });
 
 test("file: 已存在的 Flyway 迁移不可改、未存在的新迁移可建", () => {

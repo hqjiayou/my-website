@@ -14,7 +14,7 @@ from agent_services.agent.subagent import build_delegate_tool
 from agent_services.agent.todo_tools import TodoStore, build_todo_toolset
 from agent_services.config import Settings
 from agent_services.retrieval.embeddings import EmbeddingClient
-from agent_services.retrieval.service import RetrievalService
+from agent_services.retrieval.service import EmbeddingClass, RetrievalService
 from agent_services.schemas.chat import ModelSelection
 from agent_services.tools.business_api import BusinessApiClient
 
@@ -28,6 +28,8 @@ def build_execution_toolsets(
     model: Model | None = None,
     retrieval: RetrievalService | None = None,
     retrieval_embedder: EmbeddingClient | None = None,
+    retrieval_embedding_model: str | None = None,
+    retrieval_embedding_classes: list[EmbeddingClass] | None = None,
     retrieval_model_selection: ModelSelection | None = None,
     knowledge_collector: KnowledgeSearchCollector | None = None,
 ) -> list[object]:
@@ -43,6 +45,8 @@ def build_execution_toolsets(
                 agent_id,
                 retrieval,
                 embedder=retrieval_embedder,
+                embedding_model=retrieval_embedding_model,
+                embedding_classes=retrieval_embedding_classes,
                 model_selection=retrieval_model_selection,
                 collector=knowledge_collector,
             )
@@ -56,6 +60,9 @@ def build_execution_toolsets(
                 model,
                 agent_id=agent_id,
                 retrieval=retrieval,
+                embedder=retrieval_embedder,
+                embedding_model=retrieval_embedding_model,
+                embedding_classes=retrieval_embedding_classes,
                 max_per_run=settings.agent_subagent_max_per_run,
                 timeout_seconds=settings.agent_subagent_timeout_seconds,
                 max_requests=settings.agent_subagent_max_requests,

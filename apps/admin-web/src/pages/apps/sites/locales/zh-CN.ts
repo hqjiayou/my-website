@@ -586,6 +586,9 @@ export default {
     preview: {
       modeCli: 'CLI 代理',
       modeKey: 'API key 直连',
+      nextEntry: '下一条',
+      entryDefault: '该模式的默认入口',
+      entryUnavailable: '已不可用',
       using: '这次试聊只调用 {{model}}。失败会写在对话里，不会改用另一种接入。',
       noEntry: '这个模式还没有保存默认入口。到接入里保存后再试。',
       hint: '预览使用当前站点 Prompt，不写入会话表。前端不会直传 systemPrompt。注意：试聊只测所选模式的主用入口，不走备援；正式对话主用失败时会顺链换备援回答，所以试聊结果不能完全代表正式对话。',
@@ -597,6 +600,7 @@ export default {
         MCP_UNAVAILABLE: 'MCP 工具服务不可用，本轮未执行。',
         AGENT_BUDGET_EXCEEDED: '超出单轮运行预算（请求数 / 工具调用数 / Token），已中止；部分输出不会保存。',
         REQUEST_FAILED: '预览请求被拒绝。',
+        MODEL_ENTRY_UNAVAILABLE: '所选入口已不在这条模式的链上，这一轮不会改用默认入口。',
         SYSTEM_ERROR: '预览失败（系统错误）。',
       },
       skills: {

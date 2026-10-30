@@ -105,7 +105,7 @@ docker compose up -d --build
 |----|----|
 | 进程名 | `proxy-services` |
 | API | `http://127.0.0.1:8317` |
-| 管理口令 | `PROXY_SERVICES_MANAGEMENT_KEY`，本地默认 `（本地自设随机值，无默认值）`（与 Compose 的 `MANAGEMENT_PASSWORD` 相同） |
+| 管理口令 | `PROXY_INTERNAL_SERVICE_TOKEN`，本地默认 `（本地自设随机值，无默认值）`（与 `services/proxy-services/.env` 同名；Compose 注入为 `MANAGEMENT_PASSWORD`） |
 
 后台页 `/agent/api`（agent 菜单里的 API 管理）点新增后选择 GPT CLI（Codex）、Claude、Gemini（Antigravity）或 Muse（Meta）的图标并跳转登录，Cursor 没有登录入口。登录成功的账号成为面板，可选中查看成功/失败次数、额度和放出的模型。调用地址是 `http://127.0.0.1:8317/v1`，客户端 key 在同一页签发。请求里的 `model` 决定走哪个已登录账号。对话用模型入口 CLI 记录，`baseUrl` 填该地址，`apiKey` 填页面上任意一把客户端 key。自架 Compose 里 admin 用 `http://proxy-services:8317`。
 

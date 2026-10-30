@@ -21,7 +21,8 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 
 from agent_services.agent.knowledge_tools import build_knowledge_toolset
 from agent_services.api.errors import external_failure_message
-from agent_services.retrieval.service import RetrievalService
+from agent_services.retrieval.embeddings import EmbeddingClient
+from agent_services.retrieval.service import EmbeddingClass, RetrievalService
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +90,24 @@ def build_research_agent(
     *,
     agent_id: str,
     retrieval: RetrievalService | None,
+    embedder: EmbeddingClient | None = None,
+    embedding_model: str | None = None,
+    embedding_classes: list[EmbeddingClass] | None = None,
 ) -> Agent[None, str]:
     """只有知识搜索的子 agent。没有 delegate_task、业务工具、MCP 或 Todo。"""
-    return Agent(model, system_prompt=_RESEARCH_INSTRUCTIONS, toolsets=[build_knowledge_toolset(agent_id, retrieval)])
+    return Agent(
+        model,
+        system_prompt=_RESEARCH_INSTRUCTIONS,
+        toolsets=[
+            build_knowledge_toolset(
+                agent_id,
+                retrieval,
+                embedder=embedder,
+                embedding_model=embedding_model,
+                embedding_classes=embedding_classes,
+            )
+        ],
+    )
 
 
 def build_delegate_tool(
@@ -99,12 +115,22 @@ def build_delegate_tool(
     *,
     agent_id: str,
     retrieval: RetrievalService | None,
+    embedder: EmbeddingClient | None = None,
+    embedding_model: str | None = None,
+    embedding_classes: list[EmbeddingClass] | None = None,
     max_per_run: int = 4,
     timeout_seconds: float = 60,
     max_requests: int = 6,
 ) -> FunctionToolset:
     """闭包持有本 run 的模型、检索、站点和委派预算。"""
-    research = build_research_agent(model, agent_id=agent_id, retrieval=retrieval)
+    research = build_research_agent(
+        model,
+        agent_id=agent_id,
+        retrieval=retrieval,
+        embedder=embedder,
+        embedding_model=embedding_model,
+        embedding_classes=embedding_classes,
+    )
     budget = _DelegationBudget(max_per_run=max_per_run, max_requests=max_requests)
     toolset = _DelegateToolset()
 
