@@ -31,6 +31,8 @@ export interface ProxyServicesAccountPacing {
   minIntervalJitterMs: number
   maxInFlight: number
   quotaUsedPercent: number
+  /** 只为间隔闸等待的上限。0 表示不等，撞间隔立刻不合格。 */
+  maxWaitMs: number
 }
 
 export interface ProxyServicesAccount {

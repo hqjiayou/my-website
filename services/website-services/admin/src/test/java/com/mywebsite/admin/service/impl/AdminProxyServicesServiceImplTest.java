@@ -73,7 +73,7 @@ class AdminProxyServicesServiceImplTest {
             }
             writeJson(
                     exchange,
-                    "{\"min-interval-ms\":2000,\"min-interval-jitter-ms\":500,\"max-in-flight\":2,\"quota-used-percent\":85}");
+                    "{\"min-interval-ms\":2000,\"min-interval-jitter-ms\":500,\"max-in-flight\":2,\"quota-used-percent\":85,\"max-wait-ms\":3000}");
         });
         server.start();
         try {
@@ -83,6 +83,7 @@ class AdminProxyServicesServiceImplTest {
             assertThat(pacing.minIntervalJitterMs()).isEqualTo(500);
             assertThat(pacing.maxInFlight()).isEqualTo(2);
             assertThat(pacing.quotaUsedPercent()).isEqualTo(85);
+            assertThat(pacing.maxWaitMs()).isEqualTo(3000);
         } finally {
             server.stop(0);
         }

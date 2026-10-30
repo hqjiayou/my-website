@@ -169,6 +169,7 @@ export default {
     pacingInterval: '成功间隔',
     pacingInFlight: '在途上限',
     pacingQuota: '额度阈值',
+    pacingMaxWait: '最长等待',
     pacingOff: '未启用',
     pacingSeconds: '{{count}} 秒',
     pacingMillis: '{{count}} 毫秒',

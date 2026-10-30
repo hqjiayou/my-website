@@ -309,7 +309,8 @@ public class AdminProxyServicesServiceImpl implements AdminProxyServicesService 
                     node.path("min-interval-ms").asLong(0),
                     node.path("min-interval-jitter-ms").asLong(0),
                     node.path("max-in-flight").asInt(0),
-                    node.path("quota-used-percent").asInt(0));
+                    node.path("quota-used-percent").asInt(0),
+                    node.path("max-wait-ms").asLong(0));
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             return null;

@@ -173,6 +173,7 @@ export default {
     pacingInterval: '成功間隔',
     pacingInFlight: '同時実行上限',
     pacingQuota: '枠のしきい値',
+    pacingMaxWait: '最大待ち',
     pacingOff: '無効',
     pacingSeconds: '{{count}} 秒',
     pacingMillis: '{{count}} ミリ秒',

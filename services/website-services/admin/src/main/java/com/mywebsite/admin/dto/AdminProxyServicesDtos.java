@@ -21,7 +21,11 @@ public final class AdminProxyServicesDtos {
      * 数值来自管理 API，不读配置文件。
      */
     public record AdminProxyServicesAccountPacingDto(
-            long minIntervalMs, long minIntervalJitterMs, int maxInFlight, int quotaUsedPercent) {}
+            long minIntervalMs,
+            long minIntervalJitterMs,
+            int maxInFlight,
+            int quotaUsedPercent,
+            long maxWaitMs) {}
 
     /**
      * success / failed 是这次进程启动后的次数。usedPercent、modelUsedPercent 只在上游有额度观察时有值。

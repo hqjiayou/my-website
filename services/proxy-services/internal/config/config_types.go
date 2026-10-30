@@ -488,8 +488,8 @@ type RoutingConfig struct {
 	// Ignored when SessionAffinity is false.
 	SessionAffinityRebindOn string `yaml:"session-affinity-rebind-on,omitempty" json:"session-affinity-rebind-on,omitempty"`
 
-	// AccountPacing is the local per-account success interval, in-flight cap, and quota threshold.
-	// See services/proxy-services/docs/LOCAL_PATCHES.md and issue #152.
+	// AccountPacing is the local per-account success interval, in-flight cap, quota threshold,
+	// and the one-shot pause for an interval gate. See docs/LOCAL_PATCHES.md and issue #152.
 	AccountPacing AccountPacingConfig `yaml:"account-pacing,omitempty" json:"account-pacing,omitempty"`
 }
 
@@ -498,20 +498,24 @@ type RoutingConfig struct {
 // A process started with -home-jwt does not apply this section.
 type AccountPacingConfig struct {
 	// MinInterval is the minimum gap between two successful completions on one account.
-	// Examples: "2s", "0s". Empty uses 2s.
+	// Examples: "500ms", "0s". Empty uses 500ms.
 	MinInterval string `yaml:"min-interval,omitempty" json:"min-interval,omitempty"`
 
 	// MinIntervalJitter is the inclusive upper bound of the random extra delay.
-	// Empty uses 500ms. "0s" adds no jitter.
+	// Empty uses 200ms. "0s" adds no jitter.
 	MinIntervalJitter string `yaml:"min-interval-jitter,omitempty" json:"min-interval-jitter,omitempty"`
 
 	// MaxInFlight is how many requests may occupy one account at once.
-	// Nil uses 2. Explicit 0 turns the gate off.
+	// Nil uses 0, which leaves the gate off. A positive value enables it.
 	MaxInFlight *int `yaml:"max-in-flight,omitempty" json:"max-in-flight,omitempty"`
 
 	// QuotaUsedPercent drops an account from selection when its observed used percent
 	// is greater than or equal to this value. Nil uses 85. Explicit 0 turns the gate off.
 	QuotaUsedPercent *int `yaml:"quota-used-percent,omitempty" json:"quota-used-percent,omitempty"`
+
+	// MaxWait is the longest a request may pause when every candidate is blocked
+	// only by the interval gate. Empty uses 3s. "0s" rejects immediately.
+	MaxWait string `yaml:"max-wait,omitempty" json:"max-wait,omitempty"`
 }
 
 // OAuthModelAlias defines a model ID alias for a specific channel.

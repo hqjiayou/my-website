@@ -10,9 +10,9 @@ import (
 )
 
 func TestEffectiveAccountPacingDefaultsAndExplicitZero(t *testing.T) {
-	minInterval, jitter, inFlight, quota := (&Config{}).EffectiveAccountPacing()
-	if minInterval != 2*time.Second || jitter != 500*time.Millisecond || inFlight != 2 || quota != 85 {
-		t.Fatalf("omitted = %s %s %d %d, want 2s 500ms 2 85", minInterval, jitter, inFlight, quota)
+	minInterval, jitter, inFlight, quota, maxWait := (&Config{}).EffectiveAccountPacing()
+	if minInterval != 500*time.Millisecond || jitter != 200*time.Millisecond || inFlight != 0 || quota != 85 || maxWait != 3*time.Second {
+		t.Fatalf("omitted = %s %s %d %d %s, want 500ms 200ms 0 85 3s", minInterval, jitter, inFlight, quota, maxWait)
 	}
 
 	zero := 0
@@ -22,9 +22,9 @@ func TestEffectiveAccountPacingDefaultsAndExplicitZero(t *testing.T) {
 		MaxInFlight:       &zero,
 		QuotaUsedPercent:  &zero,
 	}}}
-	minInterval, jitter, inFlight, quota = cfg.EffectiveAccountPacing()
-	if minInterval != 0 || jitter != 0 || inFlight != 0 || quota != 0 {
-		t.Fatalf("explicit zero = %s %s %d %d, want all off", minInterval, jitter, inFlight, quota)
+	minInterval, jitter, inFlight, quota, maxWait = cfg.EffectiveAccountPacing()
+	if minInterval != 0 || jitter != 0 || inFlight != 0 || quota != 0 || maxWait != 3*time.Second {
+		t.Fatalf("explicit zero gates = %s %s %d %d %s, want gates off and default wait", minInterval, jitter, inFlight, quota, maxWait)
 	}
 
 	var decoded Config
@@ -32,9 +32,18 @@ func TestEffectiveAccountPacingDefaultsAndExplicitZero(t *testing.T) {
 	if err := yaml.Unmarshal(raw, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	minInterval, jitter, inFlight, quota = decoded.EffectiveAccountPacing()
-	if minInterval != 0 || jitter != 0 || inFlight != 0 || quota != 0 {
-		t.Fatalf("yaml zero = %s %s %d %d, want all off", minInterval, jitter, inFlight, quota)
+	minInterval, jitter, inFlight, quota, maxWait = decoded.EffectiveAccountPacing()
+	if minInterval != 0 || jitter != 0 || inFlight != 0 || quota != 0 || maxWait != 3*time.Second {
+		t.Fatalf("yaml zero = %s %s %d %d %s, want gates off and default wait", minInterval, jitter, inFlight, quota, maxWait)
+	}
+
+	var waitOff Config
+	if err := yaml.Unmarshal([]byte("routing:\n  account-pacing:\n    max-wait: 0s\n"), &waitOff); err != nil {
+		t.Fatal(err)
+	}
+	minInterval, jitter, inFlight, quota, maxWait = waitOff.EffectiveAccountPacing()
+	if minInterval != 500*time.Millisecond || jitter != 200*time.Millisecond || inFlight != 0 || quota != 85 || maxWait != 0 {
+		t.Fatalf("max-wait 0 = %s %s %d %d %s, want defaults with wait off", minInterval, jitter, inFlight, quota, maxWait)
 	}
 }
 
@@ -47,8 +56,8 @@ func TestExampleConfigCarriesAccountPacingDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	minInterval, jitter, inFlight, quota := cfg.EffectiveAccountPacing()
-	if minInterval != 2*time.Second || jitter != 500*time.Millisecond || inFlight != 2 || quota != 85 {
-		t.Fatalf("example = %s %s %d %d, want 2s 500ms 2 85", minInterval, jitter, inFlight, quota)
+	minInterval, jitter, inFlight, quota, maxWait := cfg.EffectiveAccountPacing()
+	if minInterval != 500*time.Millisecond || jitter != 200*time.Millisecond || inFlight != 0 || quota != 85 || maxWait != 3*time.Second {
+		t.Fatalf("example = %s %s %d %d %s, want 500ms 200ms 0 85 3s", minInterval, jitter, inFlight, quota, maxWait)
 	}
 }

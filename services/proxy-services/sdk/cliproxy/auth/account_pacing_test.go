@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,7 +20,7 @@ func TestAccountPacingSuccessClockAndFailureLeavesIt(t *testing.T) {
 	clock := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
 	manager := NewManager(nil, nil, nil)
 	manager.setAccountPacingClock(func() time.Time { return clock })
-	manager.SetAccountPacingConfig(2*time.Second, 0, 0, 0)
+	manager.SetAccountPacingConfig(2*time.Second, 0, 0, 0, 0)
 	auth := &Auth{ID: "pace-clock", Provider: "codex", Status: StatusActive}
 	if _, err := manager.Register(context.Background(), auth); err != nil {
 		t.Fatal(err)
@@ -46,7 +47,7 @@ func TestAccountPacingJitterStaysInsideConfiguredBound(t *testing.T) {
 	manager.setAccountPacingClock(func() time.Time { return clock })
 	interval := 2 * time.Second
 	jitter := 500 * time.Millisecond
-	manager.SetAccountPacingConfig(interval, jitter, 0, 0)
+	manager.SetAccountPacingConfig(interval, jitter, 0, 0, 0)
 	if _, err := manager.Register(context.Background(), &Auth{ID: "pace-jitter", Provider: "codex"}); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +213,7 @@ func TestAccountPacingSessionAffinityDoesNotRebind(t *testing.T) {
 	manager.SetRetryConfig(3, 30*time.Second, 0)
 	clock := time.Date(2026, 10, 31, 2, 0, 0, 0, time.UTC)
 	manager.setAccountPacingClock(func() time.Time { return clock })
-	manager.SetAccountPacingConfig(time.Hour, 0, 0, 0)
+	manager.SetAccountPacingConfig(time.Hour, 0, 0, 0, 0)
 	var calls atomic.Int32
 	manager.RegisterExecutor(&mockCustomErrorExecutor{
 		identifier: "codex",
@@ -253,7 +254,7 @@ func TestAccountPacingSessionAffinityDoesNotRebind(t *testing.T) {
 func TestAccountPacingWithoutAffinitySelectsAnotherAccount(t *testing.T) {
 	model := "pace-switch-" + uuid.NewString()
 	manager := NewManager(nil, &FillFirstSelector{}, nil)
-	manager.SetAccountPacingConfig(time.Hour, 0, 0, 0)
+	manager.SetAccountPacingConfig(time.Hour, 0, 0, 0, 0)
 	var calls atomic.Int32
 	manager.RegisterExecutor(&mockCustomErrorExecutor{
 		identifier: "codex",
@@ -378,7 +379,7 @@ func TestAccountPacingReloadChangesEffectiveGate(t *testing.T) {
 	if _, err := manager.Execute(context.Background(), []string{"codex"}, cliproxyexecutor.Request{Model: model}, cliproxyexecutor.Options{}); authErrorCode(err) != "auth_not_found" {
 		t.Fatal(err)
 	}
-	manager.SetAccountPacingConfig(0, 0, 0, 0)
+	manager.SetAccountPacingConfig(0, 0, 0, 0, 0)
 	if _, err := manager.Execute(context.Background(), []string{"codex"}, cliproxyexecutor.Request{Model: model}, cliproxyexecutor.Options{}); err != nil || calls.Load() != 1 {
 		t.Fatalf("after reload err=%v calls=%d", err, calls.Load())
 	}
@@ -387,7 +388,7 @@ func TestAccountPacingReloadChangesEffectiveGate(t *testing.T) {
 func TestAccountPacingIgnoredWhenHomeEnabled(t *testing.T) {
 	manager := NewManager(nil, nil, nil)
 	manager.runtimeConfig.Store(&internalconfig.Config{Home: internalconfig.HomeConfig{Enabled: true}})
-	manager.SetAccountPacingConfig(time.Hour, 0, 1, 50)
+	manager.SetAccountPacingConfig(time.Hour, 0, 1, 50, 0)
 	auth := &Auth{ID: "pace-home", Provider: "codex", Quota: QuotaState{Signals: map[string]string{"X-Codex-Primary-Used-Percent": "99"}}}
 	manager.noteAccountPacingSuccess(auth.ID, time.Now())
 	if !manager.accountPacingAllows(auth, time.Now()) {
@@ -395,10 +396,184 @@ func TestAccountPacingIgnoredWhenHomeEnabled(t *testing.T) {
 	}
 }
 
+func TestAccountPacingIntervalWaitThenSucceeds(t *testing.T) {
+	model := "pace-wait-" + uuid.NewString()
+	manager, calls := newPacingManager(t, model, 120*time.Millisecond, 0, 0)
+	manager.SetAccountPacingConfig(120*time.Millisecond, 0, 0, 0, time.Second)
+	registerPacingAuth(t, manager, "pace-wait", model)
+	req := cliproxyexecutor.Request{Model: model}
+	if _, err := manager.Execute(context.Background(), []string{"codex"}, req, cliproxyexecutor.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if _, err := manager.Execute(context.Background(), []string{"codex"}, req, cliproxyexecutor.Options{}); err != nil {
+		t.Fatalf("second = %v, want success after one wait", err)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("calls = %d, want 2", calls.Load())
+	}
+	if elapsed := time.Since(start); elapsed > time.Second || elapsed < 40*time.Millisecond {
+		t.Fatalf("second took %s, want one wait inside max-wait", elapsed)
+	}
+}
+
+func TestAccountPacingIntervalBeyondMaxWaitRejectsImmediately(t *testing.T) {
+	model := "pace-past-" + uuid.NewString()
+	manager, calls := newPacingManager(t, model, 2*time.Second, 0, 0)
+	manager.SetAccountPacingConfig(2*time.Second, 0, 0, 0, 40*time.Millisecond)
+	registerPacingAuth(t, manager, "pace-past", model)
+	req := cliproxyexecutor.Request{Model: model}
+	if _, err := manager.Execute(context.Background(), []string{"codex"}, req, cliproxyexecutor.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	_, err := manager.Execute(context.Background(), []string{"codex"}, req, cliproxyexecutor.Options{})
+	if authErrorCode(err) != "auth_not_found" || calls.Load() != 1 {
+		t.Fatalf("err=%v calls=%d", err, calls.Load())
+	}
+	if time.Since(start) > 150*time.Millisecond {
+		t.Fatal("remaining interval past max-wait still waited")
+	}
+}
+
+func TestAccountPacingQuotaDoesNotWait(t *testing.T) {
+	model := "pace-quota-nowait-" + uuid.NewString()
+	manager, calls := newPacingManager(t, model, 0, 0, 85)
+	manager.SetAccountPacingConfig(0, 0, 0, 85, 2*time.Second)
+	id := registerPacingAuth(t, manager, "pace-quota-nowait", model)
+	current, ok := manager.GetByID(id)
+	if !ok {
+		t.Fatal("missing auth")
+	}
+	current.Quota.Signals = map[string]string{"X-Codex-Primary-Used-Percent": "90"}
+	if _, err := manager.Update(context.Background(), current); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	_, err := manager.Execute(context.Background(), []string{"codex"}, cliproxyexecutor.Request{Model: model}, cliproxyexecutor.Options{})
+	if authErrorCode(err) != "auth_not_found" || calls.Load() != 0 {
+		t.Fatalf("err=%v calls=%d", err, calls.Load())
+	}
+	if time.Since(start) > 150*time.Millisecond {
+		t.Fatal("quota block entered an interval wait")
+	}
+}
+
+func TestAccountPacingWaitsOnceThenRejects(t *testing.T) {
+	model := "pace-once-" + uuid.NewString()
+	manager, calls := newPacingManager(t, model, 200*time.Millisecond, 0, 85)
+	manager.SetAccountPacingConfig(200*time.Millisecond, 0, 0, 85, 2*time.Second)
+	id := registerPacingAuth(t, manager, "pace-once", model)
+	manager.noteAccountPacingSuccess(id, time.Now().Add(-50*time.Millisecond))
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		current, ok := manager.GetByID(id)
+		if !ok {
+			return
+		}
+		current.Quota.Signals = map[string]string{"X-Codex-Primary-Used-Percent": "90"}
+		_, _ = manager.Update(context.Background(), current)
+	}()
+	start := time.Now()
+	_, err := manager.Execute(context.Background(), []string{"codex"}, cliproxyexecutor.Request{Model: model}, cliproxyexecutor.Options{})
+	elapsed := time.Since(start)
+	if authErrorCode(err) != "auth_not_found" || calls.Load() != 0 {
+		t.Fatalf("err=%v calls=%d", err, calls.Load())
+	}
+	if elapsed < 60*time.Millisecond || elapsed > 700*time.Millisecond {
+		t.Fatalf("elapsed = %s, want one interval wait and no second wait", elapsed)
+	}
+}
+
+func TestAccountPacingAffinityWaitsForBoundAccount(t *testing.T) {
+	model := "pace-affinity-wait-" + uuid.NewString()
+	selector := NewSessionAffinitySelector(&RoundRobinSelector{})
+	t.Cleanup(selector.Stop)
+	manager := NewManager(nil, selector, nil)
+	manager.SetRetryConfig(3, 30*time.Second, 0)
+	manager.SetAccountPacingConfig(80*time.Millisecond, 0, 0, 0, time.Second)
+	manager.RegisterExecutor(&mockCustomErrorExecutor{
+		identifier: "codex",
+		executeFn: func(_ context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
+			return cliproxyexecutor.Response{Payload: []byte(auth.ID)}, nil
+		},
+	})
+	registerPacingAuth(t, manager, "pace-bound-a", model)
+	registerPacingAuth(t, manager, "pace-bound-b", model)
+	opts := cliproxyexecutor.Options{Headers: http.Header{"X-Session-Id": []string{"sticky-wait"}}}
+	first, err := manager.Execute(context.Background(), []string{"codex"}, cliproxyexecutor.Request{Model: model}, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	second, err := manager.Execute(context.Background(), []string{"codex"}, cliproxyexecutor.Request{Model: model}, opts)
+	if err != nil {
+		t.Fatalf("second = %v, want the bound account after one wait", err)
+	}
+	if string(second.Payload) != string(first.Payload) {
+		t.Fatalf("second = %s, want bound %s", second.Payload, first.Payload)
+	}
+	if got, ok := selector.boundAuthID("mixed", model, opts); !ok || got != string(first.Payload) {
+		t.Fatalf("binding = %q ok=%v, want %s", got, ok, first.Payload)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second || elapsed < 20*time.Millisecond {
+		t.Fatalf("second took %s, want one wait inside max-wait", elapsed)
+	}
+}
+
+func TestAccountPacingWaitHonorsCancel(t *testing.T) {
+	model := "pace-cancel-" + uuid.NewString()
+	manager, calls := newPacingManager(t, model, 2*time.Second, 0, 0)
+	manager.SetAccountPacingConfig(2*time.Second, 0, 0, 0, 3*time.Second)
+	id := registerPacingAuth(t, manager, "pace-cancel", model)
+	manager.noteAccountPacingSuccess(id, time.Now())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	before := runtime.NumGoroutine()
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := manager.Execute(ctx, []string{"codex"}, cliproxyexecutor.Request{Model: model}, cliproxyexecutor.Options{})
+		errCh <- err
+	}()
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+	var err error
+	select {
+	case err = <-errCh:
+	case <-time.After(time.Second):
+		t.Fatal("cancel during wait did not return")
+	}
+	if !errors.Is(err, context.Canceled) || calls.Load() != 0 {
+		t.Fatalf("err=%v calls=%d, want context.Canceled and no upstream call", err, calls.Load())
+	}
+	time.Sleep(50 * time.Millisecond)
+	if got := runtime.NumGoroutine(); got > before+2 {
+		t.Fatalf("goroutines = %d, before = %d", got, before)
+	}
+}
+
+func TestAccountPacingMaxWaitZeroRejectsImmediately(t *testing.T) {
+	model := "pace-nowait-" + uuid.NewString()
+	manager, calls := newPacingManager(t, model, 80*time.Millisecond, 0, 0)
+	registerPacingAuth(t, manager, "pace-nowait", model)
+	req := cliproxyexecutor.Request{Model: model}
+	if _, err := manager.Execute(context.Background(), []string{"codex"}, req, cliproxyexecutor.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	_, err := manager.Execute(context.Background(), []string{"codex"}, req, cliproxyexecutor.Options{})
+	if authErrorCode(err) != "auth_not_found" || calls.Load() != 1 {
+		t.Fatalf("err=%v calls=%d", err, calls.Load())
+	}
+	if time.Since(start) > 150*time.Millisecond {
+		t.Fatal("max-wait 0 entered an interval wait")
+	}
+}
+
 func newPacingManager(t *testing.T, model string, interval time.Duration, inFlight, quota int) (*Manager, *atomic.Int32) {
 	t.Helper()
 	manager := NewManager(nil, nil, nil)
-	manager.SetAccountPacingConfig(interval, 0, inFlight, quota)
+	manager.SetAccountPacingConfig(interval, 0, inFlight, quota, 0)
 	var calls atomic.Int32
 	manager.RegisterExecutor(&mockCustomErrorExecutor{
 		identifier: "codex",

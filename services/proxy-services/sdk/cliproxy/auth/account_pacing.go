@@ -9,8 +9,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 )
+
+// accountPacingWaitedMetadataKey marks a request that already paused once for an interval gate.
+const accountPacingWaitedMetadataKey = "account-pacing-waited"
 
 // accountPacingSettings is the in-memory copy of routing.account-pacing.
 // A zero duration or count turns that gate off. State itself is not persisted.
@@ -19,6 +24,7 @@ type accountPacingSettings struct {
 	jitter           time.Duration
 	maxInFlight      int
 	quotaUsedPercent int
+	maxWait          time.Duration
 }
 
 type pacingClockHolder struct {
@@ -50,7 +56,7 @@ type accountPacingContextKey struct{}
 // and is refreshed on config reload. Negative values are treated as off. In-flight counts
 // and nextAllowedAt survive the reload; they are cleared only when the process restarts.
 // Home mode (-home-jwt) ignores these values. See docs/LOCAL_PATCHES.md.
-func (m *Manager) SetAccountPacingConfig(minInterval, jitter time.Duration, maxInFlight, quotaUsedPercent int) {
+func (m *Manager) SetAccountPacingConfig(minInterval, jitter time.Duration, maxInFlight, quotaUsedPercent int, maxWait time.Duration) {
 	if m == nil {
 		return
 	}
@@ -69,21 +75,25 @@ func (m *Manager) SetAccountPacingConfig(minInterval, jitter time.Duration, maxI
 	if quotaUsedPercent > 100 {
 		quotaUsedPercent = 100
 	}
+	if maxWait < 0 {
+		maxWait = 0
+	}
 	m.accountPacing.Store(&accountPacingSettings{
 		minInterval:      minInterval,
 		jitter:           jitter,
 		maxInFlight:      maxInFlight,
 		quotaUsedPercent: quotaUsedPercent,
+		maxWait:          maxWait,
 	})
 }
 
 // AccountPacingConfig returns the gates currently applied. Zeros mean the gate is off.
-func (m *Manager) AccountPacingConfig() (minInterval, jitter time.Duration, maxInFlight, quotaUsedPercent int) {
+func (m *Manager) AccountPacingConfig() (minInterval, jitter time.Duration, maxInFlight, quotaUsedPercent int, maxWait time.Duration) {
 	cfg := m.loadAccountPacing()
 	if cfg == nil {
-		return 0, 0, 0, 0
+		return 0, 0, 0, 0, 0
 	}
-	return cfg.minInterval, cfg.jitter, cfg.maxInFlight, cfg.quotaUsedPercent
+	return cfg.minInterval, cfg.jitter, cfg.maxInFlight, cfg.quotaUsedPercent, cfg.maxWait
 }
 
 func (m *Manager) loadAccountPacing() *accountPacingSettings {
@@ -141,37 +151,211 @@ func accountPacingAllowsFromContext(ctx context.Context) func(*Auth) bool {
 	return allows
 }
 
+type accountPacingBlockKind int
+
+const (
+	accountPacingOpen accountPacingBlockKind = iota
+	accountPacingInterval
+	accountPacingHard
+)
+
 // accountPacingAllows is the only local pacing eligibility check (issue #152).
 // conductor_selection.go and the scheduler predicate both call it.
 // An account that fails is simply ineligible for this pick: no new error code and no cooldown write.
 // Home mode does not apply. Patch notes: services/proxy-services/docs/LOCAL_PATCHES.md.
 func (m *Manager) accountPacingAllows(candidate *Auth, now time.Time) bool {
+	kind, _ := m.accountPacingBlock(candidate, now)
+	return kind == accountPacingOpen
+}
+
+// accountPacingBlock reports why an account is out this round.
+// Interval-only blocks can pause once. Quota and in-flight blocks cannot.
+func (m *Manager) accountPacingBlock(candidate *Auth, now time.Time) (accountPacingBlockKind, time.Time) {
 	if m == nil || candidate == nil || m.HomeEnabled() {
-		return true
+		return accountPacingOpen, time.Time{}
 	}
 	cfg := m.loadAccountPacing()
 	if cfg == nil {
-		return true
+		return accountPacingOpen, time.Time{}
 	}
+	hard := false
 	if cfg.quotaUsedPercent > 0 {
 		if used, ok := observedAccountQuotaUsedPercent(candidate); ok && used >= cfg.quotaUsedPercent {
-			return false
+			hard = true
 		}
 	}
 	slot := m.peekAccountPacingSlot(candidate.ID)
-	if slot == nil {
-		return true
-	}
-	if cfg.minInterval > 0 {
-		next := slot.nextAllowedAt.Load()
-		if next > 0 && now.Before(time.Unix(0, next)) {
-			return false
+	var next time.Time
+	interval := false
+	if slot != nil && cfg.minInterval > 0 {
+		if nano := slot.nextAllowedAt.Load(); nano > 0 {
+			next = time.Unix(0, nano)
+			if now.Before(next) {
+				interval = true
+			}
 		}
 	}
-	if cfg.maxInFlight > 0 && int(slot.inFlight.Load()) >= cfg.maxInFlight {
+	if slot != nil && cfg.maxInFlight > 0 && int(slot.inFlight.Load()) >= cfg.maxInFlight {
+		hard = true
+	}
+	if hard {
+		return accountPacingHard, next
+	}
+	if interval {
+		return accountPacingInterval, next
+	}
+	return accountPacingOpen, time.Time{}
+}
+
+// accountPacingBeforePick pauses once when the accounts this request could use
+// are blocked only by the interval gate, then lets the caller select again.
+// A quota or in-flight block does not pause. max-wait 0 does not pause.
+// The pause reuses waitForCooldown so cancellation ends it. One request pauses at most once.
+func (m *Manager) accountPacingBeforePick(ctx context.Context, providers []string, affinityProvider, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) error {
+	if m == nil || m.HomeEnabled() || !m.accountPacingActive() {
+		return nil
+	}
+	cfg := m.loadAccountPacing()
+	if cfg == nil || cfg.maxWait <= 0 || cfg.minInterval <= 0 {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	opts.EnsureMetadata()
+	if waited, _ := opts.Metadata[accountPacingWaitedMetadataKey].(bool); waited {
+		return nil
+	}
+	now := m.pacingNow()
+	if auth, bound := m.boundPacingAuth(affinityProvider, model, opts); bound {
+		kind, next := m.accountPacingBlock(auth, now)
+		if kind != accountPacingInterval || !accountPacingWaitWithin(now, next, cfg.maxWait) {
+			return nil
+		}
+		opts.Metadata[accountPacingWaitedMetadataKey] = true
+		if err := waitForCooldown(ctx, next.Sub(now), cfg.maxWait); err != nil {
+			return err
+		}
+		fresh, found := m.GetByID(auth.ID)
+		if !found || fresh == nil {
+			return &Error{Code: "auth_not_found", Message: "no auth available"}
+		}
+		if kind, _ = m.accountPacingBlock(fresh, m.pacingNow()); kind != accountPacingOpen {
+			return &Error{Code: "auth_not_found", Message: "no auth available"}
+		}
+		return nil
+	}
+	wait, ok := m.nearestIntervalWait(providers, model, opts, tried, now, cfg.maxWait)
+	if !ok {
+		return nil
+	}
+	opts.Metadata[accountPacingWaitedMetadataKey] = true
+	return waitForCooldown(ctx, wait, cfg.maxWait)
+}
+
+func accountPacingWaitWithin(now, next time.Time, maxWait time.Duration) bool {
+	if next.IsZero() || maxWait <= 0 || !next.After(now) {
 		return false
 	}
-	return true
+	return !next.After(now.Add(maxWait))
+}
+
+func (m *Manager) nearestIntervalWait(providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}, now time.Time, maxWait time.Duration) (time.Duration, bool) {
+	candidates := m.pacingSelectableAuths(providers, model, opts, tried)
+	if len(candidates) == 0 {
+		return 0, false
+	}
+	var nearest time.Time
+	for _, candidate := range candidates {
+		kind, next := m.accountPacingBlock(candidate, now)
+		if kind != accountPacingInterval {
+			return 0, false
+		}
+		if nearest.IsZero() || next.Before(nearest) {
+			nearest = next
+		}
+	}
+	if !accountPacingWaitWithin(now, nearest, maxWait) {
+		return 0, false
+	}
+	return nearest.Sub(now), true
+}
+
+func (m *Manager) boundPacingAuth(provider, model string, opts cliproxyexecutor.Options) (*Auth, bool) {
+	if m == nil {
+		return nil, false
+	}
+	affinity, ok := m.Selector().(*SessionAffinitySelector)
+	if !ok || affinity == nil {
+		return nil, false
+	}
+	authID, bound := affinity.boundAuthID(provider, model, opts)
+	if !bound || authID == "" {
+		return nil, false
+	}
+	auth, found := m.GetByID(authID)
+	if !found || auth == nil {
+		return nil, false
+	}
+	return auth, true
+}
+
+func (m *Manager) pacingSelectableAuths(providers []string, model string, opts cliproxyexecutor.Options, tried map[string]struct{}) []*Auth {
+	if m == nil {
+		return nil
+	}
+	providerSet := make(map[string]struct{}, len(providers))
+	for _, provider := range providers {
+		key := canonicalSchedulingProvider(provider)
+		if key == "" {
+			continue
+		}
+		providerSet[key] = struct{}{}
+	}
+	if len(providerSet) == 0 {
+		return nil
+	}
+	pinnedAuthID := pinnedAuthIDFromMetadata(opts.Metadata)
+	eligibility := authSelectionEligibilityForRequest(context.Background(), opts)
+	modelKey := strings.TrimSpace(model)
+	if modelKey != "" {
+		parsed := thinking.ParseSuffix(modelKey)
+		if parsed.ModelName != "" {
+			modelKey = strings.TrimSpace(parsed.ModelName)
+		}
+	}
+	registryRef := registry.GetGlobalRegistry()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	candidates := make([]*Auth, 0, len(m.auths))
+	for _, candidate := range m.auths {
+		if candidate == nil || candidate.Disabled {
+			continue
+		}
+		if pinnedAuthID != "" && candidate.ID != pinnedAuthID {
+			continue
+		}
+		if !eligibility.allows(candidate) {
+			continue
+		}
+		providerKey := executorKeyFromAuth(candidate)
+		if _, ok := providerSet[providerKey]; !ok {
+			continue
+		}
+		if _, ok := m.executorLocked(providerKey); !ok {
+			continue
+		}
+		if modelKey != "" && !m.authSupportsRouteModel(registryRef, candidate, model) {
+			continue
+		}
+		if tried != nil {
+			if _, used := tried[candidate.ID]; used {
+				continue
+			}
+		}
+		candidates = append(candidates, candidate)
+	}
+	return candidates
 }
 
 // noteAccountPacingSuccess stamps nextAllowedAt at the MarkResult success accounting point.

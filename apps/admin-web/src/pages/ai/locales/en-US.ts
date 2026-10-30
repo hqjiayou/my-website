@@ -173,6 +173,7 @@ export default {
     pacingInterval: 'Success interval',
     pacingInFlight: 'In-flight limit',
     pacingQuota: 'Quota threshold',
+    pacingMaxWait: 'Longest wait',
     pacingOff: 'Not enabled',
     pacingSeconds: '{{count}} s',
     pacingMillis: '{{count}} ms',

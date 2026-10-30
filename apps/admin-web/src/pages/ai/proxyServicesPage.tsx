@@ -108,9 +108,10 @@ function PacingStrip({
           ? t('proxyServices.pacingOff')
           : `${pacing.quotaUsedPercent}%`,
     },
+    { label: t('proxyServices.pacingMaxWait'), value: pacingDuration(pacing?.maxWaitMs, t) },
   ]
   return (
-    <dl className="grid gap-3 border-b border-admin px-4 py-3 sm:grid-cols-3">
+    <dl className="grid gap-3 border-b border-admin px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
       {rows.map((row) => (
         <div key={row.label}>
           <dt className="text-[11px] text-admin-muted">{row.label}</dt>

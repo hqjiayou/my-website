@@ -2178,6 +2178,9 @@ func (m *Manager) pickNext(ctx context.Context, provider, model string, opts cli
 		auth, exec, _, err := m.pickNextViaHome(ctx, model, opts, tried)
 		return auth, exec, err
 	}
+	if errWait := m.accountPacingBeforePick(ctx, []string{provider}, provider, model, opts, tried); errWait != nil {
+		return nil, nil, errWait
+	}
 	if errPacing := m.rejectSessionAffinityPacing(provider, model, opts); errPacing != nil {
 		return nil, nil, errPacing
 	}
@@ -2369,6 +2372,9 @@ func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model s
 	clearSchedulerSelectionID(opts.Metadata)
 	if m.HomeEnabled() {
 		return m.pickNextViaHome(ctx, model, opts, tried)
+	}
+	if errWait := m.accountPacingBeforePick(ctx, providers, "mixed", model, opts, tried); errWait != nil {
+		return nil, nil, "", errWait
 	}
 	if errPacing := m.rejectSessionAffinityPacing("mixed", model, opts); errPacing != nil {
 		return nil, nil, "", errPacing

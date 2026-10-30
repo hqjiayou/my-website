@@ -6,22 +6,24 @@ import (
 )
 
 const (
-	defaultAccountPacingMinInterval = 2 * time.Second
-	defaultAccountPacingJitter      = 500 * time.Millisecond
-	defaultAccountPacingMaxInFlight = 2
+	defaultAccountPacingMinInterval = 500 * time.Millisecond
+	defaultAccountPacingJitter      = 200 * time.Millisecond
+	defaultAccountPacingMaxInFlight = 0
 	defaultAccountPacingQuotaUsed   = 85
+	defaultAccountPacingMaxWait     = 3 * time.Second
 )
 
 // EffectiveAccountPacing resolves routing.account-pacing into the values applied to the auth manager.
 // Omitted fields use the defaults. Explicit 0 disables that gate. Invalid durations keep the default.
-func (cfg *Config) EffectiveAccountPacing() (minInterval, jitter time.Duration, maxInFlight, quotaUsedPercent int) {
+// max-wait 0 disables the one-shot interval pause and restores immediate rejection.
+func (cfg *Config) EffectiveAccountPacing() (minInterval, jitter time.Duration, maxInFlight, quotaUsedPercent int, maxWait time.Duration) {
 	if cfg == nil {
-		return defaultAccountPacingMinInterval, defaultAccountPacingJitter, defaultAccountPacingMaxInFlight, defaultAccountPacingQuotaUsed
+		return defaultAccountPacingMinInterval, defaultAccountPacingJitter, defaultAccountPacingMaxInFlight, defaultAccountPacingQuotaUsed, defaultAccountPacingMaxWait
 	}
 	return resolveAccountPacing(cfg.Routing.AccountPacing)
 }
 
-func resolveAccountPacing(cfg AccountPacingConfig) (minInterval, jitter time.Duration, maxInFlight, quotaUsedPercent int) {
+func resolveAccountPacing(cfg AccountPacingConfig) (minInterval, jitter time.Duration, maxInFlight, quotaUsedPercent int, maxWait time.Duration) {
 	minInterval = parseAccountPacingDuration(cfg.MinInterval, defaultAccountPacingMinInterval)
 	jitter = parseAccountPacingDuration(cfg.MinIntervalJitter, defaultAccountPacingJitter)
 	maxInFlight = parseAccountPacingInt(cfg.MaxInFlight, defaultAccountPacingMaxInFlight)
@@ -29,7 +31,8 @@ func resolveAccountPacing(cfg AccountPacingConfig) (minInterval, jitter time.Dur
 	if quotaUsedPercent > 100 {
 		quotaUsedPercent = 100
 	}
-	return minInterval, jitter, maxInFlight, quotaUsedPercent
+	maxWait = parseAccountPacingDuration(cfg.MaxWait, defaultAccountPacingMaxWait)
+	return minInterval, jitter, maxInFlight, quotaUsedPercent, maxWait
 }
 
 func parseAccountPacingDuration(raw string, fallback time.Duration) time.Duration {
