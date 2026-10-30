@@ -24,7 +24,7 @@ export function SitesPage() {
   }
   if (isError) {
     return (
-      <p className="text-sm text-rose-700">
+      <p className="text-sm text-danger-emphasis">
         {error instanceof Error ? error.message : t('list.empty')}{' '}
         <button type="button" className="underline" onClick={() => void refetch()}>
           {tCommon('table.retry')}
@@ -40,7 +40,7 @@ export function SitesPage() {
   }
 
   return (
-    <section>
+    <section className="admin-content-data">
       <AdminPageHeader title={t('list.title')} />
       <div className="rounded-xl border border-admin bg-admin-surface px-5 py-10">
         <p className="text-sm text-admin-muted">{t('list.empty')}</p>
