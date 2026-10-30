@@ -82,16 +82,16 @@ export function LoginPage() {
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
       <LoginOceanBackground />
 
-      <div className="relative z-10 w-full max-w-md rounded-2xl border-2 border-cyan-900/15 bg-white/94 p-8 shadow-xl shadow-cyan-950/25 backdrop-blur-md">
+      <div className="relative z-10 w-full max-w-md rounded-xl border-2 border-primary/15 bg-card/94 p-8 shadow-admin-overlay backdrop-blur-md">
         <div className="mb-8 text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-700/70">{t('kicker')}</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{t('title')}</h1>
-          <p className="mt-2 text-sm text-slate-500">{t('description')}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">{t('kicker')}</p>
+          <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{t('title')}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{t('description')}</p>
         </div>
 
         <form className="space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
           <div>
-            <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-slate-700">
+            <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-foreground">
               {t('fields.username')}
             </label>
             <div className="relative">
@@ -99,7 +99,7 @@ export function LoginPage() {
                 id="username"
                 type="text"
                 autoComplete="username"
-                className="w-full rounded-lg border border-slate-200 py-2.5 pl-3 pr-10 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200"
+                className="w-full rounded-lg border border-border py-2.5 pl-3 pr-10 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring"
                 {...register('username')}
               />
               {usernameValue ? (
@@ -107,17 +107,17 @@ export function LoginPage() {
                   type="button"
                   aria-label={t('actions.clearUsername')}
                   onClick={() => setValue('username', '', { shouldValidate: true })}
-                  className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-slate-400 transition hover:text-slate-600"
+                  className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-muted-foreground transition hover:text-foreground"
                 >
                   <X className="h-4 w-4" />
                 </button>
               ) : null}
             </div>
-            {errors.username ? <p className="mt-1.5 text-xs text-red-600">{errors.username.message}</p> : null}
+            {errors.username ? <p className="mt-1.5 text-xs text-danger-emphasis">{errors.username.message}</p> : null}
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
+            <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-foreground">
               {t('fields.password')}
             </label>
             <div className="relative">
@@ -125,7 +125,7 @@ export function LoginPage() {
                 id="password"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
-                className="w-full rounded-lg border border-slate-200 py-2.5 pl-3 pr-20 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-200"
+                className="w-full rounded-lg border border-border py-2.5 pl-3 pr-20 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring"
                 {...register('password')}
               />
               <div className="absolute inset-y-0 right-0 flex items-center pr-1">
@@ -134,7 +134,7 @@ export function LoginPage() {
                     type="button"
                     aria-label={t('actions.clearPassword')}
                     onClick={() => setValue('password', '', { shouldValidate: true })}
-                    className="inline-flex h-8 w-8 items-center justify-center text-slate-400 transition hover:text-slate-600"
+                    className="inline-flex h-8 w-8 items-center justify-center text-muted-foreground transition hover:text-foreground"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -143,16 +143,16 @@ export function LoginPage() {
                   type="button"
                   aria-label={showPassword ? t('actions.hidePassword') : t('actions.showPassword')}
                   onClick={() => setShowPassword((value) => !value)}
-                  className="inline-flex h-8 w-8 items-center justify-center text-slate-400 transition hover:text-slate-600"
+                  className="inline-flex h-8 w-8 items-center justify-center text-muted-foreground transition hover:text-foreground"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
-            {errors.password ? <p className="mt-1.5 text-xs text-red-600">{errors.password.message}</p> : null}
+            {errors.password ? <p className="mt-1.5 text-xs text-danger-emphasis">{errors.password.message}</p> : null}
           </div>
 
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
               className="admin-check"
@@ -164,7 +164,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="flex w-full items-center justify-center rounded-lg bg-cyan-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/92 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? t('actions.submitting') : t('actions.submit')}
           </button>
@@ -318,7 +318,7 @@ function LoginOceanBackground() {
       <PixelStarfish className="left-[44%] bottom-[12%]" small />
 
       {/* 水面下暗部 + 像素格 + 暗角 */}
-      <div className="absolute inset-x-0 top-[20%] h-16 bg-gradient-to-b from-black/10 to-transparent" />
+      <div className="absolute inset-x-0 top-[20%] h-16 bg-gradient-to-b from-foreground/10 to-transparent" />
       <div
         className="absolute inset-0 opacity-[0.055]"
         style={{
@@ -342,7 +342,7 @@ function LoginOceanBackground() {
 }
 
 function PixelCloud({ className, large }: { className?: string; large?: boolean }) {
-  const p = large ? 'h-2.5 w-2.5 bg-white/95 sm:h-3 sm:w-3' : 'h-2 w-2 bg-white/95 sm:h-2.5 sm:w-2.5'
+  const p = large ? 'h-2.5 w-2.5 bg-card/95 sm:h-3 sm:w-3' : 'h-2 w-2 bg-card/95 sm:h-2.5 sm:w-2.5'
   return (
     <div className={`absolute ${className ?? ''}`} style={{ imageRendering: 'pixelated' }}>
       <div className="flex">
@@ -379,14 +379,14 @@ function PixelSeagull({ className, small, delay }: { className?: string; small?:
       style={{ imageRendering: 'pixelated', animationDelay: delay ? '1.5s' : '0s' }}
     >
       <div className="flex">
-        <span className={`${p} bg-white`} />
-        <span className={`${p} bg-white opacity-0`} />
-        <span className={`${p} bg-white`} />
+        <span className={`${p} bg-card`} />
+        <span className={`${p} bg-card opacity-0`} />
+        <span className={`${p} bg-card`} />
       </div>
       <div className="flex">
-        <span className={`${p} bg-slate-700`} />
-        <span className={`${p} bg-white`} />
-        <span className={`${p} bg-slate-700`} />
+        <span className={`${p} bg-foreground`} />
+        <span className={`${p} bg-card`} />
+        <span className={`${p} bg-foreground`} />
       </div>
     </div>
   )
@@ -418,7 +418,7 @@ function PixelFish({
       <span className={p} style={{ left: 16, top: 8, backgroundColor: color }} />
       <span className={p} style={{ left: 24, top: 0, backgroundColor: color }} />
       <span className={p} style={{ left: 8, top: 0, backgroundColor: color }} />
-      <span className="absolute h-1 w-1 bg-slate-900" style={{ left: 20, top: 2 }} />
+      <span className="absolute h-1 w-1 bg-primary" style={{ left: 20, top: 2 }} />
       </div>
     </div>
   )
@@ -446,7 +446,7 @@ function PixelBubbles({ className, count = 4, delay }: { className?: string; cou
       {sizes.slice(0, count).map((size, i) => (
         <span
           key={i}
-          className={`ocean-bubble rounded-sm border border-white/40 bg-white/20 ${size}`}
+          className={`ocean-bubble rounded-sm border border-primary-foreground/40 bg-primary-foreground/20 ${size}`}
           style={{
             animationDelay: `${(delay ? 1.5 : 0) + i * 0.55}s`,
             imageRendering: 'pixelated',
@@ -476,7 +476,7 @@ function PixelBuoy({ className }: { className?: string }) {
   return (
     <div className={`ocean-buoy-bob absolute ${className ?? ''}`} style={{ imageRendering: 'pixelated' }}>
       <span className={`${p} block bg-[#e74c3c]`} />
-      <span className={`${p} block bg-white`} />
+      <span className={`${p} block bg-card`} />
       <span className={`${p} block bg-[#e74c3c]`} />
       <span className="mx-auto mt-0.5 block h-3 w-0.5 bg-[#8b5a2b]" />
     </div>
