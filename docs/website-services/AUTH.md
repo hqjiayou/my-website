@@ -19,6 +19,6 @@ last_verified: 2026-10-10
 
 auth 不跑 Flyway，不依赖 admin jar。Refresh 在 Redis。JWT 为 RS256。
 
-Gateway `application.yml` 已设 `trusted-proxies: ".*"` 且 `x-forwarded.for-append: true`。这只适合本地。生产要收成前置代理的网段。集成测试仍未证明限流用的是真实客户端 IP（Issue #1，PARTIALLY_RESOLVED）。
+Gateway `trusted-proxies` 为 `(?!)`（dev 与 prod 相同）。`ClientIpGatewayFilter` 把出站 `X-Forwarded-For` 写成 TCP 对端。`SpoofedForwardedForGatewayTest` 证明伪造转发头不会成为下游末段（Issue #136）。
 
 密码、Cookie、轮换的设计细节仍在阶段 4A；登录进程以 4F 为准。4A 已改为：Site 登录不是占位。

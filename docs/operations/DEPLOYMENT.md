@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: RUNBOOK
 status: CURRENT
-last_verified: 2026-10-28
+last_verified: 2026-10-30
 ```
 
 当前仓库以本地/开发运行为主。部署时注意：
@@ -12,7 +12,7 @@ last_verified: 2026-10-28
 2. **agent-services 不经 gateway 暴露**；Java `admin` 与 `agent-app` 内网访问。  
 3. Flyway 向前迁移；不改已执行脚本。  
 4. Auth 私钥与 JWKS 发布流程。  
-5. 生产 gateway 启用 **prod profile**：`trusted-proxies` 由环境变量 `SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES` 提供前置 LB 对端 IP 的正则（未设置则启动失败，勿用 dev 默认 `.*`）；且网络层须保证 gateway 只能被前置 LB 到达。口径见 [`SECURITY.md`](./SECURITY.md) 的 Client IP / XFF 节。  
+5. 生产 gateway 的 `trusted-proxies` 保持 `(?!)`（dev 与 prod 相同）。不要设置 `SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES`：匹配到对端时，转发头第一段会覆盖 TCP 地址，限流可被伪造绕过。前面有负载均衡时，限流键是该 LB 的对端地址。口径见 [`SECURITY.md`](./SECURITY.md) 的 Client IP / XFF 节。  
 6. 关闭开放注册（除非显式 bootstrap）。  
 
 ## agent-services（Python AI Runtime）

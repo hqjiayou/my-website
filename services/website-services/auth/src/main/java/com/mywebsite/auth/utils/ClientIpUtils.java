@@ -12,9 +12,9 @@ public final class ClientIpUtils {
     /**
      * 取 {@code X-Forwarded-For} 的<strong>最后一个</strong>条目。
      *
-     * <p>安全边界：gateway 的 XForwardedHeadersFilter 会把「与网关直连的对端 IP」追加到 XFF 末尾；
-     * 而客户端可在请求里伪造 XFF 前缀条目。因此只有最后一个条目可信，取首个条目会让攻击者
-     * 通过伪造头随意切换限流桶。无 XFF 时回退 {@link HttpServletRequest#getRemoteAddr()}（直连场景）。
+     * <p>安全边界：gateway 的 {@code ClientIpGatewayFilter} 把本头改写成与网关直连的 TCP 对端
+     * （并去掉客户端带来的 {@code Forwarded}）。因此只有最后一段可信；取首段会让攻击者用伪造前缀换限流桶。
+     * 无本头时回退 {@link HttpServletRequest#getRemoteAddr()}（直连场景）。
      */
     public static String resolveClientIp(HttpServletRequest request) {
         String xff = request.getHeader(X_FORWARDED_FOR);

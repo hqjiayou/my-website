@@ -41,8 +41,8 @@ last_verified: 2026-10-10
 
 ## 限流与 Client IP
 
-`ClientIpUtils` 取 `X-Forwarded-For` **最后**一段（假定 gateway 追加直连 IP）。  
-若 gateway 未启用可信代理 / XFF 追加，则 IP 限流可被伪造绕过 → **HIGH**（见 ROADMAP / Issue）。
+`ClientIpUtils` 取 `X-Forwarded-For` **最后**一段。gateway 的 `ClientIpGatewayFilter` 把该头改写成 TCP 对端（`trusted-proxies` 为 `(?!)`，见 [`../operations/SECURITY.md`](../operations/SECURITY.md)）。  
+绕过 gateway 直连 auth 时，末段仍可由客户端控制；生产 auth 不对外暴露。
 
 ## `/api/admin/auth/me`
 

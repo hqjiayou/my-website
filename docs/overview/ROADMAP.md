@@ -12,7 +12,7 @@ last_verified: 2026-10-28
 
 | 主题 | 状态 | Issue |
 |------|------|-------|
-| Auth trusted-proxy / XFF / rate-limit boundary | RESOLVED（集成断言 + prod 收窄已落地，PR #112 合入，Issue 已关闭） | [#1](https://github.com/hqjiayou/my-website/issues/1) |
+| Auth trusted-proxy / XFF / rate-limit boundary | RESOLVED（2026-10-30：不信任转发头，限流键取 TCP 对端；Issue #1 的「收窄正则」模型已由 #136 取代） | [#136](https://github.com/hqjiayou/my-website/issues/136) |
 | 站点用户 Auth 前端接入 | RESOLVED（superseded：site-web 已移除，整套登录已在 agent-portal 落地，Issue 已关闭） | [#3](https://github.com/hqjiayou/my-website/issues/3) |
 
 ## P2 — 测试 / 阻塞中的产品能力

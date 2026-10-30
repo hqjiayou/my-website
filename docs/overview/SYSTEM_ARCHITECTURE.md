@@ -15,7 +15,7 @@ Browser
                                    └──► agent-app :8082 (/api/agent/**)
 ```
 
-- **gateway**：路由 / CORS / RequestId；**不做业务鉴权**。`trusted-proxies` 已配置（dev 默认 `.*` + for-append；prod profile 强制由环境变量收窄），XFF 信任边界已有集成断言（PR #112），auth 限流读其最后一段。
+- **gateway**：路由 / CORS / RequestId；**不做业务鉴权**。`trusted-proxies` 为 `(?!)`，出站 `X-Forwarded-For` 由 `ClientIpGatewayFilter` 写成 TCP 对端（Issue #136），auth 限流读其最后一段。
 - **auth**：唯一 JWT 签发方（RS256 + JWKS）；Admin / Agent 会话与 Cookie、audience 隔离（ADR-0002，audience 现为 ADMIN / AGENT）。
 - **admin**：OAuth2 Resource Server + RBAC + 后台业务 API。
 - **agent-app**（原 site-app）：站点业务 API（含 Agent AI 代理路径，`/api/agent/**`）；不签发 JWT。站点用户端是 `apps/agent-portal`（浏览器入口）；公开站 `apps/site-web` 已于 2026-10-28 移除。

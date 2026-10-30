@@ -8,23 +8,34 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 /**
- * prod profile 的 trusted-proxies 護欄（Issue #1）：application-prod.yml 必須以
- * 無默認值的環境變量佔位符提供 trusted-proxies（未配置即啟動失敗），且不得含 dev 的 ".*"。
- * 不啟 Spring 上下文——prod 上下文在本機/CI 本就應因缺環境變量而 fail-fast。
+ * trusted-proxies 護欄（Issue #136）：dev 與 prod 都必須是 {@code (?!)}。
+ * 匹配到對端時 Netty 會用轉發頭第一段覆蓋 TCP 對端，環境變量收窄成 LB 正則也會重新打開這條路徑。
+ * 不啟 Spring 上下文。
  */
 class GatewayProdTrustedProxiesConfigTest {
 
     @Test
-    void prodProfileRequiresEnvProvidedTrustedProxies() throws IOException {
-        String yaml;
-        try (InputStream in = getClass().getResourceAsStream("/application-prod.yml")) {
-            assertThat(in).as("application-prod.yml 應在 gateway classpath 上").isNotNull();
-            yaml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        }
+    void prodProfileTrustsNoPeer() throws IOException {
+        String yaml = readClasspathYaml("/application-prod.yml");
 
-        assertThat(yaml).contains("${SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES}");
-        // 配置行不得把 trusted-proxies 設成 dev 的 ".*"（註釋裡提及 ".*" 不算）
+        assertThat(yaml).contains("trusted-proxies: \"(?!)\"");
         assertThat(yaml).doesNotContain("trusted-proxies: \".*\"");
-        assertThat(yaml).contains("trusted-proxies: \"${SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES}\"");
+        assertThat(yaml).doesNotContain("${SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES}");
+    }
+
+    @Test
+    void defaultProfileTrustsNoPeer() throws IOException {
+        String yaml = readClasspathYaml("/application.yml");
+
+        assertThat(yaml).contains("trusted-proxies: \"(?!)\"");
+        assertThat(yaml).doesNotContain("trusted-proxies: \".*\"");
+        assertThat(yaml).contains("forward-headers-strategy: none");
+    }
+
+    private static String readClasspathYaml(String path) throws IOException {
+        try (InputStream in = GatewayProdTrustedProxiesConfigTest.class.getResourceAsStream(path)) {
+            assertThat(in).as(path + " 應在 gateway classpath 上").isNotNull();
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
     }
 }

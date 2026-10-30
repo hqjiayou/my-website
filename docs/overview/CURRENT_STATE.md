@@ -20,7 +20,7 @@ supersedes:
 
 ## 一句话
 
-中央控制的网站集合：后台总控 `admin-web`；Java `website-services`（`gateway` 统一入口，`auth` 签发 RS256 JWT，`admin` Resource Server + 后台业务）；Python `agent-services` 做 AI 执行。`admin-web` 主纵向域与站点 AI 管理已 FORCE REAL；公开站前端 `apps/site-web` 已随 PR #108 移除，站点用户端为 `apps/agent-portal`（登录在此）；AI LIVE 已在本机环境实证（2026-10-25 Portal Gemini 真实回复，见下表 #5）；Browser E2E 套件已落地（PR #111 合入 dev；首次 CI 实跑待 GitHub Actions 额度恢复后以 workflow_dispatch 补验）；Auth XFF 信任边界已由 gateway 集成断言证明、prod 配置已收窄（RESOLVED，见下表 #1）。
+中央控制的网站集合：后台总控 `admin-web`；Java `website-services`（`gateway` 统一入口，`auth` 签发 RS256 JWT，`admin` Resource Server + 后台业务）；Python `agent-services` 做 AI 执行。`admin-web` 主纵向域与站点 AI 管理已 FORCE REAL；公开站前端 `apps/site-web` 已随 PR #108 移除，站点用户端为 `apps/agent-portal`（登录在此）；AI LIVE 已在本机环境实证（2026-10-25 Portal Gemini 真实回复，见下表 #5）；Browser E2E 套件已落地（PR #111 合入 dev；首次 CI 实跑待 GitHub Actions 额度恢复后以 workflow_dispatch 补验）；Auth XFF 信任边界改为不信任转发头、限流键取 TCP 对端（Issue #136，见下表 #1）。
 
 ---
 
@@ -32,7 +32,7 @@ supersedes:
 | **Site Web** | REMOVED（2026-10-28，PR #108） | `apps/site-web` 与公开内容 API 已移除（见上方架构变更）；站点用户登录在 `apps/agent-portal` |
 | **Backend (website-services)** | PARTIAL（主业务 COMPLETE_V1；安全门（Auth XFF）RESOLVED） | 见 [`../website-services/CURRENT_STATE.md`](../website-services/CURRENT_STATE.md) |
 | **Database** | COMPLETE_V1（Flyway 以 `infra/.../db/migration` 为准，当前至 **V35**） | 以代码为准 |
-| **Auth Admin** | PARTIAL | 登录/刷新/登出/注册门控 REAL；XFF：gateway 集成断言已落地（`GatewayXForwardedTrustBoundaryTest`），prod 以 prod profile 收窄 trusted-proxies |
+| **Auth Admin** | PARTIAL | 登录/刷新/登出/注册门控 REAL；XFF：`trusted-proxies` 为 `(?!)`，`ClientIpGatewayFilter` 写下 TCP 对端（`SpoofedForwardedForGatewayTest`） |
 | **Auth Agent（原 Auth Site）** | BACKEND_COMPLETE | login/refresh/logout/me + aud 隔离；前端登录在 `apps/agent-portal`（#3 已结案） |
 | **RBAC** | COMPLETE_V1 | roles/permissions/me/menus 读；Method Security |
 | **Menu write** | COMPLETE_V1 | `POST/PUT/DELETE /api/admin/menus`；权限目录页已撤下，角色按菜单分配并带上该页操作权限 |
@@ -55,7 +55,7 @@ supersedes:
 
 | 项 | 状态 | Tracking |
 |----|------|----------|
-| Auth trusted client IP / XFF | **RESOLVED**（2026-10-28：gateway 集成断言 `GatewayXForwardedTrustBoundaryTest` 证明伪造 XFF 前缀不控制限流末段；prod 以 prod profile 强制收窄 trusted-proxies；残留：本机 smoke 直连 Auth 的 XFF 行为属本地调试面、已文档化于 SECURITY.md） | [#1](https://github.com/hqjiayou/my-website/issues/1) |
+| Auth trusted client IP / XFF | **RESOLVED**（2026-10-30，Issue #136：`trusted-proxies` 为 `(?!)`，伪造 `X-Forwarded-For` / `Forwarded` 不能覆盖 TCP 对端；残留：本机 smoke 直连 Auth 的 XFF 行为属本地调试面，已文档化于 SECURITY.md） | [#136](https://github.com/hqjiayou/my-website/issues/136) |
 | Browser E2E golden paths | **LANDED**（2026-10-28，PR #111 合入 dev，#2 已关闭）：Playwright 套件（3 条现行黄金路径）+ `browser-e2e-ci` workflow 已在树里；首次 CI 实跑待 2026-11-01 Actions 额度重置后以 workflow_dispatch 补跑，未取得真实结论前不得称 E2E 已验证通过 | [#2](https://github.com/hqjiayou/my-website/issues/2) |
 | site-web authentication integration | **RESOLVED（superseded）**：`apps/site-web` 已移除，站点登录整套已在 `apps/agent-portal` 落地（后端更名为 Agent Auth） | [#3](https://github.com/hqjiayou/my-website/issues/3) |
 | Soft-delete `deleted_at` consistency | **RESOLVED**（Site / Appearance / User 删除用例已写 `deleted_at`；Role / 绑定仍只 `deleteById`，不在 #4 范围） | [#4](https://github.com/hqjiayou/my-website/issues/4) |

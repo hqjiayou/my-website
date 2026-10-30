@@ -82,7 +82,7 @@ last_verified: 2026-10-30
 
 | 变量 | 必填 | 代码默认 | 说明 |
 |------|------|----------|------|
-| `SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES` | **prod 必填** | dev 默认 `.*`（写在 `application.yml`） | prod profile 下必须由本变量提供前置 LB 对端的正则，未设置则启动 fail-fast。口径见 [`SECURITY.md`](./SECURITY.md) |
+| `SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES` | 否，且不要设置 | `(?!)`（写在 `application.yml` 与 `application-prod.yml`） | 覆盖该值会让匹配到的对端用转发头第一段替换 TCP 地址。不是 `(?!)` 时 `ClientIpGatewayFilter` 拒绝启动。口径见 [`SECURITY.md`](./SECURITY.md) |
 
 ## 7. Python：agent-services
 

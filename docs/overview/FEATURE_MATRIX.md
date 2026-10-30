@@ -8,7 +8,7 @@ last_verified: 2026-10-28
 
 | Feature | Backend | DB | Admin API | admin-web | agent-portal | Tests (non-browser) | Browser E2E | Status |
 |---------|---------|----|-----------|-----------|----------|---------------------|-------------|--------|
-| Admin login/refresh/logout | ✅ | ✅ | ✅ auth | ✅ | — | ✅ MVC | ✅*（路径 01 登录段） | COMPLETE_V1（XFF 已 RESOLVED，PR #112） |
+| Admin login/refresh/logout | ✅ | ✅ | ✅ auth | ✅ | — | ✅ MVC | ✅*（路径 01 登录段） | COMPLETE_V1（XFF 取 TCP 对端，Issue #136） |
 | Agent login/refresh/logout/me（原 Site Auth） | ✅ | ✅ | ✅ auth | — | ✅ | ✅ | ✅*（路径 02 用到登录） | COMPLETE_V1 |
 | RBAC roles/permissions | ✅ | ✅ | ✅ | ✅ | — | ✅ | ❌ | COMPLETE_V1 |
 | Menu read | ✅ | ✅ | ✅ | ✅ | — | ✅ | ❌ | COMPLETE_V1 |

@@ -11,4 +11,4 @@ last_verified: 2026-10-10
 | unit/MVC | `cd services/website-services && mvn -B -ntp test` |
 | PG verify | `mvn -B -ntp -Ppersistence-verify-pg test` |
 
-Gateway↔Auth XFF 集成断言：仍为 **TEST_GAP**（支撑安全 Issue）。
+Gateway↔Auth XFF：`SpoofedForwardedForGatewayTest` 经真实 Netty 证明伪造转发头不会成为下游末段（Issue #136）。auth 限流 MVC 测试取 XFF 末段。

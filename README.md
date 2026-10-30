@@ -106,7 +106,7 @@ admin / agent-app / auth
   └── agent-core（HttpAgentClient） -> services/agent-services
 ```
 
-当前阶段不引入注册中心、服务发现、消息队列或复杂网关鉴权。`gateway` 做统一入口、CORS、request-id 与路由，并打开 `trusted-proxies`（默认 `.*`）与 `X-Forwarded-For` 追加。auth 限流读这个头的最后一段。信任边界已有集成断言证明（PR #112，Issue #1 已关闭）；生产须启用 prod profile 把 `trusted-proxies` 收窄为前置 LB 正则，见 [`docs/operations/SECURITY.md`](docs/operations/SECURITY.md)。
+当前阶段不引入注册中心、服务发现、消息队列或复杂网关鉴权。`gateway` 做统一入口、CORS、request-id 与路由。`trusted-proxies` 为 `(?!)`，出站 `X-Forwarded-For` 写成 TCP 对端。auth 限流读这个头的最后一段。见 [`docs/operations/SECURITY.md`](docs/operations/SECURITY.md)。
 
 ## 启动命令
 
@@ -252,7 +252,7 @@ admin / agent-app / auth
   └── agent-core（HttpAgentClient） -> services/agent-services
 ```
 
-當前階段不引入註冊中心、服務發現、訊息佇列或複雜閘道鑑權。`gateway` 做統一入口、CORS、request-id 與路由，並打開 `trusted-proxies`（預設 `.*`）與 `X-Forwarded-For` 追加。auth 限流讀這個標頭的最後一段。用戶端 IP 還沒有整合斷言，見 [GitHub Issue #1](https://github.com/hqjiayou/my-website/issues/1)。
+當前階段不引入註冊中心、服務發現、訊息佇列或複雜閘道鑑權。`gateway` 做統一入口、CORS、request-id 與路由。`trusted-proxies` 為 `(?!)`，出站 `X-Forwarded-For` 寫成 TCP 對端。auth 限流讀這個標頭的最後一段。見 [`docs/operations/SECURITY.md`](docs/operations/SECURITY.md)。
 
 ## 啟動命令
 

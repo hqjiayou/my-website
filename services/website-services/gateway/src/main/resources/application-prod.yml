@@ -1,17 +1,14 @@
-# 生產 profile（Issue #1）：trusted-proxies 不得沿用 application.yml 的 dev 默認 ".*"。
+# 生产 profile（Issue #136）：trusted-proxies 固定为 (?!)，与 application.yml 相同。
 #
-# 啟用：--spring.profiles.active=prod（或 SPRING_PROFILES_ACTIVE=prod）
-# 必填：環境變量 SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES，
-#       值為「前置 LB 對端 IP」的 Java 正則（SCG 以正則匹配對端 host 字符串，不是 CIDR 語法；
-#       覆蓋一個網段請寫等價正則，例如 LB 在 10.0.5.0/24 時用 '^10\.0\.5\.\d+$'）。
-# 未設置時佔位符無法解析、啟動直接失敗（fail-fast），不會靜默退回信任任意對端。
-#
-# 注意：收窄 trusted-proxies 必須與網絡層限制成對——prod 下 gateway 只能被前置 LB 到達、
-# 不得對不可信來源直連暴露（對端不被信任時 XForwardedHeadersFilter 不追加可信條目）。
-# 口徑見 docs/operations/SECURITY.md 與 docs/operations/DEPLOYMENT.md。
+# 启用：--spring.profiles.active=prod（或 SPRING_PROFILES_ACTIVE=prod）
+# Spring Cloud Gateway 在对端匹配 trusted-proxies 时，会用 X-Forwarded-For / Forwarded
+# 的第一段覆盖 TCP 对端。第一段可由客户端伪造。因此生产也不信任任何对端，
+# 出站 X-Forwarded-For 由 ClientIpGatewayFilter 写成与 gateway 直连的地址。
+# 不要用环境变量 SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES 改成 .* 或前置 LB 正则：
+# 一旦匹配对端，就会重新打开上述覆盖。前置 LB 时，限流键是 LB 的对端地址。
 spring:
   cloud:
     gateway:
       server:
         webflux:
-          trusted-proxies: "${SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES}"
+          trusted-proxies: "(?!)"

@@ -1,5 +1,8 @@
 server:
   port: 8080
+  # 不让 Boot 用入站 Forwarded / X-Forwarded-* 改写连接信息。
+  # 对端是否被 SCG 用转发头覆盖，只由下面的 trusted-proxies 决定。
+  forward-headers-strategy: none
 
 spring:
   application:
@@ -8,12 +11,11 @@ spring:
     gateway:
       server:
         webflux:
-          # SCG 4.3+：未配置 trusted-proxies 时 XForwardedHeadersFilter 不启用，
-          # 客户端伪造的 XFF 可能原样到达 auth，或被剥离导致限流维度退化为网关 IP。
-          # 本地/直连：匹配任意对端以启用「追加 peer IP」；生产请改为前置 LB CIDR/正则。
-          # 可用环境变量 SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES 覆盖。
-          # 生产请启用 prod profile（application-prod.yml）：强制由上述环境变量提供收窄值，未设置即启动失败。
-          trusted-proxies: ".*"
+          # SCG 在对端匹配本正则时，用 X-Forwarded-For / Forwarded 的第一段覆盖 TCP 对端。
+          # 第一段可由客户端伪造，限流键会跟着被换掉。(?!) 不匹配任何地址，因此不会覆盖。
+          # 出站 X-Forwarded-For 由 ClientIpGatewayFilter 写成 TCP 对端。
+          # 不要改成 .* 或前置 LB 网段；值不是 (?!) 时该 Filter 拒绝启动。
+          trusted-proxies: "(?!)"
           x-forwarded:
             enabled: true
             for-append: true

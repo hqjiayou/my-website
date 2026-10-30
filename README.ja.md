@@ -105,7 +105,7 @@ admin / agent-app / auth
   └── agent（必要なとき） -> services/agent-services
 ```
 
-この段階ではレジストリ、サービスディスカバリ、メッセージキュー、ゲートウェイ側の認可は入れない。`gateway` は単一入口、CORS、request-id、ルーティングを担い、`trusted-proxies`（既定 `.*`）と `X-Forwarded-For` の追記を有効にする。auth のレート制限はこのヘッダの最後のホップを読む。クライアント IP の結合アサーションはまだない。[GitHub Issue #1](https://github.com/hqjiayou/my-website/issues/1)。
+この段階ではレジストリ、サービスディスカバリ、メッセージキュー、ゲートウェイ側の認可は入れない。`gateway` は単一入口、CORS、request-id、ルーティングを担う。`trusted-proxies` は `(?!)` で、下流へ渡す `X-Forwarded-For` は TCP の接続相手になる。auth のレート制限はこのヘッダの最後のホップを読む。詳細は [`docs/operations/SECURITY.md`](docs/operations/SECURITY.md)。
 
 ## 起動
 

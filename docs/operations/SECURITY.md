@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: SPEC
 status: CURRENT
-last_verified: 2026-10-28
+last_verified: 2026-10-30
 ```
 
 ## 已建立
@@ -16,20 +16,17 @@ last_verified: 2026-10-28
 
 ## Client IP / X-Forwarded-For
 
-**机制**：gateway `XForwardedHeadersFilter` 在对端可信时把「与 gateway 直连的对端 IP」追加到 XFF 末尾（`x-forwarded.for-append: true`）；auth 的 `ClientIpUtils` 取 XFF **末段**作限流键。客户端能控制的只有 XFF 前缀条目，控制不了末段。
+**机制**：Spring Cloud Gateway 在对端匹配 `trusted-proxies` 时，会用 `X-Forwarded-For` 或 `Forwarded` 的第一段覆盖 TCP 连接地址。第一段可由客户端伪造。因此 dev 与 prod 的 `trusted-proxies` 都固定为 `(?!)`（谁都不匹配），`server.forward-headers-strategy` 为 `none`。`ClientIpGatewayFilter` 把出站 `X-Forwarded-For` 写成与 gateway 直连的 TCP 对端，并去掉客户端带来的 `Forwarded`。值不是 `(?!)` 时该 Filter 拒绝启动。auth 的 `ClientIpUtils` 取 XFF **末段**作限流键；经网关后这一段就是 TCP 对端。
 
-**集成断言（2026-10-28，Issue #1 已落地）**：gateway 模块 `GatewayXForwardedTrustBoundaryTest` 用上下文实际装配的 filter 证明：伪造 `X-Forwarded-For: 1.1.1.1`（含多段伪造）经 gateway 后末段是真实对端 IP、不是 `1.1.1.1`；与 auth 侧限流 MVC 测试（取末段）合为 Gateway→Auth 证据链。
+**集成断言（2026-10-30，Issue #136）**：`SpoofedForwardedForGatewayTest` 打到已启动的 gateway，伪造 `X-Forwarded-For` 与 `Forwarded` 后，下游末段是测试客户端的对端地址，不是 `1.1.1.1`。`GatewayXForwardedTrustBoundaryTest` 覆盖过滤器改写；auth 限流 MVC 测试覆盖取末段。
 
-**配置分工**：
+**部署**：不要设置 `SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES`。把它改成 `.*` 或前置 LB 正则会重新打开「第一段覆盖连接地址」。gateway 是最外层时，限流键是客户端自己的 TCP 地址；前面有负载均衡时，限流键是负载均衡器的对端地址，不是终端用户地址。
 
-- 本机/dev：`application.yml` 默认 `trusted-proxies: ".*"`（gateway 即最外层，直连对端就是客户端本人），本地全栈照常。
-- 生产：启用 **prod profile**（`application-prod.yml`），`trusted-proxies` 只能由环境变量 `SPRING_CLOUD_GATEWAY_SERVER_WEBFLUX_TRUSTED_PROXIES` 提供，值是前置 LB 对端 IP 的 Java 正则（如 LB 在 10.0.5.0/24 用 `^10\.0\.5\.\d+$`；SCG 以正则匹配，不是 CIDR 语法）。未设置时启动 fail-fast，不静默退回 `.*`。收窄后还有额外收益：不匹配该正则的既有 XFF 条目会被 filter 整段剥除。
-
-**暴露面（与部署拓扑一致，强制）**：只有 gateway 对外；auth（:8083）、admin、agent-app 只在内网。prod 还必须在网络层保证 gateway **只能被前置 LB 到达**——对端不被信任时 filter 不追加可信条目、原样放行，收窄 trusted-proxies 不是单独成立的控制。
+**暴露面**：只有 gateway 对外；auth（:8083）、admin、agent-app 只在内网。
 
 **残留（已文档化，接受）**：本机 smoke 直连 auth（绕过 gateway）时 XFF 末段仍可由客户端控制——这是本地调试面，不属生产拓扑；生产 auth 不对外暴露，故不构成生产风险。
 
-状态：**RESOLVED**（集成断言 + prod 收窄落地，2026-10-28）。
+状态：**RESOLVED**（Issue #136：不信任转发头，限流键取 TCP 对端，2026-10-30）。
 
 ## 其他
 
