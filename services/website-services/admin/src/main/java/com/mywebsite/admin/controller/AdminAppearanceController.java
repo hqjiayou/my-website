@@ -31,7 +31,7 @@ public class AdminAppearanceController {
     }
 
     @GetMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:detail')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:list')")
     @Operation(summary = "站点外观详情")
     public ResponseEntity<HttpMessageBody<AdminAppearanceDetailDto>> get(@PathVariable("id") long agentId) {
         return ResponseEntity.ok(
@@ -39,7 +39,7 @@ public class AdminAppearanceController {
     }
 
     @PutMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:list')")
     @Operation(summary = "整份替换站点外观")
     public ResponseEntity<HttpMessageBody<AdminAppearanceDetailDto>> put(
             @PathVariable("id") long agentId, @Valid @RequestBody AdminAppearancePutRequest request) {

@@ -50,7 +50,7 @@ public class AdminMediaController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:upload')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:list')")
     @Operation(summary = "上传站点媒体")
     public ResponseEntity<HttpMessageBody<AdminMediaDetailDto>> upload(
             @PathVariable long agentId, @RequestPart("file") MultipartFile file) {
@@ -68,7 +68,7 @@ public class AdminMediaController {
     }
 
     @GetMapping("/{id}/preview")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:download')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:list')")
     @Operation(summary = "站点媒体预览（短时 presigned URL）")
     public ResponseEntity<HttpMessageBody<AdminMediaPreviewDto>> preview(
             @PathVariable long agentId, @PathVariable("id") long id) {
@@ -77,7 +77,7 @@ public class AdminMediaController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:delete')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:list')")
     @Operation(summary = "删除站点媒体（软删 + 触发对象清理）")
     public ResponseEntity<HttpMessageBody<Void>> delete(
             @PathVariable long agentId, @PathVariable("id") long id) {

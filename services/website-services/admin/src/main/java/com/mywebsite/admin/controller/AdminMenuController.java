@@ -43,14 +43,14 @@ public class AdminMenuController {
     }
 
     @PostMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:menu:create')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:menu:list')")
     @Operation(summary = "新增菜单")
     public ResponseEntity<HttpMessageBody<AdminMenuNodeDto>> create(@Valid @RequestBody AdminMenuCreateRequest request) {
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, adminMenuService.createMenu(request)));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:menu:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:menu:list')")
     @Operation(summary = "修改菜单")
     public ResponseEntity<HttpMessageBody<AdminMenuNodeDto>> update(
             @PathVariable long id, @Valid @RequestBody AdminMenuUpdateRequest request) {
@@ -59,7 +59,7 @@ public class AdminMenuController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:menu:delete')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:menu:list')")
     @Operation(summary = "删除菜单（软删除，有子菜单时拒绝）")
     public ResponseEntity<HttpMessageBody<Void>> delete(@PathVariable long id) {
         adminMenuService.deleteMenu(id);

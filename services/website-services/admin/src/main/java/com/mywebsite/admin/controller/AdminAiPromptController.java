@@ -39,7 +39,7 @@ public class AdminAiPromptController {
     }
 
     @PutMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:read')")
     @Operation(summary = "更新站点 AI Prompt 配置（不存在则创建）")
     public ResponseEntity<HttpMessageBody<AdminAiPromptProfileDto>> upsert(
             @PathVariable long agentId, @Valid @RequestBody AdminAiPromptProfileUpdateRequest request) {

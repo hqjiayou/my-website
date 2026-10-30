@@ -53,14 +53,14 @@ public class AdminAgentController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:detail')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:list')")
     @Operation(summary = "站点详情")
     public ResponseEntity<HttpMessageBody<AdminAgentDetailDto>> get(@PathVariable long id) {
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAgentService.getSite(id)));
     }
 
     @PostMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:create')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:list')")
     @Operation(summary = "创建站点")
     public ResponseEntity<HttpMessageBody<AdminAgentDetailDto>> create(
             @Valid @RequestBody AdminAgentCreateRequest request) {
@@ -68,7 +68,7 @@ public class AdminAgentController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:list')")
     @Operation(summary = "更新站点")
     public ResponseEntity<HttpMessageBody<AdminAgentDetailDto>> update(
             @PathVariable long id, @Valid @RequestBody AdminAgentUpdateRequest request) {
@@ -77,7 +77,7 @@ public class AdminAgentController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:delete')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:list')")
     @Operation(summary = "删除站点（软删除）")
     public ResponseEntity<HttpMessageBody<Void>> delete(@PathVariable long id) {
         adminAgentService.deleteSite(id);
@@ -85,7 +85,7 @@ public class AdminAgentController {
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:status')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:list')")
     @Operation(summary = "变更站点状态")
     public ResponseEntity<HttpMessageBody<AdminAgentDetailDto>> updateStatus(
             @PathVariable long id, @Valid @RequestBody AdminAgentStatusUpdateRequest request) {

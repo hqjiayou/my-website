@@ -58,21 +58,21 @@ public class AdminRoleController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:detail')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:list')")
     @Operation(summary = "角色详情")
     public ResponseEntity<HttpMessageBody<AdminRoleDetailDto>> get(@PathVariable long id) {
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, roleManagementService.getRole(id)));
     }
 
     @PostMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:create')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:list')")
     @Operation(summary = "创建角色")
     public ResponseEntity<HttpMessageBody<AdminRoleDetailDto>> create(@Valid @RequestBody AdminRoleCreateRequest request) {
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, roleManagementService.createRole(request)));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:list')")
     @Operation(summary = "更新角色")
     public ResponseEntity<HttpMessageBody<AdminRoleDetailDto>> update(
             @PathVariable long id, @Valid @RequestBody AdminRoleUpdateRequest request) {
@@ -81,7 +81,7 @@ public class AdminRoleController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:delete')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:list')")
     @Operation(summary = "删除角色（软删除）")
     public ResponseEntity<HttpMessageBody<Void>> delete(@PathVariable long id) {
         roleManagementService.deleteRole(id);
@@ -89,7 +89,7 @@ public class AdminRoleController {
     }
 
     @GetMapping("/{id}/permissions")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:permission:view')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:list')")
     @Operation(summary = "查询角色已绑定权限")
     public ResponseEntity<HttpMessageBody<AdminRolePermissionsResponse>> getPermissions(@PathVariable long id) {
         return ResponseEntity.ok(new HttpMessageBody<>(
@@ -97,7 +97,7 @@ public class AdminRoleController {
     }
 
     @PutMapping("/{id}/permissions")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:permission:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:role:list')")
     @Operation(summary = "替换角色权限绑定")
     public ResponseEntity<HttpMessageBody<AdminRolePermissionsResponse>> replacePermissions(
             @PathVariable long id, @Valid @RequestBody AdminRolePermissionsUpdateRequest request) {

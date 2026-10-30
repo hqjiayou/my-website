@@ -52,14 +52,14 @@ public class AdminUserController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:detail')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:list')")
     @Operation(summary = "管理员用户详情")
     public ResponseEntity<HttpMessageBody<AdminUserDetailDto>> get(@PathVariable long id) {
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, userManagementService.getUser(id)));
     }
 
     @PostMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:create')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:list')")
     @Operation(summary = "创建管理员用户")
     public ResponseEntity<HttpMessageBody<AdminUserDetailDto>> create(
             @Valid @RequestBody AdminUserCreateRequest request) {
@@ -68,7 +68,7 @@ public class AdminUserController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:list')")
     @Operation(summary = "更新管理员用户资料")
     public ResponseEntity<HttpMessageBody<AdminUserDetailDto>> update(
             @PathVariable long id, @Valid @RequestBody AdminUserUpdateRequest request) {
@@ -77,7 +77,7 @@ public class AdminUserController {
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:status')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:list')")
     @Operation(summary = "变更管理员用户状态")
     public ResponseEntity<HttpMessageBody<AdminUserDetailDto>> updateStatus(
             @PathVariable long id, @Valid @RequestBody AdminUserStatusUpdateRequest request) {
@@ -86,7 +86,7 @@ public class AdminUserController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:delete')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:list')")
     @Operation(summary = "删除管理员用户（软删除）")
     public ResponseEntity<HttpMessageBody<Void>> delete(@PathVariable long id) {
         userManagementService.deleteUser(id);

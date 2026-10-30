@@ -61,7 +61,7 @@ public class AdminProxyServicesController {
     }
 
     @PostMapping("/api-keys")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
     @Operation(summary = "新增客户端 API key；apiKey 为空时由服务端生成")
     public ResponseEntity<HttpMessageBody<AdminProxyServicesApiKeyCreatedDto>> createApiKey(
             @RequestBody(required = false) AdminProxyServicesApiKeyWriteRequest request) {
@@ -71,7 +71,7 @@ public class AdminProxyServicesController {
     }
 
     @DeleteMapping("/api-keys")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
     @Operation(summary = "删除一把客户端 API key")
     public ResponseEntity<HttpMessageBody<Void>> deleteApiKey(@RequestBody AdminProxyServicesApiKeyWriteRequest request) {
         adminProxyServicesService.deleteApiKey(request == null ? null : request.apiKey());
@@ -79,7 +79,7 @@ public class AdminProxyServicesController {
     }
 
     @PostMapping("/logins")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
     @Operation(summary = "发起 GPT CLI（codex）或 Claude 登录，返回授权链接")
     public ResponseEntity<HttpMessageBody<AdminProxyServicesLoginDto>> startLogin(
             @RequestBody(required = false) AdminProxyServicesLoginRequest request) {
@@ -89,7 +89,7 @@ public class AdminProxyServicesController {
     }
 
     @GetMapping("/logins/status")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
     @Operation(summary = "查询一次登录会话：wait、ok 或 error")
     public ResponseEntity<HttpMessageBody<AdminProxyServicesLoginStatusDto>> loginStatus(@RequestParam String state) {
         return ResponseEntity.ok(

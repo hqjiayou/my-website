@@ -48,7 +48,7 @@ public final class AdminContentDtos {
             Integer sortOrder,
             Long coverMediaId) {}
 
-    /** 状态仅走 PATCH {@code /status}，避免绕过 {@code admin:content:status}。 */
+    /** 状态仅走 PATCH {@code /status}。 */
     public record AdminContentUpdateRequest(
             @NotBlank @Size(max = 32) String type,
             @NotBlank @Size(max = 255) String title,
