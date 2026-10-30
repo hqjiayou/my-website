@@ -300,7 +300,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           <div>
             <div>{item.title}</div>
             {item.originalFilename ? (
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-muted-foreground">
                 {item.originalFilename}
                 {item.sourceFormat ? ` · ${item.sourceFormat}` : ''}
                 {item.fileSizeBytes != null ? ` · ${formatFileSize(item.fileSizeBytes)}` : ''}
@@ -321,10 +321,10 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           <span
             className={
               item.indexStatus === 'INDEXED'
-                ? 'text-emerald-700'
+                ? 'text-success-emphasis'
                 : item.indexStatus === 'FAILED'
-                  ? 'text-rose-700'
-                  : 'text-slate-500'
+                  ? 'text-danger-emphasis'
+                  : 'text-muted-foreground'
             }
             title={item.indexStatus === 'FAILED' ? (item.indexError ?? undefined) : undefined}
           >
@@ -355,7 +355,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 </button>
               </PermissionGate>
             ) : (
-              <span className="text-xs text-slate-400">{t('aiWorkspace.knowledge.sharedBadge')}</span>
+              <span className="text-xs text-muted-foreground">{t('aiWorkspace.knowledge.sharedBadge')}</span>
             )}
             {item.hasOriginal ? (
               <button
@@ -387,7 +387,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
               <PermissionGate code={PERMISSION_CODES.aiKbDelete}>
                 <button
                   type="button"
-                  className="text-sm text-rose-700 underline"
+                  className="text-sm text-danger-emphasis underline"
                   onClick={() => {
                     if (window.confirm(t('aiWorkspace.knowledge.confirmDelete'))) {
                       deleteMutation.mutate(item.id)
@@ -409,7 +409,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
 
   return (
     <div
-      className={`space-y-4 ${dragging ? 'rounded-xl outline-2 outline-dashed outline-blue-400 outline-offset-4' : ''}`}
+      className={`space-y-4 ${dragging ? 'rounded-xl outline-2 outline-dashed outline-ring outline-offset-4' : ''}`}
       onDragOver={(event) => {
         event.preventDefault()
         setDragging(true)
@@ -421,14 +421,14 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
         void uploadFilesBatch(Array.from(event.dataTransfer.files))
       }}
     >
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted-foreground">
         {batchUploading ? t('aiWorkspace.knowledge.uploading') : t('aiWorkspace.knowledge.dropHint')}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 text-sm">
-          <span className="text-slate-600">{t('aiWorkspace.knowledge.baseLabel')}</span>
+          <span className="text-muted-foreground">{t('aiWorkspace.knowledge.baseLabel')}</span>
           <select
-            className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-border px-2 py-1.5 text-sm"
             value={selectedBaseId == null ? '' : String(selectedBaseId)}
             onChange={(event) => {
               setSelectedBaseId(event.target.value === '' ? null : Number(event.target.value))
@@ -453,7 +453,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           {newBaseName == null ? (
             <button
               type="button"
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm"
               onClick={() => setNewBaseName('')}
             >
               {t('aiWorkspace.knowledge.baseNew')}
@@ -461,14 +461,14 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           ) : (
             <span className="flex items-center gap-1">
               <input
-                className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                className="rounded-lg border border-border px-2 py-1.5 text-sm"
                 value={newBaseName}
                 onChange={(event) => setNewBaseName(event.target.value)}
                 placeholder={t('aiWorkspace.knowledge.baseNamePlaceholder')}
               />
               <button
                 type="button"
-                className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
                 disabled={!newBaseName.trim() || createBaseMutation.isPending}
                 onClick={() => createBaseMutation.mutate(newBaseName.trim())}
               >
@@ -476,7 +476,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
               </button>
               <button
                 type="button"
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm"
                 onClick={() => setNewBaseName(null)}
               >
                 {t('aiWorkspace.knowledge.baseCancel')}
@@ -488,7 +488,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           <PermissionGate code={PERMISSION_CODES.aiKbDelete}>
             <button
               type="button"
-              className="rounded-lg border border-rose-200 px-3 py-1.5 text-sm text-rose-700 disabled:opacity-50"
+              className="rounded-lg border border-danger/35 px-3 py-1.5 text-sm text-danger-emphasis disabled:opacity-50"
               disabled={deleteBaseMutation.isPending}
               onClick={() => {
                 if (window.confirm(t('aiWorkspace.knowledge.baseDeleteConfirm'))) {
@@ -501,12 +501,12 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           </PermissionGate>
         ) : null}
         {viewingShared ? (
-          <span className="text-xs text-amber-700">{t('aiWorkspace.knowledge.sharedReadOnly')}</span>
+          <span className="text-xs text-warning-emphasis">{t('aiWorkspace.knowledge.sharedReadOnly')}</span>
         ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <select
-          className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+          className="rounded-lg border border-border px-2 py-1.5 text-sm"
           value={filters.status}
           onChange={(event) =>
             setFilters((prev) => ({
@@ -526,7 +526,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
         <PermissionGate code={PERMISSION_CODES.aiKbCreate}>
           <button
             type="button"
-            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
             disabled={viewingShared}
             onClick={() =>
               setEditor({ mode: 'create', title: '', content: '', status: AI_KB_STATUS.ACTIVE })
@@ -536,7 +536,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           </button>
           <button
             type="button"
-            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
             disabled={uploadMutation.isPending || viewingShared}
             onClick={openUpload}
           >
@@ -564,7 +564,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
 
       {editor ? (
         <form
-          className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"
+          className="space-y-3 rounded-xl border border-border bg-card p-4"
           onSubmit={(event) => {
             event.preventDefault()
             if (editor.mode === 'create') createMutation.mutate()
@@ -572,14 +572,14 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           }}
         >
           <input
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm"
             value={editor.title}
             onChange={(event) => setEditor({ ...editor, title: event.target.value })}
             placeholder={t('aiWorkspace.knowledge.titlePlaceholder')}
             required
           />
           <textarea
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm"
             rows={8}
             value={editor.content}
             onChange={(event) => setEditor({ ...editor, content: event.target.value })}
@@ -587,7 +587,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           />
           {editor.mode === 'edit' ? (
             <select
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              className="rounded-lg border border-border px-2 py-1.5 text-sm"
               value={editor.status}
               onChange={(event) =>
                 setEditor({
@@ -607,13 +607,13 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             <button
               type="submit"
               disabled={createMutation.isPending || updateMutation.isPending}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
               {t('aiWorkspace.knowledge.save')}
             </button>
             <button
               type="button"
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="rounded-lg border border-border px-3 py-2 text-sm"
               onClick={() => setEditor(null)}
             >
               {t('aiWorkspace.knowledge.cancel')}
@@ -626,7 +626,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-slate-900/40"
+            className="fixed inset-0 z-40 bg-foreground/45"
             aria-label={t('aiWorkspace.knowledge.cancel')}
             onClick={closeUpload}
           />
@@ -634,13 +634,13 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="knowledge-upload-title"
-            className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
+            className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-3 rounded-xl border border-border bg-card p-4 shadow-admin-overlay"
             onSubmit={onUploadSubmit}
           >
-            <h2 id="knowledge-upload-title" className="text-base font-semibold text-slate-900">
+            <h2 id="knowledge-upload-title" className="text-base font-semibold text-foreground">
               {t('aiWorkspace.knowledge.uploadDialogTitle')}
             </h2>
-            <p className="text-xs text-slate-500">{t('aiWorkspace.knowledge.uploadHint')}</p>
+            <p className="text-xs text-muted-foreground">{t('aiWorkspace.knowledge.uploadHint')}</p>
             <input
               ref={uploadInputRef}
               type="file"
@@ -652,30 +652,30 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             <button
               type="button"
               disabled={uploadMutation.isPending}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
+              className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50"
               onClick={() => uploadInputRef.current?.click()}
             >
               {t('aiWorkspace.knowledge.chooseFile')}
             </button>
             {uploadDialog.file ? (
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-foreground">
                 {uploadDialog.file.name}
-                <span className="text-slate-500"> · {formatFileSize(uploadDialog.file.size)}</span>
+                <span className="text-muted-foreground"> · {formatFileSize(uploadDialog.file.size)}</span>
               </p>
             ) : null}
             {uploadDialog.fieldError ? (
-              <p className="text-sm text-rose-700">
+              <p className="text-sm text-danger-emphasis">
                 {uploadDialog.fieldError === 'extension'
                   ? t('aiWorkspace.knowledge.invalidExtension')
                   : t('aiWorkspace.knowledge.fileTooLarge')}
               </p>
             ) : null}
             <label className="block">
-              <span className="text-sm font-medium text-slate-800">
+              <span className="text-sm font-medium text-foreground">
                 {t('aiWorkspace.knowledge.titleLabel')}
               </span>
               <input
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                 value={uploadDialog.title}
                 disabled={uploadMutation.isPending}
                 onChange={(event) =>
@@ -690,7 +690,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 disabled={
                   uploadMutation.isPending || !uploadDialog.file || uploadDialog.fieldError != null
                 }
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
               >
                 {uploadMutation.isPending
                   ? t('aiWorkspace.knowledge.uploading')
@@ -699,7 +699,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
               <button
                 type="button"
                 disabled={uploadMutation.isPending}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
+                className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50"
                 onClick={closeUpload}
               >
                 {t('aiWorkspace.knowledge.cancel')}
