@@ -14,8 +14,8 @@ export function RouteFallback({ fullScreen = false }: RouteFallbackProps) {
   return (
     <div
       className={cn(
-        'flex items-center justify-center text-sm text-slate-500',
-        fullScreen ? 'min-h-screen bg-slate-100' : 'min-h-[12rem]',
+        'flex items-center justify-center text-sm text-muted-foreground',
+        fullScreen ? 'min-h-screen bg-background' : 'min-h-48',
       )}
     >
       {t('table.loading')}
