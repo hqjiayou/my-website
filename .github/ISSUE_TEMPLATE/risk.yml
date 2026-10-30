@@ -1,0 +1,46 @@
+name: 風險
+description: 尚未成案的風險——先登記觸發條件與影響，成案再轉 bug／feature
+title: "risk: "
+labels: ["risk"]
+body:
+  - type: textarea
+    id: risk
+    attributes:
+      label: 風險描述
+      description: 什麼事可能發生、為什麼
+    validations:
+      required: true
+  - type: textarea
+    id: trigger
+    attributes:
+      label: 觸發條件
+      description: 什麼情況下它會成案（成案後轉 bug 或 feature 並回鏈本單）
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 影響範圍
+      description: 成案時影響哪些模組／資料／使用者路徑
+    validations:
+      required: true
+  - type: textarea
+    id: revisit
+    attributes:
+      label: 回訪條件
+      description: 何時重看本單（日期、事件或指標）；沒有回訪條件的風險單視為未登記完畢
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: 相關模組
+      options:
+        - admin-web
+        - agent-portal
+        - website-services
+        - agent-services
+        - 全倉／流程
+        - 其他
+    validations:
+      required: true

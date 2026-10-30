@@ -15,7 +15,7 @@ disable-model-invocation: true
 ## 开始（一次）
 
 1. 写出本段范围：目录、谁调用它、它调用谁、相关契约。
-2. 建 `.cursor/runs/hunt-<slug>.md`，`status: running`，`round: 0 / 10`。验收项一节换成三张清单：「已修缺陷」「既定策略」「顺带发现（范围外）」。
+2. 建 `.cursor/runs/hunt-<slug>.md`，`status: running`，`round: 0 / 10`。验收项一节换成三张清单：「已修缺陷」「既定策略」「已转 Issue（范围外）」。
 
 ## 每一轮
 
@@ -30,13 +30,13 @@ disable-model-invocation: true
 ## 收尾
 
 本段有改动时，派 `integration-reviewer` 审本段全部改动。只给 diff、失败路径和相关契约。BLOCKER / HIGH 记进「已修缺陷」待修并回到每一轮，修完再审；没有就 `status: done`。本段没有任何改动则直接 `status: done`。
-6. 范围外的问题只记进「顺带发现」，不跨段修，不自动换下一段。
+6. 范围外的问题按 `.cursor/README.md`「发现问题怎么办」开 GitHub Issue、号码记进「已转 Issue」，不跨段修，不自动换下一段。
 
 修复需要改跨模块契约、新迁移，或同一失败两次没解决：`status: blocked`，用 AskQuestion 问。
 
 ## 交代
 
 - 每轮：修了什么（路径和坏结果）、测试结果、继续还是停
-- 结束：范围、已修缺陷、既定策略、顺带发现、未提交改动清单（不 git commit）；未开 PR 时写明「CI 未验」（双入口与硬规矩见 `.cursor/README.md`「与实际编排的关系」）
+- 结束：范围、已修缺陷、既定策略、已转 Issue 清单（含号码）、未提交改动清单（不 git commit）；未开 PR 时写明「CI 未验」（双入口与硬规矩见 `.cursor/README.md`「与实际编排的关系」）
 
 功能完善盘点仍走 `area-reviewer` 的功能完善审查，不在本流程里做。

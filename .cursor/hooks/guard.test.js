@@ -36,6 +36,23 @@ for (const cmd of askCmds) {
   });
 }
 
+const denyMsgCmds = [
+  'git commit -m "no message"',
+  "git commit -m wip",
+  "git commit -m ''",
+  'git -C /repo commit -m "update"',
+  "git commit --message=temp",
+];
+for (const cmd of denyMsgCmds) {
+  test(`deny (空洞訊息): ${cmd}`, () => {
+    assert.strictEqual((shellVerdict(cmd) || [])[0], "deny");
+  });
+}
+
+test("ask: 正常 Conventional Commits 标题仍走确认", () => {
+  assert.strictEqual((shellVerdict('git commit -m "fix(auth): 收窄 trusted-proxies"') || [])[0], "ask");
+});
+
 const allowCmds = [
   "git status",
   "git -C /repo log --oneline -3",

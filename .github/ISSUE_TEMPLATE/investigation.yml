@@ -1,0 +1,42 @@
+name: 調查
+description: 根因未明的問題——先查清調用鏈與原因，結論再拆成 fix／feature 子單
+title: "investigate: "
+labels: ["investigation"]
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 現象
+      description: 觀察到什麼、出現條件、影響面
+    validations:
+      required: true
+  - type: textarea
+    id: chain
+    attributes:
+      label: 已知調用鏈
+      description: 請求／程式碼路徑；還不知道的寫明未知點
+    validations:
+      required: true
+  - type: textarea
+    id: conclusion-format
+    attributes:
+      label: 結論交付格式
+      description: 查完要回答哪幾個問題；根因成立後在本單留言拆出子 Issue（fix/feature）並回鏈，不在本單直接改程式碼
+      value: |
+        1. 根因（在哪一層、哪段程式碼）：
+        2. 是否既定策略（附依據）：
+        3. 拆出的子 Issue：
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: 相關模組
+      options:
+        - admin-web
+        - agent-portal
+        - website-services
+        - agent-services
+        - 其他
+    validations:
+      required: true

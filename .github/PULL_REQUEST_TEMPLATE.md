@@ -20,3 +20,9 @@ Closes #
 
 - [ ] 日常改动：目标分支是 `dev`
 - [ ] 发版：`dev` → `main`
+
+## 提交规范
+
+- [ ] 每笔提交标题为 Conventional Commits（`feat/fix/docs/chore/ci/test/refactor/style(scope): …`），无空洞訊息（如 `no message`、`wip`、`update`）
+- [ ] 单笔提交单一关切；混杂改动已拆笔
+- [ ] 本次发现的範圍外問題已另開 Issue 並在上方回鏈，未混進本次 diff

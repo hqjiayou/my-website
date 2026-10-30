@@ -57,8 +57,27 @@ function fileVerdict(toolName, filePath, cwd) {
   return null;
 }
 
+// 空洞提交訊息直接拒绝（提交规范见 .cursor/README.md「提交规范」硬规矩）。
+// 只拦明确的占位词；正常 Conventional Commits 标题不受影响，仍走 commit 的 ask。
+const MEANINGLESS_MSG = /^(no message|wip|tmp|temp|update|updates|misc|change|changes|fix|test|\.|提交|修改)$/i;
+function commitMessageVerdict(command) {
+  if (!gitRe("commit\\b").test(command)) return null;
+  const m =
+    command.match(/(?:-m|--message)(?:=|\s+)"([^"]*)"/) ||
+    command.match(/(?:-m|--message)(?:=|\s+)'([^']*)'/) ||
+    command.match(/(?:-m|--message)(?:=|\s+)(\S+)/);
+  if (!m) return null;
+  const msg = m[1].trim();
+  if (!msg || MEANINGLESS_MSG.test(msg)) {
+    return ["deny", "提交訊息空洞：标题要用 Conventional Commits 写明做了什么（feat/fix/docs/…(scope): …）"];
+  }
+  return null;
+}
+
 function shellVerdict(command) {
   for (const [re, why] of SHELL_DENY) if (re.test(command)) return ["deny", why];
+  const cmv = commitMessageVerdict(command);
+  if (cmv) return cmv;
   for (const [re, why] of SHELL_ASK) if (re.test(command)) return ["ask", why];
   return null;
 }
