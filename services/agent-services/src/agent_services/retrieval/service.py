@@ -20,7 +20,12 @@ from agent_services.config import (
     Settings,
 )
 from agent_services.retrieval.chunking import split_text
-from agent_services.retrieval.embeddings import EmbeddingClient, create_embedding_client
+from agent_services.retrieval.embeddings import (
+    MAX_EMBEDDING_CLASSES,
+    EmbeddingClient,
+    create_embedding_client,
+    embedding_class_name,
+)
 from agent_services.retrieval.store import RetrievalStore, RetrievedChunk
 from agent_services.schemas.chat import ModelSelection
 
@@ -44,6 +49,14 @@ class ReembedPrepared:
     dimensions: int
     column_dimensions: int | None
     recreated: bool
+
+
+@dataclass(frozen=True)
+class EmbeddingClass:
+    """一次检索或写入用的一类：模型名加上它自己的嵌入客户端。"""
+
+    name: str
+    client: EmbeddingClient | None
 
 
 DEFAULT_TOP_K = 4
@@ -231,6 +244,43 @@ def _ranked_hits(
     return sorted(chosen.values(), key=lambda item: (-item.score, item.source_id, item.chunk_index))
 
 
+def merge_by_rank(paths: list[list[RetrievedChunk]]) -> list[RetrievedChunk]:
+    """类之间按名次相加。分数是各路 1/rank 之和，不读取各路原来的余弦。
+
+    同一 (source_id, chunk_index) 出现在多路时名次相加。正文留名次最好的那一路。
+    并列时按 source_id、chunk_index，保证只有一路时顺序稳定。
+    """
+    totals: dict[tuple[str, int], float] = {}
+    best_rank: dict[tuple[str, int], int] = {}
+    chosen: dict[tuple[str, int], RetrievedChunk] = {}
+    for path in paths:
+        for rank, chunk in enumerate(path, start=1):
+            key = (chunk.source_id, chunk.chunk_index)
+            totals[key] = totals.get(key, 0.0) + (1.0 / rank)
+            previous = best_rank.get(key)
+            if previous is None or rank < previous:
+                best_rank[key] = rank
+                content = chunk.content
+            else:
+                content = chosen[key].content
+            chosen[key] = RetrievedChunk(chunk.source_id, chunk.chunk_index, content, totals[key])
+    return sorted(chosen.values(), key=lambda item: (-item.score, item.source_id, item.chunk_index))
+
+
+def lexical_rank_path(
+    lexical_hits: list[RetrievedChunk], tokens: list[str]
+) -> list[RetrievedChunk]:
+    """字面命中单独成一路名次。覆盖率只用来给这一路排序。"""
+    ranked: list[RetrievedChunk] = []
+    for hit in lexical_hits:
+        coverage = code_coverage(hit.content, tokens)
+        if coverage <= 0:
+            continue
+        ranked.append(RetrievedChunk(hit.source_id, hit.chunk_index, hit.content, coverage))
+    ranked.sort(key=lambda item: (-item.score, item.source_id, item.chunk_index))
+    return ranked
+
+
 def merge_code_hits(
     vector_hits: list[RetrievedChunk],
     lexical_hits: list[RetrievedChunk],
@@ -321,9 +371,11 @@ class RetrievalService:
         rerank_max_candidates: int | None = None,
         rerank_cutoff: bool | None = None,
         max_chunks_per_source: int | None = None,
+        embedding_model: str = "",
     ) -> None:
         self._embedder = embedder
         self._store = store
+        self._embedding_model = embedding_class_name(embedding_model) if embedding_model else ""
         self._min_score = min_score
         self._score_ratio_floor = score_ratio_floor
         self._settings = settings
@@ -366,6 +418,7 @@ class RetrievalService:
         self._degraded = False
         self._last_error: str | None = None
         self._rerank_applied = False
+        self._retrieval_incomplete = False
 
     @property
     def has_process_embedder(self) -> bool:
@@ -383,6 +436,55 @@ class RetrievalService:
     def rerank_applied(self) -> bool:
         return self._rerank_applied
 
+    def _resolve_classes(
+        self,
+        embedder: EmbeddingClient | None,
+        embedding_classes: list[EmbeddingClass] | None,
+        embedding_model: str | None,
+    ) -> list[EmbeddingClass]:
+        if embedding_classes:
+            chosen: list[EmbeddingClass] = []
+            seen: set[str] = set()
+            for item in embedding_classes:
+                name = embedding_class_name(item.name)
+                if name in seen:
+                    continue
+                seen.add(name)
+                chosen.append(EmbeddingClass(name, item.client))
+            if len(chosen) > MAX_EMBEDDING_CLASSES:
+                raise ValueError(
+                    f"embeddingClasses accepts at most {MAX_EMBEDDING_CLASSES} classes."
+                )
+            if not chosen:
+                raise RuntimeError("Embedding client is not configured.")
+            return chosen
+        client = embedder or self._embedder
+        if client is None:
+            raise RuntimeError("Embedding client is not configured.")
+        name = embedding_class_name(embedding_model) if embedding_model else self._embedding_model
+        return [EmbeddingClass(name, client)]
+
+    async def _upsert_one(
+        self,
+        *,
+        agent_id: str,
+        source_id: str,
+        title: str,
+        chunks: list[str],
+        item: EmbeddingClass,
+    ) -> int:
+        if item.client is None:
+            raise RuntimeError("Embedding client is not configured.")
+        embeddings = await item.client.embed_documents(chunks)
+        return await self._store.upsert_document(
+            agent_id=agent_id,
+            source_id=source_id,
+            title=title,
+            chunks=chunks,
+            embeddings=embeddings,
+            embedding_model=item.name,
+        )
+
     async def upsert_document(
         self,
         *,
@@ -391,6 +493,8 @@ class RetrievalService:
         title: str,
         content: str,
         embedder: EmbeddingClient | None = None,
+        embedding_model: str | None = None,
+        embedding_classes: list[EmbeddingClass] | None = None,
     ) -> int:
         chunks = split_text(content)
         if not chunks:
@@ -400,17 +504,36 @@ class RetrievalService:
             raise RetrievalChunkLimitExceeded(
                 f"Document exceeds the maximum of {MAX_UPSERT_CHUNKS} chunks."
             )
-        client = embedder or self._embedder
-        if client is None:
-            raise RuntimeError("Embedding client is not configured.")
-        embeddings = await client.embed_documents(chunks)
-        return await self._store.upsert_document(
-            agent_id=agent_id,
-            source_id=source_id,
-            title=title,
-            chunks=chunks,
-            embeddings=embeddings,
-        )
+        classes = self._resolve_classes(embedder, embedding_classes, embedding_model)
+        if len(classes) == 1:
+            return await self._upsert_one(
+                agent_id=agent_id,
+                source_id=source_id,
+                title=title,
+                chunks=chunks,
+                item=classes[0],
+            )
+        count = 0
+        failures = 0
+        for item in classes:
+            try:
+                count = await self._upsert_one(
+                    agent_id=agent_id,
+                    source_id=source_id,
+                    title=title,
+                    chunks=chunks,
+                    item=item,
+                )
+            except Exception:
+                failures += 1
+                logger.warning(
+                    "retrieval upsert failed for embedding class %s",
+                    item.name,
+                    exc_info=True,
+                )
+        if failures:
+            raise RuntimeError("One or more embedding classes failed to index.")
+        return count
 
     async def prepare_reembed(
         self,
@@ -494,39 +617,28 @@ class RetrievalService:
             raise ValueError("unusable rerank order")
         return [window[index] for index in order] + tail
 
-    async def search(
-        self,
-        *,
-        agent_id: str,
-        query: str,
-        top_k: int = DEFAULT_TOP_K,
-        embedder: EmbeddingClient | None = None,
-        model_selection: ModelSelection | None = None,
-    ) -> list[RetrievedChunk]:
-        self._rerank_applied = False
-        client = embedder or self._embedder
-        if client is None:
-            raise RuntimeError("Embedding client is not configured.")
-        embedding = await client.embed_query(query)
-        vector_hits = apply_min_score(
-            await self._store.search(agent_id=agent_id, embedding=embedding, top_k=top_k),
-            self._min_score,
-        )
+    async def _lexical_hits(
+        self, agent_id: str, query: str, classes: list[EmbeddingClass]
+    ) -> tuple[list[str], list[RetrievedChunk]]:
         terms = query_terms(query)
-        lexical_hits: list[RetrievedChunk] = []
-        # 上面的嵌入和向量查询若失败会直接抛出，词法查询不会先跑。
-        if terms:
-            lexical_hits = await self._store.search_lexical(
-                agent_id=agent_id,
-                tokens=terms,
-                limit=LEXICAL_CANDIDATE_LIMIT,
-            )
-        fused = apply_per_source_cap(
-            apply_score_ratio_floor(
-                _ranked_hits(vector_hits, lexical_hits, terms), self._score_ratio_floor
-            ),
-            self._max_chunks_per_source,
+        if not terms:
+            return terms, []
+        hits = await self._store.search_lexical(
+            agent_id=agent_id,
+            tokens=terms,
+            limit=LEXICAL_CANDIDATE_LIMIT,
+            embedding_models=[item.name for item in classes],
         )
+        return terms, hits
+
+    async def _finish_with_rerank(
+        self,
+        fused: list[RetrievedChunk],
+        *,
+        query: str,
+        top_k: int,
+        model_selection: ModelSelection | None,
+    ) -> list[RetrievedChunk]:
         ordered = fused
         # 重排模式维持旧触发（候选多于 topK 才值得重排）；裁门模式候选 ≥2 即触发，
         # 否则小知识库里融合后的 2~3 条近失命中永远等不到语义把关（对抗探针实测）。
@@ -547,6 +659,122 @@ class RetrievalService:
                     )
         return ordered[:top_k]
 
+    async def _search_one(
+        self,
+        item: EmbeddingClass,
+        *,
+        agent_id: str,
+        query: str,
+        top_k: int,
+        model_selection: ModelSelection | None,
+    ) -> list[RetrievedChunk]:
+        """只有一类时保持原来的余弦、字面覆盖率取较大值、相对裁剪。"""
+        if item.client is None:
+            raise RuntimeError("Embedding client is not configured.")
+        embedding = await item.client.embed_query(query)
+        vector_hits = apply_min_score(
+            await self._store.search(
+                agent_id=agent_id,
+                embedding=embedding,
+                top_k=top_k,
+                embedding_model=item.name,
+            ),
+            self._min_score,
+        )
+        # 上面的嵌入和向量查询若失败会直接抛出，词法查询不会先跑。
+        terms, lexical_hits = await self._lexical_hits(agent_id, query, [item])
+        fused = apply_per_source_cap(
+            apply_score_ratio_floor(
+                _ranked_hits(vector_hits, lexical_hits, terms), self._score_ratio_floor
+            ),
+            self._max_chunks_per_source,
+        )
+        return await self._finish_with_rerank(
+            fused, query=query, top_k=top_k, model_selection=model_selection
+        )
+
+    async def _class_vector_hits(
+        self, item: EmbeddingClass, *, agent_id: str, query: str, top_k: int
+    ) -> list[RetrievedChunk]:
+        """一类内部：余弦、绝对分门槛、相对裁剪。名次从这份结果的顺序来。"""
+        if item.client is None:
+            raise RuntimeError("Embedding client is not configured.")
+        embedding = await item.client.embed_query(query)
+        raw = await self._store.search(
+            agent_id=agent_id,
+            embedding=embedding,
+            top_k=top_k,
+            embedding_model=item.name,
+        )
+        return apply_score_ratio_floor(apply_min_score(raw, self._min_score), self._score_ratio_floor)
+
+    async def _search_many(
+        self,
+        classes: list[EmbeddingClass],
+        *,
+        agent_id: str,
+        query: str,
+        top_k: int,
+        model_selection: ModelSelection | None,
+    ) -> list[RetrievedChunk]:
+        paths: list[list[RetrievedChunk]] = []
+        failures = 0
+        for item in classes:
+            try:
+                paths.append(
+                    await self._class_vector_hits(item, agent_id=agent_id, query=query, top_k=top_k)
+                )
+            except Exception as exc:  # noqa: BLE001 — 一类失败跳过，其它类继续
+                failures += 1
+                logger.warning(
+                    "retrieval embedding class %s failed (%s); skipping its vector hits",
+                    item.name,
+                    type(exc).__name__,
+                )
+        if failures == len(classes):
+            raise RuntimeError("All embedding classes failed.")
+        if failures:
+            self._retrieval_incomplete = True
+        terms, lexical_hits = await self._lexical_hits(agent_id, query, classes)
+        lexical_path = lexical_rank_path(lexical_hits, terms)
+        ranked_paths = [path for path in paths if path]
+        if lexical_path:
+            ranked_paths.append(lexical_path)
+        fused = apply_per_source_cap(merge_by_rank(ranked_paths), self._max_chunks_per_source)
+        return await self._finish_with_rerank(
+            fused, query=query, top_k=top_k, model_selection=model_selection
+        )
+
+    async def search(
+        self,
+        *,
+        agent_id: str,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+        embedder: EmbeddingClient | None = None,
+        model_selection: ModelSelection | None = None,
+        embedding_model: str | None = None,
+        embedding_classes: list[EmbeddingClass] | None = None,
+    ) -> list[RetrievedChunk]:
+        self._rerank_applied = False
+        self._retrieval_incomplete = False
+        classes = self._resolve_classes(embedder, embedding_classes, embedding_model)
+        if len(classes) == 1:
+            return await self._search_one(
+                classes[0],
+                agent_id=agent_id,
+                query=query,
+                top_k=top_k,
+                model_selection=model_selection,
+            )
+        return await self._search_many(
+            classes,
+            agent_id=agent_id,
+            query=query,
+            top_k=top_k,
+            model_selection=model_selection,
+        )
+
     async def retrieve_chunks(
         self,
         *,
@@ -555,10 +783,13 @@ class RetrievalService:
         top_k: int = DEFAULT_TOP_K,
         embedder: EmbeddingClient | None = None,
         model_selection: ModelSelection | None = None,
+        embedding_model: str | None = None,
+        embedding_classes: list[EmbeddingClass] | None = None,
     ) -> list[RetrievedChunk]:
         """与 retrieve_context 同一条降级路径：嵌入或向量库失败时返回空列表并置 degraded。
 
-        chat grounding 与 POST /retrieval/search 都走这里，避免另写一套错误格式。
+        多类时某一类嵌问题失败只跳过该类，degraded 仍为真，其它类和字面命中照常返回。
+        全部类失败才整次降级。chat grounding 与 POST /retrieval/search 都走这里。
         """
         try:
             chunks = await self.search(
@@ -567,6 +798,8 @@ class RetrievalService:
                 top_k=top_k,
                 embedder=embedder,
                 model_selection=model_selection,
+                embedding_model=embedding_model,
+                embedding_classes=embedding_classes,
             )
         except Exception as exc:  # noqa: BLE001
             self._degraded = True
@@ -574,8 +807,8 @@ class RetrievalService:
             self._last_error = type(exc).__name__
             logger.warning("retrieval search failed; continuing without context", exc_info=True)
             return []
-        self._degraded = False
-        self._last_error = None
+        self._degraded = self._retrieval_incomplete
+        self._last_error = "EmbeddingError" if self._retrieval_incomplete else None
         return chunks
 
     async def retrieve_context(self, *, agent_id: str, query: str) -> list[str]:
@@ -607,6 +840,7 @@ def create_retrieval_service(settings: Settings) -> tuple[RetrievalService | Non
         dsn,
         dimensions=settings.ai_embedding_dimensions,
         hnsw_ef_search=settings.retrieval_hnsw_ef_search,
+        legacy_embedding_model=settings.ai_embedding_model,
     )
     # 进程没配嵌入模型时仍保留库连接：请求可以带模型入口的 embedding spec 和 key。
     return (
@@ -617,6 +851,7 @@ def create_retrieval_service(settings: Settings) -> tuple[RetrievalService | Non
             score_ratio_floor=settings.retrieval_score_ratio_floor,
             max_chunks_per_source=settings.retrieval_max_chunks_per_source,
             settings=settings,
+            embedding_model=settings.ai_embedding_model,
         ),
         None if embedder is not None else blocked_reason,
     )

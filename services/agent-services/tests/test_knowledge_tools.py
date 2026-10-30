@@ -16,17 +16,20 @@ _GUIDANCE_MARKER = "search_site_knowledge tool first"
 
 
 class _FakeRetrieval:
-    def __init__(self, *, degraded: bool = False, fail: bool = False) -> None:
+    def __init__(self, *, degraded: bool = False, fail: bool = False, partial: bool = False) -> None:
         self.calls: list[tuple[str, str]] = []
         self.kwargs: list[dict[str, object]] = []
         self.degraded = degraded
         self._fail = fail
+        self._partial = partial
 
     async def retrieve_chunks(self, *, agent_id: str, query: str, **kwargs: object) -> list[RetrievedChunk]:
         self.calls.append((agent_id, query))
         self.kwargs.append(dict(kwargs))
         if self._fail:
             raise RuntimeError("boom")
+        if self.degraded and not self._partial:
+            return []
         return [RetrievedChunk(source_id="kb:1", chunk_index=2, content="KB-FACT", score=0.9)]
 
 
@@ -79,6 +82,18 @@ async def test_knowledge_tool_returns_formatted_chunks_with_sources() -> None:
 async def test_knowledge_tool_reports_unavailable_without_retrieval() -> None:
     toolset = build_knowledge_toolset("42", None)
     assert await _call_search(toolset, "hours") == "Site knowledge search is unavailable."
+
+
+async def test_knowledge_tool_returns_partial_hits_when_degraded() -> None:
+    collector = KnowledgeSearchCollector()
+    toolset = build_knowledge_toolset(
+        "42",
+        _FakeRetrieval(degraded=True, partial=True),  # type: ignore[arg-type]
+        collector=collector,
+    )
+    assert await _call_search(toolset, "hours") == "- KB-FACT (source: kb:1#2)"
+    assert collector.degraded is True
+    assert [(chunk.source_id, chunk.chunk_index) for chunk in collector.chunks] == [("kb:1", 2)]
 
 
 async def test_knowledge_tool_reports_failure_when_degraded() -> None:

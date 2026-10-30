@@ -205,6 +205,7 @@ class _Row:
     chunk_index: int
     content: str
     embedding: list[float]
+    embedding_model: str = ""
 
 
 class MemoryRetrievalStore:
@@ -223,9 +224,16 @@ class MemoryRetrievalStore:
         title: str,
         chunks: list[str],
         embeddings: list[list[float]],
+        embedding_model: str = "",
     ) -> int:
         self._rows = [
-            row for row in self._rows if not (row.agent_id == agent_id and row.source_id == source_id)
+            row
+            for row in self._rows
+            if not (
+                row.agent_id == agent_id
+                and row.source_id == source_id
+                and row.embedding_model == embedding_model
+            )
         ]
         self._titles[(agent_id, source_id)] = title
         for index, (content, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
@@ -236,6 +244,7 @@ class MemoryRetrievalStore:
                     chunk_index=index,
                     content=content,
                     embedding=list(embedding),
+                    embedding_model=embedding_model,
                 )
             )
             self._dimensions = len(embedding)
@@ -247,11 +256,20 @@ class MemoryRetrievalStore:
         ]
         self._titles.pop((agent_id, source_id), None)
 
-    async def search(self, *, agent_id: str, embedding: list[float], top_k: int) -> list[RetrievedChunk]:
+    async def search(
+        self,
+        *,
+        agent_id: str,
+        embedding: list[float],
+        top_k: int,
+        embedding_model: str = "",
+    ) -> list[RetrievedChunk]:
         if top_k < 1:
             return []
         scored = [
-            (_cosine(row.embedding, embedding), row) for row in self._rows if row.agent_id == agent_id
+            (_cosine(row.embedding, embedding), row)
+            for row in self._rows
+            if row.agent_id == agent_id and row.embedding_model == embedding_model
         ]
         scored.sort(key=lambda item: (-item[0], item[1].source_id, item[1].chunk_index))
         return [
@@ -265,13 +283,21 @@ class MemoryRetrievalStore:
         ]
 
     async def search_lexical(
-        self, *, agent_id: str, tokens: list[str], limit: int
+        self,
+        *,
+        agent_id: str,
+        tokens: list[str],
+        limit: int,
+        embedding_models: list[str] | None = None,
     ) -> list[RetrievedChunk]:
         if not tokens or limit < 1:
             return []
+        allowed = None if embedding_models is None else set(embedding_models)
         ranked: list[tuple[int, _Row]] = []
         for row in self._rows:
             if row.agent_id != agent_id:
+                continue
+            if allowed is not None and row.embedding_model not in allowed:
                 continue
             folded = row.content.casefold()
             hits = sum(1 for token in tokens if token.casefold() in folded)

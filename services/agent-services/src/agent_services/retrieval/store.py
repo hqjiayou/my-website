@@ -6,10 +6,11 @@
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
-from agent_services.retrieval.embeddings import _finite_floats
+from agent_services.retrieval.embeddings import _finite_floats, embedding_class_name
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,86 @@ WHERE n.nspname = 'agent_retrieval'
 """
 
 
+# 重建遗留表时只删这一张。其它维度的类表（chunks_dN）不在这条语句里。
+LEGACY_CHUNKS_DROP_SQL = "DROP TABLE IF EXISTS agent_retrieval.chunks"
+_CHUNKS_TABLE_NAME = re.compile(r"^chunks(?:_d[1-9][0-9]{0,4})?$")
+
+
+def qualified_chunks_table(table: str) -> str:
+    """表名只接受 chunks 或 chunks_d<维度>，避免把调用方字符串拼进 SQL。"""
+    if not _CHUNKS_TABLE_NAME.fullmatch(table):
+        raise ValueError("Invalid chunks table name.")
+    return f"agent_retrieval.{table}"
+
+
+def dimension_table_name(dimensions: int, *, legacy_dimensions: int | None) -> str:
+    """与遗留列同维度的类共用 chunks。维度不同则另表，不替换遗留表。"""
+    dimensions = _positive_dimensions(dimensions)
+    if legacy_dimensions is None or dimensions == legacy_dimensions:
+        return "chunks"
+    return f"chunks_d{dimensions}"
+
+
+def create_class_table_sql(table: str, dimensions: int) -> str:
+    """新建一类的表。只有 CREATE IF NOT EXISTS，不删除已有类。"""
+    dimensions = _positive_dimensions(dimensions)
+    qualified = qualified_chunks_table(table)
+    return (
+        f"CREATE TABLE IF NOT EXISTS {qualified} ("
+        "id BIGSERIAL PRIMARY KEY, "
+        "agent_id TEXT NOT NULL, "
+        "source_id TEXT NOT NULL, "
+        "chunk_index INTEGER NOT NULL, "
+        "content TEXT NOT NULL, "
+        "embedding_model TEXT NOT NULL, "
+        f"embedding vector({dimensions}) NOT NULL, "
+        "metadata JSONB NOT NULL DEFAULT '{}'::jsonb, "
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT now())"
+    )
+
+
+def class_row_delete_sql(table: str, *, include_legacy_nulls: bool = False) -> str:
+    """只删这一类里这一份文档。include_legacy_nulls 仅用于把未标注的存量行算进进程模型。"""
+    qualified = qualified_chunks_table(table)
+    if include_legacy_nulls:
+        predicate = "(embedding_model = $3 OR embedding_model IS NULL)"
+    else:
+        predicate = "embedding_model = $3"
+    return (
+        f"DELETE FROM {qualified} WHERE agent_id = $1 AND source_id = $2 AND {predicate}"
+    )
+
+
+def _class_index_names(table: str) -> tuple[str, str]:
+    """遗留表沿用原来的索引名。新维度表用自己的名字，避免和 chunks 冲突。"""
+    qualified_chunks_table(table)
+    if table == "chunks":
+        return (
+            "idx_agent_retrieval_chunks_agent_source",
+            "idx_agent_retrieval_chunks_embedding_hnsw",
+        )
+    return (
+        f"idx_agent_retrieval_{table}_agent_source",
+        f"idx_agent_retrieval_{table}_embedding_hnsw",
+    )
+
+
+def vector_search_sql(table: str, *, include_legacy_nulls: bool = False) -> str:
+    """类内余弦。WHERE 带模型名，不同模型不进同一次距离计算。"""
+    qualified = qualified_chunks_table(table)
+    if include_legacy_nulls:
+        predicate = "(embedding_model = $3 OR embedding_model IS NULL)"
+    else:
+        predicate = "embedding_model = $3"
+    return (
+        "SELECT source_id, chunk_index, content, "
+        "1 - (embedding <=> $2::vector) AS score "
+        f"FROM {qualified} "
+        f"WHERE agent_id = $1 AND {predicate} "
+        "ORDER BY embedding <=> $2::vector LIMIT $4"
+    )
+
+
 def like_literal_pattern(token: str) -> str:
     """收成 ILIKE 字面量模式。%、_、\\ 按字面匹配，不当成通配符。"""
     escaped = token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -76,12 +157,18 @@ def like_literal_pattern(token: str) -> str:
 
 
 def lexical_search_statement(
-    agent_id: str, tokens: list[str], limit: int
+    agent_id: str,
+    tokens: list[str],
+    limit: int,
+    table: str = "chunks",
+    embedding_models: list[str] | None = None,
+    include_legacy_nulls: bool = False,
 ) -> tuple[str, list[object]]:
-    """词法 SQL 只按调用方 agent_id 过滤，token 只进绑定参数。
+    """词法 SQL 只按调用方 agent_id 过滤，token 和模型名只进绑定参数。
 
     LIMIT 之前按命中 token 数降序，同分再按 source_id、chunk_index。
     否则更宽的短 token 会占满候选窗口，把型号整段命中挤掉。
+    embedding_models 给出时只查这些类；未给出时保持旧的整表字面查询。
     """
     arguments: list[object] = [agent_id]
     clauses: list[str] = []
@@ -91,15 +178,49 @@ def lexical_search_statement(
     rank_terms = [
         f"(content ILIKE ${index} ESCAPE '\\')::int" for index in range(2, len(arguments) + 1)
     ]
+    model_sql = ""
+    if embedding_models is not None:
+        arguments.append(list(embedding_models))
+        model_param = len(arguments)
+        if include_legacy_nulls:
+            model_sql = (
+                f" AND (embedding_model = ANY(${model_param}::text[]) "
+                "OR embedding_model IS NULL)"
+            )
+        else:
+            model_sql = f" AND embedding_model = ANY(${model_param}::text[])"
     arguments.append(limit)
+    rank_expr = " + ".join(rank_terms)
     sql = (
-        "SELECT source_id, chunk_index, content, 0::float8 AS score "
-        "FROM agent_retrieval.chunks "
-        f"WHERE agent_id = $1 AND ({' OR '.join(clauses)}) "
-        f"ORDER BY ({' + '.join(rank_terms)}) DESC, source_id, chunk_index "
+        "SELECT source_id, chunk_index, content, "
+        f"({rank_expr})::float8 AS score "
+        f"FROM {qualified_chunks_table(table)} "
+        f"WHERE agent_id = $1 AND ({' OR '.join(clauses)}){model_sql} "
+        f"ORDER BY ({rank_expr}) DESC, source_id, chunk_index "
         f"LIMIT ${len(arguments)}"
     )
     return sql, arguments
+
+
+def merge_lexical_candidates(
+    groups: list[list[RetrievedChunk]], *, limit: int
+) -> list[RetrievedChunk]:
+    """每张类表各自带了 LIMIT。按命中分数合并后再截断，表名靠前的那张不能占满窗口。"""
+    if limit < 1:
+        return []
+    chosen: dict[tuple[str, int], RetrievedChunk] = {}
+    for group in groups:
+        for chunk in group:
+            key = (chunk.source_id, chunk.chunk_index)
+            previous = chosen.get(key)
+            if previous is not None and previous.score >= chunk.score:
+                continue
+            chosen[key] = chunk
+    ranked = sorted(
+        chosen.values(),
+        key=lambda item: (-item.score, item.source_id, item.chunk_index),
+    )
+    return ranked[:limit]
 
 
 class RetrievalStore(Protocol):
@@ -111,16 +232,27 @@ class RetrievalStore(Protocol):
         title: str,
         chunks: list[str],
         embeddings: list[list[float]],
+        embedding_model: str = "",
     ) -> int: ...
 
     async def delete_document(self, *, agent_id: str, source_id: str) -> None: ...
 
     async def search(
-        self, *, agent_id: str, embedding: list[float], top_k: int
+        self,
+        *,
+        agent_id: str,
+        embedding: list[float],
+        top_k: int,
+        embedding_model: str = "",
     ) -> list[RetrievedChunk]: ...
 
     async def search_lexical(
-        self, *, agent_id: str, tokens: list[str], limit: int
+        self,
+        *,
+        agent_id: str,
+        tokens: list[str],
+        limit: int,
+        embedding_models: list[str] | None = None,
     ) -> list[RetrievedChunk]: ...
 
     async def current_dimensions(self) -> int | None: ...
@@ -162,10 +294,19 @@ class PgVectorRetrievalStore:
     """pgvector 实现。schema/表首次使用时创建；CREATE EXTENSION 需要 DBA 预授权，
     失败时假定扩展已由运维预建（部署文档约定）。"""
 
-    def __init__(self, dsn: str, *, dimensions: int, hnsw_ef_search: int = 40) -> None:
+    def __init__(
+        self,
+        dsn: str,
+        *,
+        dimensions: int,
+        hnsw_ef_search: int = 40,
+        legacy_embedding_model: str = "",
+    ) -> None:
         self._dsn = dsn
         self._dimensions = dimensions
         self._hnsw_ef_search = hnsw_ef_search
+        # 存量行在加列时记成进程嵌入模型。空字符串表示进程没配模型名。
+        self._legacy_embedding_model = embedding_class_name(legacy_embedding_model)
         self._pool = None
         self._pool_lock = asyncio.Lock()
 
@@ -200,32 +341,22 @@ class PgVectorRetrievalStore:
         except Exception:  # noqa: BLE001 — 无扩展安装权限时由运维预建
             pass
 
-    @staticmethod
-    async def _create_chunks(conn, dimensions: int) -> None:
-        """与首次建表同一套 DDL。dimensions 只来自已校验的正整数。"""
+    async def _create_chunks(self, conn, dimensions: int, table: str = "chunks") -> None:
+        """建这一维度的类表和索引。已有表只补 embedding_model 列，不删其它类。"""
+        dimensions = _positive_dimensions(dimensions)
+        qualified = qualified_chunks_table(table)
         await conn.execute("CREATE SCHEMA IF NOT EXISTS agent_retrieval")
+        await conn.execute(create_class_table_sql(table, dimensions))
+        await self._ensure_embedding_model_column(conn, table)
+        source_index, vector_index = _class_index_names(table)
         await conn.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS agent_retrieval.chunks (
-                id          BIGSERIAL PRIMARY KEY,
-                agent_id     TEXT NOT NULL,
-                source_id   TEXT NOT NULL,
-                chunk_index INTEGER NOT NULL,
-                content     TEXT NOT NULL,
-                embedding   vector({dimensions}) NOT NULL,
-                metadata    JSONB NOT NULL DEFAULT '{{}}'::jsonb,
-                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_agent_retrieval_chunks_agent_source "
-            "ON agent_retrieval.chunks (agent_id, source_id)"
+            f"CREATE INDEX IF NOT EXISTS {source_index} "
+            f"ON {qualified} (agent_id, source_id)"
         )
         if hnsw_index_allowed(dimensions):
             await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_agent_retrieval_chunks_embedding_hnsw "
-                "ON agent_retrieval.chunks USING hnsw (embedding vector_cosine_ops) "
+                f"CREATE INDEX IF NOT EXISTS {vector_index} "
+                f"ON {qualified} USING hnsw (embedding vector_cosine_ops) "
                 "WITH (m = 16, ef_construction = 64)"
             )
         else:
@@ -235,6 +366,49 @@ class PgVectorRetrievalStore:
                 dimensions,
                 HNSW_MAX_DIMENSIONS,
             )
+
+    async def _ensure_embedding_model_column(self, conn, table: str) -> None:
+        """旧表没有模型名时补列。chunks 上的空值记为当前进程嵌入模型。"""
+        qualified = qualified_chunks_table(table)
+        await conn.execute(
+            f"ALTER TABLE {qualified} ADD COLUMN IF NOT EXISTS embedding_model TEXT"
+        )
+        if table == "chunks" and self._legacy_embedding_model:
+            await conn.execute(
+                f"UPDATE {qualified} SET embedding_model = $1 WHERE embedding_model IS NULL",
+                self._legacy_embedding_model,
+            )
+        await conn.execute(
+            f"UPDATE {qualified} SET embedding_model = '' WHERE embedding_model IS NULL"
+        )
+        await conn.execute(
+            f"ALTER TABLE {qualified} ALTER COLUMN embedding_model SET NOT NULL"
+        )
+
+    async def _table_exists(self, conn, table: str) -> bool:
+        qualified_chunks_table(table)
+        found = await conn.fetchval(
+            "SELECT 1 FROM pg_catalog.pg_class c "
+            "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'agent_retrieval' AND c.relname = $1 AND c.relkind = 'r'",
+            table,
+        )
+        return found is not None
+
+    async def _list_class_tables(self, conn) -> list[str]:
+        rows = await conn.fetch(
+            "SELECT c.relname FROM pg_catalog.pg_class c "
+            "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'agent_retrieval' AND c.relkind = 'r' "
+            "AND (c.relname = 'chunks' OR c.relname LIKE 'chunks\\_d%' ESCAPE '\\')"
+        )
+        names = [
+            row["relname"]
+            for row in rows
+            if isinstance(row["relname"], str) and _CHUNKS_TABLE_NAME.fullmatch(row["relname"])
+        ]
+        names.sort()
+        return names
 
     async def _connect(self):
         import asyncpg
@@ -271,16 +445,18 @@ class PgVectorRetrievalStore:
         try:
             await self._install_vector_extension(conn)
             async with conn.transaction():
-                await conn.execute("DROP TABLE IF EXISTS agent_retrieval.chunks")
+                # 只重建遗留 chunks。chunks_dN 上的其它类留在原表。
+                await conn.execute(LEGACY_CHUNKS_DROP_SQL)
                 await self._create_chunks(conn, new_dimensions)
             self._dimensions = new_dimensions
         finally:
             await conn.close()
 
-    def _vector_literal(self, embedding: list[float]) -> str:
-        if len(embedding) != self._dimensions:
+    def _vector_literal(self, embedding: list[float], *, dimensions: int | None = None) -> str:
+        expected = self._dimensions if dimensions is None else dimensions
+        if len(embedding) != expected:
             raise ValueError(
-                f"Embedding dimension {len(embedding)} does not match configured {self._dimensions}."
+                f"Embedding dimension {len(embedding)} does not match configured {expected}."
             )
         return "[" + ",".join(repr(value) for value in _finite_floats(embedding)) + "]"
 
@@ -292,7 +468,16 @@ class PgVectorRetrievalStore:
         title: str,
         chunks: list[str],
         embeddings: list[list[float]],
+        embedding_model: str = "",
     ) -> int:
+        if not embeddings:
+            return 0
+        dimensions = len(embeddings[0])
+        model = embedding_class_name(embedding_model)
+        table = dimension_table_name(dimensions, legacy_dimensions=self._dimensions)
+        qualified = qualified_chunks_table(table)
+        # 只有写进遗留表、且模型名就是进程模型时，才把未标注的存量行一起换掉。
+        include_nulls = table == "chunks" and model == self._legacy_embedding_model
         pool = await self._get_pool()
         metadata = json.dumps({"title": title})
         async with pool.acquire() as conn, conn.transaction():
@@ -303,40 +488,58 @@ class PgVectorRetrievalStore:
                 "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
                 f"{agent_id}:{source_id}",
             )
+            await self._create_chunks(conn, dimensions, table)
             await conn.execute(
-                "DELETE FROM agent_retrieval.chunks WHERE agent_id = $1 AND source_id = $2",
+                class_row_delete_sql(table, include_legacy_nulls=include_nulls),
                 agent_id,
                 source_id,
+                model,
             )
             for index, (content, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
                 await conn.execute(
-                    "INSERT INTO agent_retrieval.chunks "
-                    "(agent_id, source_id, chunk_index, content, embedding, metadata) "
-                    "VALUES ($1, $2, $3, $4, $5::vector, $6::jsonb)",
+                    f"INSERT INTO {qualified} "
+                    "(agent_id, source_id, chunk_index, content, embedding, embedding_model, metadata) "
+                    "VALUES ($1, $2, $3, $4, $5::vector, $6, $7::jsonb)",
                     agent_id,
                     source_id,
                     index,
                     content,
-                    self._vector_literal(embedding),
+                    self._vector_literal(embedding, dimensions=dimensions),
+                    model,
                     metadata,
                 )
         return len(chunks)
 
     async def delete_document(self, *, agent_id: str, source_id: str) -> None:
+        """删文档时清掉每一类里的这份。新增一类不会走到这里。"""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
-            await conn.execute(
-                "DELETE FROM agent_retrieval.chunks WHERE agent_id = $1 AND source_id = $2",
-                agent_id,
-                source_id,
-            )
+            tables = await self._list_class_tables(conn)
+            for table in tables:
+                qualified = qualified_chunks_table(table)
+                await conn.execute(
+                    f"DELETE FROM {qualified} WHERE agent_id = $1 AND source_id = $2",
+                    agent_id,
+                    source_id,
+                )
 
     async def search(
-        self, *, agent_id: str, embedding: list[float], top_k: int
+        self,
+        *,
+        agent_id: str,
+        embedding: list[float],
+        top_k: int,
+        embedding_model: str = "",
     ) -> list[RetrievedChunk]:
+        dimensions = len(embedding)
+        model = embedding_class_name(embedding_model)
+        table = dimension_table_name(dimensions, legacy_dimensions=self._dimensions)
+        include_nulls = table == "chunks" and model == self._legacy_embedding_model
         pool = await self._get_pool()
         # hnsw.ef_search 是事务局部参数。asyncpg 必须把 set_config 和查询放进同一个 transaction。
         async with pool.acquire() as conn, conn.transaction():
+            if not await self._table_exists(conn, table):
+                return []
             if (
                 isinstance(self._hnsw_ef_search, int)
                 and not isinstance(self._hnsw_ef_search, bool)
@@ -347,13 +550,10 @@ class PgVectorRetrievalStore:
                     str(self._hnsw_ef_search),
                 )
             rows = await conn.fetch(
-                "SELECT source_id, chunk_index, content, "
-                "1 - (embedding <=> $2::vector) AS score "
-                "FROM agent_retrieval.chunks "
-                "WHERE agent_id = $1 "
-                "ORDER BY embedding <=> $2::vector LIMIT $3",
+                vector_search_sql(table, include_legacy_nulls=include_nulls),
                 agent_id,
-                self._vector_literal(embedding),
+                self._vector_literal(embedding, dimensions=dimensions),
+                model,
                 top_k,
             )
         return [
@@ -367,24 +567,57 @@ class PgVectorRetrievalStore:
         ]
 
     async def search_lexical(
-        self, *, agent_id: str, tokens: list[str], limit: int
+        self,
+        *,
+        agent_id: str,
+        tokens: list[str],
+        limit: int,
+        embedding_models: list[str] | None = None,
     ) -> list[RetrievedChunk]:
-        """按调用方 agent_id 做字面量子串匹配。分数由服务层覆盖率决定，这里不取向量分。"""
+        """按调用方 agent_id 做字面量子串匹配。只查这次检索登记的嵌入类。
+
+        分数先用命中 token 数，好让多张类表能按同一把尺子合并；服务层再改成覆盖率。
+        """
         if not tokens or limit < 1:
             return []
+        models = (
+            None
+            if embedding_models is None
+            else [embedding_class_name(model) for model in embedding_models]
+        )
         pool = await self._get_pool()
-        sql, arguments = lexical_search_statement(agent_id, tokens, limit)
         async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, *arguments)
-        return [
-            RetrievedChunk(
-                source_id=row["source_id"],
-                chunk_index=row["chunk_index"],
-                content=row["content"],
-                score=float(row["score"]),
-            )
-            for row in rows
-        ]
+            tables = await self._list_class_tables(conn)
+            if not tables:
+                tables = ["chunks"]
+            groups: list[list[RetrievedChunk]] = []
+            for table in tables:
+                include_nulls = bool(
+                    models is not None
+                    and table == "chunks"
+                    and self._legacy_embedding_model in models
+                )
+                sql, arguments = lexical_search_statement(
+                    agent_id,
+                    tokens,
+                    limit,
+                    table,
+                    embedding_models=models,
+                    include_legacy_nulls=include_nulls,
+                )
+                rows = await conn.fetch(sql, *arguments)
+                groups.append(
+                    [
+                        RetrievedChunk(
+                            source_id=row["source_id"],
+                            chunk_index=row["chunk_index"],
+                            content=row["content"],
+                            score=float(row["score"]),
+                        )
+                        for row in rows
+                    ]
+                )
+        return merge_lexical_candidates(groups, limit=limit)
 
     async def close(self) -> None:
         async with self._pool_lock:

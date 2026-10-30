@@ -2,8 +2,9 @@
 
 from pydantic import BaseModel, Field, field_validator
 
+from agent_services.retrieval.embeddings import limit_embedding_class_specs
 from agent_services.retrieval.service import DEFAULT_TOP_K
-from agent_services.schemas.chat import ModelSelection
+from agent_services.schemas.chat import EmbeddingClassCredentials, ModelSelection
 
 MAX_SITE_ID_LENGTH = 64
 MAX_SOURCE_ID_LENGTH = 128
@@ -22,8 +23,18 @@ class RetrievalUpsertRequest(BaseModel):
     embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
     api_key: str | None = Field(default=None, alias="apiKey", max_length=4096)
     base_url: str | None = Field(default=None, alias="baseUrl", max_length=512)
+    embedding_classes: list[EmbeddingClassCredentials] | None = Field(
+        default=None, alias="embeddingClasses"
+    )
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("embedding_classes")
+    @classmethod
+    def cap_embedding_classes(
+        cls, value: list[EmbeddingClassCredentials] | None
+    ) -> list[EmbeddingClassCredentials] | None:
+        return limit_embedding_class_specs(value)
 
 
 class RetrievalSearchRequest(BaseModel):
@@ -39,10 +50,20 @@ class RetrievalSearchRequest(BaseModel):
     embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
     api_key: str | None = Field(default=None, alias="apiKey", max_length=4096)
     base_url: str | None = Field(default=None, alias="baseUrl", max_length=512)
+    embedding_classes: list[EmbeddingClassCredentials] | None = Field(
+        default=None, alias="embeddingClasses"
+    )
     # 与 chat 的 model 同一形状。Java 知识检索目前只带 embedding 凭证，缺省时 rerank 用进程 AI_MODEL。
     model_selection: ModelSelection | None = Field(default=None, alias="model")
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("embedding_classes")
+    @classmethod
+    def cap_embedding_classes(
+        cls, value: list[EmbeddingClassCredentials] | None
+    ) -> list[EmbeddingClassCredentials] | None:
+        return limit_embedding_class_specs(value)
 
     @field_validator("top_k")
     @classmethod
