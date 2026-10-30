@@ -29,7 +29,7 @@ export interface AgentWorkspaceOutletContext {
 }
 
 const headerControlClass =
-  'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--primary)/0.35)] disabled:opacity-60'
+  'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium leading-none transition admin-focus-ring disabled:opacity-60'
 
 interface WorkspaceNavItem {
   key: string
@@ -142,7 +142,7 @@ export function AgentWorkspaceLayout() {
 
   if (!Number.isFinite(parsedId) || isError || (!isPending && !site)) {
     return (
-      <p className="text-sm text-rose-700">
+      <p className="text-sm text-danger-emphasis">
         {error instanceof Error ? error.message : t('workspace.notFound.title')}
       </p>
     )
@@ -193,7 +193,7 @@ export function AgentWorkspaceLayout() {
           {canDelete ? (
             <button
               type="button"
-              className={cn(headerControlClass, 'border-rose-300 bg-admin-surface text-rose-700 hover:bg-rose-50')}
+              className={cn(headerControlClass, 'border-danger/35 bg-admin-surface text-danger-emphasis hover:bg-danger-muted')}
               disabled={deleteMutation.isPending}
               onClick={() => {
                 if (!window.confirm(t('list.messages.confirmDelete', { name: site.agentName }))) return
