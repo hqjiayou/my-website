@@ -267,7 +267,7 @@ function UserRoleEditor({
               >
                 <input
                   type="checkbox"
-                  className="mt-1"
+                  className="admin-check mt-1"
                   checked={selectedCodes.has(role.roleCode)}
                   disabled={readOnly}
                   onChange={() => toggleCode(role.roleCode)}

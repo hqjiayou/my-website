@@ -30,7 +30,7 @@ export function CopyableText({ value, className }: CopyableTextProps) {
       type="button"
       onClick={() => void handleCopy()}
       className={cn(
-        'inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-admin transition hover:bg-admin-surface-muted',
+        'admin-focus-ring inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-sm text-admin transition hover:bg-admin-surface-muted',
         className,
       )}
       title={t('actions.copy')}
@@ -38,7 +38,7 @@ export function CopyableText({ value, className }: CopyableTextProps) {
     >
       <span className="min-w-0 break-all font-medium">{value}</span>
       {copied ? (
-        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+        <Check className="h-3.5 w-3.5 shrink-0 text-admin-success" />
       ) : (
         <Copy className="h-3.5 w-3.5 shrink-0 text-admin-muted" />
       )}

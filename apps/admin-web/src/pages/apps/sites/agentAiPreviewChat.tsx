@@ -308,7 +308,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
                     <label className="flex cursor-pointer items-start gap-2">
                       <input
                         type="checkbox"
-                        className="mt-0.5"
+                        className="admin-check mt-1"
                         checked={selectedSkills.includes(skill.id)}
                         onChange={() => toggleSkill(skill.id)}
                       />

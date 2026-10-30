@@ -261,6 +261,10 @@ html[data-density='compact'] {
   color: rgb(var(--muted-foreground));
 }
 
+.bg-admin-muted-foreground {
+  background-color: rgb(var(--muted-foreground));
+}
+
 .text-admin-sidebar {
   color: rgb(var(--sidebar-foreground));
 }
@@ -275,6 +279,18 @@ html[data-density='compact'] {
 
 .bg-admin-danger {
   background-color: rgb(var(--danger));
+}
+
+.bg-admin-success {
+  background-color: rgb(var(--success));
+}
+
+.bg-admin-warning {
+  background-color: rgb(var(--warning));
+}
+
+.bg-admin-info {
+  background-color: rgb(var(--info));
 }
 
 .text-admin-on-danger {
@@ -483,4 +499,86 @@ html[data-density='compact'] {
   color: rgb(var(--foreground));
   font-weight: 500;
   box-shadow: 0 1px 2px rgb(15 23 42 / 0.07);
+}
+
+.admin-skeleton {
+  border-radius: var(--admin-radius-sm);
+  background-image: linear-gradient(
+    90deg,
+    rgb(var(--muted-foreground) / 0.1),
+    rgb(var(--muted-foreground) / 0.18),
+    rgb(var(--muted-foreground) / 0.1)
+  );
+  background-size: 200% 100%;
+  animation: admin-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes admin-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.admin-status-tag {
+  height: 22px;
+}
+
+.admin-empty-mark {
+  display: flex;
+  width: 52px;
+  height: 52px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--admin-radius-lg);
+  background: rgb(var(--muted-foreground) / 0.1);
+  color: rgb(var(--muted-foreground));
+}
+
+.admin-table-hover:hover {
+  background-color: rgb(var(--primary) / 0.04);
+}
+
+.admin-check {
+  width: 16px;
+  height: 16px;
+  accent-color: rgb(var(--primary));
+}
+
+.admin-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: 0 0 auto;
+  appearance: none;
+  border-radius: 999px;
+  background: rgb(var(--border));
+  transition: background-color 150ms;
+}
+
+.admin-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgb(255 255 255);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.16);
+  transition: transform 150ms;
+}
+
+.admin-switch:checked {
+  background: rgb(var(--primary));
+}
+
+.admin-switch:checked::after {
+  transform: translateX(16px);
+}
+
+.admin-switch:disabled {
+  opacity: 0.4;
 }

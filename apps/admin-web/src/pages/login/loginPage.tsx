@@ -155,7 +155,7 @@ export function LoginPage() {
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
             <input
               type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-cyan-700 focus:ring-cyan-400"
+              className="admin-check"
               {...register('rememberUsername')}
             />
             <span>{t('fields.rememberUsername')}</span>

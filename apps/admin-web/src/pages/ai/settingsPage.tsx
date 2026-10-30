@@ -711,6 +711,7 @@ export function AiSettingsPage() {
             <label className="flex items-center gap-2 text-sm text-slate-800">
               <input
                 type="checkbox"
+                className="admin-check"
                 checked={draft.enabled}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
@@ -720,6 +721,7 @@ export function AiSettingsPage() {
             <label className="flex items-center gap-2 text-sm text-slate-800">
               <input
                 type="checkbox"
+                className="admin-check"
                 checked={draft.defaultEntry}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, defaultEntry: event.target.checked })}

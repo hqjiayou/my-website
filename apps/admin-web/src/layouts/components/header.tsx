@@ -245,7 +245,7 @@ function AppearanceDrawer({ open, onClose }: { open: boolean; onClose: () => voi
               <span className="text-sm text-admin-muted">{t('preferences.sidebar.collapsed')}</span>
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-admin"
+                className="admin-check"
                 checked={preferences.sidebarCollapsed}
                 onChange={(event) => setSidebarCollapsed(event.target.checked)}
               />

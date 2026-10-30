@@ -205,7 +205,7 @@ function RoleMenuEditor({
             >
               <input
                 type="checkbox"
-                className="mt-1"
+                className="admin-check mt-1"
                 checked={selectedCodes.has(page.code)}
                 disabled={protectedRole}
                 onChange={() => toggleCode(page.code)}
