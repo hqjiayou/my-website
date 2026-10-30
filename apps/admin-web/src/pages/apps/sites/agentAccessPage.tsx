@@ -5,7 +5,7 @@ import { Link, useOutletContext } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api'
-import { adminFieldClass, adminPrimaryButtonClass } from '@/components/admin/controls'
+import { adminFieldClass, adminGhostButtonClass, adminPrimaryButtonClass } from '@/components/admin/controls'
 import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
 import type { AiModelEntry, AiModelEntryWriteInput, ProxyServicesPublishedAccount } from '@/types/ai'
@@ -150,6 +150,9 @@ function CliAccessForm({
   const modelIds = account ? visibleModelIds(account.provider, account.modelIds) : []
   const [modelId, setModelId] = useState(modelIds.includes(initialModel) ? initialModel : (modelIds[0] ?? ''))
   const [clientKey, setClientKey] = useState('')
+  const [changingKey, setChangingKey] = useState(false)
+  const hasSavedKey = entry != null && entry.agentId === agentId && entry.apiKeyConfigured
+  const showKeyList = !hasSavedKey || changingKey
   const ready = Boolean(apiBaseUrl) && accounts.length > 0 && modelIds.length > 0 && (clientKeys.length > 0 || owned)
 
   const saveMutation = useMutation({
@@ -223,23 +226,38 @@ function CliAccessForm({
               ))}
             </select>
           </label>
-          <label className="block text-sm text-admin">
-            {t('access.clientKey')}
-            <select
-              className={`${adminFieldClass} mt-1`}
-              value={clientKey}
-              disabled={!canUpdate}
-              onChange={(event) => setClientKey(event.target.value)}
-            >
-              <option value="">{owned ? t('access.clientKeyKeep') : t('access.pickKey')}</option>
-              {clientKeys.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </select>
+          <div>
+            <label htmlFor="access-client-key" className="block text-sm text-admin">
+              {t('access.clientKey')}
+            </label>
+            {showKeyList ? (
+              <select
+                id="access-client-key"
+                className={`${adminFieldClass} mt-1`}
+                value={clientKey}
+                disabled={!canUpdate}
+                onChange={(event) => setClientKey(event.target.value)}
+              >
+                <option value="">{hasSavedKey ? t('access.clientKeyKeep') : t('access.pickKey')}</option>
+                {clientKeys.map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className={`${adminFieldClass} mt-1 flex items-center justify-between gap-2`}>
+                <span>{t('access.clientKeyKeep')}</span>
+                {entry != null ? <span className="font-mono text-xs text-admin-muted">{entry.apiKeyHint}</span> : null}
+              </div>
+            )}
+            {hasSavedKey && !changingKey && canUpdate ? (
+              <button type="button" className={`${adminGhostButtonClass} mt-2`} onClick={() => setChangingKey(true)}>
+                {t('access.clientKeyChange')}
+              </button>
+            ) : null}
             <span className="mt-1 block text-xs text-admin-muted">{t('access.keyRelation', { baseUrl: apiBaseUrl })}</span>
-          </label>
+          </div>
         </div>
       ) : (
         <p className="mt-4 text-sm text-admin-muted">
@@ -338,11 +356,17 @@ function KeyAccessForm({
             {pool.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.displayName} · {item.modelSpec}
+                {item.apiKeyConfigured ? ` · ${item.apiKeyHint}` : ''}
                 {item.agentId != null && item.agentId !== agentId ? ` · ${t('access.keyBoundOther')}` : ''}
               </option>
             ))}
           </select>
-          {selected ? <span className="mt-1 block font-mono text-xs text-admin-muted">{selected.apiKeyHint || selected.modelSpec}</span> : null}
+          {selected ? (
+            <span className="mt-1 block font-mono text-xs text-admin-muted">
+              {selected.displayName} · {selected.modelSpec}
+              {selected.apiKeyConfigured ? ` · ${selected.apiKeyHint}` : ''}
+            </span>
+          ) : null}
         </label>
       ) : (
         <p className="mt-4 text-sm text-admin-muted">
