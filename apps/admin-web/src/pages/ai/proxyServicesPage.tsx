@@ -8,7 +8,7 @@ import { agentApi } from '@/api/apps/agentApi'
 import { aiApi } from '@/api/apps/aiApi'
 import { AdminPageHeader, CopyableText, FormDialog, StatusTag } from '@/components/admin'
 import {
-  adminDangerButtonClass,
+  adminDangerGhostButtonClass,
   adminFieldClass,
   adminFormActionsClass,
   adminPrimaryButtonClass,
@@ -249,8 +249,8 @@ export function ProxyServicesPage() {
               aria-selected={active}
               onClick={() => setPanel(key)}
               className={cn(
-                'rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--primary)/0.35)]',
-                active ? 'bg-admin-surface text-admin shadow-sm' : 'text-admin-muted hover:text-admin',
+                'rounded-md px-3 py-1.5 text-sm font-medium transition admin-focus-ring',
+                active ? 'bg-admin-surface text-admin ' : 'text-admin-muted hover:text-admin',
               )}
             >
               {label}
@@ -263,7 +263,7 @@ export function ProxyServicesPage() {
 
       {panel === 'cli' && statusQuery.isLoading ? <p className="text-sm text-admin-muted">{t('loading')}</p> : null}
       {panel === 'cli' && statusQuery.isError ? (
-        <p className="text-sm text-rose-700">
+        <p className="text-sm text-danger-emphasis">
           {t('error')}{' '}
           <button type="button" className="underline" onClick={() => statusQuery.refetch()}>
             {t('retry')}
@@ -272,7 +272,7 @@ export function ProxyServicesPage() {
       ) : null}
 
       {panel === 'cli' && status && !status.reachable ? (
-        <section className="rounded-xl border border-dashed border-admin bg-admin-surface px-6 py-8">
+        <section className="admin-content-data rounded-xl border border-dashed border-admin bg-admin-surface px-6 py-8">
           <p className="text-base font-medium text-admin">{t('proxyServices.unreachable')}</p>
           <p className="mt-2 font-mono text-sm text-admin-muted">{status.baseUrl || t('proxyServices.port')}</p>
           <p className="mt-2 text-sm text-admin-muted">{t('proxyServices.unreachableHint')}</p>
@@ -280,7 +280,7 @@ export function ProxyServicesPage() {
       ) : null}
 
       {panel === 'cli' && status?.reachable && !status.managementConfigured ? (
-        <p className="text-sm text-amber-700 dark:text-amber-400">{t('proxyServices.managementOff')}</p>
+        <p className="text-sm text-warning-emphasis text-warning-emphasis">{t('proxyServices.managementOff')}</p>
       ) : null}
 
       {panel === 'cli' && canManage && status ? (
@@ -306,7 +306,7 @@ export function ProxyServicesPage() {
               )}
             </div>
             {usageReason ? (
-              <p className="border-b border-admin px-4 py-2 text-sm text-amber-700 dark:text-amber-400">{usageReason}</p>
+              <p className="border-b border-admin px-4 py-2 text-sm text-warning-emphasis text-warning-emphasis">{usageReason}</p>
             ) : null}
 
           <div className="grid items-stretch lg:h-[calc(100vh-15.5rem)] lg:grid-cols-[15rem_minmax(0,1fr)]">
@@ -322,8 +322,8 @@ export function ProxyServicesPage() {
                     aria-pressed={active}
                     onClick={() => setSelectedName(account.name)}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition hover:bg-admin-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--primary)/0.35)]',
-                      active && 'bg-[rgb(var(--primary)/0.08)] shadow-[inset_2px_0_0_rgb(var(--primary))]',
+                      'flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
+                      active && 'admin-active-inset bg-primary/8',
                     )}
                   >
                     {isLoginProvider(account.provider) ? (
@@ -357,7 +357,7 @@ export function ProxyServicesPage() {
             {accounts.length === 0 ? <p className="mt-3 text-sm text-admin-muted">{t('proxyServices.emptyAccounts')}</p> : null}
             {pendingLogin && !choosing ? (
               <p className="mt-3 flex flex-wrap items-center gap-3 text-sm text-admin-muted">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
                 {providerLabel(pendingLogin.provider, t)}
                 <span>{t('proxyServices.loginWaiting')}</span>
                 <a className="inline-flex items-center gap-1 text-admin" href={pendingLogin.url} target="_blank" rel="noopener noreferrer">
@@ -407,7 +407,7 @@ export function ProxyServicesPage() {
                 </div>
                 {keysQuery.isLoading ? <p className="text-sm text-admin-muted">{t('loading')}</p> : null}
                 {keysQuery.isError ? (
-                  <p className="text-sm text-rose-700">
+                  <p className="text-sm text-danger-emphasis">
                     {t('error')}{' '}
                     <button type="button" className="underline" onClick={() => keysQuery.refetch()}>
                       {t('retry')}
@@ -425,7 +425,7 @@ export function ProxyServicesPage() {
                         {canUpdate ? (
                           <button
                             type="button"
-                            className={cn(adminDangerButtonClass, 'shrink-0')}
+                            className={cn(adminDangerGhostButtonClass, 'shrink-0')}
                             onClick={() => {
                               if (!window.confirm(t('proxyServices.confirmDelete'))) return
                               deleteMutation.mutate(apiKey)
@@ -438,7 +438,7 @@ export function ProxyServicesPage() {
                     ))}
                   </ul>
                 ) : null}
-                {createdKey ? <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">{t('proxyServices.createdHint')}</p> : null}
+                {createdKey ? <p className="mt-1 text-xs text-success-emphasis text-success-emphasis">{t('proxyServices.createdHint')}</p> : null}
               </div>
             </div>
           </div>
@@ -460,7 +460,7 @@ export function ProxyServicesPage() {
               ) : null}
               <p className="text-sm text-admin">{providerLabel(pendingLogin.provider, t)}</p>
               <p className="flex items-center gap-2 text-sm text-admin-muted">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
                 {t('proxyServices.loginWaiting')}
               </p>
               <a className={adminSecondaryButtonClass} href={pendingLogin.url} target="_blank" rel="noopener noreferrer">
@@ -664,7 +664,7 @@ function ApiKeyColumn() {
       </div>
       {entriesQuery.isLoading ? <p className="px-4 py-6 text-sm text-admin-muted">{t('loading')}</p> : null}
       {entriesQuery.isError ? (
-        <p className="px-4 py-6 text-sm text-rose-700">
+        <p className="px-4 py-6 text-sm text-danger-emphasis">
           {t('error')}{' '}
           <button type="button" className="underline" onClick={() => entriesQuery.refetch()}>
             {t('retry')}
@@ -686,8 +686,8 @@ function ApiKeyColumn() {
                   aria-pressed={active}
                   onClick={() => setSelectedId(entry.id)}
                   className={cn(
-                    'flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-admin-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--primary)/0.35)]',
-                    active && 'bg-[rgb(var(--primary)/0.08)] shadow-[inset_2px_0_0_rgb(var(--primary))]',
+                    'flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
+                    active && 'admin-active-inset bg-primary/8',
                   )}
                 >
                   <span className="w-full truncate text-sm font-medium text-admin">{entry.displayName}</span>
@@ -713,7 +713,7 @@ function ApiKeyColumn() {
                 <div className="mt-6 flex justify-end">
                   <button
                     type="button"
-                    className={adminDangerButtonClass}
+                    className={adminDangerGhostButtonClass}
                     onClick={() => {
                       if (!window.confirm(t('proxyServices.keyConfirmDelete'))) return
                       deleteMutation.mutate(selected.id)

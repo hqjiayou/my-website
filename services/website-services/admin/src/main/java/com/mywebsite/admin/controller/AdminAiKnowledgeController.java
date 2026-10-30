@@ -133,7 +133,7 @@ public class AdminAiKnowledgeController {
     }
 
     @PostMapping(BASES)
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "新建知识库")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeBaseDto>> createBase(
             @PathVariable long agentId,
@@ -143,7 +143,7 @@ public class AdminAiKnowledgeController {
     }
 
     @DeleteMapping(BASES + "/{baseId}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:delete')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "删除知识库（默认库与非空库不可删）")
     public ResponseEntity<HttpMessageBody<Void>> deleteBase(
             @PathVariable long agentId, @PathVariable long baseId) {
@@ -160,7 +160,7 @@ public class AdminAiKnowledgeController {
     }
 
     @PostMapping("/api/admin/ai/knowledge-bases/{baseId}/links/{targetAgentId}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "把知识库共享给目标站点（文档扇出同步）")
     public ResponseEntity<HttpMessageBody<Void>> linkBase(
             @PathVariable long baseId, @PathVariable long targetAgentId) {
@@ -169,7 +169,7 @@ public class AdminAiKnowledgeController {
     }
 
     @DeleteMapping("/api/admin/ai/knowledge-bases/{baseId}/links/{targetAgentId}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "取消知识库对目标站点的共享（文档从其分区移除）")
     public ResponseEntity<HttpMessageBody<Void>> unlinkBase(
             @PathVariable long baseId, @PathVariable long targetAgentId) {
@@ -187,7 +187,7 @@ public class AdminAiKnowledgeController {
     }
 
     @PostMapping(DOCUMENTS)
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "创建 AI 知识库文档")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> create(
             @PathVariable long agentId, @Valid @RequestBody AdminAiKnowledgeCreateRequest request) {
@@ -196,7 +196,7 @@ public class AdminAiKnowledgeController {
     }
 
     @PostMapping(value = DOCUMENTS + "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "上传 AI 知识库文件（多格式，归一化为 Markdown 入库，原档留存对象存储）")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> upload(
             @PathVariable long agentId,
@@ -210,7 +210,7 @@ public class AdminAiKnowledgeController {
     }
 
     @PostMapping(value = DOCUMENTS + "/upload-archive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:create')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "上传 zip 批量导入 AI 知识库文档（逐条转换入库，部分失败不回滚）")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveResultDto>> uploadArchive(
             @PathVariable long agentId,
@@ -392,7 +392,7 @@ public class AdminAiKnowledgeController {
     }
 
     @PutMapping(DOCUMENTS + "/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "更新 AI 知识库文档")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> update(
             @PathVariable long agentId,
@@ -403,7 +403,7 @@ public class AdminAiKnowledgeController {
     }
 
     @PostMapping(DOCUMENTS + "/{id}/reindex")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "重新索引单篇 AI 知识库文档（同步派生向量索引并记录结果）")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDetailDto>> reindex(
             @PathVariable long agentId, @PathVariable("id") long id) {
@@ -412,7 +412,7 @@ public class AdminAiKnowledgeController {
     }
 
     @DeleteMapping(DOCUMENTS + "/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:delete')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "删除 AI 知识库文档（软删除，并移除派生索引）")
     public ResponseEntity<HttpMessageBody<Void>> delete(
             @PathVariable long agentId, @PathVariable("id") long id) {
@@ -429,7 +429,7 @@ public class AdminAiKnowledgeController {
     }
 
     @PostMapping("/api/admin/ai/knowledge/reindex-failed")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "批量重试全部索引失败的知识库文档")
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeReindexFailedResultDto>>
             reindexFailed() {
@@ -438,7 +438,7 @@ public class AdminAiKnowledgeController {
     }
 
     @PostMapping("/api/admin/ai/knowledge/reembed")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
     @Operation(summary = "按各站点当前模型入口重嵌全部知识库文档")
     public ResponseEntity<?> reembed() {
         try {

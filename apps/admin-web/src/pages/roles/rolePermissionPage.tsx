@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 
 import { rbacApi } from '@/api/rbacApi'
 import { adminFormActionsClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { isSuperAdminRole, useHasPermission } from '@/router/permission'
@@ -73,7 +73,7 @@ export function RolePermissionPage({
 
   if (isRoleError || isMenusError || isRolePermissionsError) {
     return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
         <p>
           {(roleError instanceof Error && roleError.message) ||
             (menusError instanceof Error && menusError.message) ||
@@ -170,20 +170,20 @@ function RoleMenuEditor({
   }
 
   return (
-    <section>
+    <section className="admin-content-form">
       {embedded ? (
         <p className="mb-4 text-sm text-admin-muted">
           {t('permissions.description', { roleName, roleCode })}
         </p>
       ) : (
-        <PageHeader
+        <AdminPageHeader
           title={t('permissions.title')}
           description={t('permissions.description', { roleName, roleCode })}
         />
       )}
 
       {protectedRole ? (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mb-4 rounded-lg border border-warning/35 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis">
           {t('permissions.protectedHint')}
         </div>
       ) : null}
@@ -205,7 +205,7 @@ function RoleMenuEditor({
             >
               <input
                 type="checkbox"
-                className="mt-1"
+                className="admin-check mt-1"
                 checked={selectedCodes.has(page.code)}
                 disabled={protectedRole}
                 onChange={() => toggleCode(page.code)}

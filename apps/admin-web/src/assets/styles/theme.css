@@ -1,6 +1,17 @@
 /**
  * 主题层（theme）：Design tokens、深浅色、密度/主色偏好、Tailwind 桥接、layout 壳层语义类。
  * 不写 font-family / 根字号；页面专属样式放在各 page 目录，不放入本文件夹。
+ * 数值以 docs/admin-web/DESIGN_SYSTEM.md §2 与 design-preview.html 为准。
+ *
+ * 对比（WCAG，文字×底色；标签底为 base 的 10% 透明叠在白/深色卡面上）：
+ * - 浅色标签字（深一档）× muted 底：danger 5.54 / success 4.88 / warning 4.50 / info 5.24，均 ≥ 4.5。
+ *   warning 用 12% 时 amber-700 仅 4.42，故 muted 取规范允许的 10% 下限。
+ * - 浅色 danger 实底 × 白字 4.83。success 3.77、warning 3.19、info 4.10 未达 4.5，
+ *   故这三色只做标签/文字，不做成实心按钮。
+ * - 深色 primary blue-400 × 卡面 30 41 59 = 5.75；深色 primary 底 × 深字 15 23 42 = 7.02。
+ * - 深色状态实底 × 深字：danger 6.45 / success 9.29 / warning 10.69 / info 8.33。
+ * - 深色标签字（400）× 10% muted：danger 4.62 / success 6.24 / warning 7.10 / info 5.63。
+ * - 四主色深色档 × 深字：蓝 7.02 / 紫 6.56 / 绿 10.25 / 橙 7.89；× 卡面均 ≥ 5.38。
  */
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -15,11 +26,55 @@
   --muted-foreground: 100 116 139;
   --primary: 37 99 235;
   --primary-foreground: 255 255 255;
-  --header-background: rgb(255 255 255 / 0.9);
+
+  --popover: 255 255 255;
+  --popover-foreground: 15 23 42;
+  --secondary: 241 245 249;
+  --secondary-foreground: 15 23 42;
+  --accent: 248 250 252;
+  --accent-foreground: 15 23 42;
+  --input: 226 232 240;
+  --ring: rgb(var(--primary) / 0.28);
+  --sidebar: 248 250 252;
+  --sidebar-foreground: 15 23 42;
+  --sidebar-accent: 241 245 249;
+
+  /* 状态：base / foreground（实底上的字）/ emphasis（标签字，浅色深一档）/ muted（10%） */
+  --danger: 220 38 38;
+  --danger-foreground: 255 255 255;
+  --danger-emphasis: 185 28 28;
+  --danger-muted: rgb(var(--danger) / 0.1);
+  --success: 5 150 105;
+  --success-foreground: 255 255 255;
+  --success-emphasis: 4 120 87;
+  --success-muted: rgb(var(--success) / 0.1);
+  --warning: 217 119 6;
+  --warning-foreground: 255 255 255;
+  --warning-emphasis: 180 83 9;
+  --warning-muted: rgb(var(--warning) / 0.1);
+  --info: 2 132 199;
+  --info-foreground: 255 255 255;
+  --info-emphasis: 3 105 161;
+  --info-muted: rgb(var(--info) / 0.1);
+
+  --chart-1: 37 99 235;
+  --chart-2: 124 58 237;
+  --chart-3: 22 163 74;
+  --chart-4: 234 88 12;
+
+  --header-background: rgb(255 255 255 / 0.88);
+  --shadow-pop: 0 4px 16px rgb(15 23 42 / 0.08), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-overlay: 0 16px 48px rgb(15 23 42 / 0.18), 0 4px 12px rgb(15 23 42 / 0.1);
+  /* 不占用 Tailwind 的 --radius-*，避免改写全站 rounded 刻度 */
+  --admin-radius-sm: 6px;
+  --admin-radius-md: 8px;
+  --admin-radius-lg: 12px;
+  --admin-radius-xl: 16px;
 
   --admin-page-padding: 1.25rem;
   --admin-control-py: 0.5rem;
   --admin-table-row-py: 0.75rem;
+  --admin-nav-item-height: 2.25rem;
 }
 
 .dark {
@@ -29,24 +84,82 @@
   --card-muted: 51 65 85;
   --border: 51 65 85;
   --muted-foreground: 148 163 184;
-  --header-background: rgb(30 41 59 / 0.92);
+  --primary: 96 165 250;
+  --primary-foreground: 15 23 42;
+
+  --popover: 30 41 59;
+  --popover-foreground: 241 245 249;
+  --secondary: 51 65 85;
+  --secondary-foreground: 241 245 249;
+  --accent: 51 65 85;
+  --accent-foreground: 241 245 249;
+  --input: 51 65 85;
+  --sidebar: 23 32 48;
+  --sidebar-foreground: 241 245 249;
+  --sidebar-accent: 30 41 59;
+
+  --danger: 248 113 113;
+  --danger-foreground: 15 23 42;
+  --danger-emphasis: 248 113 113;
+  --success: 52 211 153;
+  --success-foreground: 15 23 42;
+  --success-emphasis: 52 211 153;
+  --warning: 251 191 36;
+  --warning-foreground: 15 23 42;
+  --warning-emphasis: 251 191 36;
+  --info: 56 189 248;
+  --info-foreground: 15 23 42;
+  --info-emphasis: 56 189 248;
+
+  --chart-1: 96 165 250;
+  --chart-2: 167 139 250;
+  --chart-3: 74 222 128;
+  --chart-4: 251 146 60;
+
+  --header-background: rgb(23 32 48 / 0.9);
+  --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-overlay: 0 16px 48px rgb(0 0 0 / 0.5), 0 4px 12px rgb(0 0 0 / 0.5);
 }
 
-/* 主色偏好（TODO: 扩展为完整 design token 派生） */
-html[data-primary-color='blue'] {
+/* 主色偏好。浅色规则带 :not(.dark)，避免压过深色提亮档。 */
+html[data-primary-color='blue']:not(.dark) {
   --primary: 37 99 235;
+  --primary-foreground: 255 255 255;
 }
 
-html[data-primary-color='purple'] {
+html[data-primary-color='purple']:not(.dark) {
   --primary: 124 58 237;
+  --primary-foreground: 255 255 255;
 }
 
-html[data-primary-color='green'] {
+html[data-primary-color='green']:not(.dark) {
   --primary: 22 163 74;
+  --primary-foreground: 255 255 255;
 }
 
-html[data-primary-color='orange'] {
+html[data-primary-color='orange']:not(.dark) {
   --primary: 234 88 12;
+  --primary-foreground: 255 255 255;
+}
+
+html.dark[data-primary-color='blue'] {
+  --primary: 96 165 250;
+  --primary-foreground: 15 23 42;
+}
+
+html.dark[data-primary-color='purple'] {
+  --primary: 167 139 250;
+  --primary-foreground: 15 23 42;
+}
+
+html.dark[data-primary-color='green'] {
+  --primary: 74 222 128;
+  --primary-foreground: 15 23 42;
+}
+
+html.dark[data-primary-color='orange'] {
+  --primary: 251 146 60;
+  --primary-foreground: 15 23 42;
 }
 
 /* 密度偏好 */
@@ -54,27 +167,69 @@ html[data-density='comfortable'] {
   --admin-page-padding: 1.75rem;
   --admin-control-py: 0.625rem;
   --admin-table-row-py: 1rem;
+  --admin-nav-item-height: 2.5rem;
 }
 
 html[data-density='default'] {
   --admin-page-padding: 1.25rem;
   --admin-control-py: 0.5rem;
   --admin-table-row-py: 0.75rem;
+  --admin-nav-item-height: 2.25rem;
 }
 
 html[data-density='compact'] {
   --admin-page-padding: 0.875rem;
   --admin-control-py: 0.375rem;
   --admin-table-row-py: 0.5rem;
+  --admin-nav-item-height: 2rem;
 }
 
 @theme inline {
   --color-background: rgb(var(--background));
   --color-foreground: rgb(var(--foreground));
   --color-card: rgb(var(--card));
+  --color-card-muted: rgb(var(--card-muted));
   --color-border: rgb(var(--border));
+  --color-input: rgb(var(--input));
+  --color-ring: var(--ring);
   --color-primary: rgb(var(--primary));
+  --color-primary-foreground: rgb(var(--primary-foreground));
   --color-muted-foreground: rgb(var(--muted-foreground));
+  --color-popover: rgb(var(--popover));
+  --color-popover-foreground: rgb(var(--popover-foreground));
+  --color-secondary: rgb(var(--secondary));
+  --color-secondary-foreground: rgb(var(--secondary-foreground));
+  --color-accent: rgb(var(--accent));
+  --color-accent-foreground: rgb(var(--accent-foreground));
+  --color-sidebar: rgb(var(--sidebar));
+  --color-sidebar-foreground: rgb(var(--sidebar-foreground));
+  --color-sidebar-accent: rgb(var(--sidebar-accent));
+  --color-danger: rgb(var(--danger));
+  --color-danger-foreground: rgb(var(--danger-foreground));
+  --color-danger-emphasis: rgb(var(--danger-emphasis));
+  --color-danger-muted: var(--danger-muted);
+  --color-success: rgb(var(--success));
+  --color-success-foreground: rgb(var(--success-foreground));
+  --color-success-emphasis: rgb(var(--success-emphasis));
+  --color-success-muted: var(--success-muted);
+  --color-warning: rgb(var(--warning));
+  --color-warning-foreground: rgb(var(--warning-foreground));
+  --color-warning-emphasis: rgb(var(--warning-emphasis));
+  --color-warning-muted: var(--warning-muted);
+  --color-info: rgb(var(--info));
+  --color-info-foreground: rgb(var(--info-foreground));
+  --color-info-emphasis: rgb(var(--info-emphasis));
+  --color-info-muted: var(--info-muted);
+  --color-chart-1: rgb(var(--chart-1));
+  --color-chart-2: rgb(var(--chart-2));
+  --color-chart-3: rgb(var(--chart-3));
+  --color-chart-4: rgb(var(--chart-4));
+  --shadow-pop: var(--shadow-pop);
+  --shadow-overlay: var(--shadow-overlay);
+  --radius-admin-sm: var(--admin-radius-sm);
+  --radius-admin-md: var(--admin-radius-md);
+  --radius-admin-lg: var(--admin-radius-lg);
+  --radius-admin-xl: var(--admin-radius-xl);
 }
 
 /* layout 壳层语义类（全局复用，非单页样式） */
@@ -90,6 +245,10 @@ html[data-density='compact'] {
   background-color: rgb(var(--card-muted));
 }
 
+.bg-admin-sidebar {
+  background-color: rgb(var(--sidebar));
+}
+
 .border-admin {
   border-color: rgb(var(--border));
 }
@@ -102,12 +261,80 @@ html[data-density='compact'] {
   color: rgb(var(--muted-foreground));
 }
 
+.bg-admin-muted-foreground {
+  background-color: rgb(var(--muted-foreground));
+}
+
+.text-admin-sidebar {
+  color: rgb(var(--sidebar-foreground));
+}
+
 .bg-admin-primary {
   background-color: rgb(var(--primary));
 }
 
 .text-admin-on-primary {
   color: rgb(var(--primary-foreground));
+}
+
+.bg-admin-danger {
+  background-color: rgb(var(--danger));
+}
+
+.bg-admin-success {
+  background-color: rgb(var(--success));
+}
+
+.bg-admin-warning {
+  background-color: rgb(var(--warning));
+}
+
+.bg-admin-info {
+  background-color: rgb(var(--info));
+}
+
+.text-admin-on-danger {
+  color: rgb(var(--danger-foreground));
+}
+
+.text-admin-danger {
+  color: rgb(var(--danger-emphasis));
+}
+
+.bg-admin-danger-muted {
+  background-color: var(--danger-muted);
+}
+
+.text-admin-success {
+  color: rgb(var(--success-emphasis));
+}
+
+.bg-admin-success-muted {
+  background-color: var(--success-muted);
+}
+
+.text-admin-warning {
+  color: rgb(var(--warning-emphasis));
+}
+
+.bg-admin-warning-muted {
+  background-color: var(--warning-muted);
+}
+
+.text-admin-info {
+  color: rgb(var(--info-emphasis));
+}
+
+.bg-admin-info-muted {
+  background-color: var(--info-muted);
+}
+
+.shadow-admin-pop {
+  box-shadow: var(--shadow-pop);
+}
+
+.shadow-admin-overlay {
+  box-shadow: var(--shadow-overlay);
 }
 
 .admin-control {
@@ -118,4 +345,244 @@ html[data-density='compact'] {
 .admin-table-row {
   padding-top: var(--admin-table-row-py);
   padding-bottom: var(--admin-table-row-py);
+}
+
+/* 聚焦环：2px --ring + 2px 偏移。按钮走 focus-visible，字段走 :focus 以便点按也可见。 */
+.admin-focus-ring:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.admin-focus-within:focus-within {
+  border-color: rgb(var(--primary));
+  background-color: rgb(var(--card));
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.admin-field-chrome:focus {
+  border-color: rgb(var(--primary));
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.admin-danger-solid:hover {
+  background-color: rgb(var(--danger) / 0.92);
+}
+
+.admin-danger-ghost {
+  border-color: rgb(var(--danger) / 0.35);
+}
+
+.admin-danger-ghost:hover {
+  background-color: rgb(var(--danger) / 0.08);
+}
+
+.admin-danger-ghost:active {
+  background-color: rgb(var(--danger) / 0.15);
+}
+
+.admin-content-data {
+  width: 100%;
+  max-width: 1460px;
+  margin-inline: auto;
+}
+
+.admin-content-form {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+}
+
+.admin-content-doc {
+  width: 100%;
+  max-width: 880px;
+  margin-inline: auto;
+}
+
+.admin-overlay {
+  background-color: rgb(15 23 42 / 0.45);
+}
+
+.admin-icon-button {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--admin-radius-md);
+  color: rgb(var(--muted-foreground));
+  transition: background-color 150ms, color 150ms;
+}
+
+.admin-icon-button:hover {
+  background-color: rgb(var(--primary) / 0.07);
+  color: rgb(var(--foreground));
+}
+
+.admin-brand-mark,
+.admin-avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgb(var(--primary)), rgb(var(--chart-2)));
+  color: rgb(255 255 255);
+  font-weight: 600;
+}
+
+.admin-brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.admin-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.admin-nav-item {
+  position: relative;
+  height: var(--admin-nav-item-height);
+  border-radius: var(--admin-radius-md);
+  color: rgb(var(--sidebar-foreground));
+  transition: background-color 150ms, color 150ms;
+}
+
+.admin-nav-item:hover {
+  background-color: rgb(var(--primary) / 0.06);
+}
+
+.admin-nav-item[aria-current='page'] {
+  background-color: rgb(var(--primary) / 0.12);
+  color: rgb(var(--primary));
+  box-shadow: inset 3px 0 0 rgb(var(--primary));
+}
+
+.admin-active-inset {
+  box-shadow: inset 3px 0 0 rgb(var(--primary));
+}
+
+.admin-nav-item[aria-current='page']:hover {
+  background-color: rgb(var(--primary) / 0.12);
+}
+
+.admin-nav-group-title {
+  color: rgb(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.admin-seg {
+  display: flex;
+  gap: 2px;
+  border: 1px solid rgb(var(--border));
+  border-radius: var(--admin-radius-md);
+  background: rgb(var(--card-muted));
+  padding: 3px;
+}
+
+.admin-seg button {
+  height: 26px;
+  border-radius: var(--admin-radius-sm);
+  padding: 0 10px;
+  color: rgb(var(--muted-foreground));
+  font-size: 12px;
+}
+
+.admin-seg button.is-on {
+  background: rgb(var(--card));
+  color: rgb(var(--foreground));
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.07);
+}
+
+.admin-skeleton {
+  border-radius: var(--admin-radius-sm);
+  background-image: linear-gradient(
+    90deg,
+    rgb(var(--muted-foreground) / 0.1),
+    rgb(var(--muted-foreground) / 0.18),
+    rgb(var(--muted-foreground) / 0.1)
+  );
+  background-size: 200% 100%;
+  animation: admin-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes admin-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.admin-status-tag {
+  height: 22px;
+}
+
+.admin-empty-mark {
+  display: flex;
+  width: 52px;
+  height: 52px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--admin-radius-lg);
+  background: rgb(var(--muted-foreground) / 0.1);
+  color: rgb(var(--muted-foreground));
+}
+
+.admin-table-hover:hover {
+  background-color: rgb(var(--primary) / 0.04);
+}
+
+.admin-check {
+  width: 16px;
+  height: 16px;
+  accent-color: rgb(var(--primary));
+}
+
+.admin-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: 0 0 auto;
+  appearance: none;
+  border-radius: 999px;
+  background: rgb(var(--border));
+  transition: background-color 150ms;
+}
+
+.admin-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgb(255 255 255);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.16);
+  transition: transform 150ms;
+}
+
+.admin-switch:checked {
+  background: rgb(var(--primary));
+}
+
+.admin-switch:checked::after {
+  transform: translateX(16px);
+}
+
+.admin-switch:disabled {
+  opacity: 0.4;
 }

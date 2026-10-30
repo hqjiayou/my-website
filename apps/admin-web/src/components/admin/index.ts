@@ -4,6 +4,13 @@ export { DataTable, type DataTableColumn, type DataTablePagination } from './dat
 export { FilterTabs, type FilterTabItem } from './filterTabs'
 export {
   adminDangerButtonClass,
+  adminDangerButtonLgClass,
+  adminDangerButtonMdClass,
+  adminDangerButtonSmClass,
+  adminDangerGhostButtonClass,
+  adminDangerGhostButtonLgClass,
+  adminDangerGhostButtonMdClass,
+  adminDangerGhostButtonSmClass,
   adminFieldClass,
   adminFilterFieldClass,
   adminFormActionsClass,

@@ -11,21 +11,20 @@ import {
   listOperationContents,
   type OperationContentRow,
 } from '@/api/operation/contentApi'
-import { DataTable, type DataTableColumn } from '@/components/admin'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader, DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 
 function statusClassName(status: string) {
   switch (status) {
     case 'PUBLISHED':
-      return 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+      return 'border border-success/35 bg-success-muted text-success-emphasis'
     case 'DRAFT':
-      return 'border border-amber-200 bg-amber-50 text-amber-700'
+      return 'border border-warning/35 bg-warning-muted text-warning-emphasis'
     case 'HIDDEN':
-      return 'border border-slate-200 bg-slate-100 text-slate-600'
+      return 'border border-border bg-card-muted text-muted-foreground'
     default:
-      return 'border border-slate-200 bg-slate-50 text-slate-500'
+      return 'border border-border bg-card-muted text-muted-foreground'
   }
 }
 
@@ -56,8 +55,8 @@ export function OperationContentsPage() {
         header: t('contents.columns.site'),
         cell: (item) => (
           <div>
-            <p className="font-medium text-slate-900">{item.agentName}</p>
-            <p className="mt-1 text-xs text-slate-500">{item.agentCode}</p>
+            <p className="font-medium text-foreground">{item.agentName}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{item.agentCode}</p>
           </div>
         ),
       },
@@ -96,7 +95,7 @@ export function OperationContentsPage() {
         cell: (item) => (
           <Link
             to={ROUTES.apps.agentContents(item.agentId)}
-            className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline"
+            className="text-xs font-medium text-foreground underline-offset-2 hover:underline"
           >
             {t('contents.actions.manage')}
           </Link>
@@ -107,19 +106,19 @@ export function OperationContentsPage() {
   )
 
   return (
-    <section>
-      <PageHeader title={t('contents.title')} description={t('contents.description')} />
+    <section className="admin-content-data">
+      <AdminPageHeader title={t('contents.title')} description={t('contents.description')} />
 
-      <p className="mb-3 text-xs text-slate-500">{t('contents.aggregateNotice')}</p>
+      <p className="mb-3 text-xs text-muted-foreground">{t('contents.aggregateNotice')}</p>
 
-      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-4 rounded-xl border border-border bg-card p-4">
         <div className="grid gap-3 md:grid-cols-4">
           <label className="space-y-1.5 text-sm">
-            <span className="font-medium text-slate-700">{t('contents.filters.type')}</span>
+            <span className="font-medium text-foreground">{t('contents.filters.type')}</span>
             <select
               value={draftType}
               onChange={(event) => setDraftType(event.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">{t('contents.filters.allTypes')}</option>
               {CONTENT_TYPE_VALUES.map((type) => (
@@ -130,11 +129,11 @@ export function OperationContentsPage() {
             </select>
           </label>
           <label className="space-y-1.5 text-sm">
-            <span className="font-medium text-slate-700">{t('contents.filters.status')}</span>
+            <span className="font-medium text-foreground">{t('contents.filters.status')}</span>
             <select
               value={draftStatus}
               onChange={(event) => setDraftStatus(event.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">{t('contents.filters.allStatuses')}</option>
               {CONTENT_STATUS_VALUES.map((status) => (
@@ -155,7 +154,7 @@ export function OperationContentsPage() {
                   status: draftStatus,
                 }))
               }
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+              className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/92"
             >
               {t('contents.filters.search')}
             </button>
@@ -166,7 +165,7 @@ export function OperationContentsPage() {
                 setDraftStatus('')
                 setFilters({ pageNum: 1, pageSize: filters.pageSize, type: '', status: '' })
               }}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-card-muted"
             >
               {t('contents.filters.reset')}
             </button>

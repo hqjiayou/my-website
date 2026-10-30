@@ -78,17 +78,17 @@ export function PermissionListPage() {
       {
         id: 'permissionName',
         header: t('columns.permissionName'),
-        cell: (row) => <span className="text-slate-700">{row.permissionName}</span>,
+        cell: (row) => <span className="text-foreground">{row.permissionName}</span>,
       },
       {
         id: 'resourceType',
         header: t('columns.resourceType'),
-        cell: (row) => <span className="text-slate-600">{formatResourceType(tc, row.resourceType)}</span>,
+        cell: (row) => <span className="text-muted-foreground">{formatResourceType(tc, row.resourceType)}</span>,
       },
       {
         id: 'resourceKey',
         header: t('columns.resourceKey'),
-        cell: (row) => <span className="font-mono text-xs text-slate-600">{row.resourceKey}</span>,
+        cell: (row) => <span className="font-mono text-xs text-muted-foreground">{row.resourceKey}</span>,
       },
       {
         id: 'status',
@@ -121,7 +121,7 @@ export function PermissionListPage() {
   const errorMessage = isApiError(error) ? error.message : error instanceof Error ? error.message : undefined
 
   return (
-    <section>
+    <section className="admin-content-data">
       <AdminPageHeader
         title={t('title')}
         description={t('description')}

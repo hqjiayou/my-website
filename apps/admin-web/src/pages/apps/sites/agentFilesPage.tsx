@@ -13,8 +13,7 @@ import {
   type MediaListItem,
   type MediaListQuery,
 } from '@/api'
-import { DataTable, type DataTableColumn } from '@/components/admin'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader, DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -29,9 +28,9 @@ function formatFileSize(bytes: number) {
 }
 
 function statusClassName(status: string) {
-  if (status === MEDIA_STATUS.READY) return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-  if (status === MEDIA_STATUS.FAILED) return 'border-rose-200 bg-rose-50 text-rose-700'
-  return 'border-amber-200 bg-amber-50 text-amber-700'
+  if (status === MEDIA_STATUS.READY) return 'border-success/35 bg-success-muted text-success-emphasis'
+  if (status === MEDIA_STATUS.FAILED) return 'border-danger/35 bg-danger-muted text-danger-emphasis'
+  return 'border-warning/35 bg-warning-muted text-warning-emphasis'
 }
 
 export function AgentFilesPage() {
@@ -106,8 +105,8 @@ export function AgentFilesPage() {
         header: t('filesManagement.columns.filename'),
         cell: (item) => (
           <div>
-            <p className="font-medium text-slate-900">{item.originalFilename}</p>
-            <p className="mt-1 text-xs text-slate-500">#{item.id}</p>
+            <p className="font-medium text-foreground">{item.originalFilename}</p>
+            <p className="mt-1 text-xs text-muted-foreground">#{item.id}</p>
           </div>
         ),
       },
@@ -150,7 +149,7 @@ export function AgentFilesPage() {
                 type="button"
                 disabled={item.status !== MEDIA_STATUS.READY || previewMutation.isPending}
                 onClick={() => previewMutation.mutate(item.id)}
-                className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-primary/35 bg-info-muted px-2.5 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t('filesManagement.actions.preview')}
               </button>
@@ -171,7 +170,7 @@ export function AgentFilesPage() {
                   }
                   deleteMutation.mutate(item.id)
                 }}
-                className="rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-danger/35 px-2.5 py-1.5 text-xs font-medium text-danger-emphasis transition hover:bg-danger-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t('filesManagement.actions.delete')}
               </button>
@@ -184,8 +183,8 @@ export function AgentFilesPage() {
   )
 
   return (
-    <section>
-      <PageHeader
+    <section className="admin-content-data">
+      <AdminPageHeader
         title={t('workspace.nav.files')}
         description={t('filesManagement.description')}
         action={
@@ -202,7 +201,7 @@ export function AgentFilesPage() {
                 type="button"
                 disabled={uploadMutation.isPending}
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/92 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Upload className="h-4 w-4" />
                 <span>
@@ -216,7 +215,7 @@ export function AgentFilesPage() {
         }
       />
 
-      <p className="mb-3 text-xs text-slate-500">
+      <p className="mb-3 text-xs text-muted-foreground">
         {t('filesManagement.hints.whitelist')}
         {canUpload ? null : ` ${t('filesManagement.hints.uploadPermission')}`}
       </p>

@@ -73,7 +73,7 @@ function AgentBasicForm({ site }: { site: Site }) {
   }
 
   return (
-    <article className="rounded-xl border border-admin bg-admin-surface p-5 shadow-sm">
+    <article className="admin-content-form rounded-xl border border-admin bg-admin-surface p-5">
       <h2 className="text-base font-semibold text-admin">{t('detail.nav.basic')}</h2>
       <p className="mt-1 text-sm text-admin-muted">{t('basic.description')}</p>
 

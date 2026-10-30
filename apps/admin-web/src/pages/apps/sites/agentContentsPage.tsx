@@ -20,8 +20,7 @@ import {
   type MediaListItem,
   type UpdateContentInput,
 } from '@/api'
-import { DataTable, type DataTableColumn } from '@/components/admin'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader, DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -60,13 +59,13 @@ function emptyEditor(defaults?: Partial<EditorState>): EditorState {
 function statusClassName(status: string) {
   switch (status) {
     case CONTENT_STATUS.PUBLISHED:
-      return 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+      return 'border border-success/35 bg-success-muted text-success-emphasis'
     case CONTENT_STATUS.DRAFT:
-      return 'border border-amber-200 bg-amber-50 text-amber-700'
+      return 'border border-warning/35 bg-warning-muted text-warning-emphasis'
     case CONTENT_STATUS.HIDDEN:
-      return 'border border-slate-200 bg-slate-100 text-slate-600'
+      return 'border border-border bg-card-muted text-muted-foreground'
     default:
-      return 'border border-slate-200 bg-slate-50 text-slate-500'
+      return 'border border-border bg-card-muted text-muted-foreground'
   }
 }
 
@@ -274,8 +273,8 @@ export function AgentContentsPage() {
         header: t('contentManagement.columns.title'),
         cell: (item) => (
           <div>
-            <p className="font-medium text-slate-900">{item.title}</p>
-            <p className="mt-1 max-w-[280px] truncate text-xs text-slate-500">
+            <p className="font-medium text-foreground">{item.title}</p>
+            <p className="mt-1 max-w-[280px] truncate text-xs text-muted-foreground">
               {item.body?.trim() || '—'}
             </p>
           </div>
@@ -345,7 +344,7 @@ export function AgentContentsPage() {
               <button
                 type="button"
                 onClick={() => openEdit(item)}
-                className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-card-muted"
               >
                 {t('contentManagement.actions.edit')}
               </button>
@@ -364,7 +363,7 @@ export function AgentContentsPage() {
                   }
                   deleteMutation.mutate(item.id)
                 }}
-                className="rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-danger/35 px-2.5 py-1.5 text-xs font-medium text-danger-emphasis transition hover:bg-danger-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t('contentManagement.actions.delete')}
               </button>
@@ -379,8 +378,8 @@ export function AgentContentsPage() {
   const saving = createMutation.isPending || updateMutation.isPending
 
   return (
-    <section>
-      <PageHeader
+    <section className="admin-content-data">
+      <AdminPageHeader
         title={t('workspace.nav.contents')}
         description={t('contentManagement.description')}
         action={
@@ -388,7 +387,7 @@ export function AgentContentsPage() {
             <button
               type="button"
               onClick={openCreate}
-              className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/92"
             >
               <Plus className="h-4 w-4" />
               {t('contentManagement.actions.create')}
@@ -397,14 +396,14 @@ export function AgentContentsPage() {
         }
       />
 
-      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-4 rounded-xl border border-border bg-card p-4">
         <div className="grid gap-3 md:grid-cols-4">
           <label className="space-y-1.5 text-sm">
-            <span className="font-medium text-slate-700">{t('contentManagement.filters.type')}</span>
+            <span className="font-medium text-foreground">{t('contentManagement.filters.type')}</span>
             <select
               value={draftType}
               onChange={(event) => setDraftType(event.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">{t('contentManagement.filters.allTypes')}</option>
               {CONTENT_TYPE_VALUES.map((type) => (
@@ -415,11 +414,11 @@ export function AgentContentsPage() {
             </select>
           </label>
           <label className="space-y-1.5 text-sm">
-            <span className="font-medium text-slate-700">{t('contentManagement.filters.status')}</span>
+            <span className="font-medium text-foreground">{t('contentManagement.filters.status')}</span>
             <select
               value={draftStatus}
               onChange={(event) => setDraftStatus(event.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">{t('contentManagement.filters.allStatuses')}</option>
               {CONTENT_STATUS_VALUES.map((status) => (
@@ -433,14 +432,14 @@ export function AgentContentsPage() {
             <button
               type="button"
               onClick={applyFilters}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+              className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/92"
             >
               {t('contentManagement.filters.search')}
             </button>
             <button
               type="button"
               onClick={resetFilters}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-card-muted"
             >
               {t('contentManagement.filters.reset')}
             </button>
@@ -449,9 +448,9 @@ export function AgentContentsPage() {
       </div>
 
       {editor ? (
-        <article className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <article className="mb-4 rounded-xl border border-border bg-card p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-slate-900">
+            <h2 className="text-base font-semibold text-foreground">
               {editor.mode === 'create'
                 ? t('contentManagement.editor.createTitle')
                 : t('contentManagement.editor.editTitle')}
@@ -459,7 +458,7 @@ export function AgentContentsPage() {
             <button
               type="button"
               onClick={() => setEditor(null)}
-              className="rounded-md border border-slate-200 p-1.5 text-slate-500 transition hover:bg-slate-50"
+              className="rounded-md border border-border p-1.5 text-muted-foreground transition hover:bg-card-muted"
               aria-label={t('contentManagement.actions.cancel')}
             >
               <X className="h-4 w-4" />
@@ -468,13 +467,13 @@ export function AgentContentsPage() {
 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-1.5 text-sm">
-              <span className="font-medium text-slate-700">{t('contentManagement.fields.type')}</span>
+              <span className="font-medium text-foreground">{t('contentManagement.fields.type')}</span>
               <select
                 value={editor.type}
                 onChange={(event) =>
                   setEditor((prev) => (prev ? { ...prev, type: event.target.value as ContentType } : prev))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                className="w-full rounded-lg border border-border px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {CONTENT_TYPE_VALUES.map((type) => (
                   <option key={type} value={type}>
@@ -485,7 +484,7 @@ export function AgentContentsPage() {
             </label>
 
             <label className="space-y-1.5 text-sm">
-              <span className="font-medium text-slate-700">{t('contentManagement.fields.status')}</span>
+              <span className="font-medium text-foreground">{t('contentManagement.fields.status')}</span>
               <select
                 value={editor.status}
                 onChange={(event) =>
@@ -493,7 +492,7 @@ export function AgentContentsPage() {
                     prev ? { ...prev, status: event.target.value as ContentStatus } : prev,
                   )
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                className="w-full rounded-lg border border-border px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {CONTENT_STATUS_VALUES.map((status) => (
                   <option key={status} value={status}>
@@ -504,19 +503,19 @@ export function AgentContentsPage() {
             </label>
 
             <label className="space-y-1.5 text-sm md:col-span-2">
-              <span className="font-medium text-slate-700">{t('contentManagement.fields.title')}</span>
+              <span className="font-medium text-foreground">{t('contentManagement.fields.title')}</span>
               <input
                 value={editor.title}
                 onChange={(event) =>
                   setEditor((prev) => (prev ? { ...prev, title: event.target.value } : prev))
                 }
                 maxLength={255}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                className="w-full rounded-lg border border-border px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
 
             <label className="space-y-1.5 text-sm md:col-span-2">
-              <span className="font-medium text-slate-700">{t('contentManagement.fields.body')}</span>
+              <span className="font-medium text-foreground">{t('contentManagement.fields.body')}</span>
               <textarea
                 value={editor.body}
                 onChange={(event) =>
@@ -524,30 +523,30 @@ export function AgentContentsPage() {
                 }
                 rows={5}
                 maxLength={20000}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                className="w-full rounded-lg border border-border px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
 
             <label className="space-y-1.5 text-sm">
-              <span className="font-medium text-slate-700">{t('contentManagement.fields.sortOrder')}</span>
+              <span className="font-medium text-foreground">{t('contentManagement.fields.sortOrder')}</span>
               <input
                 type="number"
                 value={editor.sortOrder}
                 onChange={(event) =>
                   setEditor((prev) => (prev ? { ...prev, sortOrder: event.target.value } : prev))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                className="w-full rounded-lg border border-border px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
 
             <label className="space-y-1.5 text-sm">
-              <span className="font-medium text-slate-700">{t('contentManagement.fields.cover')}</span>
+              <span className="font-medium text-foreground">{t('contentManagement.fields.cover')}</span>
               <select
                 value={editor.coverMediaId}
                 onChange={(event) =>
                   setEditor((prev) => (prev ? { ...prev, coverMediaId: event.target.value } : prev))
                 }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                className="w-full rounded-lg border border-border px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">{t('contentManagement.fields.coverNone')}</option>
                 {readyMedia.map((item: MediaListItem) => (
@@ -556,7 +555,7 @@ export function AgentContentsPage() {
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-slate-500">{t('contentManagement.fields.coverHint')}</p>
+              <p className="text-xs text-muted-foreground">{t('contentManagement.fields.coverHint')}</p>
             </label>
           </div>
 
@@ -565,14 +564,14 @@ export function AgentContentsPage() {
               type="button"
               disabled={saving || (editor.mode === 'create' ? !canCreate : !canUpdate)}
               onClick={submitEditor}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/92 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving ? t('contentManagement.actions.saving') : t('contentManagement.actions.save')}
             </button>
             <button
               type="button"
               onClick={() => setEditor(null)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              className="rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-card-muted"
             >
               {t('contentManagement.actions.cancel')}
             </button>

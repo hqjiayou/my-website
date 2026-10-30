@@ -86,7 +86,7 @@ function Fact({
     <Link
       to={to}
       className={cn(
-        'block rounded-xl border border-admin bg-admin-surface px-4 py-3 transition hover:bg-admin-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--primary)/0.35)]',
+        'block rounded-xl border border-admin bg-admin-surface px-4 py-3 transition hover:bg-admin-surface-muted admin-focus-ring',
         className,
       )}
     >
@@ -194,7 +194,7 @@ export function AgentOverviewPage() {
     : undefined
 
   return (
-    <section className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_26rem]">
+    <section className="admin-content-data grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_26rem]">
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <Fact
@@ -285,7 +285,7 @@ function HarnessPanel({
       {pending ? (
         <p className="px-4 py-4 text-sm text-admin-muted">{t('agentOverview.unavailable')}</p>
       ) : unreachable || !status ? (
-        <p className="px-4 py-4 text-sm text-rose-700">{t('agentOverview.model.unreachable')}</p>
+        <p className="px-4 py-4 text-sm text-danger-emphasis">{t('agentOverview.model.unreachable')}</p>
       ) : (
         <>
           <div className="grid sm:grid-cols-3">
@@ -294,7 +294,7 @@ function HarnessPanel({
               return (
                 <div key={key} className="flex items-center justify-between gap-3 border-b border-admin px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
                   <span className="text-sm text-admin">{t(`agentOverview.harness.${key}`)}</span>
-                  <span className={cn('text-xs font-medium', on ? 'text-emerald-700' : 'text-amber-700')}>
+                  <span className={cn('text-xs font-medium', on ? 'text-success-emphasis' : 'text-warning-emphasis')}>
                     {t(on ? 'agentOverview.harness.present' : 'agentOverview.harness.missing')}
                   </span>
                 </div>
@@ -307,7 +307,7 @@ function HarnessPanel({
               {skillsPending ? (
                 <p className="mt-2 text-sm text-admin-muted">…</p>
               ) : skillsError ? (
-                <p className="mt-2 text-sm text-rose-700">{t('aiWorkspace.preview.skills.error')}</p>
+                <p className="mt-2 text-sm text-danger-emphasis">{t('aiWorkspace.preview.skills.error')}</p>
               ) : !skills || skills.length === 0 ? (
                 <p className="mt-2 text-sm text-admin-muted">{t('agentOverview.harness.noSkills')}</p>
               ) : (
@@ -350,7 +350,7 @@ function HarnessPanel({
                     {status.mcpServers.map((server) => (
                       <li key={server.name} className="flex items-center justify-between gap-3 text-sm">
                         <span className="truncate text-admin">{server.name}</span>
-                        <span className={server.enabled ? 'text-emerald-700' : 'text-admin-muted'}>
+                        <span className={server.enabled ? 'text-success-emphasis' : 'text-admin-muted'}>
                           {t(server.enabled ? 'aiWorkspace.runtime.enabled' : 'aiWorkspace.runtime.disabled')}
                         </span>
                       </li>

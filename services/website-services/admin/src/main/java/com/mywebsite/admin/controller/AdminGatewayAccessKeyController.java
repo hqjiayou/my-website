@@ -41,7 +41,7 @@ public class AdminGatewayAccessKeyController {
     }
 
     @PostMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
     @Operation(summary = "签发网关访问 Key；明文只在本次响应中返回一次")
     public ResponseEntity<HttpMessageBody<AdminGatewayAccessKeyIssueResponse>> issue(
             @Valid @RequestBody AdminGatewayAccessKeyIssueRequest request) {
@@ -50,7 +50,7 @@ public class AdminGatewayAccessKeyController {
     }
 
     @PostMapping("/{id}/revoke")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
     @Operation(summary = "吊销网关访问 Key；已吊销重复调用幂等")
     public ResponseEntity<HttpMessageBody<AdminGatewayAccessKeyDto>> revoke(@PathVariable long id) {
         return ResponseEntity.ok(

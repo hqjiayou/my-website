@@ -76,17 +76,17 @@ export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
           }}
         />
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-xl border border-border bg-card p-4">
         {selectedId == null ? (
-          <p className="text-sm text-slate-500">{t('aiWorkspace.conversations.selectHint')}</p>
+          <p className="text-sm text-muted-foreground">{t('aiWorkspace.conversations.selectHint')}</p>
         ) : messagesPending ? (
-          <p className="text-sm text-slate-500">{t('aiWorkspace.loading')}</p>
+          <p className="text-sm text-muted-foreground">{t('aiWorkspace.loading')}</p>
         ) : (
           <ul className="space-y-3">
             {(messages ?? []).map((item) => (
-              <li key={item.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                <p className="text-xs font-medium text-slate-500">{item.role}</p>
-                <p className="mt-1 whitespace-pre-wrap text-slate-800">{item.content}</p>
+              <li key={item.id} className="rounded-lg bg-card-muted px-3 py-2 text-sm">
+                <p className="text-xs font-medium text-muted-foreground">{item.role}</p>
+                <p className="mt-1 whitespace-pre-wrap text-foreground">{item.content}</p>
                 {item.agentMeta ? <AiRunMetaSummary meta={item.agentMeta} /> : null}
               </li>
             ))}

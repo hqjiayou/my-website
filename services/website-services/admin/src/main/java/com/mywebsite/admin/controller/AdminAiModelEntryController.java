@@ -42,7 +42,7 @@ public class AdminAiModelEntryController {
     }
 
     @PostMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
     @Operation(summary = "新增模型入口")
     public ResponseEntity<HttpMessageBody<AdminAiModelEntryDto>> create(
             @Valid @RequestBody AdminAiModelEntryWriteRequest request) {
@@ -51,7 +51,7 @@ public class AdminAiModelEntryController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
     @Operation(summary = "更新模型入口；apiKey 留空则保留原密钥")
     public ResponseEntity<HttpMessageBody<AdminAiModelEntryDto>> update(
             @PathVariable long id, @Valid @RequestBody AdminAiModelEntryWriteRequest request) {
@@ -60,7 +60,7 @@ public class AdminAiModelEntryController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
     @Operation(summary = "删除模型入口")
     public ResponseEntity<HttpMessageBody<Void>> delete(@PathVariable long id) {
         adminAiModelEntryService.deleteEntry(id);

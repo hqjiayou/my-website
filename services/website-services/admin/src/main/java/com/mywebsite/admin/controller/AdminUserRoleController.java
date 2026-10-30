@@ -31,7 +31,7 @@ public class AdminUserRoleController {
     }
 
     @GetMapping("/{id}/roles")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:role:view')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:list')")
     @Operation(summary = "查询管理员角色绑定")
     public ResponseEntity<HttpMessageBody<AdminUserRoleResponse>> getRoles(@PathVariable long id) {
         return ResponseEntity.ok(
@@ -39,7 +39,7 @@ public class AdminUserRoleController {
     }
 
     @PutMapping("/{id}/roles")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:role:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:user:list')")
     @Operation(summary = "替换管理员角色绑定")
     public ResponseEntity<HttpMessageBody<AdminUserRoleResponse>> replaceRoles(
             @PathVariable long id, @Valid @RequestBody AdminUserRoleUpdateRequest request) {

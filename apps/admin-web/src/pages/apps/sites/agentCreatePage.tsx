@@ -70,7 +70,7 @@ export function AgentCreatePage() {
   }
 
   return (
-    <section>
+    <section className="admin-content-form">
       <AdminPageHeader title={t('create.title')} description={t('create.description')} />
       <PermissionGate code={PERMISSION_CODES.agentCreate}>
         <form onSubmit={handleSubmit} className="max-w-xl space-y-4">

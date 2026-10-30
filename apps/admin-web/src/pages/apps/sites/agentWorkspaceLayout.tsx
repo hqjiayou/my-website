@@ -29,7 +29,7 @@ export interface AgentWorkspaceOutletContext {
 }
 
 const headerControlClass =
-  'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--primary)/0.35)] disabled:opacity-60'
+  'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium leading-none transition admin-focus-ring disabled:opacity-60'
 
 interface WorkspaceNavItem {
   key: string
@@ -142,7 +142,7 @@ export function AgentWorkspaceLayout() {
 
   if (!Number.isFinite(parsedId) || isError || (!isPending && !site)) {
     return (
-      <p className="text-sm text-rose-700">
+      <p className="text-sm text-danger-emphasis">
         {error instanceof Error ? error.message : t('workspace.notFound.title')}
       </p>
     )
@@ -193,7 +193,7 @@ export function AgentWorkspaceLayout() {
           {canDelete ? (
             <button
               type="button"
-              className={cn(headerControlClass, 'border-rose-300 bg-admin-surface text-rose-700 hover:bg-rose-50')}
+              className={cn(headerControlClass, 'border-danger/35 bg-admin-surface text-danger-emphasis hover:bg-danger-muted')}
               disabled={deleteMutation.isPending}
               onClick={() => {
                 if (!window.confirm(t('list.messages.confirmDelete', { name: site.agentName }))) return
@@ -220,21 +220,16 @@ export function AgentWorkspaceLayout() {
         <aside className="rounded-xl border border-admin bg-admin-surface p-2">
           {navGroups.map((group) => (
             <div key={group.key} className="mb-3 last:mb-0">
-              <p className="px-2.5 pb-1 text-xs font-medium text-admin-muted">{t(`workspace.groups.${group.key}`)}</p>
+              <p className="admin-nav-group-title px-3 pb-1">{t(`workspace.groups.${group.key}`)}</p>
               <nav className="flex flex-col gap-0.5">
                 {group.items.map((item) => (
                   <NavLink
                     key={item.key}
                     to={item.path}
                     end={item.end}
-                    className={({ isActive }) =>
-                      cn(
-                        'inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium text-admin transition hover:bg-admin-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--primary)/0.35)]',
-                        isActive && 'bg-[rgb(var(--primary)/0.08)] shadow-[inset_2px_0_0_rgb(var(--primary))]',
-                      )
-                    }
+                    className="admin-nav-item admin-focus-ring flex items-center gap-3 px-3 text-sm font-medium"
                   >
-                    <item.icon className="h-4 w-4 shrink-0" />
+                    <item.icon className="h-4.5 w-4.5 shrink-0" />
                     {t(`workspace.nav.${item.key}`)}
                   </NavLink>
                 ))}

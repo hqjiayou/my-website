@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { rbacApi } from '@/api/rbacApi'
 import { AdminPageHeader, DataTable, FormDialog, StatusTag } from '@/components/admin'
 import {
-  adminDangerButtonClass,
+  adminDangerGhostButtonClass,
   adminFilterFieldClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
@@ -80,7 +80,7 @@ export function UserListPage() {
   }
 
   return (
-    <section>
+    <section className="admin-content-data">
       <AdminPageHeader title={t('list.title')} description={t('list.description')} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -209,10 +209,10 @@ function UserNameCell({
     <div className="flex flex-wrap items-center gap-2 font-medium">
       <span>{user.username}</span>
       {isSelf ? (
-        <span className="rounded-md border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-xs text-sky-700">{selfLabel}</span>
+        <span className="rounded-md border border-info/35 bg-info-muted px-1.5 py-0.5 text-xs text-info-emphasis">{selfLabel}</span>
       ) : null}
       {user.protectedUser ? (
-        <span className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">
+        <span className="rounded-md border border-warning/35 bg-warning-muted px-1.5 py-0.5 text-xs text-warning-emphasis">
           {protectedLabel}
         </span>
       ) : null}
@@ -270,7 +270,7 @@ function UserRowActions({
         </button>
       ) : null}
       {canDelete && !dangerLocked ? (
-        <button type="button" onClick={onDelete} disabled={deletePending} className={adminDangerButtonClass}>
+        <button type="button" onClick={onDelete} disabled={deletePending} className={adminDangerGhostButtonClass}>
           <Trash2 className="h-3.5 w-3.5" />
           {t('list.actions.delete')}
         </button>

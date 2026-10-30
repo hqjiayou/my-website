@@ -63,7 +63,7 @@ public class AdminContentController {
     }
 
     @PostMapping
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:create')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:list')")
     @Operation(summary = "创建站点内容")
     public ResponseEntity<HttpMessageBody<AdminContentDetailDto>> create(
             @PathVariable long agentId, @Valid @RequestBody AdminContentCreateRequest request) {
@@ -72,7 +72,7 @@ public class AdminContentController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:update')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:list')")
     @Operation(summary = "更新站点内容")
     public ResponseEntity<HttpMessageBody<AdminContentDetailDto>> update(
             @PathVariable long agentId,
@@ -83,7 +83,7 @@ public class AdminContentController {
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:status')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:list')")
     @Operation(summary = "变更站点内容状态")
     public ResponseEntity<HttpMessageBody<AdminContentDetailDto>> updateStatus(
             @PathVariable long agentId,
@@ -94,7 +94,7 @@ public class AdminContentController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:delete')")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:content:list')")
     @Operation(summary = "删除站点内容（软删除）")
     public ResponseEntity<HttpMessageBody<Void>> delete(
             @PathVariable long agentId, @PathVariable("id") long id) {

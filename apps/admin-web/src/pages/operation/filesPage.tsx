@@ -5,8 +5,7 @@ import { Link } from 'react-router-dom'
 
 import { MEDIA_STATUS } from '@/api/apps/mediaApi'
 import { listOperationMedia, type OperationMediaRow } from '@/api/operation/fileApi'
-import { DataTable, type DataTableColumn } from '@/components/admin'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader, DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 
@@ -18,9 +17,9 @@ function formatFileSize(bytes: number) {
 }
 
 function statusClassName(status: string) {
-  if (status === MEDIA_STATUS.READY) return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-  if (status === MEDIA_STATUS.FAILED) return 'border-rose-200 bg-rose-50 text-rose-700'
-  return 'border-amber-200 bg-amber-50 text-amber-700'
+  if (status === MEDIA_STATUS.READY) return 'border-success/35 bg-success-muted text-success-emphasis'
+  if (status === MEDIA_STATUS.FAILED) return 'border-danger/35 bg-danger-muted text-danger-emphasis'
+  return 'border-warning/35 bg-warning-muted text-warning-emphasis'
 }
 
 export function OperationFilesPage() {
@@ -46,8 +45,8 @@ export function OperationFilesPage() {
         header: t('files.columns.site'),
         cell: (item) => (
           <div>
-            <p className="font-medium text-slate-900">{item.agentName}</p>
-            <p className="mt-1 text-xs text-slate-500">{item.agentCode}</p>
+            <p className="font-medium text-foreground">{item.agentName}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{item.agentCode}</p>
           </div>
         ),
       },
@@ -91,7 +90,7 @@ export function OperationFilesPage() {
         cell: (item) => (
           <Link
             to={ROUTES.apps.agentFiles(item.agentId)}
-            className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline"
+            className="text-xs font-medium text-foreground underline-offset-2 hover:underline"
           >
             {t('files.actions.manage')}
           </Link>
@@ -102,10 +101,10 @@ export function OperationFilesPage() {
   )
 
   return (
-    <section>
-      <PageHeader title={t('files.title')} description={t('files.description')} />
+    <section className="admin-content-data">
+      <AdminPageHeader title={t('files.title')} description={t('files.description')} />
 
-      <p className="mb-3 text-xs text-slate-500">{t('files.aggregateNotice')}</p>
+      <p className="mb-3 text-xs text-muted-foreground">{t('files.aggregateNotice')}</p>
 
       <DataTable
         columns={columns}

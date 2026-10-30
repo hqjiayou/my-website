@@ -4,19 +4,30 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/cn'
 import { ROLE_STATUS } from '@/types/rbac'
 
-const statusTagVariants = cva('inline-flex rounded-md border px-2 py-0.5 text-xs font-medium', {
+const statusTagVariants = cva('admin-status-tag inline-flex items-center gap-1.5 rounded-full px-2 text-xs font-medium', {
   variants: {
     tone: {
-      active: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-      disabled: 'border-slate-200 bg-slate-50 text-slate-600',
-      warning: 'border-amber-200 bg-amber-50 text-amber-700',
-      neutral: 'border-slate-200 bg-slate-50 text-slate-600',
+      active: 'bg-admin-success-muted text-admin-success',
+      disabled: 'bg-admin-surface-muted text-admin-muted',
+      warning: 'bg-admin-warning-muted text-admin-warning',
+      neutral: 'bg-admin-surface-muted text-admin-muted',
+      danger: 'bg-admin-danger-muted text-admin-danger',
+      info: 'bg-admin-info-muted text-admin-info',
     },
   },
   defaultVariants: {
     tone: 'neutral',
   },
 })
+
+const statusDotClass = {
+  active: 'bg-admin-success',
+  disabled: 'bg-admin-muted-foreground',
+  warning: 'bg-admin-warning',
+  neutral: 'bg-admin-muted-foreground',
+  danger: 'bg-admin-danger',
+  info: 'bg-admin-info',
+} as const
 
 type StatusTagVariantProps = VariantProps<typeof statusTagVariants>
 
@@ -40,6 +51,12 @@ export function StatusTag({ status, label, tone, className }: StatusTagProps) {
     t(`enum.status.${status}`, {
       defaultValue: status,
     })
+  const dot = statusDotClass[resolvedTone ?? 'neutral']
 
-  return <span className={cn(statusTagVariants({ tone: resolvedTone }), className)}>{displayLabel}</span>
+  return (
+    <span className={cn(statusTagVariants({ tone: resolvedTone }), className)}>
+      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dot)} />
+      {displayLabel}
+    </span>
+  )
 }

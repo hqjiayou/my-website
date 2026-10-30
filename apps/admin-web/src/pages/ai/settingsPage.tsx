@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { aiApi } from '@/api/apps/aiApi'
 import { agentApi } from '@/api/apps/agentApi'
 import { CopyableText } from '@/components/admin/copyableText'
-import { PageHeader } from '@/components/page'
+import { AdminPageHeader } from '@/components/admin'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import type {
   AiModelEntry,
@@ -147,14 +147,14 @@ function GatewayAccessKeysCard() {
   }
 
   return (
-    <article className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="text-sm font-semibold text-slate-900">{t('settings.gatewayKeys.title')}</h3>
-      <p className="text-sm text-slate-600">{t('settings.gatewayKeys.description')}</p>
+    <article className="space-y-3 rounded-xl border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold text-foreground">{t('settings.gatewayKeys.title')}</h3>
+      <p className="text-sm text-muted-foreground">{t('settings.gatewayKeys.description')}</p>
 
       {issuedKey ? (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-lg border border-warning/35 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis">
           <p className="font-medium">{t('settings.gatewayKeys.oneTimeWarning')}</p>
-          <div className="mt-2 flex items-center gap-2 rounded bg-white px-3 py-2">
+          <div className="mt-2 flex items-center gap-2 rounded bg-card px-3 py-2">
             <CopyableText value={issuedKey.apiKey} className="font-mono text-xs" />
           </div>
           <button
@@ -168,9 +168,9 @@ function GatewayAccessKeysCard() {
       ) : null}
 
       {isPending ? (
-        <p className="text-sm text-slate-500">{t('loading')}</p>
+        <p className="text-sm text-muted-foreground">{t('loading')}</p>
       ) : keys.length === 0 ? (
-        <p className="text-sm text-slate-600">{t('settings.gatewayKeys.empty')}</p>
+        <p className="text-sm text-muted-foreground">{t('settings.gatewayKeys.empty')}</p>
       ) : (
         <ul className="space-y-2">
           {keys.map((key) => {
@@ -178,17 +178,17 @@ function GatewayAccessKeysCard() {
             return (
               <li
                 key={key.id}
-                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
               >
                 <span>
-                  <span className="font-medium text-slate-900">{key.name}</span>
-                  <span className="ml-2 font-mono text-xs text-slate-500">…{key.keyHint}</span>
-                  <span className="ml-2 text-xs text-slate-400">
-                    <span className="text-slate-500">{t('settings.gatewayKeys.createdAtTag')}</span>{' '}
+                  <span className="font-medium text-foreground">{key.name}</span>
+                  <span className="ml-2 font-mono text-xs text-muted-foreground">…{key.keyHint}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    <span className="text-muted-foreground">{t('settings.gatewayKeys.createdAtTag')}</span>{' '}
                     {new Date(key.createdAt).toLocaleString()}
                   </span>
-                  <span className="ml-2 text-xs text-slate-400">
-                    <span className="text-slate-500">{t('settings.gatewayKeys.expiresAtTag')}</span>{' '}
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    <span className="text-muted-foreground">{t('settings.gatewayKeys.expiresAtTag')}</span>{' '}
                     {key.expiresAt
                       ? new Date(key.expiresAt).toLocaleString()
                       : t('settings.gatewayKeys.neverExpires')}
@@ -198,8 +198,8 @@ function GatewayAccessKeysCard() {
                   <span
                     className={
                       status === 'ACTIVE'
-                        ? 'rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700'
-                        : 'rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500'
+                        ? 'rounded bg-success-muted px-1.5 py-0.5 text-xs text-success-emphasis'
+                        : 'rounded bg-card-muted px-1.5 py-0.5 text-xs text-muted-foreground'
                     }
                   >
                     {statusLabel[status]}
@@ -207,7 +207,7 @@ function GatewayAccessKeysCard() {
                   {canUpdate && status === 'ACTIVE' ? (
                     <button
                       type="button"
-                      className="rounded-lg border border-rose-200 px-2 py-1 text-xs text-rose-700 disabled:opacity-50"
+                      className="rounded-lg border border-danger/35 px-2 py-1 text-xs text-danger-emphasis disabled:opacity-50"
                       disabled={revokeMutation.isPending}
                       onClick={() => {
                         if (!window.confirm(t('settings.gatewayKeys.confirmRevoke'))) return
@@ -234,31 +234,31 @@ function GatewayAccessKeysCard() {
           }}
         >
           <label className="block">
-            <span className="text-xs font-medium text-slate-800">{t('settings.gatewayKeys.name')}</span>
+            <span className="text-xs font-medium text-foreground">{t('settings.gatewayKeys.name')}</span>
             <input
-              className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1 rounded-lg border border-border px-3 py-2 text-sm"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-slate-800">
+            <span className="text-xs font-medium text-foreground">
               {t('settings.gatewayKeys.expiresAt')}
             </span>
             <input
               type="datetime-local"
-              className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1 rounded-lg border border-border px-3 py-2 text-sm"
               value={expiresAt}
               onChange={(event) => setExpiresAt(event.target.value)}
             />
-            <span className="mt-1 block text-xs text-slate-500">
+            <span className="mt-1 block text-xs text-muted-foreground">
               {t('settings.gatewayKeys.expiresAtHint')}
             </span>
           </label>
           <button
             type="submit"
             disabled={issueMutation.isPending || !name.trim()}
-            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
             {issueMutation.isPending ? t('settings.gatewayKeys.issuing') : t('settings.gatewayKeys.issue')}
           </button>
@@ -273,11 +273,11 @@ function ModeChainSection({ mode, chain }: { mode: string; chain: AiModelEntry[]
   const { t } = useTranslation('aiAdmin')
   return (
     <div className="space-y-1">
-      <h4 className="text-xs font-semibold text-slate-700">
+      <h4 className="text-xs font-semibold text-foreground">
         {mode === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
       </h4>
       {chain.length === 0 ? (
-        <p className="text-sm text-slate-600">{t('settings.chainModeEmpty')}</p>
+        <p className="text-sm text-muted-foreground">{t('settings.chainModeEmpty')}</p>
       ) : (
         <ol className="space-y-1">
           {chain.map((entry, index) => (
@@ -285,19 +285,19 @@ function ModeChainSection({ mode, chain }: { mode: string; chain: AiModelEntry[]
               <span
                 className={
                   index === 0
-                    ? 'rounded bg-slate-900 px-2 py-0.5 text-xs font-medium text-white'
-                    : 'rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600'
+                    ? 'rounded bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground'
+                    : 'rounded bg-card-muted px-2 py-0.5 text-xs text-muted-foreground'
                 }
               >
                 {index === 0 ? t('settings.chainPrimary') : t('settings.chainFallback', { n: index })}
               </span>
-              <span className="font-medium text-slate-900">
+              <span className="font-medium text-foreground">
                 {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
               </span>
-              <span className="text-slate-500">
+              <span className="text-muted-foreground">
                 {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
               </span>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-muted-foreground">
                 {entry.agentId == null ? t('settings.agentPlatform') : null}
               </span>
             </li>
@@ -391,12 +391,12 @@ export function AiSettingsPage() {
     },
   })
 
-  if (isPending) return <p className="text-sm text-slate-500">{t('loading')}</p>
+  if (isPending) return <p className="text-sm text-muted-foreground">{t('loading')}</p>
   if (isError) {
     return (
-      <section>
-        <PageHeader title={t('settings.title')} description={t('settings.description')} />
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <section className="admin-content-form">
+        <AdminPageHeader title={t('settings.title')} description={t('settings.description')} />
+        <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
           <p>{error instanceof Error ? error.message : t('error')}</p>
           <button type="button" className="mt-2 underline" onClick={() => void refetch()}>
             {t('retry')}
@@ -441,50 +441,50 @@ export function AiSettingsPage() {
 
   return (
     <section>
-      <PageHeader title={t('settings.title')} description={t('settings.description')} />
+      <AdminPageHeader title={t('settings.title')} description={t('settings.description')} />
       <div className="space-y-4">
-        <p className="text-sm text-slate-600">{t('settings.fallbackHint')}</p>
-        <article className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          {entries.length === 0 ? <p className="text-sm text-slate-600">{t('settings.empty')}</p> : null}
+        <p className="text-sm text-muted-foreground">{t('settings.fallbackHint')}</p>
+        <article className="space-y-3 rounded-xl border border-border bg-card p-5">
+          {entries.length === 0 ? <p className="text-sm text-muted-foreground">{t('settings.empty')}</p> : null}
           <ul className="space-y-2">
             {entries.map((entry) => (
               <li key={entry.id} className="flex items-stretch gap-2">
                 <button
                   type="button"
-                  className="flex flex-1 items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  className="flex flex-1 items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-card-muted"
                   onClick={() => setDraft(draftFromEntry(entry))}
                 >
                   <span>
-                    <span className="font-medium text-slate-900">
+                    <span className="font-medium text-foreground">
                       {(entry.mode ?? 'KEY') === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
                     </span>
                     {entry.alias ? (
-                      <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                      <span className="ml-2 rounded bg-card-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                         {entry.alias}
                       </span>
                     ) : null}
-                    <span className="ml-2 text-slate-500">
+                    <span className="ml-2 text-muted-foreground">
                       {(entry.mode ?? 'KEY') === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
                     </span>
                   </span>
                   <span className="flex flex-wrap items-center gap-1">
                     {entry.defaultEntry ? (
-                      <span className="rounded bg-slate-900 px-1.5 py-0.5 text-xs text-white">
+                      <span className="rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
                         {(entry.mode ?? 'KEY') === 'CLI'
                           ? t('settings.defaultBadgeCli')
                           : t('settings.defaultBadgeKey')}
                       </span>
                     ) : null}
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                    <span className="rounded bg-card-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                       {(entry.mode ?? 'KEY') === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
                     </span>
                     {!entry.enabled ? (
-                      <span className="rounded bg-rose-50 px-1.5 py-0.5 text-xs text-rose-700">
+                      <span className="rounded bg-danger-muted px-1.5 py-0.5 text-xs text-danger-emphasis">
                         {t('settings.disabledBadge')}
                       </span>
                     ) : null}
                     {entry.apiKeyConfigured ? (
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                      <span className="rounded bg-card-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                         {entry.apiKeyHint}
                       </span>
                     ) : null}
@@ -493,7 +493,7 @@ export function AiSettingsPage() {
                 {canUpdate && entry.enabled && !entry.defaultEntry ? (
                   <button
                     type="button"
-                    className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
+                    className="shrink-0 rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50"
                     disabled={setDefaultMutation.isPending}
                     onClick={() => setDefaultMutation.mutate(entry)}
                   >
@@ -506,7 +506,7 @@ export function AiSettingsPage() {
           <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
             <button
               type="button"
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="rounded-lg border border-border px-3 py-2 text-sm"
               onClick={() => setDraft(emptyDraft(entries.length === 0))}
             >
               {t('settings.add')}
@@ -516,11 +516,11 @@ export function AiSettingsPage() {
 
         <GatewayAccessKeysCard />
 
-        <article className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="space-y-3 rounded-xl border border-border bg-card p-5">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-slate-900">{t('settings.chainTitle')}</h3>
+            <h3 className="text-sm font-semibold text-foreground">{t('settings.chainTitle')}</h3>
             <select
-              className="rounded-lg border border-slate-200 px-2 py-1 text-sm"
+              className="rounded-lg border border-border px-2 py-1 text-sm"
               value={chainScope}
               onChange={(event) => setChainScope(event.target.value)}
             >
@@ -532,7 +532,7 @@ export function AiSettingsPage() {
               ))}
             </select>
           </div>
-          <p className="text-sm text-slate-600">{t('settings.chainHint')}</p>
+          <p className="text-sm text-muted-foreground">{t('settings.chainHint')}</p>
           <div className="space-y-4">
             <ModeChainSection mode="KEY" chain={keyChain} />
             <ModeChainSection mode="CLI" chain={cliChain} />
@@ -541,16 +541,16 @@ export function AiSettingsPage() {
 
         {draft ? (
           <form
-            className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            className="space-y-4 rounded-xl border border-border bg-card p-5"
             onSubmit={(event) => {
               event.preventDefault()
               submitDraft()
             }}
           >
             <label className="block">
-              <span className="text-sm font-medium text-slate-800">{t('settings.name')}</span>
+              <span className="text-sm font-medium text-foreground">{t('settings.name')}</span>
               <input
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                 value={draft.displayName}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, displayName: event.target.value })}
@@ -560,9 +560,9 @@ export function AiSettingsPage() {
               cliReady ? (
                 <>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-800">{t('settings.cliModel')}</span>
+                    <span className="text-sm font-medium text-foreground">{t('settings.cliModel')}</span>
                     <select
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                       value={cliModelId}
                       disabled={!canUpdate}
                       onChange={(event) => setDraft({ ...draft, modelSpec: event.target.value })}
@@ -591,12 +591,12 @@ export function AiSettingsPage() {
                         )
                       })}
                     </select>
-                    <span className="mt-1 block text-xs text-slate-500">{t('settings.cliModelHint')}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">{t('settings.cliModelHint')}</span>
                   </label>
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-800">{t('settings.cliKey')}</span>
+                    <span className="text-sm font-medium text-foreground">{t('settings.cliKey')}</span>
                     <select
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                       value={draft.apiKey}
                       disabled={!canUpdate}
                       onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
@@ -608,19 +608,19 @@ export function AiSettingsPage() {
                         </option>
                       ))}
                     </select>
-                    <span className="mt-1 block text-xs text-slate-500">{t('settings.cliKeyHint')}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">{t('settings.cliKeyHint')}</span>
                   </label>
-                  <p className="text-xs text-slate-500">{t('settings.cliAddressFixed', { baseUrl: cliBaseUrl })}</p>
+                  <p className="text-xs text-muted-foreground">{t('settings.cliAddressFixed', { baseUrl: cliBaseUrl })}</p>
                 </>
               ) : (
-                <p className="text-sm text-slate-600">{t('settings.cliNeedProxy')}</p>
+                <p className="text-sm text-muted-foreground">{t('settings.cliNeedProxy')}</p>
               )
             ) : (
               <>
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-800">{t('settings.spec')}</span>
+                  <span className="text-sm font-medium text-foreground">{t('settings.spec')}</span>
                   <input
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                     value={draft.modelSpec}
                     disabled={!canUpdate}
                     placeholder={t('settings.specHint')}
@@ -628,9 +628,9 @@ export function AiSettingsPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-800">{t('settings.apiKey')}</span>
+                  <span className="text-sm font-medium text-foreground">{t('settings.apiKey')}</span>
                   <input
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                     type="password"
                     autoComplete="new-password"
                     value={draft.apiKey}
@@ -639,15 +639,15 @@ export function AiSettingsPage() {
                     onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
                   />
                   {draft.apiKeyHint ? (
-                    <span className="mt-1 block text-xs text-slate-500">
+                    <span className="mt-1 block text-xs text-muted-foreground">
                       {t('settings.apiKeyHint', { hint: draft.apiKeyHint })}
                     </span>
                   ) : null}
                 </label>
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-800">{t('settings.embeddingSpec')}</span>
+                  <span className="text-sm font-medium text-foreground">{t('settings.embeddingSpec')}</span>
                   <input
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                     value={draft.embeddingSpec}
                     disabled={!canUpdate}
                     placeholder={t('settings.embeddingSpecHint')}
@@ -655,9 +655,9 @@ export function AiSettingsPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-800">{t('settings.baseUrl')}</span>
+                  <span className="text-sm font-medium text-foreground">{t('settings.baseUrl')}</span>
                   <input
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                     value={draft.baseUrl}
                     disabled={!canUpdate}
                     placeholder={t('settings.baseUrlHint')}
@@ -667,22 +667,22 @@ export function AiSettingsPage() {
               </>
             )}
             <label className="block">
-              <span className="text-sm font-medium text-slate-800">{t('settings.alias')}</span>
+              <span className="text-sm font-medium text-foreground">{t('settings.alias')}</span>
               <input
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                 value={draft.alias}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, alias: event.target.value })}
               />
-              <span className="mt-1 block text-xs text-slate-500">{t('settings.aliasHint')}</span>
+              <span className="mt-1 block text-xs text-muted-foreground">{t('settings.aliasHint')}</span>
               {aliasInvalid ? (
-                <span className="mt-1 block text-xs text-rose-600">{t('settings.aliasInvalid')}</span>
+                <span className="mt-1 block text-xs text-danger-emphasis">{t('settings.aliasInvalid')}</span>
               ) : null}
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-slate-800">{t('settings.site')}</span>
+              <span className="text-sm font-medium text-foreground">{t('settings.site')}</span>
               <select
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                 value={draft.agentId}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, agentId: event.target.value })}
@@ -696,9 +696,9 @@ export function AiSettingsPage() {
               </select>
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-slate-800">{t('settings.mode')}</span>
+              <span className="text-sm font-medium text-foreground">{t('settings.mode')}</span>
               <select
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
                 value={draft.mode}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, mode: event.target.value })}
@@ -706,20 +706,22 @@ export function AiSettingsPage() {
                 <option value="KEY">{t('settings.modeKey')}</option>
                 <option value="CLI">{t('settings.modeCli')}</option>
               </select>
-              <span className="mt-1 block text-xs text-slate-500">{t('settings.modeHint')}</span>
+              <span className="mt-1 block text-xs text-muted-foreground">{t('settings.modeHint')}</span>
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-800">
+            <label className="flex items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
+                className="admin-check"
                 checked={draft.enabled}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
               />
               {t('settings.enabled')}
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-800">
+            <label className="flex items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
+                className="admin-check"
                 checked={draft.defaultEntry}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, defaultEntry: event.target.checked })}
@@ -731,14 +733,14 @@ export function AiSettingsPage() {
                 <button
                   type="submit"
                   disabled={saveMutation.isPending || aliasInvalid}
-                  className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
                 >
                   {saveMutation.isPending ? t('settings.saving') : t('settings.save')}
                 </button>
                 {draft.id != null ? (
                   <button
                     type="button"
-                    className="rounded-lg border border-rose-200 px-3 py-2 text-sm text-rose-700"
+                    className="rounded-lg border border-danger/35 px-3 py-2 text-sm text-danger-emphasis"
                     disabled={deleteMutation.isPending}
                     onClick={() => {
                       if (draft.id == null) return

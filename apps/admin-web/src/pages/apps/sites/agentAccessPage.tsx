@@ -79,7 +79,7 @@ export function AgentAccessPage() {
     return <p className="text-sm text-admin-muted">{t('access.loading')}</p>
   }
   if (entriesQuery.isError || usageQuery.isError || keysQuery.isError) {
-    return <p className="text-sm text-rose-700">{t('access.loadError')}</p>
+    return <p className="text-sm text-danger-emphasis">{t('access.loadError')}</p>
   }
 
   const entries = entriesQuery.data ?? []
@@ -90,7 +90,7 @@ export function AgentAccessPage() {
   const clientKeys = keysQuery.data?.apiKeys ?? []
 
   return (
-    <section className="space-y-4">
+    <section className="admin-content-form space-y-4">
       <div>
         <h2 className="text-base font-semibold text-admin">{t('access.title')}</h2>
         <p className="mt-1 text-sm text-admin-muted">{t('access.description')}</p>
@@ -185,7 +185,7 @@ function CliAccessForm({
   }
 
   return (
-    <article className="rounded-xl border border-admin bg-admin-surface p-5 shadow-sm">
+    <article className="rounded-xl border border-admin bg-admin-surface p-5">
       <h3 className="text-sm font-semibold text-admin">{t('access.cliTitle')}</h3>
       <p className="mt-1 text-sm text-admin-muted">{t('access.cliDescription')}</p>
       <div className="mt-3">
@@ -319,7 +319,7 @@ function KeyAccessForm({
   }
 
   return (
-    <article className="rounded-xl border border-admin bg-admin-surface p-5 shadow-sm">
+    <article className="rounded-xl border border-admin bg-admin-surface p-5">
       <h3 className="text-sm font-semibold text-admin">{t('access.keyTitle')}</h3>
       <p className="mt-1 text-sm text-admin-muted">{t('access.keyDescription')}</p>
       <div className="mt-3">

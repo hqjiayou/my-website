@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { rbacApi } from '@/api/rbacApi'
 import { AdminPageHeader, DataTable, FormDialog, StatusTag } from '@/components/admin'
 import {
-  adminDangerButtonClass,
+  adminDangerGhostButtonClass,
   adminFilterFieldClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
@@ -101,7 +101,7 @@ export function RoleListPage() {
   }
 
   return (
-    <section>
+    <section className="admin-content-data">
       <AdminPageHeader title={t('list.title')} description={t('list.description')} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -249,7 +249,7 @@ function RoleRowActions({
         </button>
       ) : null}
       {canDelete ? (
-        <button type="button" onClick={onDelete} className={adminDangerButtonClass}>
+        <button type="button" onClick={onDelete} className={adminDangerGhostButtonClass}>
           <Trash2 className="h-3.5 w-3.5" />
           {t('list.actions.delete')}
         </button>

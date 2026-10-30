@@ -17,25 +17,25 @@ export function AiAgentScope({ children }: { children: (agentId: number) => Reac
   const numericAgentId = Number(activeAgentId)
 
   if (isPending) {
-    return <p className="text-sm text-slate-500">{t('loading')}</p>
+    return <p className="text-sm text-muted-foreground">{t('loading')}</p>
   }
   if (isError) {
     return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
         <p>{error instanceof Error ? error.message : t('error')}</p>
       </div>
     )
   }
   if (sites.length === 0) {
-    return <p className="text-sm text-slate-500">{t('noSites')}</p>
+    return <p className="text-sm text-muted-foreground">{t('noSites')}</p>
   }
 
   return (
     <div className="space-y-4">
       <label className="block max-w-sm">
-        <span className="text-sm font-medium text-slate-800">{t('agentLabel')}</span>
+        <span className="text-sm font-medium text-foreground">{t('agentLabel')}</span>
         <select
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
           value={activeAgentId}
           onChange={(event) => setSelectedAgentId(event.target.value)}
         >
