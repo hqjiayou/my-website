@@ -7,6 +7,7 @@ background / guardrails / tool guidance 来自平台目录，skills 正文来自
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,6 +18,8 @@ from agent_services.schemas.todo import TodoItem
 
 if TYPE_CHECKING:
     from agent_services.agent.runtime import RunBudget
+
+logger = logging.getLogger(__name__)
 
 _COMPONENT_FILES = ("background.md", "guardrails.md", "tool_guidance.md")
 _COMPONENT_MAX_CHARS = 4_000
@@ -267,6 +270,12 @@ def _read_component(root: Path, name: str) -> str:
     text = text.strip()
     if len(text) <= _COMPONENT_MAX_CHARS:
         return text
+    logger.warning(
+        "harness component %s truncated: %d chars exceeds max %d",
+        name,
+        len(text),
+        _COMPONENT_MAX_CHARS,
+    )
     return text[:_COMPONENT_MAX_CHARS] + "\n" + _TRUNCATED
 
 

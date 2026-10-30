@@ -114,6 +114,22 @@ def test_long_background_is_marked_truncated(tmp_path) -> None:
     assert len(harness.background) > 4_000
 
 
+def test_long_background_truncation_logs_a_warning(tmp_path, caplog) -> None:
+    (tmp_path / "background.md").write_text("A" * 4_005, encoding="utf-8")
+    with caplog.at_level("WARNING", logger="agent_services.agent.harness"):
+        harness = assemble_harness(
+            agent_id="1",
+            message="hi",
+            harness_dir=str(tmp_path),
+        )
+    assert harness.background.endswith("[... truncated]")
+    assert len(harness.background) > 4_000
+    assert any(
+        "background.md" in record.getMessage() and "truncated" in record.getMessage()
+        for record in caplog.records
+    )
+
+
 def test_health_reports_which_harness_files_exist(tmp_path) -> None:
     present = TestClient(create_app(make_settings())).get("/internal/v1/health", headers=TOKEN_HEADER).json()
     assert present["harness"] == {"background": True, "guardrails": True, "toolGuidance": True}

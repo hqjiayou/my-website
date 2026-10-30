@@ -28,6 +28,7 @@ from agent_services.evals.scoring import (
     aggregate,
     case_passed,
     citation_precision,
+    has_refusal_cue,
     keyword_coverage,
     refusal_correct,
     retrieval_hit,
@@ -131,6 +132,32 @@ def test_refusal_correct_matches_attested_live_replies() -> None:
         )
         is False
     )
+
+
+def test_refusal_correct_matches_2026_10_29_ab_rerun_replies() -> None:
+    """2026-10-29 A/B 补验 Arm B 原文：unans-orbit、unans-snow 的实际回复。
+
+    两条此前都不在词表内（"unable to find" 不含 "could not find"；
+    「未找到相关」因中间隔了宾语漏命「未找到……的相关信息」），
+    实质正确拒答被记 refusal_correct=False。
+    """
+    orbit_answer = (
+        "I could not find information about the Zephyr satellite's orbital "
+        "period in the site's documents."
+    )
+    snow_answer = '在站内知识库中未找到关于"人工降雪机夜间票价"的相关信息。'
+    assert has_refusal_cue(orbit_answer) is True
+    assert has_refusal_cue(snow_answer) is True
+    assert (
+        refusal_correct(category="unanswerable", answer=orbit_answer, citation_source_ids=None)
+        is True
+    )
+    assert (
+        refusal_correct(category="unanswerable", answer=snow_answer, citation_source_ids=None)
+        is True
+    )
+    # 纪律负例：正常作答含「无法提供」不误伤，已在上面
+    # test_refusal_correct_matches_attested_live_replies 里覆盖，这里不重复加。
 
 
 def test_case_passed_follows_the_written_rule() -> None:

@@ -10,6 +10,11 @@ from collections.abc import Mapping, Sequence
 # （未查到／暂无相关／没有相关的…／not available）此前不在表内，
 # 4 题实质正确拒答全被记 refusal_correct=False。新增条目以实测原文为准，
 # 仍保持具体性（如只收「暂无法提供」，不收正常作答也会出现的「无法提供」）。
+# 2026-10-29 A/B 补验 Arm B 原文实锤补充两条：unans-orbit 答"I could not find
+# information about the Zephyr satellite's orbital period in the site's
+# documents."（"unable to find"不命中）；unans-snow 答「在站内知识库中未找到
+# 关于"人工降雪机夜间票价"的相关信息。」（「未找到相关」因中间隔了宾语不命中，
+# 补裸条目「未找到」，与既有裸条目「未查到」为先例一致）。
 REFUSAL_CUES: tuple[str, ...] = (
     "无法确认",
     "無法確認",
@@ -21,6 +26,7 @@ REFUSAL_CUES: tuple[str, ...] = (
     "没有相关的",
     "沒有相關的",
     "未查到",
+    "未找到",
     "未找到相关",
     "未找到相關",
     "暂无法提供",
@@ -39,6 +45,7 @@ REFUSAL_CUES: tuple[str, ...] = (
     "no information available",
     "not available",
     "unable to find",
+    "could not find",
     "i don't know",
     "i do not know",
 )
