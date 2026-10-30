@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
+import { adminFieldClass, adminPrimaryButtonClass } from '@/components/admin/controls'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
@@ -53,7 +54,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
 
   return (
     <form
-      className="space-y-4"
+      className="space-y-5 pb-16"
       onSubmit={(event) => {
         event.preventDefault()
         if (!canUpdate) return
@@ -61,37 +62,50 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
       }}
     >
       <label className="block">
-        <span className="text-sm font-medium text-foreground">{t('aiWorkspace.prompt.systemPrompt')}</span>
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-admin">{t('aiWorkspace.prompt.systemPrompt')}</span>
+          <span className="text-xs text-admin-muted">{promptValue.length}</span>
+        </div>
         <textarea
-          className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
-          rows={8}
+          className={`${adminFieldClass} mt-1 bg-card-muted/50 leading-relaxed`}
+          rows={12}
           value={promptValue}
           disabled={!canUpdate}
           onChange={(event) => setSystemPrompt(event.target.value)}
         />
       </label>
-      <label className="block max-w-xs">
-        <span className="text-sm font-medium text-foreground">{t('aiWorkspace.prompt.temperature')}</span>
-        <input
-          className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
-          type="number"
-          min={0}
-          max={2}
-          step={0.1}
-          value={temperatureValue}
-          disabled={!canUpdate}
-          onChange={(event) => setTemperature(event.target.value)}
-        />
+      <label className="block max-w-sm">
+        <span className="text-sm font-medium text-admin">{t('aiWorkspace.prompt.temperature')}</span>
+        <div className="mt-1 flex items-center gap-3">
+          <input
+            type="range"
+            min={0}
+            max={2}
+            step={0.1}
+            value={temperatureValue}
+            disabled={!canUpdate}
+            onChange={(event) => setTemperature(event.target.value)}
+            className="h-1.5 flex-1 accent-[rgb(var(--primary))] disabled:opacity-50"
+          />
+          <input
+            className={`${adminFieldClass} w-20`}
+            type="number"
+            min={0}
+            max={2}
+            step={0.1}
+            value={temperatureValue}
+            disabled={!canUpdate}
+            onChange={(event) => setTemperature(event.target.value)}
+          />
+        </div>
       </label>
-      <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
-        <button
-          type="submit"
-          disabled={saveMutation.isPending}
-          className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-        >
-          {saveMutation.isPending ? t('aiWorkspace.prompt.saving') : t('aiWorkspace.prompt.save')}
-        </button>
-      </PermissionGate>
+      <div className="sticky bottom-4 flex items-center justify-end rounded-[14px] border border-admin bg-admin-surface p-3 shadow-admin-pop">
+        <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
+          <button type="submit" disabled={saveMutation.isPending} className={adminPrimaryButtonClass}>
+            {saveMutation.isPending ? t('aiWorkspace.prompt.saving') : t('aiWorkspace.prompt.save')}
+          </button>
+        </PermissionGate>
+      </div>
     </form>
   )
 }
