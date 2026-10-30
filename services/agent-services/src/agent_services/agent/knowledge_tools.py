@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pydantic_ai.toolsets import FunctionToolset
 
 from agent_services.retrieval.embeddings import EmbeddingClient
-from agent_services.retrieval.service import RetrievalService
+from agent_services.retrieval.service import EmbeddingClass, RetrievalService
 from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.chat import ModelSelection
 
@@ -73,6 +73,8 @@ def build_knowledge_toolset(
     retrieval: RetrievalService | None,
     *,
     embedder: EmbeddingClient | None = None,
+    embedding_model: str | None = None,
+    embedding_classes: list[EmbeddingClass] | None = None,
     model_selection: ModelSelection | None = None,
     collector: KnowledgeSearchCollector | None = None,
 ) -> FunctionToolset:
@@ -95,6 +97,8 @@ def build_knowledge_toolset(
                 agent_id=agent_id,
                 query=cleaned,
                 embedder=embedder,
+                embedding_model=embedding_model,
+                embedding_classes=embedding_classes,
                 model_selection=model_selection,
             )
         except Exception as exc:  # noqa: BLE001 — 检索失败不让本轮 run 失败
@@ -102,9 +106,10 @@ def build_knowledge_toolset(
             if collector is not None:
                 collector.degraded = True
             return "Site knowledge search failed."
-        if retrieval.degraded:
-            if collector is not None:
-                collector.degraded = True
+        if retrieval.degraded and collector is not None:
+            collector.degraded = True
+        # 某一类失败时 degraded 为真，但其它类和字面命中仍然返回。
+        if retrieval.degraded and not chunks:
             return "Site knowledge search failed."
         if collector is not None:
             collector.record(cleaned, chunks)

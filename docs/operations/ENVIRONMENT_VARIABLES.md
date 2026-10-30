@@ -100,7 +100,7 @@ last_verified: 2026-10-30
 | `AI_ALLOW_PROCESS_MODEL` | 否 | `false` | 请求未带 Java 模型入口时，是否允许用进程 `AI_MODEL` 顶替作答。默认关：入口驱动的对话（门户/试聊/OCR）没选到入口即 BLOCKED，不许环境模型静默顶上（Issue #145 F1）。仅本机调试可设 `true` |
 | `RETRIEVAL_DATABASE_URL` | 否 | 空 | 独立 `agent_retrieval` 库（专用 DB 用户，禁止读 Java 业务表）；缺失 → 检索 BLOCKED（问答仍可用） |
 | `AI_EMBEDDING_MODEL` | 否 | 空 | 例 `openai:text-embedding-3-small`；缺失 → 检索 BLOCKED |
-| `AI_EMBEDDING_DIMENSIONS` | 否 | `1536` | 必须与向量列一致（如 gemini-embedding-001 可设 768） |
+| `AI_EMBEDDING_DIMENSIONS` | 否 | `1536` | 遗留 `chunks` 表的向量维度（如 gemini-embedding-001 可设 768）。同维度的其它嵌入模型共用这张表，查询按模型名过滤；维度不同则另建 `chunks_d<维度>`，不删除已有类 |
 | `RETRIEVAL_MIN_SCORE` | 否 | `0.35` | 余弦门槛；低于此分的向量命中不返回。`0` 关闭；越界或非数字 → 启动 fail-fast |
 | `RETRIEVAL_SCORE_RATIO_FLOOR` | 否 | `0.7` | 与最高分比值的下限（`config.py`） |
 | `RETRIEVAL_MAX_CHUNKS_PER_SOURCE` | 否 | `2` | 每来源最多返回块数 |

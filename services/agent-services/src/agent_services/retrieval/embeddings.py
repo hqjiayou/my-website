@@ -174,6 +174,38 @@ def _finite_floats(values: object) -> list[float]:
 
 
 _EMBEDDING_SPEC_HINT = "only 'openai:', 'google:', and 'google-gla:' are supported"
+# 一次检索最多登记的嵌入模型类。同一模型名算一类，避免按类数线性多嵌问题。
+MAX_EMBEDDING_CLASSES = 4
+
+
+def embedding_class_name(spec: str) -> str:
+    """分类键是嵌入模型名。`google-gla:` 与 `google:` 写入同一类。"""
+    text = spec.strip()
+    if text.startswith("google-gla:"):
+        return "google:" + text.removeprefix("google-gla:")
+    return text
+
+
+def limit_embedding_class_specs(items: list | None) -> list | None:
+    """按模型名去重，超过上限则拒绝。空列表原样返回。"""
+    if not items:
+        return items
+    chosen: list = []
+    seen: set[str] = set()
+    for item in items:
+        spec = getattr(item, "embedding_spec", None)
+        if not isinstance(spec, str):
+            raise ValueError("embeddingClasses entries require embeddingSpec.")
+        name = embedding_class_name(spec)
+        if name in seen:
+            continue
+        seen.add(name)
+        chosen.append(item)
+    if len(chosen) > MAX_EMBEDDING_CLASSES:
+        raise ValueError(
+            f"embeddingClasses accepts at most {MAX_EMBEDDING_CLASSES} classes."
+        )
+    return chosen
 
 
 def _google_embedding_model_name(spec: str) -> str | None:
