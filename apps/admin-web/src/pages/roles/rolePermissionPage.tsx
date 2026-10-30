@@ -73,7 +73,7 @@ export function RolePermissionPage({
 
   if (isRoleError || isMenusError || isRolePermissionsError) {
     return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
         <p>
           {(roleError instanceof Error && roleError.message) ||
             (menusError instanceof Error && menusError.message) ||
@@ -170,7 +170,7 @@ function RoleMenuEditor({
   }
 
   return (
-    <section>
+    <section className="admin-content-form">
       {embedded ? (
         <p className="mb-4 text-sm text-admin-muted">
           {t('permissions.description', { roleName, roleCode })}
@@ -183,7 +183,7 @@ function RoleMenuEditor({
       )}
 
       {protectedRole ? (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mb-4 rounded-lg border border-warning/35 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis">
           {t('permissions.protectedHint')}
         </div>
       ) : null}
