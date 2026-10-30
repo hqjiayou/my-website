@@ -681,6 +681,80 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         }
     }
 
+    @Test
+    void previewPinsChainEntryAndRejectsOneThatIsNotOnTheChain() throws Exception {
+        String token = tokenFor(500L);
+        long agentId = createSite(token);
+        long defaultId = createPreviewEntry(token, agentId, "默认", "openai:default-model", true);
+        long altId = createPreviewEntry(token, agentId, "备用", "openai:alt-model", false);
+
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/preview/model")
+                        .param("mode", "KEY")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.entries[0].id").value((int) defaultId))
+                .andExpect(jsonPath("$.data.entries[1].id").value((int) altId))
+                .andExpect(jsonPath("$.data.entries[1].displayName").value("备用"))
+                .andExpect(jsonPath("$.data.entries[1].modelSpec").value("openai:alt-model"));
+
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        doAnswer(invocation -> {
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent("DONE", "{\"reply\":\"hi\"}");
+                    return null;
+                })
+                .when(agentClient)
+                .chatStream(captor.capture(), any());
+
+        ObjectNode body = MAPPER.createObjectNode();
+        body.put("message", "hello");
+        body.put("mode", "KEY");
+        body.put("modelEntryId", altId);
+        MvcResult pinned = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(body)))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(pinned)).andExpect(status().isOk());
+        assertThat(captor.getValue().model().spec()).isEqualTo("openai:alt-model");
+        assertThat(captor.getValue().fallbackModels()).isNull();
+
+        mockMvc.perform(get("/api/admin/ai/model-entries").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == " + defaultId + ")].defaultEntry").value(org.hamcrest.Matchers.hasItem(true)));
+
+        body.put("modelEntryId", 9_999_999L);
+        MvcResult rejected = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(body)))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(rejected))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("MODEL_ENTRY_UNAVAILABLE")));
+    }
+
+    private long createPreviewEntry(String token, long agentId, String name, String spec, boolean defaultEntry)
+            throws Exception {
+        ObjectNode entry = MAPPER.createObjectNode();
+        entry.put("displayName", name);
+        entry.put("modelSpec", spec);
+        entry.put("apiKey", "sk-" + name);
+        entry.put("agentId", agentId);
+        entry.put("mode", "KEY");
+        entry.put("enabled", true);
+        entry.put("defaultEntry", defaultEntry);
+        MvcResult created = mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(entry)))
+                .andExpect(status().isOk())
+                .andReturn();
+        return MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
+    }
+
     private long createSite(String token) throws Exception {
         ObjectNode body = MAPPER.createObjectNode();
         body.put("agentCode", "ai_" + Long.toHexString(System.nanoTime()));

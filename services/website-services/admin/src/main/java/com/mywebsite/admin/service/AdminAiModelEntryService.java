@@ -34,6 +34,21 @@ public interface AdminAiModelEntryService {
     List<AgentModelSelection> selectionChain(long agentId, String mode);
 
     /**
+     * 与 {@link #selectionChain(long, String)} 同一条链，只给菜单：id、名称、spec，不含 key。
+     */
+    List<ChainCandidate> chainCandidates(long agentId, String mode);
+
+    /**
+     * 链上这条入口的凭证。不在链上时抛 {@code MODEL_ENTRY_UNAVAILABLE}，调用方不得改用链首。
+     */
+    AgentModelSelection selectionOnChain(long agentId, String mode, long entryId);
+
+    /**
+     * 菜单上的一条候选。与生效链同一顺序。
+     */
+    record ChainCandidate(Long id, String displayName, String modelSpec) {}
+
+    /**
      * 向量索引用的凭证，与当前对话模式无关。站点 KEY 入口里第一把带 embedding spec 且能解密的 key，
      * 否则全站同样的入口。都没有时返回 null，检索改用进程嵌入模型。CLI 入口不参与。
      */

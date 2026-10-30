@@ -401,10 +401,17 @@ export interface AiMcpReady {
  * mode 缺省时服务端按默认判定选出模式；modelSpec 为该模式链首 spec，无链为 null；
  * available 即链是否非空（含默认入口 key 解密失败导致整链为空的场景）。
  */
+export interface AiPreviewModelEntry {
+  id: number
+  displayName: string
+  modelSpec: string
+}
+
 export interface AiPreviewModelBackfill {
   mode: 'CLI' | 'KEY'
   modelSpec: string | null
   available: boolean
+  entries?: AiPreviewModelEntry[]
 }
 
 export interface AiPreviewChatInput {
@@ -414,6 +421,8 @@ export interface AiPreviewChatInput {
   skills?: string[]
   todos?: AiPreviewTodoItem[]
   mode?: 'CLI' | 'KEY'
+  /** 这一轮点名的入口。不传则用该模式链首。 */
+  modelEntryId?: number
 }
 
 /** 知识搜索工具的安全摘要：查询词与命中数（片段正文不进预览事件）。 */

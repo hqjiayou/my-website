@@ -198,7 +198,8 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
                         m.getCreatedAt(),
                         readPublicAttachments(m),
                         readCitations(m),
-                        readProcess(m)))
+                        readProcess(m),
+                        readRequestedModel(m)))
                 .toList();
     }
 
@@ -695,6 +696,23 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
             return new AgentAiMessageDto.Process(List.copyOf(tools), List.copyOf(searches));
         } catch (Exception ex) {
             log.warn("agent ai message {} has malformed agent_meta process, ignored", message.getId(), ex);
+            return null;
+        }
+    }
+
+    /** 助手消息上当时请求的主用入口 spec。用户消息、旧数据或损坏的 meta 为 null。 */
+    private String readRequestedModel(AgentAiMessageEntity message) {
+        if (message == null || !"ASSISTANT".equals(message.getRole()) || !StringUtils.hasText(message.getAgentMeta())) {
+            return null;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(message.getAgentMeta()).get("requestedModel");
+            if (node == null || node.isNull() || !StringUtils.hasText(node.asText())) {
+                return null;
+            }
+            return node.asText().trim();
+        } catch (Exception ex) {
+            log.warn("agent ai message {} has malformed agent_meta requestedModel, ignored", message.getId(), ex);
             return null;
         }
     }

@@ -72,12 +72,14 @@ async function readStream(
     }
 
     if (!response.ok) {
-      throw new ApiError(await readErrorMessage(response), { status: response.status })
+      const failure = await readErrorBody(response)
+      throw new ApiError(failure.message, { status: response.status, code: failure.code })
     }
 
     const contentType = response.headers.get('content-type') ?? ''
     if (contentType.includes('application/json')) {
-      throw new ApiError(await readErrorMessage(response), { status: response.status })
+      const failure = await readErrorBody(response)
+      throw new ApiError(failure.message, { status: response.status, code: failure.code })
     }
 
     await consumeSse(response, onEvent)
@@ -247,12 +249,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-async function readErrorMessage(response: Response): Promise<string> {
+async function readErrorBody(response: Response): Promise<{ message: string; code: number | null }> {
   try {
-    const body = (await response.json()) as { message?: unknown }
-    if (typeof body.message === 'string' && body.message) return body.message
+    const body = (await response.json()) as { message?: unknown; code?: unknown }
+    const message = typeof body.message === 'string' && body.message ? body.message : `請求失敗（HTTP ${response.status}）`
+    const code = typeof body.code === 'number' ? body.code : null
+    return { message, code }
   } catch {
-    // 非 JSON 錯誤主體
+    return { message: `請求失敗（HTTP ${response.status}）`, code: null }
   }
-  return `請求失敗（HTTP ${response.status}）`
 }

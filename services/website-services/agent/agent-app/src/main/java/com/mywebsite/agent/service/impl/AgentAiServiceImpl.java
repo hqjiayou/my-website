@@ -225,7 +225,7 @@ public class AgentAiServiceImpl implements AgentAiService {
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
         AgentChatRequest agentRequest = buildAgentRequest(
-                agentId, message, attachments, validated.documents(), preparation, memories, mode);
+                agentId, message, attachments, validated.documents(), preparation, memories, mode, request.modelEntryId());
         AgentChatResponse response = agentClient.chat(agentRequest);
         persistTurn(
                 agentId,
@@ -356,7 +356,14 @@ public class AgentAiServiceImpl implements AgentAiService {
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
         AgentChatRequest agentRequest =
                 buildAgentRequest(
-                        agentId, message, attachments, validated.documents(), preparation, memories, mode);
+                        agentId,
+                        message,
+                        attachments,
+                        validated.documents(),
+                        preparation,
+                        memories,
+                        mode,
+                        request.modelEntryId());
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         List<AgentAttachmentDto> stored = storedAttachments(attachments, validated);
@@ -384,9 +391,11 @@ public class AgentAiServiceImpl implements AgentAiService {
             List<AgentDocumentContext> documents,
             ChatPreparation preparation,
             List<String> memories,
-            String mode) {
+            String mode,
+            Long modelEntryId) {
         Long conversationId = preparation.conversation().getId();
-        List<AgentModelSelection> chain = loadModelChain(agentId, mode);
+        List<ChainLink> links = pinChain(loadModelChainLinks(agentId, mode), modelEntryId);
+        List<AgentModelSelection> chain = links.stream().map(ChainLink::selection).toList();
         if (chain.isEmpty()) {
             // 所选模式无可用入口即未配置：诚实 BLOCKED，绝不把 model=null 发给
             // 执行层让进程环境模型顶替作答（Issue #145 F1，ADR-0004）。
@@ -543,10 +552,14 @@ public class AgentAiServiceImpl implements AgentAiService {
         requireAgentMember(agentId);
         List<AgentAiModelModesDto.ModeOption> options = new ArrayList<>();
         for (String mode : List.of("KEY", "CLI")) {
-            List<AgentModelSelection> chain = loadModelChain(agentId, mode);
-            boolean available = !chain.isEmpty();
+            List<ChainLink> links = loadModelChainLinks(agentId, mode);
+            boolean available = !links.isEmpty();
+            List<AgentAiModelModesDto.EntryOption> entries = links.stream()
+                    .map(link -> new AgentAiModelModesDto.EntryOption(
+                            link.id(), link.displayName(), link.selection().spec()))
+                    .toList();
             options.add(new AgentAiModelModesDto.ModeOption(
-                    mode, available, available ? modelLabel(chain.get(0).spec()) : null));
+                    mode, available, available ? modelLabel(links.get(0).selection().spec()) : null, entries));
         }
         return new AgentAiModelModesDto(options);
     }
@@ -600,6 +613,10 @@ public class AgentAiServiceImpl implements AgentAiService {
      * 解密不出 key 的备援跳过。mode 非空时先按模式过滤（备援封闭在模式内）；为空时即整链。
      */
     private List<AgentModelSelection> loadModelChain(long agentId, String mode) {
+        return loadModelChainLinks(agentId, mode).stream().map(ChainLink::selection).toList();
+    }
+
+    private List<ChainLink> loadModelChainLinks(long agentId, String mode) {
         List<AgentAiModelEntryEntity> agentEntries = AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId);
         List<AgentAiModelEntryEntity> globalEntries = AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null);
         if (mode != null) {
@@ -621,12 +638,64 @@ public class AgentAiServiceImpl implements AgentAiService {
         if (primarySelection == null) {
             return List.of();
         }
-        List<AgentModelSelection> chain = new ArrayList<>();
-        chain.add(primarySelection);
-        AgentModelChainUtils.appendModelSelections(chain, agentEntries, primary.getId(), modelEntryCipher);
-        AgentModelChainUtils.appendModelSelections(chain, globalEntries, primary.getId(), modelEntryCipher);
+        List<ChainLink> chain = new ArrayList<>();
+        chain.add(linkOf(primary, primarySelection));
+        appendLinks(chain, agentEntries, primary.getId());
+        appendLinks(chain, globalEntries, primary.getId());
         return List.copyOf(chain);
     }
+
+    /**
+     * 把点名入口换到链首，其余同模式入口仍作备援。不在链上（停用、删除、解不开 key、模式不符）则拒绝，
+     * 不改走默认。{@code entryId} 为空时链保持原样。
+     */
+    private static List<ChainLink> pinChain(List<ChainLink> links, Long entryId) {
+        if (entryId == null) {
+            return links;
+        }
+        int index = -1;
+        for (int i = 0; i < links.size(); i++) {
+            if (entryId.equals(links.get(i).id())) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) {
+            throw new BusinessException(ErrorCode.MODEL_ENTRY_UNAVAILABLE);
+        }
+        if (index == 0) {
+            return links;
+        }
+        List<ChainLink> reordered = new ArrayList<>(links.size());
+        reordered.add(links.get(index));
+        for (int i = 0; i < links.size(); i++) {
+            if (i != index) {
+                reordered.add(links.get(i));
+            }
+        }
+        return List.copyOf(reordered);
+    }
+
+    private void appendLinks(List<ChainLink> chain, List<AgentAiModelEntryEntity> entries, Long skipId) {
+        for (AgentAiModelEntryEntity entry : entries) {
+            if (entry.getId() != null && entry.getId().equals(skipId)) {
+                continue;
+            }
+            AgentModelSelection selection = AgentModelChainUtils.toModelSelection(entry, modelEntryCipher);
+            if (selection != null) {
+                chain.add(linkOf(entry, selection));
+            }
+        }
+    }
+
+    private static ChainLink linkOf(AgentAiModelEntryEntity entry, AgentModelSelection selection) {
+        String name = StringUtils.hasText(entry.getDisplayName())
+                ? entry.getDisplayName().trim()
+                : selection.spec();
+        return new ChainLink(entry.getId(), name, selection);
+    }
+
+    private record ChainLink(Long id, String displayName, AgentModelSelection selection) {}
 
     private ValidatedChat validateChatAccess(long agentId, AgentAiChatRequestDto request) {
         AuthenticatedUser user = requireAgentMember(agentId);

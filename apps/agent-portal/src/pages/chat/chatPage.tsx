@@ -10,7 +10,7 @@ import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
 import type { AgentAiCitation, AgentAiConversation, AgentAiDocument, AgentAiMessage, AgentAiModelModes } from '@/types/api'
 import { formatSimilarityPercent } from '@/utils/formatSimilarity'
-import { errorMessage } from '@/utils/http/apiError'
+import { ApiError, errorMessage } from '@/utils/http/apiError'
 
 import { ConversationSheet } from './conversationSheet'
 import { ProcessTimeline, type ProcessStep } from './processTimeline'
@@ -77,6 +77,8 @@ interface ChatTurn {
   citations?: AgentAiCitation[]
   /** 本轮的过程步骤（思考/工具）。只在当次会话内保留，刷新后服务端不回传。 */
   process?: ProcessStep[]
+  /** 这一轮请求的入口 spec。只标在助手消息上。 */
+  requestedModel?: string | null
 }
 
 interface StoredLoadOptions {
@@ -142,6 +144,7 @@ function toStoredTurns(
         : undefined,
       citations: item.role === 'ASSISTANT' && item.citations?.length ? item.citations : undefined,
       process: storedSteps.length ? storedSteps : undefined,
+      requestedModel: item.role === 'ASSISTANT' ? item.requestedModel ?? null : undefined,
     }
   })
   // 即時輪的 extra 只覆蓋最後一條 ASSISTANT；沒有 extra citations 時保留該條已存的引用。
@@ -272,6 +275,31 @@ export function ChatPage() {
       // 存儲不可用時僅本次會話生效
     }
   }
+  const [entryByMode, setEntryByMode] = useState<Record<string, string | null>>(() => {
+    if (!site.ok) return {}
+    const read = (value: string) => {
+      try {
+        return window.localStorage.getItem(`portal-ai-entry:${site.agentId}:${value}`)
+      } catch {
+        return null
+      }
+    }
+    return { KEY: read('KEY'), CLI: read('CLI') }
+  })
+  const entryId = entryByMode[effectiveMode] ?? null
+  const rememberEntry = (next: string | null) => {
+    setEntryByMode((current) => ({ ...current, [effectiveMode]: next }))
+    if (!site.ok) return
+    try {
+      const key = `portal-ai-entry:${site.agentId}:${effectiveMode}`
+      if (next) window.localStorage.setItem(key, next)
+      else window.localStorage.removeItem(key)
+    } catch {
+      // 存儲不可用時僅本次會話生效
+    }
+  }
+  const modeEntries = modeOption(effectiveMode)?.entries ?? []
+  const pickedEntry = modeEntries.find((item) => String(item.id) === entryId) ?? null
   const displayName = useAuthStore((state) => state.user?.displayName || state.user?.username || '')
   const { setExtra, closeDrawer } = useSidebarExtra()
   useKeyboardInset()
@@ -764,7 +792,14 @@ export function ChatPage() {
           images: images.length ? images : undefined,
           documents: documents.length ? documents.map((doc) => ({ fileName: doc.fileName })) : undefined,
         },
-        { id: assistantId, role: 'ASSISTANT', content: '', pending: true, createdAt: new Date().toISOString() },
+        {
+          id: assistantId,
+          role: 'ASSISTANT',
+          content: '',
+          pending: true,
+          createdAt: new Date().toISOString(),
+          requestedModel: pickedEntry?.modelSpec ?? modeEntries[0]?.modelSpec ?? null,
+        },
       ]
     })
 
@@ -800,6 +835,7 @@ export function ChatPage() {
         {
           message: trimmed,
           mode: effectiveMode,
+          ...(entryId ? { modelEntryId: Number(entryId) } : {}),
           ...(conversationId ? { conversationId } : {}),
           ...(images.length
             ? { attachments: images.map((image) => ({ mediaType: image.mediaType, data: image.data })) }
@@ -904,6 +940,7 @@ export function ChatPage() {
         markStopped()
         return
       }
+      if (error instanceof ApiError && error.code === 1009) rememberEntry(null)
       markFailed(errorMessage(error))
     } finally {
       if (generation.current === gen) {
@@ -1189,6 +1226,28 @@ export function ChatPage() {
           })}
         </div>
       </div>
+      {modeEntries.length > 0 ? (
+        <div className="mb-2 flex justify-end">
+          <label className="flex items-center gap-2 text-xs text-gpt-muted">
+            下一則
+            <select
+              aria-label="下一則使用的模型"
+              value={entryId ?? ''}
+              disabled={sending}
+              onChange={(event) => rememberEntry(event.target.value || null)}
+              className="max-w-[14rem] rounded-full border border-gpt-line bg-gpt-canvas px-3 py-1 text-gpt-ink"
+            >
+              <option value="">此模式的預設入口</option>
+              {modeEntries.map((item) => (
+                <option key={item.id} value={String(item.id)}>
+                  {item.displayName}
+                </option>
+              ))}
+              {entryId && !pickedEntry ? <option value={entryId}>已無法使用</option> : null}
+            </select>
+          </label>
+        </div>
+      ) : null}
       <div className="relative flex w-full items-end gap-2 rounded-[28px] border border-gpt-line bg-gpt-canvas px-3 py-2 shadow-composer transition focus-within:border-gpt-muted">
         <input
           ref={fileRef}
@@ -1598,6 +1657,9 @@ export function ChatPage() {
                         </p>
                       ) : (
                         <div>
+                          {message.requestedModel ? (
+                            <p className="mb-1 font-mono text-[11px] text-gpt-muted">{message.requestedModel}</p>
+                          ) : null}
                           {message.pending && !message.content && !hasProcess ? (
                             <p className="animate-pulse text-base text-gpt-muted">正在思考…</p>
                           ) : (

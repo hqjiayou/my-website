@@ -10,7 +10,9 @@ public record AgentAiMessageDto(
         OffsetDateTime createdAt,
         List<AgentAiAttachmentDto> attachments,
         List<Citation> citations,
-        Process process) {
+        Process process,
+        /** 本轮请求的主用入口 spec。仅 ASSISTANT；旧消息或用户消息为 null。 */
+        String requestedModel) {
 
     /** 本轮实际采用的检索引用。外层列表无引用时为 null，与 {@code attachments} 相同。 */
     public record Citation(String sourceId, int chunkIndex, double score) {}

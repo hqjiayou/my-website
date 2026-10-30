@@ -9,6 +9,7 @@ import com.mywebsite.infra.entity.AbstractAuditableEntity;
 @TableName("agent_model_entry")
 public class AgentAiModelEntryEntity extends AbstractAuditableEntity {
 
+    private String displayName;
     private String modelSpec;
     private String apiKey;
     private String baseUrl;
@@ -26,6 +27,14 @@ public class AgentAiModelEntryEntity extends AbstractAuditableEntity {
 
     /** 对外模型名（网关 UoW-2 用；本步只加字段，不写使用逻辑）。 */
     private String alias;
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
 
     public String getModelSpec() {
         return modelSpec;

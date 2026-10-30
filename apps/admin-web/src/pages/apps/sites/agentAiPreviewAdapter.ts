@@ -106,7 +106,16 @@ export interface PreviewAdapterOptions {
   getSkills: () => string[]
   getTodos: () => AiPreviewTodoItem[]
   getMode: () => 'CLI' | 'KEY'
+  getModelEntryId: () => number | null
+  getRequestedSpec: () => string
   onAgentEvent: (event: AiPreviewAgentEvent) => void
+}
+
+function labeled(text: string, requestedModel: string) {
+  return {
+    content: [{ type: 'text' as const, text }],
+    metadata: { custom: { requestedModel } },
+  }
 }
 
 export function createJavaPreviewAdapter(
@@ -135,6 +144,8 @@ export function createJavaPreviewAdapter(
         .slice(-20)
       const skills = options.getSkills()
       const todos = options.getTodos()
+      const modelEntryId = options.getModelEntryId()
+      const requestedModel = options.getRequestedSpec()
 
       const response = await streamPreviewChat(
         agentId,
@@ -144,6 +155,7 @@ export function createJavaPreviewAdapter(
           skills,
           todos: todos.length ? todos : undefined,
           mode: options.getMode(),
+          ...(modelEntryId != null ? { modelEntryId } : {}),
         },
         abortSignal,
       )
@@ -180,7 +192,7 @@ export function createJavaPreviewAdapter(
             const delta = payload?.delta
             if (typeof delta === 'string') {
               text += delta
-              yield { content: [{ type: 'text' as const, text }] }
+              yield labeled(text, requestedModel)
             }
           } else if (parsed.event === 'THINKING') {
             const delta = payload?.delta
@@ -193,7 +205,7 @@ export function createJavaPreviewAdapter(
             options.onAgentEvent({ type: 'error', errorCode: code, message })
             const shown = message || code
             text = text ? `${text}\n${shown}` : shown
-            yield { content: [{ type: 'text' as const, text }] }
+            yield labeled(text, requestedModel)
             return
           } else if (payload) {
             const agentEvent = toAgentEvent(parsed.event, payload)
@@ -202,7 +214,7 @@ export function createJavaPreviewAdapter(
         }
       }
 
-      yield { content: [{ type: 'text' as const, text }] }
+      yield labeled(text, requestedModel)
     },
   }
 }

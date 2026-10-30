@@ -12,7 +12,7 @@ public final class GlobalExceptionHttpStatus {
     private GlobalExceptionHttpStatus() {}
 
     public static HttpStatus fromBusinessCode(int code) {
-        if (code == ErrorCode.BAD_REQUEST.getCode()) {
+        if (code == ErrorCode.BAD_REQUEST.getCode() || code == ErrorCode.MODEL_ENTRY_UNAVAILABLE.getCode()) {
             return HttpStatus.BAD_REQUEST;
         }
         if (code == ErrorCode.UNAUTHORIZED.getCode()) {

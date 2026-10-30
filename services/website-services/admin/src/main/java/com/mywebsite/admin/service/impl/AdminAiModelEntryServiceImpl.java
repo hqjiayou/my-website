@@ -8,6 +8,7 @@ import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
+import com.mywebsite.admin.service.AdminAiModelEntryService.ChainCandidate;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -132,6 +133,32 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
     @Override
     @Transactional
     public List<AgentModelSelection> selectionChain(long agentId, String mode) {
+        return chainLinks(agentId, mode).stream().map(ChainLink::selection).toList();
+    }
+
+    @Override
+    @Transactional
+    public List<ChainCandidate> chainCandidates(long agentId, String mode) {
+        return chainLinks(agentId, mode).stream()
+                .map(link -> new ChainCandidate(link.id(), link.displayName(), link.selection().spec()))
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public AgentModelSelection selectionOnChain(long agentId, String mode, long entryId) {
+        for (ChainLink link : chainLinks(agentId, mode)) {
+            if (link.id() != null && link.id() == entryId) {
+                return link.selection();
+            }
+        }
+        throw new BusinessException(ErrorCode.MODEL_ENTRY_UNAVAILABLE);
+    }
+
+    /**
+     * 组链规则与 {@link #selectionChain(long, String)} 的原实现一致，并带上菜单需要的 id 与名称。
+     */
+    private List<ChainLink> chainLinks(long agentId, String mode) {
         String normalized = chainMode(mode);
         List<AdminAiModelEntryEntity> agentEntries = filterMode(enabledEntries(agentId), normalized);
         List<AdminAiModelEntryEntity> globalEntries = filterMode(enabledEntries(null), normalized);
@@ -148,10 +175,10 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
             // 备援不得越过坏主用顶上，否则坏 key 会被静默掩盖。
             return List.of();
         }
-        List<AgentModelSelection> chain = new ArrayList<>();
-        chain.add(primarySelection);
-        appendSelections(chain, agentEntries, primary.getId());
-        appendSelections(chain, globalEntries, primary.getId());
+        List<ChainLink> chain = new ArrayList<>();
+        chain.add(new ChainLink(primary.getId(), candidateName(primary), primarySelection));
+        appendLinks(chain, agentEntries, primary.getId());
+        appendLinks(chain, globalEntries, primary.getId());
         return List.copyOf(chain);
     }
 
@@ -201,18 +228,26 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         return null;
     }
 
-    private void appendSelections(
-            List<AgentModelSelection> chain, List<AdminAiModelEntryEntity> entries, Long skipId) {
+    private void appendLinks(List<ChainLink> chain, List<AdminAiModelEntryEntity> entries, Long skipId) {
         for (AdminAiModelEntryEntity entry : entries) {
             if (entry.getId() != null && entry.getId().equals(skipId)) {
                 continue;
             }
             AgentModelSelection selection = toSelection(entry);
             if (selection != null) {
-                chain.add(selection);
+                chain.add(new ChainLink(entry.getId(), candidateName(entry), selection));
             }
         }
     }
+
+    private static String candidateName(AdminAiModelEntryEntity entry) {
+        if (StringUtils.hasText(entry.getDisplayName())) {
+            return entry.getDisplayName().trim();
+        }
+        return entry.getModelSpec().trim();
+    }
+
+    private record ChainLink(Long id, String displayName, AgentModelSelection selection) {}
 
     private void clearOtherDefaults(Long agentId, Long keepId, String mode) {
         LambdaQueryWrapper<AdminAiModelEntryEntity> query = new LambdaQueryWrapper<AdminAiModelEntryEntity>()
