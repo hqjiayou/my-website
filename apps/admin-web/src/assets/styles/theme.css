@@ -465,6 +465,10 @@ html[data-density='compact'] {
   box-shadow: inset 3px 0 0 rgb(var(--primary));
 }
 
+.admin-active-inset {
+  box-shadow: inset 3px 0 0 rgb(var(--primary));
+}
+
 .admin-nav-item[aria-current='page']:hover {
   background-color: rgb(var(--primary) / 0.12);
 }

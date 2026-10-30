@@ -323,7 +323,7 @@ export function ProxyServicesPage() {
                     onClick={() => setSelectedName(account.name)}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
-                      active && 'bg-primary/8 shadow-[inset_2px_0_0_rgb(var(--primary))]',
+                      active && 'admin-active-inset bg-primary/8',
                     )}
                   >
                     {isLoginProvider(account.provider) ? (
@@ -687,7 +687,7 @@ function ApiKeyColumn() {
                   onClick={() => setSelectedId(entry.id)}
                   className={cn(
                     'flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
-                    active && 'bg-primary/8 shadow-[inset_2px_0_0_rgb(var(--primary))]',
+                    active && 'admin-active-inset bg-primary/8',
                   )}
                 >
                   <span className="w-full truncate text-sm font-medium text-admin">{entry.displayName}</span>
