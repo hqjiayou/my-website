@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { BookOpen, FileText, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -6,6 +7,8 @@ import { toast } from 'sonner'
 import { agentApi } from '@/api'
 import { aiApi } from '@/api/apps/aiApi'
 import { AdminPageHeader } from '@/components/admin'
+import { adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
+import { cn } from '@/lib/cn'
 import { AgentAiKnowledgePanel } from '@/pages/apps/sites/agentAiKnowledgePanel'
 import { PermissionGate } from '@/router/permission'
 import type { AiKnowledgeReembedConflict, AiKnowledgeReembedResult } from '@/types/ai'
@@ -50,7 +53,7 @@ export function AiKnowledgeBasesPage() {
           <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
             <button
               type="button"
-              className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+              className={adminPrimaryButtonClass}
               disabled={reembedMutation.isPending}
               onClick={startReembed}
             >
@@ -154,9 +157,9 @@ function KnowledgeBasesAdminSection() {
     return null
   }
   return (
-    <article className="mb-4 rounded-xl border border-border bg-card p-5">
-      <h2 className="text-sm font-semibold text-foreground">{t('knowledgeBases.bases.title')}</h2>
-      <p className="mt-1 text-xs text-muted-foreground">{t('knowledgeBases.bases.hint')}</p>
+    <article className="mb-4 rounded-xl border border-admin bg-admin-surface p-5">
+      <h2 className="text-sm font-semibold text-admin">{t('knowledgeBases.bases.title')}</h2>
+      <p className="mt-1 text-xs text-admin-muted">{t('knowledgeBases.bases.hint')}</p>
       <div className="mt-3 space-y-3">
         {bases.map((base) => {
           const candidates = sites.filter(
@@ -164,75 +167,80 @@ function KnowledgeBasesAdminSection() {
           )
           const chosen = linkTargets[base.id] ?? (candidates[0] ? String(candidates[0].id) : '')
           return (
-            <div key={base.id} className="rounded-lg border border-border px-3 py-2">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-medium text-foreground">{base.name}</span>
-                {base.isDefault ? (
-                  <span className="rounded bg-card-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                    {t('knowledgeBases.bases.defaultBadge')}
+            <div key={base.id} className="flex items-start gap-3 rounded-lg border border-admin px-3 py-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info-muted text-info-emphasis">
+                <BookOpen className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-semibold text-admin">{base.name}</span>
+                  {base.isDefault ? (
+                    <span className="rounded-full bg-admin-surface-muted px-1.5 py-0.5 text-xs text-admin-muted">
+                      {t('knowledgeBases.bases.defaultBadge')}
+                    </span>
+                  ) : null}
+                  <span className="text-xs text-admin-muted">
+                    {t('knowledgeBases.bases.owner')} {base.ownerAgentName ?? `#${base.agentId}`}
+                    {' · '}
+                    {t('knowledgeBases.bases.documents')} {base.documentCount}
                   </span>
-                ) : null}
-                <span className="text-xs text-muted-foreground">
-                  {t('knowledgeBases.bases.owner')} {base.ownerAgentName ?? `#${base.agentId}`}
-                  {' · '}
-                  {t('knowledgeBases.bases.documents')} {base.documentCount}
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">{t('knowledgeBases.bases.sharedWith')}</span>
-                {base.linkedAgentIds.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">{t('knowledgeBases.bases.none')}</span>
-                ) : (
-                  base.linkedAgentIds.map((linkedAgentId) => (
-                    <span
-                      key={linkedAgentId}
-                      className="flex items-center gap-1 rounded bg-info-muted px-2 py-0.5 text-xs text-primary"
-                    >
-                      {agentName(linkedAgentId)}
-                      <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
-                        <button
-                          type="button"
-                          className="text-primary"
-                          title={t('knowledgeBases.bases.unlink')}
-                          onClick={() =>
-                            unlinkMutation.mutate({ baseId: base.id, targetAgentId: linkedAgentId })
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-admin-muted">{t('knowledgeBases.bases.sharedWith')}</span>
+                  {base.linkedAgentIds.length === 0 ? (
+                    <span className="text-xs text-admin-muted">{t('knowledgeBases.bases.none')}</span>
+                  ) : (
+                    base.linkedAgentIds.map((linkedAgentId) => (
+                      <span
+                        key={linkedAgentId}
+                        className="flex items-center gap-1 rounded-full bg-info-muted py-0.5 pl-2 pr-1 text-xs text-info-emphasis"
+                      >
+                        {agentName(linkedAgentId)}
+                        <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 text-danger-emphasis transition hover:bg-danger-muted"
+                            title={t('knowledgeBases.bases.unlink')}
+                            onClick={() =>
+                              unlinkMutation.mutate({ baseId: base.id, targetAgentId: linkedAgentId })
+                            }
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </PermissionGate>
+                      </span>
+                    ))
+                  )}
+                  {candidates.length > 0 ? (
+                    <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
+                      <span className="flex items-center gap-1">
+                        <select
+                          className="rounded-lg border border-admin bg-admin-surface px-2 py-1 text-xs text-admin"
+                          value={chosen}
+                          onChange={(event) =>
+                            setLinkTargets((prev) => ({ ...prev, [base.id]: event.target.value }))
                           }
                         >
-                          ×
+                          {candidates.map((site) => (
+                            <option key={site.id} value={site.id}>
+                              {site.agentName}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-admin bg-admin-surface px-2 py-1 text-xs text-admin disabled:opacity-50"
+                          disabled={linkMutation.isPending || !chosen}
+                          onClick={() =>
+                            linkMutation.mutate({ baseId: base.id, targetAgentId: Number(chosen) })
+                          }
+                        >
+                          {t('knowledgeBases.bases.link')}
                         </button>
-                      </PermissionGate>
-                    </span>
-                  ))
-                )}
-                {candidates.length > 0 ? (
-                  <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
-                    <span className="flex items-center gap-1">
-                      <select
-                        className="rounded-lg border border-border px-2 py-1 text-xs"
-                        value={chosen}
-                        onChange={(event) =>
-                          setLinkTargets((prev) => ({ ...prev, [base.id]: event.target.value }))
-                        }
-                      >
-                        {candidates.map((site) => (
-                          <option key={site.id} value={site.id}>
-                            {site.agentName}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="rounded-lg border border-border px-2 py-1 text-xs disabled:opacity-50"
-                        disabled={linkMutation.isPending || !chosen}
-                        onClick={() =>
-                          linkMutation.mutate({ baseId: base.id, targetAgentId: Number(chosen) })
-                        }
-                      >
-                        {t('knowledgeBases.bases.link')}
-                      </button>
-                    </span>
-                  </PermissionGate>
-                ) : null}
+                      </span>
+                    </PermissionGate>
+                  ) : null}
+                </div>
               </div>
             </div>
           )
@@ -270,58 +278,93 @@ function KnowledgeOverviewSection() {
   if (!overview) {
     return null
   }
-  const stats = [
-    { label: t('knowledgeBases.overview.total'), value: String(overview.totalDocuments) },
-    { label: t('knowledgeBases.overview.indexed'), value: String(overview.indexedDocuments) },
-    { label: t('knowledgeBases.overview.failed'), value: String(overview.failedDocuments) },
-    { label: t('knowledgeBases.overview.pending'), value: String(overview.pendingDocuments) },
-    { label: t('knowledgeBases.overview.storage'), value: formatBytes(overview.originalBytes) },
+  // 设计稿的「知识库数（按智能体）」格缺对应 i18n 文案，按红线不编造文案，省略该格（见报告）。
+  const stats: { key: string; label: string; value: number; valueClassName: string }[] = [
+    {
+      key: 'total',
+      label: t('knowledgeBases.overview.total'),
+      value: overview.totalDocuments,
+      valueClassName: 'text-admin',
+    },
+    {
+      key: 'indexed',
+      label: t('knowledgeBases.overview.indexed'),
+      value: overview.indexedDocuments,
+      valueClassName: 'text-success-emphasis',
+    },
+    {
+      key: 'failed',
+      label: t('knowledgeBases.overview.failed'),
+      value: overview.failedDocuments,
+      valueClassName: overview.failedDocuments > 0 ? 'text-danger-emphasis' : 'text-admin',
+    },
   ]
   return (
-    <article className="mb-4 rounded-xl border border-border bg-card p-5">
-      <h2 className="text-sm font-semibold text-foreground">{t('knowledgeBases.overview.title')}</h2>
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+    <>
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {stats.map((stat) => (
-          <div key={stat.label} className="rounded-lg bg-card-muted px-3 py-2">
-            <div className="text-xs text-muted-foreground">{stat.label}</div>
-            <div className="mt-0.5 text-lg font-semibold text-foreground">{stat.value}</div>
+          <div key={stat.key} className="rounded-xl border border-admin bg-admin-surface p-4">
+            <div className={cn('text-[23px] font-bold leading-none tabular-nums', stat.valueClassName)}>
+              {stat.value}
+            </div>
+            <div className="mt-1 text-xs text-admin-muted">{stat.label}</div>
           </div>
         ))}
       </div>
-      {overview.sites.length > 0 ? (
-        <table className="mt-4 w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-muted-foreground">
-              <th className="py-1 pr-3 font-medium">{t('knowledgeBases.overview.site')}</th>
-              <th className="py-1 pr-3 font-medium">{t('knowledgeBases.overview.total')}</th>
-              <th className="py-1 pr-3 font-medium">{t('knowledgeBases.overview.indexed')}</th>
-              <th className="py-1 pr-3 font-medium">{t('knowledgeBases.overview.failed')}</th>
-              <th className="py-1 font-medium">{t('knowledgeBases.overview.storage')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {overview.sites.map((site) => (
-              <tr key={site.agentId} className="border-t border-border">
-                <td className="py-1.5 pr-3">{site.agentName ?? `#${site.agentId}`}</td>
-                <td className="py-1.5 pr-3">{site.totalDocuments}</td>
-                <td className="py-1.5 pr-3">{site.indexedDocuments}</td>
-                <td className="py-1.5 pr-3">{site.failedDocuments}</td>
-                <td className="py-1.5">{formatBytes(site.originalBytes)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : null}
+      <article className="mb-3 overflow-hidden rounded-xl border border-admin bg-admin-surface">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-admin px-4 py-3">
+          <h2 className="text-sm font-semibold text-admin">{t('knowledgeBases.overview.title')}</h2>
+          <span className="text-xs text-admin-muted">
+            {t('knowledgeBases.overview.storage')} {formatBytes(overview.originalBytes)}
+          </span>
+        </div>
+        {overview.sites.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-admin-surface-muted text-[11.5px] font-medium text-admin-muted">
+                  <th className="px-4 py-3">{t('knowledgeBases.overview.site')}</th>
+                  <th className="px-4 py-3">{t('knowledgeBases.overview.total')}</th>
+                  <th className="px-4 py-3">{t('knowledgeBases.overview.indexed')}</th>
+                  <th className="px-4 py-3">{t('knowledgeBases.overview.failed')}</th>
+                  <th className="px-4 py-3">{t('knowledgeBases.overview.storage')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overview.sites.map((site) => (
+                  <tr key={site.agentId} className="border-t border-admin hover:bg-admin-surface-muted">
+                    <td className="px-4 py-3 font-semibold text-admin">{site.agentName ?? `#${site.agentId}`}</td>
+                    <td className="px-4 py-3 tabular-nums text-admin">{site.totalDocuments}</td>
+                    <td className="px-4 py-3 tabular-nums font-semibold text-success-emphasis">
+                      {site.indexedDocuments}
+                    </td>
+                    <td
+                      className={cn(
+                        'px-4 py-3 tabular-nums font-semibold',
+                        site.failedDocuments > 0 ? 'text-danger-emphasis' : 'text-admin',
+                      )}
+                    >
+                      {site.failedDocuments}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-admin">{formatBytes(site.originalBytes)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </article>
       {overview.recentFailures.length > 0 ? (
-        <div className="mt-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-danger-emphasis">
+        <article className="overflow-hidden rounded-xl border border-admin bg-admin-surface">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-admin px-4 py-3">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-danger-emphasis">
+              <span className="h-2 w-2 rounded-full bg-danger" />
               {t('knowledgeBases.overview.recentFailures')}
             </h3>
             <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
               <button
                 type="button"
-                className="rounded-lg border border-border px-3 py-1 text-xs font-medium disabled:opacity-50"
+                className={adminSecondaryButtonClass}
                 disabled={retryMutation.isPending}
                 onClick={() => {
                   if (window.confirm(t('knowledgeBases.overview.retryConfirm'))) {
@@ -335,24 +378,31 @@ function KnowledgeOverviewSection() {
               </button>
             </PermissionGate>
           </div>
-          <ul className="mt-2 space-y-1 text-sm text-foreground">
+          <div>
             {overview.recentFailures.map((failure) => (
-              <li key={failure.documentId}>
-                <span className="font-medium">{failure.title}</span>
-                <span className="text-muted-foreground">
-                  {' · '}
+              <div
+                key={failure.documentId}
+                className="flex items-center gap-3 border-b border-admin px-4 py-3 last:border-b-0"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-danger-muted text-danger-emphasis">
+                  <FileText className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-admin">{failure.title}</div>
+                  {failure.indexError ? (
+                    <div className="truncate text-xs text-danger-emphasis" title={failure.indexError}>
+                      {failure.indexError}
+                    </div>
+                  ) : null}
+                </div>
+                <span className="shrink-0 rounded-full bg-admin-surface-muted px-2 py-0.5 text-xs text-admin-muted">
                   {failure.agentName ?? `#${failure.agentId}`}
                 </span>
-                {failure.indexError ? (
-                  <span className="block truncate text-xs text-danger-emphasis" title={failure.indexError}>
-                    {failure.indexError}
-                  </span>
-                ) : null}
-              </li>
+              </div>
             ))}
-          </ul>
-        </div>
+          </div>
+        </article>
       ) : null}
-    </article>
+    </>
   )
 }

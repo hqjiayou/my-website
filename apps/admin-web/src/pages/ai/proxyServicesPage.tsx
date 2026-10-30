@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Plus } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -48,6 +48,15 @@ function providerLabel(provider: string, t: (key: string) => string) {
 
 function isReady(account: { disabled: boolean; unavailable: boolean }) {
   return !account.disabled && !account.unavailable
+}
+
+/** 家族色映射（设计稿）：GPT=chart-2、Claude=chart-3、Gemini=info、Muse/其他=chart-4。 */
+function providerTileClass(provider: string) {
+  if (provider === 'codex') return 'bg-[rgb(var(--chart-2)/.13)] text-[rgb(var(--chart-2))]'
+  if (provider === 'claude') return 'bg-[rgb(var(--chart-3)/.14)] text-[rgb(var(--chart-3))]'
+  if (provider === 'antigravity') return 'bg-[rgb(var(--info)/.12)] text-[rgb(var(--info))]'
+  if (provider === 'meta') return 'bg-[rgb(var(--chart-4)/.12)] text-[rgb(var(--chart-4))]'
+  return 'bg-admin-surface-muted text-admin-muted'
 }
 
 function accountTitle(account: ProxyServicesAccount) {
@@ -222,18 +231,22 @@ export function ProxyServicesPage() {
       <AdminPageHeader
         className="mb-0"
         title={t('proxyServices.title')}
+        description={t('proxyServices.description')}
         action={
           status ? (
-            <StatusTag
-              status={status.reachable ? 'active' : 'warning'}
-              tone={status.reachable ? 'active' : 'warning'}
-              label={status.reachable ? t('proxyServices.reachable') : t('proxyServices.unreachable')}
-            />
+            status.reachable ? (
+              <span className="admin-status-tag inline-flex items-center gap-1.5 rounded-full bg-admin-success-muted px-2 text-xs font-medium text-admin-success">
+                <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-admin-success" />
+                {t('proxyServices.reachable')}
+              </span>
+            ) : (
+              <StatusTag status="warning" tone="warning" label={t('proxyServices.unreachable')} />
+            )
           ) : null
         }
       />
 
-      <div className="inline-flex rounded-lg bg-admin-surface-muted p-1" role="tablist">
+      <div className="inline-flex rounded-[10px] bg-admin-surface-muted p-[3px]" role="tablist">
         {(
           [
             ['cli', t('proxyServices.cliTitle')],
@@ -250,7 +263,7 @@ export function ProxyServicesPage() {
               onClick={() => setPanel(key)}
               className={cn(
                 'rounded-md px-3 py-1.5 text-sm font-medium transition admin-focus-ring',
-                active ? 'bg-admin-surface text-admin ' : 'text-admin-muted hover:text-admin',
+                active ? 'bg-admin-surface font-semibold text-admin shadow-sm' : 'text-admin-muted hover:text-admin',
               )}
             >
               {label}
@@ -288,9 +301,11 @@ export function ProxyServicesPage() {
           <section className="overflow-hidden rounded-xl border border-admin bg-admin-surface">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-admin px-4 py-3">
               <div className="flex min-w-0 items-center gap-3">
-                <span className="shrink-0 text-xs text-admin-muted">{t('proxyServices.callTitle')}</span>
+                <span className="shrink-0 text-xs font-semibold text-admin-muted">{t('proxyServices.callTitle')}</span>
                 {apiBaseUrl ? (
-                  <CopyableText value={apiBaseUrl} className="font-mono text-sm" />
+                  <span className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-admin bg-admin-surface-muted py-1 pl-3 pr-1.5">
+                    <CopyableText value={apiBaseUrl} className="min-w-0 font-mono text-sm" />
+                  </span>
                 ) : (
                   <span className="text-sm text-admin-muted">{t('proxyServices.port')}</span>
                 )}
@@ -306,7 +321,10 @@ export function ProxyServicesPage() {
               )}
             </div>
             {usageReason ? (
-              <p className="border-b border-admin px-4 py-2 text-sm text-warning-emphasis text-warning-emphasis">{usageReason}</p>
+              <div className="mx-4 mt-3 flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning/[0.09] px-3.5 py-2.5 text-sm text-admin">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                <p>{usageReason}</p>
+              </div>
             ) : null}
 
           <div className="grid items-stretch lg:h-[calc(100vh-15.5rem)] lg:grid-cols-[15rem_minmax(0,1fr)]">
@@ -322,24 +340,33 @@ export function ProxyServicesPage() {
                     aria-pressed={active}
                     onClick={() => setSelectedName(account.name)}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
-                      active && 'admin-active-inset bg-primary/8',
+                      'flex w-full items-center gap-3 rounded-[10px] border border-transparent px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
+                      active && 'admin-active-inset border-admin bg-admin-surface shadow-sm',
                     )}
                   >
-                    {isLoginProvider(account.provider) ? (
-                      <ProviderIcon id={account.provider} className="h-5 w-5 shrink-0 text-admin" />
-                    ) : (
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center text-xs font-semibold text-admin">
-                        {account.provider.slice(0, 1).toUpperCase()}
-                      </span>
-                    )}
+                    <span
+                      className={cn(
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]',
+                        isLoginProvider(account.provider) ? providerTileClass(account.provider) : 'bg-admin-surface-muted text-admin-muted',
+                      )}
+                    >
+                      {isLoginProvider(account.provider) ? (
+                        <ProviderIcon id={account.provider} className="h-5 w-5" />
+                      ) : (
+                        <span className="text-xs font-semibold">{account.provider.slice(0, 1).toUpperCase()}</span>
+                      )}
+                    </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-admin">{providerLabel(account.provider, t)}</span>
+                      <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-admin">
+                        {providerLabel(account.provider, t)}
+                        {statusLabel.tone === 'active' ? (
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-admin-success" />
+                        ) : (
+                          <StatusTag status={statusLabel.tone} tone={statusLabel.tone} label={statusLabel.label} />
+                        )}
+                      </span>
                       <span className="mt-0.5 block truncate text-xs text-admin-muted">{accountTitle(account)}</span>
                     </span>
-                    {statusLabel.tone !== 'active' ? (
-                      <StatusTag status={statusLabel.tone} tone={statusLabel.tone} label={statusLabel.label} />
-                    ) : null}
                   </button>
                 )
               })}
@@ -347,46 +374,56 @@ export function ProxyServicesPage() {
                 <button
                   type="button"
                   onClick={() => setChoosing(true)}
-                  className={cn(adminSecondaryButtonClass, 'mt-1 w-full')}
+                  className="admin-control admin-focus-ring mt-1 flex w-full items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-admin px-3 text-sm font-medium text-admin-muted transition hover:border-primary hover:bg-primary/[0.04] hover:text-primary"
                 >
-                  <Plus className="h-5 w-5" />
+                  <Plus className="h-4 w-4" />
                   {t('proxyServices.addAccount')}
                 </button>
               </PermissionGate>
             </div>
             {accounts.length === 0 ? <p className="mt-3 text-sm text-admin-muted">{t('proxyServices.emptyAccounts')}</p> : null}
             {pendingLogin && !choosing ? (
-              <p className="mt-3 flex flex-wrap items-center gap-3 text-sm text-admin-muted">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
-                {providerLabel(pendingLogin.provider, t)}
-                <span>{t('proxyServices.loginWaiting')}</span>
-                <a className="inline-flex items-center gap-1 text-admin" href={pendingLogin.url} target="_blank" rel="noopener noreferrer">
+              <div className="mt-3 rounded-[10px] border border-warning/30 bg-warning/[0.09] px-3 py-2.5 text-sm leading-relaxed text-admin">
+                <p className="flex items-center gap-2 font-medium">
+                  <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-warning" />
+                  {providerLabel(pendingLogin.provider, t)} {t('proxyServices.loginWaiting')}
+                </p>
+                <a
+                  className="mt-1 inline-flex items-center gap-1 font-medium text-primary"
+                  href={pendingLogin.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <ExternalLink className="h-3.5 w-3.5" />
                   {t('proxyServices.loginOpen')}
                 </a>
-              </p>
+              </div>
             ) : null}
             </div>
             <div className="flex min-h-0 min-w-0 flex-col lg:h-full">
               {selected ? (
                 <>
-                  <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-admin px-4 py-3 text-sm">
-                    <span className="font-medium text-admin">
+                  <div className="flex flex-wrap items-center gap-3 border-b border-admin px-4 py-3 text-sm">
+                    <span className="min-w-0 flex-1 truncate font-medium text-admin">
                       {providerLabel(selected.provider, t)}
                       <span className="ml-2 font-normal text-admin-muted">{accountTitle(selected)}</span>
                     </span>
-                    <span className="text-admin-muted">
-                      {t('proxyServices.statSuccess')} <span className="tabular-nums text-admin">{selected.success}</span>
-                    </span>
-                    <span className="text-admin-muted">
-                      {t('proxyServices.statFailed')} <span className="tabular-nums text-admin">{selected.failed}</span>
-                    </span>
-                    <span className="text-admin-muted">
-                      {t('proxyServices.statQuota')}{' '}
-                      <span className="tabular-nums text-admin">
-                        {selected.usedPercent != null ? `${selected.usedPercent}%` : t('proxyServices.quotaUnknown')}
-                      </span>
-                    </span>
+                    <div className="flex shrink-0 gap-2">
+                      <div className="rounded-lg bg-admin-surface-muted px-3 py-1.5 text-right">
+                        <p className="text-base font-bold tabular-nums text-success-emphasis">{selected.success}</p>
+                        <p className="text-[11px] text-admin-muted">{t('proxyServices.statSuccess')}</p>
+                      </div>
+                      <div className="rounded-lg bg-admin-surface-muted px-3 py-1.5 text-right">
+                        <p className="text-base font-bold tabular-nums text-danger-emphasis">{selected.failed}</p>
+                        <p className="text-[11px] text-admin-muted">{t('proxyServices.statFailed')}</p>
+                      </div>
+                      <div className="rounded-lg bg-admin-surface-muted px-3 py-1.5 text-right">
+                        <p className="text-base font-bold tabular-nums text-admin">
+                          {selected.usedPercent != null ? `${selected.usedPercent}%` : t('proxyServices.quotaUnknown')}
+                        </p>
+                        <p className="text-[11px] text-admin-muted">{t('proxyServices.statQuota')}</p>
+                      </div>
+                    </div>
                   </div>
                   <div className="min-h-0 flex-1 overflow-hidden">
                     <ModelList account={selected} />
@@ -421,7 +458,9 @@ export function ProxyServicesPage() {
                   <ul className="max-h-32 overflow-auto">
                     {visibleKeys.map((apiKey) => (
                       <li key={apiKey} className="flex items-center gap-3 py-1.5">
-                        <CopyableText value={apiKey} className="min-w-0 flex-1 font-mono text-sm" />
+                        <span className="flex min-w-0 flex-1 items-center rounded-lg border border-admin bg-admin-surface-muted py-1 pl-3 pr-1">
+                          <CopyableText value={apiKey} className="min-w-0 flex-1 font-mono text-sm" />
+                        </span>
                         {canUpdate ? (
                           <button
                             type="button"
@@ -438,7 +477,12 @@ export function ProxyServicesPage() {
                     ))}
                   </ul>
                 ) : null}
-                {createdKey ? <p className="mt-1 text-xs text-success-emphasis text-success-emphasis">{t('proxyServices.createdHint')}</p> : null}
+                {createdKey ? (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-success-emphasis">
+                    <Check className="h-3.5 w-3.5" />
+                    {t('proxyServices.createdHint')}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -476,10 +520,12 @@ export function ProxyServicesPage() {
                   type="button"
                   disabled={loginMutation.isPending || pendingLogin !== null}
                   onClick={() => startLogin(option.id)}
-                  className="flex flex-col items-center gap-2 rounded-xl border border-admin px-2 py-4 text-admin disabled:opacity-60"
+                  className="flex flex-col items-center gap-2 rounded-xl border border-admin bg-admin-surface px-2 py-4 text-admin transition hover:border-primary/55 hover:shadow-sm disabled:opacity-60"
                 >
-                  <ProviderIcon id={option.id} className="h-8 w-8" />
-                  <span className="text-sm font-medium">{t(option.titleKey)}</span>
+                  <span className={cn('flex h-[42px] w-[42px] items-center justify-center rounded-xl', providerTileClass(option.id))}>
+                    <ProviderIcon id={option.id} className="h-[21px] w-[21px]" />
+                  </span>
+                  <span className="text-sm font-semibold">{t(option.titleKey)}</span>
                   <span className="text-center text-xs text-admin-muted">{t(option.noteKey)}</span>
                 </button>
               ))}
@@ -554,21 +600,36 @@ function ModelList({ account }: { account: ShownAccount }) {
   return (
     <div className="h-full max-h-80 overflow-auto lg:max-h-none">
       <table className="min-w-full text-left text-sm">
-        <thead className="sticky top-0 z-10 bg-admin-surface-muted text-xs font-medium text-admin-muted">
+        <thead className="sticky top-0 z-10 bg-admin-surface-muted text-[11.5px] font-semibold tracking-wide text-admin-muted">
           <tr>
-            <th className="px-4 py-2.5 text-left font-medium">{t('proxyServices.columnModel')}</th>
-            <th className="w-24 px-4 py-2.5 text-right font-medium">{t('proxyServices.statQuota')}</th>
-            <th className="w-16 px-4 py-2.5 text-right font-medium">{t('proxyServices.columnCopy')}</th>
+            <th className="px-4 py-2.5 text-left">{t('proxyServices.columnModel')}</th>
+            <th className="w-[190px] px-4 py-2.5 text-left">{t('proxyServices.statQuota')}</th>
+            <th className="w-16 px-4 py-2.5 text-right">{t('proxyServices.columnCopy')}</th>
           </tr>
         </thead>
         <tbody>
           {modelIds.map((id) => {
             const usedPercent = account.modelUsedPercent[id]
+            const isHigh = usedPercent != null && usedPercent >= 85
             return (
               <tr key={id} className="border-t border-admin hover:bg-admin-surface-muted">
                 <td className="px-4 py-2 font-mono text-sm text-admin">{id}</td>
-                <td className="px-4 py-2 text-right text-sm tabular-nums text-admin">
-                  {usedPercent != null ? `${usedPercent}%` : '—'}
+                <td className="px-4 py-2">
+                  {usedPercent != null ? (
+                    <div className="flex items-center gap-2">
+                      <span className="h-[5px] w-[86px] shrink-0 overflow-hidden rounded-full bg-[rgb(var(--muted-foreground)/.1)]">
+                        <span
+                          className={cn('block h-full rounded-full', isHigh ? 'bg-warning' : 'bg-chart-1')}
+                          style={{ width: `${Math.min(usedPercent, 100)}%` }}
+                        />
+                      </span>
+                      <span className={cn('text-xs tabular-nums', isHigh ? 'font-semibold text-warning' : 'text-admin-muted')}>
+                        {usedPercent}%
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-admin-muted">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-2 text-right">
                   <CopyableText value={id} className="ml-auto [&>span]:sr-only" />
@@ -654,7 +715,8 @@ function ApiKeyColumn() {
 
   return (
     <section className="overflow-hidden rounded-xl border border-admin bg-admin-surface">
-      <div className="flex items-center justify-end border-b border-admin px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-admin px-4 py-3">
+        <span className="min-w-0 text-sm text-admin-muted">{t('proxyServices.keyHint')}</span>
         <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
           <button type="button" className={adminPrimaryButtonClass} onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" />
@@ -686,11 +748,11 @@ function ApiKeyColumn() {
                   aria-pressed={active}
                   onClick={() => setSelectedId(entry.id)}
                   className={cn(
-                    'flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
-                    active && 'admin-active-inset bg-primary/8',
+                    'flex w-full flex-col items-start gap-0.5 rounded-[10px] border border-transparent px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
+                    active && 'admin-active-inset border-admin bg-admin-surface shadow-sm',
                   )}
                 >
-                  <span className="w-full truncate text-sm font-medium text-admin">{entry.displayName}</span>
+                  <span className="w-full truncate text-sm font-semibold text-admin">{entry.displayName}</span>
                   <span className="w-full truncate font-mono text-xs text-admin-muted">{entry.modelSpec}</span>
                 </button>
               )
@@ -701,13 +763,13 @@ function ApiKeyColumn() {
               <h2 className="text-sm font-medium text-admin">{selected.displayName}</h2>
               <dl className="mt-4 grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
                 <dt className="text-admin-muted">{t('proxyServices.keySpec')}</dt>
-                <dd className="break-all font-mono text-admin">{selected.modelSpec}</dd>
+                <dd className="break-all font-mono font-medium text-admin">{selected.modelSpec}</dd>
                 <dt className="text-admin-muted">{t('proxyServices.keySecret')}</dt>
-                <dd className="font-mono text-admin">{selected.apiKeyHint || '—'}</dd>
+                <dd className="font-mono font-medium text-admin">{selected.apiKeyHint || '—'}</dd>
                 <dt className="text-admin-muted">{t('proxyServices.keyBaseUrl')}</dt>
-                <dd className="break-all text-admin">{selected.baseUrl || '—'}</dd>
+                <dd className="break-all font-medium text-admin">{selected.baseUrl || '—'}</dd>
                 <dt className="text-admin-muted">{t('proxyServices.keyUse')}</dt>
-                <dd className="text-admin">{labelFor(selected.agentId)}</dd>
+                <dd className="font-medium text-admin">{labelFor(selected.agentId)}</dd>
               </dl>
               {canUpdate ? (
                 <div className="mt-6 flex justify-end">

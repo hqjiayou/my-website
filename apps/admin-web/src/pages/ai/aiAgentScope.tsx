@@ -3,6 +3,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { agentApi } from '@/api'
+import { adminFieldClass } from '@/components/admin/controls'
 
 export function AiAgentScope({ children }: { children: (agentId: number) => ReactNode }) {
   const { t } = useTranslation('aiAdmin')
@@ -17,25 +18,36 @@ export function AiAgentScope({ children }: { children: (agentId: number) => Reac
   const numericAgentId = Number(activeAgentId)
 
   if (isPending) {
-    return <p className="text-sm text-muted-foreground">{t('loading')}</p>
+    return (
+      <div className="rounded-[14px] border border-admin bg-admin-surface px-4 py-3 text-sm text-admin-muted">
+        {t('loading')}
+      </div>
+    )
   }
   if (isError) {
     return (
-      <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
+      <div className="rounded-[14px] border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
         <p>{error instanceof Error ? error.message : t('error')}</p>
       </div>
     )
   }
   if (sites.length === 0) {
-    return <p className="text-sm text-muted-foreground">{t('noSites')}</p>
+    return (
+      <div className="rounded-[14px] border border-admin bg-admin-surface px-4 py-3 text-sm text-admin-muted">
+        {t('noSites')}
+      </div>
+    )
   }
 
   return (
     <div className="space-y-4">
-      <label className="block max-w-sm">
-        <span className="text-sm font-medium text-foreground">{t('agentLabel')}</span>
+      <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-admin bg-admin-surface px-4 py-3">
+        <label htmlFor="ai-agent-scope-select" className="text-sm font-semibold text-admin">
+          {t('agentLabel')}
+        </label>
         <select
-          className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+          id="ai-agent-scope-select"
+          className={`${adminFieldClass} w-64`}
           value={activeAgentId}
           onChange={(event) => setSelectedAgentId(event.target.value)}
         >
@@ -45,7 +57,7 @@ export function AiAgentScope({ children }: { children: (agentId: number) => Reac
             </option>
           ))}
         </select>
-      </label>
+      </div>
       {Number.isFinite(numericAgentId) && numericAgentId > 0 ? children(numericAgentId) : null}
     </div>
   )

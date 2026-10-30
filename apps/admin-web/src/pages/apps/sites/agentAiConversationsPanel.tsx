@@ -1,21 +1,38 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { AlertCircle, Inbox } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { DataTable, type DataTableColumn } from '@/components/admin'
-import type { AiConversationListItem } from '@/types/ai'
+import { adminGhostButtonClass } from '@/components/admin'
+import { cn } from '@/lib/cn'
 
 import { AiRunMetaSummary } from './agentAiRunMeta'
 
+const PAGE_SIZE = 20
+
+function formatListTime(value: string | null) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatMessageTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+}
+
 export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
   const { t } = useTranslation('sites')
+  const { t: tCommon } = useTranslation('common')
   const [pageNum, setPageNum] = useState(1)
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['sites', agentId, 'ai', 'conversations', pageNum],
-    queryFn: () => aiApi.listConversations(agentId, { pageNum, pageSize: 20 }),
+    queryFn: () => aiApi.listConversations(agentId, { pageNum, pageSize: PAGE_SIZE }),
   })
 
   const { data: messages, isPending: messagesPending } = useQuery({
@@ -24,70 +41,126 @@ export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
     enabled: selectedId != null,
   })
 
-  const columns = useMemo<DataTableColumn<AiConversationListItem>[]>(
-    () => [
-      {
-        id: 'title',
-        header: t('aiWorkspace.conversations.columns.title'),
-        cell: (item) => item.title || t('aiWorkspace.conversations.untitled'),
-      },
-      {
-        id: 'agentUserId',
-        header: t('aiWorkspace.conversations.columns.agentUserId'),
-        cell: (item) => String(item.agentUserId),
-      },
-      {
-        id: 'lastMessageAt',
-        header: t('aiWorkspace.conversations.columns.lastMessageAt'),
-        cell: (item) => item.lastMessageAt ?? '—',
-      },
-      {
-        id: 'actions',
-        header: t('aiWorkspace.conversations.columns.actions'),
-        cell: (item) => (
-          <button type="button" className="text-sm underline" onClick={() => setSelectedId(item.id)}>
-            {t('aiWorkspace.conversations.view')}
-          </button>
-        ),
-      },
-    ],
-    [t],
-  )
-
   const records = data?.records ?? []
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <div>
-        <DataTable
-          columns={columns}
-          data={records}
-          rowKey={(item) => item.id}
-          isLoading={isPending}
-          isError={isError}
-          errorMessage={error instanceof Error ? error.message : undefined}
-          emptyMessage={t('aiWorkspace.conversations.empty')}
-          onRetry={() => void refetch()}
-          pagination={{
-            page: pageNum,
-            pageSize: 20,
-            total: data?.total ?? 0,
-            onPageChange: setPageNum,
-          }}
-        />
+    <div className="grid max-h-[32rem] overflow-hidden rounded-xl border border-admin md:grid-cols-[330px_minmax(0,1fr)]">
+      {/* 左列：会话列表（分页沿用现有 pageNum / total 状态） */}
+      <div className="flex h-full min-h-0 flex-col border-b border-admin md:border-b-0 md:border-r">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {isPending ? (
+            <ul>
+              {Array.from({ length: 4 }, (_, index) => (
+                <li key={index} className="border-b border-admin px-3.5 py-3 last:border-b-0">
+                  <div className="admin-skeleton h-3.5 w-3/4" />
+                  <div className="admin-skeleton mt-2 h-3 w-1/2" />
+                </li>
+              ))}
+            </ul>
+          ) : isError ? (
+            <div className="flex flex-col items-center gap-2 px-3.5 py-8 text-center">
+              <AlertCircle className="h-5 w-5 text-admin-danger" />
+              <p className="text-sm text-admin-danger">
+                {error instanceof Error ? error.message : tCommon('table.error')}
+              </p>
+              <button type="button" onClick={() => void refetch()} className={adminGhostButtonClass}>
+                {tCommon('table.retry')}
+              </button>
+            </div>
+          ) : records.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 px-3.5 py-8 text-center">
+              <Inbox className="h-5 w-5 text-admin-muted" />
+              <p className="text-sm text-admin-muted">{t('aiWorkspace.conversations.empty')}</p>
+            </div>
+          ) : (
+            <ul>
+              {records.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(item.id)}
+                    className={cn(
+                      'w-full border-b border-admin px-3.5 py-3 text-left transition last:border-b-0 hover:bg-admin-surface-muted',
+                      selectedId === item.id && 'admin-active-inset bg-[rgb(var(--primary)/.1)]',
+                    )}
+                  >
+                    <p className="truncate text-sm font-medium text-admin">
+                      {item.title?.trim() || t('aiWorkspace.conversations.untitled')}
+                    </p>
+                    <p className="mt-1 text-xs tabular-nums text-admin-muted">{formatListTime(item.lastMessageAt) ?? '—'}</p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {total > PAGE_SIZE ? (
+          <div className="flex items-center justify-between gap-2 border-t border-admin px-3 py-2">
+            <span className="text-xs text-admin-muted">{tCommon('table.paginationTotal', { total })}</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={pageNum <= 1}
+                onClick={() => setPageNum((page) => page - 1)}
+                className={cn(adminGhostButtonClass, 'disabled:opacity-40')}
+              >
+                {tCommon('table.prev')}
+              </button>
+              <span className="px-1 text-xs tabular-nums text-admin-muted">
+                {pageNum} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={pageNum >= totalPages}
+                onClick={() => setPageNum((page) => page + 1)}
+                className={cn(adminGhostButtonClass, 'disabled:opacity-40')}
+              >
+                {tCommon('table.next')}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
-      <div className="rounded-xl border border-border bg-card p-4">
+
+      {/* 右列：消息流 */}
+      <div className="flex h-full min-h-0 flex-col bg-card-muted/50">
         {selectedId == null ? (
-          <p className="text-sm text-muted-foreground">{t('aiWorkspace.conversations.selectHint')}</p>
+          <p className="m-auto px-4 text-sm text-admin-muted">{t('aiWorkspace.conversations.selectHint')}</p>
         ) : messagesPending ? (
-          <p className="text-sm text-muted-foreground">{t('aiWorkspace.loading')}</p>
+          <p className="m-auto px-4 text-sm text-admin-muted">{t('aiWorkspace.loading')}</p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="min-h-0 flex-1 space-y-3.5 overflow-y-auto p-4">
             {(messages ?? []).map((item) => (
-              <li key={item.id} className="rounded-lg bg-card-muted px-3 py-2 text-sm">
-                <p className="text-xs font-medium text-muted-foreground">{item.role}</p>
-                <p className="mt-1 whitespace-pre-wrap text-foreground">{item.content}</p>
-                {item.agentMeta ? <AiRunMetaSummary meta={item.agentMeta} /> : null}
+              <li key={item.id} className={cn('max-w-[78%]', item.role === 'USER' ? 'ml-auto' : 'mr-auto')}>
+                <p
+                  className={cn(
+                    'mb-1 flex items-center gap-1.5 text-[11px] font-medium text-admin-muted',
+                    item.role === 'USER' && 'justify-end',
+                  )}
+                >
+                  <span>{item.role}</span>
+                  <span className="tabular-nums">{formatMessageTime(item.createdAt)}</span>
+                </p>
+                <div
+                  className={cn(
+                    'rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
+                    item.role === 'USER'
+                      ? 'bg-admin-primary text-admin-on-primary'
+                      : 'border border-admin bg-admin-surface',
+                  )}
+                >
+                  <p className="whitespace-pre-wrap">{item.content}</p>
+                </div>
+                {item.role === 'ASSISTANT' && item.agentMeta ? (
+                  <>
+                    {item.agentMeta.model ? (
+                      <p className="mt-1 font-mono text-[11px] text-admin-muted">{item.agentMeta.model}</p>
+                    ) : null}
+                    <AiRunMetaSummary meta={item.agentMeta} />
+                  </>
+                ) : null}
               </li>
             ))}
           </ul>

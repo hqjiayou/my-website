@@ -11,9 +11,13 @@ export function AiPromptsPage() {
   return (
     <section className="admin-content-data">
       <AdminPageHeader title={t('prompts.title')} description={t('prompts.description')} />
-      <article className="rounded-xl border border-border bg-card p-5">
-        <AiAgentScope>{(agentId) => <AgentAiPromptPanel agentId={agentId} />}</AiAgentScope>
-      </article>
+      <AiAgentScope>
+        {(agentId) => (
+          <div className="rounded-[14px] border border-admin bg-admin-surface p-5">
+            <AgentAiPromptPanel agentId={agentId} />
+          </div>
+        )}
+      </AiAgentScope>
     </section>
   )
 }
