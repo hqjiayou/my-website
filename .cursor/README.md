@@ -84,7 +84,7 @@ Agents 只写「谁做、能改哪里、怎么验证」；循环和停法只写�
 
 | 脚本 | 事件 | 作用 |
 |------|------|------|
-| [`guard.js`](hooks/guard.js) | `beforeShellExecution` | 拒绝 git push / rebase / merge、reset --hard、checkout -- 等丢弃改动的命令；git commit 与递归删除要确认；空洞提交訊息（`no message`、`wip`、`update` 等）直接拒绝 |
+| [`guard.js`](hooks/guard.js) | `beforeShellExecution` | push／merge 放行，只挡改写历史（rebase／cherry-pick／am）；拒绝 reset --hard、checkout -- 等丢弃改动的命令；git commit 与递归删除要确认；空洞提交訊息（`no message`、`wip`、`update` 等）直接拒绝 |
 | [`guard.js`](hooks/guard.js) | `preToolUse` | 拒绝写本地 `.env`、会话记录、`secrets/`、已有的 Flyway 迁移，拒绝删除测试；改 hooks 本身要确认 |
 | [`continue.js`](hooks/continue.js) | `stop` | 本会话有 `status: running` 的运行状态时，自动发起下一轮 |
 
