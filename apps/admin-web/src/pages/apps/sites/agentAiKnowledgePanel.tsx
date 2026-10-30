@@ -626,7 +626,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-foreground/45"
+            className="admin-overlay fixed inset-0 z-40"
             aria-label={t('aiWorkspace.knowledge.cancel')}
             onClick={closeUpload}
           />
