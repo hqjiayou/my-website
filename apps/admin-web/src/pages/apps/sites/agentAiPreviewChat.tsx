@@ -70,16 +70,16 @@ const KNOWN_ERROR_CODES = new Set([
 ])
 
 const TODO_STATUS_CLASS: Record<AiPreviewTodoStatus, string> = {
-  PENDING: 'bg-slate-100 text-slate-600',
-  IN_PROGRESS: 'bg-sky-100 text-sky-700',
-  COMPLETED: 'bg-emerald-100 text-emerald-700',
-  CANCELLED: 'bg-slate-100 text-slate-400 line-through',
+  PENDING: 'bg-card-muted text-muted-foreground',
+  IN_PROGRESS: 'bg-info-muted text-info-emphasis',
+  COMPLETED: 'bg-success-muted text-success-emphasis',
+  CANCELLED: 'bg-card-muted text-muted-foreground line-through',
 }
 
 const TOOL_STATE_CLASS: Record<ToolCallTrace['state'], string> = {
-  running: 'text-sky-700',
-  ok: 'text-emerald-700',
-  failed: 'text-rose-700',
+  running: 'text-info-emphasis',
+  ok: 'text-success-emphasis',
+  failed: 'text-danger-emphasis',
 }
 
 /** adapter 每轮读取的最新选择；闭包持有，避免选择变化时重建 runtime（会丢失预览线程）。 */
@@ -231,8 +231,8 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             aria-pressed={mode === value}
             className={
               mode === value
-                ? 'rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white'
-                : 'rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700'
+                ? 'rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground'
+                : 'rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground'
             }
             onClick={() => chooseMode(value)}
           >
@@ -240,67 +240,67 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
           </button>
         ))}
       </div>
-      <p className="mb-3 text-sm text-slate-600">
+      <p className="mb-3 text-sm text-muted-foreground">
         {entriesQuery.isPending
           ? t('aiWorkspace.loading')
           : activeModel
             ? t('aiWorkspace.preview.using', { model: activeModel })
             : t('aiWorkspace.preview.noEntry')}
       </p>
-      <p className="mb-3 text-sm text-slate-600">{t('aiWorkspace.preview.hint')}</p>
+      <p className="mb-3 text-sm text-muted-foreground">{t('aiWorkspace.preview.hint')}</p>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-        <ThreadPrimitive.Root className="flex h-[28rem] flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+        <ThreadPrimitive.Root className="flex h-[28rem] flex-col overflow-hidden rounded-xl border border-border bg-card-muted">
           <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-3 py-3">
             <ThreadPrimitive.Empty>
-              <p className="px-2 text-sm text-slate-500">{t('aiWorkspace.preview.empty')}</p>
+              <p className="px-2 text-sm text-muted-foreground">{t('aiWorkspace.preview.empty')}</p>
             </ThreadPrimitive.Empty>
             <ThreadPrimitive.Messages>
               {() => (
-                <MessagePrimitive.Root className="mb-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800">
+                <MessagePrimitive.Root className="mb-3 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
                   <MessagePrimitive.Content />
                 </MessagePrimitive.Root>
               )}
             </ThreadPrimitive.Messages>
           </ThreadPrimitive.Viewport>
           {runError ? (
-            <div role="alert" className="border-t border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+            <div role="alert" className="border-t border-danger/35 bg-danger-muted px-3 py-2 text-xs text-danger-emphasis">
               <p>
                 {t(
                   `aiWorkspace.preview.errors.${
                     KNOWN_ERROR_CODES.has(runError.errorCode) ? runError.errorCode : 'SYSTEM_ERROR'
                   }`,
                 )}
-                <span className="ml-1 font-mono text-rose-500">({runError.errorCode})</span>
+                <span className="ml-1 font-mono text-danger">({runError.errorCode})</span>
               </p>
-              {runError.message ? <p className="mt-0.5 break-all text-rose-600">{runError.message}</p> : null}
+              {runError.message ? <p className="mt-0.5 break-all text-danger-emphasis">{runError.message}</p> : null}
             </div>
           ) : null}
-          <ComposerPrimitive.Root className="flex gap-2 border-t border-slate-200 bg-white p-3">
+          <ComposerPrimitive.Root className="flex gap-2 border-t border-border bg-card p-3">
             <ComposerPrimitive.Input
-              className="min-h-10 flex-1 resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              className="min-h-10 flex-1 resize-none rounded-lg border border-border px-3 py-2 text-sm"
               placeholder={t('aiWorkspace.preview.placeholder')}
             />
-            <ComposerPrimitive.Send className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white">
+            <ComposerPrimitive.Send className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">
               {t('aiWorkspace.preview.send')}
             </ComposerPrimitive.Send>
           </ComposerPrimitive.Root>
         </ThreadPrimitive.Root>
 
         <aside className="space-y-4 text-sm">
-          <section className="rounded-xl border border-slate-200 bg-white p-3">
-            <h4 className="mb-2 font-medium text-slate-800">{t('aiWorkspace.preview.skills.title')}</h4>
-            <p className="mb-2 text-xs text-slate-500">{t('aiWorkspace.preview.skills.hint')}</p>
+          <section className="rounded-xl border border-border bg-card p-3">
+            <h4 className="mb-2 font-medium text-foreground">{t('aiWorkspace.preview.skills.title')}</h4>
+            <p className="mb-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.skills.hint')}</p>
             {skillsQuery.isPending ? (
-              <p className="text-slate-500">{t('aiWorkspace.loading')}</p>
+              <p className="text-muted-foreground">{t('aiWorkspace.loading')}</p>
             ) : skillsQuery.isError ? (
-              <div className="text-rose-700">
+              <div className="text-danger-emphasis">
                 <p>{t('aiWorkspace.preview.skills.error')}</p>
                 <button type="button" className="mt-1 underline" onClick={() => void skillsQuery.refetch()}>
                   {t('aiWorkspace.retry')}
                 </button>
               </div>
             ) : skillsQuery.data.length === 0 ? (
-              <p className="text-slate-500">{t('aiWorkspace.preview.skills.empty')}</p>
+              <p className="text-muted-foreground">{t('aiWorkspace.preview.skills.empty')}</p>
             ) : (
               <ul className="space-y-1.5">
                 {skillsQuery.data.map((skill) => (
@@ -313,9 +313,9 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
                         onChange={() => toggleSkill(skill.id)}
                       />
                       <span>
-                        <span className="font-mono text-xs text-slate-800">{skill.id}</span>
+                        <span className="font-mono text-xs text-foreground">{skill.id}</span>
                         {skill.description ? (
-                          <span className="block text-xs text-slate-500">{skill.description}</span>
+                          <span className="block text-xs text-muted-foreground">{skill.description}</span>
                         ) : null}
                       </span>
                     </label>
@@ -325,45 +325,45 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             )}
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-3">
-            <h4 className="mb-2 font-medium text-slate-800">{t('aiWorkspace.preview.run.title')}</h4>
+          <section className="rounded-xl border border-border bg-card p-3">
+            <h4 className="mb-2 font-medium text-foreground">{t('aiWorkspace.preview.run.title')}</h4>
             {servedModel && activeModel && servedModel !== activeModel ? (
-              <p className="mb-2 text-xs text-amber-700">
+              <p className="mb-2 text-xs text-warning-emphasis">
                 {t('aiWorkspace.preview.run.servedModel', { model: servedModel })}
               </p>
             ) : null}
-            <p className="text-xs text-slate-500">{t('aiWorkspace.preview.run.skillsApplied')}</p>
-            <p className="mb-2 font-mono text-xs text-slate-800">
+            <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.skillsApplied')}</p>
+            <p className="mb-2 font-mono text-xs text-foreground">
               {trace.skillsApplied.length ? trace.skillsApplied.join(', ') : '—'}
             </p>
             {trace.skillsMissing.length ? (
-              <p className="mb-2 text-xs text-amber-700">
+              <p className="mb-2 text-xs text-warning-emphasis">
                 {t('aiWorkspace.preview.run.skillsMissing', { ids: trace.skillsMissing.join(', ') })}
               </p>
             ) : null}
             {trace.thinking ? (
               <>
-                <p className="text-xs text-slate-500">{t('aiWorkspace.preview.run.thinking')}</p>
-                <div className="mb-2 mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 px-2 py-1.5 text-xs leading-5 text-slate-600">
+                <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.thinking')}</p>
+                <div className="mb-2 mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-card-muted px-2 py-1.5 text-xs leading-5 text-muted-foreground">
                   {trace.thinking}
                 </div>
               </>
             ) : null}
-            <p className="text-xs text-slate-500">{t('aiWorkspace.preview.run.tools')}</p>
+            <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.tools')}</p>
             {trace.tools.length === 0 ? (
-              <p className="text-xs text-slate-400">{t('aiWorkspace.preview.run.noTools')}</p>
+              <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.noTools')}</p>
             ) : (
               <ul className="space-y-1">
                 {trace.tools.map((tool) => (
                   <li key={tool.toolCallId || tool.toolName} className="text-xs">
                     <div className="flex justify-between gap-2">
-                      <span className="truncate font-mono text-slate-800">{tool.toolName}</span>
+                      <span className="truncate font-mono text-foreground">{tool.toolName}</span>
                       <span className={TOOL_STATE_CLASS[tool.state]}>
                         {t(`aiWorkspace.preview.run.toolState.${tool.state}`)}
                       </span>
                     </div>
                     {tool.summary ? (
-                      <p className="mt-0.5 truncate text-slate-500">
+                      <p className="mt-0.5 truncate text-muted-foreground">
                         {t('aiWorkspace.preview.run.searchDetail', {
                           query: tool.summary.query,
                           count: tool.summary.hitCount,
@@ -381,9 +381,9 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             ) : null}
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-3">
+          <section className="rounded-xl border border-border bg-card p-3">
             <div className="mb-2 flex items-center justify-between">
-              <h4 className="font-medium text-slate-800">{t('aiWorkspace.preview.todos.title')}</h4>
+              <h4 className="font-medium text-foreground">{t('aiWorkspace.preview.todos.title')}</h4>
               {todos.length ? (
                 <button type="button" className="text-xs underline" onClick={() => updateTodos([])}>
                   {t('aiWorkspace.preview.todos.clear')}
@@ -391,12 +391,12 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
               ) : null}
             </div>
             {todos.length === 0 ? (
-              <p className="text-xs text-slate-400">{t('aiWorkspace.preview.todos.empty')}</p>
+              <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.todos.empty')}</p>
             ) : (
               <ul className="space-y-1">
                 {todos.map((todo) => (
                   <li key={todo.id} className="flex items-start justify-between gap-2 text-xs">
-                    <span className="text-slate-800">{todo.title}</span>
+                    <span className="text-foreground">{todo.title}</span>
                     <span className={`shrink-0 rounded px-1.5 py-0.5 ${TODO_STATUS_CLASS[todo.status]}`}>
                       {t(`aiWorkspace.preview.todos.status.${todo.status}`)}
                     </span>
@@ -404,7 +404,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
                 ))}
               </ul>
             )}
-            <p className="mt-2 text-xs text-slate-400">{t('aiWorkspace.preview.todos.hint')}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.todos.hint')}</p>
           </section>
         </aside>
       </div>
