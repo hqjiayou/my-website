@@ -27,7 +27,7 @@ export function AgentAppearancePreview({ agentName, config, previewMode }: Agent
 
   return (
     <div className={cn(previewMode === 'mobile' ? 'mx-auto w-full max-w-[380px]' : 'w-full')}>
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
+      <div className="rounded-xl border border-border bg-card-muted p-3">
         <div
           className="mb-3 flex items-center justify-between rounded-xl px-3 py-2 text-xs text-white"
           style={{ backgroundColor: config.primaryColor }}
