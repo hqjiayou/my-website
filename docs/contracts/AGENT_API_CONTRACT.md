@@ -38,6 +38,21 @@ Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之
 
 站点 chat 与 chat/stream：服务端注入该用户最近 20 条记忆，并在成功回复后把本轮抽取结果去重落库；抽取为空或缺失时不写入。终端 SSE 不下发抽取结果。
 
+### 对外 API 网关 `/v1`（UoW-2）
+
+前缀 `/v1/**`（独立于 `/api/agent/**`，无 `siteId`/`agentId` 路径段）。鉴权为 `Authorization: Bearer mwgw_...`（网关访问 Key，签发见 `ADMIN_API_CONTRACT.md` 的 `gateway-access-keys`），不走站点 JWT；缺失/格式错/查无/已吊销/已过期一律 **401**，响应体为 OpenAI 错误形状 `{"error":{"message":"...","type":"authentication_error","code":"invalid_api_key"}}`，不区分具体原因。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/v1/models` | 列出 enabled 且 `alias` 非空、未删除的模型入口：`{"object":"list","data":[{"id":<alias>,"object":"model","created":0,"owned_by":"my-website"}]}` |
+| POST | `/v1/chat/completions` | 请求体 `model` 字段即入口 `alias`（精确匹配、enabled、未删除；查无或禁用一律 404 `{"error":{"code":"model_not_found"}}`）。仅支持 `modelSpec` 以 `openai:` 开头的入口，其余形状 400 `{"error":{"code":"model_not_supported"}}`。转发 `POST {baseUrl}/chat/completions`（`baseUrl` 空则 `https://api.openai.com/v1`），`model` 换成 spec 去掉 `openai:` 前缀后的上游模型名，其余字段原样透传；`Authorization` 用解密后的入口 key。上游响应（状态码＋错误体）原样透传，不重写形状 |
+
+备援：alias 命中入口为主用（不要求是默认入口），备援链按主用入口的 agentId 作用域 × mode 沿用站点 chat 组链规则生成（`AgentModelChainUtils`，与 `AgentAiServiceImpl.loadModelChain` 共享同一套查询/组装，只是从共享工具类调用，不单独维护一份），只保留 `openai:` 形状。主用上游回 429/5xx 或连接失败时按链顺序试下一个；全部失败回最后一个上游的状态与错误体（纯连接失败没有真实响应体时，合成 502 `{"error":{"code":"upstream_unavailable"}}`）。
+
+流式：请求体 `stream:true` 时整段同步阻塞转发（非 `SseEmitter`，直接写 `HttpServletResponse`，响应头 `text/event-stream`），SSE 字节逐块透传给客户端，不重写事件。备援只在**尚未向客户端写出任何字节前**允许切换；已开始输出后上游中断直接结束流，不切换、不补发。
+
+不做请求记账（UoW-3）；不支持非 `openai:` 形状入口（第一期）。
+
 ### 公开内容
 
 匿名，只允许 GET。站点不存在或非 ACTIVE 为 404。内容只回 PUBLISHED；不存在、不属于该站或未发布一律 404。

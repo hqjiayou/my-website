@@ -31,6 +31,11 @@ spring:
               uri: http://localhost:8082
               predicates:
                 - Path=/api/agent/**
+            # 对外 API 网关 /v1（UoW-2）：鉴权在 agent-app 的 gateway_access_key 过滤器做，这里只路由。
+            - id: agent-service-v1
+              uri: http://localhost:8082
+              predicates:
+                - Path=/v1/**
           globalcors:
             cors-configurations:
               '[/**]':

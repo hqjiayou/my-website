@@ -5,6 +5,7 @@ import com.mywebsite.agent.security.AgentAccessDeniedHandler;
 import com.mywebsite.agent.security.AgentAuthenticationEntryPoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
@@ -23,7 +24,9 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class AgentSecurityConfig {
 
+    /** @Order(2)：{@code /v1/**} 由 {@link GatewayV1SecurityConfig} 的 @Order(1) 链先匹配拦截。 */
     @Bean
+    @Order(2)
     SecurityFilterChain agentSecurityFilterChain(
             HttpSecurity http,
             JwtDecoder agentJwtDecoder,

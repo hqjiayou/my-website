@@ -9,9 +9,7 @@ import com.mywebsite.admin.mapper.AdminGatewayAccessKeyMapper;
 import com.mywebsite.admin.service.AdminGatewayAccessKeyService;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import com.mywebsite.infra.crypto.ApiKeyHasher;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -38,7 +36,7 @@ public class AdminGatewayAccessKeyServiceImpl implements AdminGatewayAccessKeySe
         String plainKey = generateApiKey();
         AdminGatewayAccessKeyEntity entity = new AdminGatewayAccessKeyEntity();
         entity.setName(request.name().trim());
-        entity.setKeyHash(sha256Hex(plainKey));
+        entity.setKeyHash(ApiKeyHasher.sha256Hex(plainKey));
         entity.setKeyHint(plainKey.substring(plainKey.length() - 4));
         entity.setExpiresAt(request.expiresAt());
         accessKeyMapper.insert(entity);
@@ -89,20 +87,6 @@ public class AdminGatewayAccessKeyServiceImpl implements AdminGatewayAccessKeySe
         byte[] raw = new byte[32];
         RANDOM.nextBytes(raw);
         return KEY_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
-    }
-
-    private static String sha256Hex(String plaintext) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hashed = digest.digest(plaintext.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(hashed.length * 2);
-            for (byte b : hashed) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     private AdminGatewayAccessKeyDto toDto(AdminGatewayAccessKeyEntity entity) {

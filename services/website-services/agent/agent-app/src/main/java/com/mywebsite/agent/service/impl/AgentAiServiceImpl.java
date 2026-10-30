@@ -42,6 +42,7 @@ import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
 import com.mywebsite.agent.service.AgentAiRateLimitService;
 import com.mywebsite.agent.service.AgentAiService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
+import com.mywebsite.agent.utils.AgentModelChainUtils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -522,13 +523,6 @@ public class AgentAiServiceImpl implements AgentAiService {
         return value;
     }
 
-    /** 入口模式归属：空值按 KEY（与 V35 列默认同口径）。 */
-    private static String entryMode(AgentAiModelEntryEntity entry) {
-        return StringUtils.hasText(entry.getMode())
-                ? entry.getMode().trim().toUpperCase(java.util.Locale.ROOT)
-                : "KEY";
-    }
-
     @Override
     public AgentAiModelModesDto modelModes(long agentId) {
         requireAgentMember(agentId);
@@ -564,19 +558,19 @@ public class AgentAiServiceImpl implements AgentAiService {
      * 否则全站同样的入口。都没有时返回 null，检索改用进程嵌入模型。CLI 入口不参与。
      */
     private AgentModelSelection embeddingSelection(long agentId) {
-        AgentModelSelection fromAgent = firstKeyEmbedding(enabledModelEntries(agentId));
+        AgentModelSelection fromAgent = firstKeyEmbedding(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId));
         if (fromAgent != null) {
             return fromAgent;
         }
-        return firstKeyEmbedding(enabledModelEntries(null));
+        return firstKeyEmbedding(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null));
     }
 
     private AgentModelSelection firstKeyEmbedding(List<AgentAiModelEntryEntity> entries) {
         for (AgentAiModelEntryEntity entry : entries) {
-            if (!"KEY".equals(entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())) {
+            if (!"KEY".equals(AgentModelChainUtils.entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())) {
                 continue;
             }
-            AgentModelSelection selection = toModelSelection(entry);
+            AgentModelSelection selection = AgentModelChainUtils.toModelSelection(entry, modelEntryCipher);
             if (selection != null && StringUtils.hasText(selection.embeddingSpec())) {
                 return selection;
             }
@@ -591,80 +585,32 @@ public class AgentAiServiceImpl implements AgentAiService {
      * 解密不出 key 的备援跳过。mode 非空时先按模式过滤（备援封闭在模式内）；为空时即整链。
      */
     private List<AgentModelSelection> loadModelChain(long agentId, String mode) {
-        List<AgentAiModelEntryEntity> agentEntries = enabledModelEntries(agentId);
-        List<AgentAiModelEntryEntity> globalEntries = enabledModelEntries(null);
+        List<AgentAiModelEntryEntity> agentEntries = AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId);
+        List<AgentAiModelEntryEntity> globalEntries = AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null);
         if (mode != null) {
-            agentEntries = agentEntries.stream().filter(entry -> mode.equals(entryMode(entry))).toList();
-            globalEntries = globalEntries.stream().filter(entry -> mode.equals(entryMode(entry))).toList();
+            agentEntries = agentEntries.stream()
+                    .filter(entry -> mode.equals(AgentModelChainUtils.entryMode(entry)))
+                    .toList();
+            globalEntries = globalEntries.stream()
+                    .filter(entry -> mode.equals(AgentModelChainUtils.entryMode(entry)))
+                    .toList();
         }
-        AgentAiModelEntryEntity primary = firstDefaultEntry(agentEntries);
+        AgentAiModelEntryEntity primary = AgentModelChainUtils.firstDefaultEntry(agentEntries);
         if (primary == null) {
-            primary = firstDefaultEntry(globalEntries);
+            primary = AgentModelChainUtils.firstDefaultEntry(globalEntries);
         }
         if (primary == null) {
             return List.of();
         }
-        AgentModelSelection primarySelection = toModelSelection(primary);
+        AgentModelSelection primarySelection = AgentModelChainUtils.toModelSelection(primary, modelEntryCipher);
         if (primarySelection == null) {
             return List.of();
         }
         List<AgentModelSelection> chain = new ArrayList<>();
         chain.add(primarySelection);
-        appendModelSelections(chain, agentEntries, primary.getId());
-        appendModelSelections(chain, globalEntries, primary.getId());
+        AgentModelChainUtils.appendModelSelections(chain, agentEntries, primary.getId(), modelEntryCipher);
+        AgentModelChainUtils.appendModelSelections(chain, globalEntries, primary.getId(), modelEntryCipher);
         return List.copyOf(chain);
-    }
-
-    /** 作用域内启用入口：默认在前，其余 id 升序。 */
-    private List<AgentAiModelEntryEntity> enabledModelEntries(Long agentId) {
-        LambdaQueryWrapper<AgentAiModelEntryEntity> query = new LambdaQueryWrapper<AgentAiModelEntryEntity>()
-                .eq(AgentAiModelEntryEntity::getEnabled, true)
-                .orderByDesc(AgentAiModelEntryEntity::getDefaultEntry)
-                .orderByAsc(AgentAiModelEntryEntity::getId);
-        if (agentId == null) {
-            query.isNull(AgentAiModelEntryEntity::getAgentId);
-        } else {
-            query.eq(AgentAiModelEntryEntity::getAgentId, agentId);
-        }
-        List<AgentAiModelEntryEntity> entries = modelEntryMapper.selectList(query);
-        return entries == null ? List.of() : entries;
-    }
-
-    private static AgentAiModelEntryEntity firstDefaultEntry(List<AgentAiModelEntryEntity> entries) {
-        for (AgentAiModelEntryEntity entry : entries) {
-            if (Boolean.TRUE.equals(entry.getDefaultEntry())) {
-                return entry;
-            }
-        }
-        return null;
-    }
-
-    private void appendModelSelections(
-            List<AgentModelSelection> chain, List<AgentAiModelEntryEntity> entries, Long skipId) {
-        for (AgentAiModelEntryEntity entry : entries) {
-            if (entry.getId() != null && entry.getId().equals(skipId)) {
-                continue;
-            }
-            AgentModelSelection selection = toModelSelection(entry);
-            if (selection != null) {
-                chain.add(selection);
-            }
-        }
-    }
-
-    private AgentModelSelection toModelSelection(AgentAiModelEntryEntity entry) {
-        if (entry == null || !StringUtils.hasText(entry.getModelSpec())) {
-            return null;
-        }
-        String apiKey = modelEntryCipher.decrypt(entry.getApiKey());
-        if (!StringUtils.hasText(apiKey)) {
-            return null;
-        }
-        String baseUrl = StringUtils.hasText(entry.getBaseUrl()) ? entry.getBaseUrl().trim() : null;
-        String embeddingSpec = "CLI".equals(entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())
-                ? null
-                : entry.getEmbeddingSpec().trim();
-        return new AgentModelSelection(entry.getModelSpec().trim(), apiKey, baseUrl, embeddingSpec);
     }
 
     private ValidatedChat validateChatAccess(long agentId, AgentAiChatRequestDto request) {
