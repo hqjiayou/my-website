@@ -6,7 +6,7 @@ alwaysApply: false
 
 # admin-web 实现边界
 
-Router 目录细则见 `admin-web-router.mdc`；全局样式分层见 `admin-web-styles.mdc`。
+Router 目录细则见 `admin-web-router.mdc`；全局样式分层见 `admin-web-styles.mdc`；页面/元素的设计规范见 `admin-web-design.mdc` 与 `docs/admin-web/DESIGN_SYSTEM.md`（新增或修改页面、组件、布局时必读必遵）。
 
 ## API
 
