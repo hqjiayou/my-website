@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 
 import { agentApi } from '@/api'
 import { AdminPageHeader } from '@/components/admin'
@@ -10,10 +11,12 @@ import { ROUTES } from '@/router/config/routePaths'
 import { PermissionGate } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
+import { AgentCreateDialog } from './agentCreateDialog'
+
 export function SitesPage() {
   const { t } = useTranslation('sites')
   const { t: tCommon } = useTranslation('common')
-  const navigate = useNavigate()
+  const [createOpen, setCreateOpen] = useState(false)
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['sites', { pageNum: 1, pageSize: 50 }],
     queryFn: () => agentApi.listSites({ pageNum: 1, pageSize: 50 }),
@@ -45,12 +48,13 @@ export function SitesPage() {
       <div className="rounded-xl border border-admin bg-admin-surface px-5 py-10">
         <p className="text-sm text-admin-muted">{t('list.empty')}</p>
         <PermissionGate code={PERMISSION_CODES.agentCreate}>
-          <button type="button" onClick={() => navigate(ROUTES.apps.agentCreate)} className={`${adminPrimaryButtonClass} mt-4`}>
+          <button type="button" onClick={() => setCreateOpen(true)} className={`${adminPrimaryButtonClass} mt-4`}>
             <Plus className="h-4 w-4" />
             {t('list.createSite')}
           </button>
         </PermissionGate>
       </div>
+      {createOpen ? <AgentCreateDialog onClose={() => setCreateOpen(false)} /> : null}
     </section>
   )
 }

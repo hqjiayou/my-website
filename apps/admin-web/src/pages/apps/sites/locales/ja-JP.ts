@@ -36,6 +36,7 @@ export default {
     },
   },
   create: {
+    close: '閉じる',
     title: 'エージェントを作成',
     description: '名前とコードを入れます。作成後は概要から試せます。',
     steps: {
@@ -113,6 +114,11 @@ export default {
     },
   },
   basic: {
+    info: {
+      title: 'システム情報',
+      id: 'ID',
+      createdAt: '作成日時',
+    },
     description: 'コードは作成後に変更できません。',
     versionLabel: 'バージョン',
     noPermission: '更新権限がありません',

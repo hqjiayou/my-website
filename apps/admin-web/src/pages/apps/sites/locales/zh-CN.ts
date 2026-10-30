@@ -36,6 +36,7 @@ export default {
     },
   },
   create: {
+    close: '关闭',
     title: '新建智能体',
     description: '填名称和编码。建好后在概览里试聊。',
     steps: {
@@ -113,6 +114,11 @@ export default {
     },
   },
   basic: {
+    info: {
+      title: '系统信息',
+      id: 'ID',
+      createdAt: '创建时间',
+    },
     description: '编码创建后不能改。',
     versionLabel: '版本',
     noPermission: '当前账号无更新权限',

@@ -11,7 +11,7 @@ import {
   SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react'
-import { Suspense, useMemo } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -24,6 +24,8 @@ import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
+
+import { AgentCreateDialog } from './agentCreateDialog'
 
 export interface AgentWorkspaceOutletContext {
   site: Site
@@ -52,6 +54,7 @@ interface WorkspaceNavGroup {
 
 export function AgentWorkspaceLayout() {
   const { t } = useTranslation('sites')
+  const [createOpen, setCreateOpen] = useState(false)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { agentId } = useParams()
@@ -222,7 +225,7 @@ export function AgentWorkspaceLayout() {
             </button>
           ) : null}
           <PermissionGate code={PERMISSION_CODES.agentCreate}>
-            <button type="button" className={adminPrimaryButtonClass} onClick={() => navigate(ROUTES.apps.agentCreate)}>
+            <button type="button" className={adminPrimaryButtonClass} onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" />
               {t('list.createSite')}
             </button>
@@ -258,6 +261,7 @@ export function AgentWorkspaceLayout() {
           </Suspense>
         </div>
       </div>
+      {createOpen ? <AgentCreateDialog onClose={() => setCreateOpen(false)} /> : null}
     </section>
   )
 }

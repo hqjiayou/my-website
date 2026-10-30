@@ -36,6 +36,7 @@ export default {
     },
   },
   create: {
+    close: 'Close',
     title: 'New agent',
     description: 'Name and code. After it is created, try it from the overview.',
     steps: {
@@ -113,6 +114,11 @@ export default {
     },
   },
   basic: {
+    info: {
+      title: 'System info',
+      id: 'ID',
+      createdAt: 'Created at',
+    },
     description: 'The code cannot be changed after creation.',
     versionLabel: 'Version',
     noPermission: 'No update permission',

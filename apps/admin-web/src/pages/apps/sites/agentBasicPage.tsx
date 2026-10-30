@@ -5,11 +5,24 @@ import { useOutletContext } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { agentApi, SITE_TAG_PATTERN, SITE_TYPE_PRESETS, type Site } from '@/api'
+import { StatusTag } from '@/components/admin'
 import { adminFieldClass, adminPrimaryButtonClass } from '@/components/admin/controls'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
 import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
+
+function formatDateTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 export function AgentBasicPage() {
   const { site } = useOutletContext<AgentWorkspaceOutletContext>()
@@ -25,14 +38,21 @@ function AgentBasicForm({ site }: { site: Site }) {
   const [agentName, setAgentName] = useState(site.agentName)
   const [agentType, setAgentType] = useState(site.agentType)
   const [customType, setCustomType] = useState(false)
+  const [defaultDomain, setDefaultDomain] = useState(site.defaultDomain ?? '')
   const [description, setDescription] = useState(site.description ?? '')
+
+  const dirty =
+    agentName.trim() !== site.agentName ||
+    agentType.trim() !== site.agentType ||
+    defaultDomain.trim() !== (site.defaultDomain ?? '') ||
+    description.trim() !== (site.description ?? '')
 
   const updateMutation = useMutation({
     mutationFn: () =>
       agentApi.updateSite(site.id, {
         agentName: agentName.trim(),
         agentType: agentType.trim(),
-        defaultDomain: site.defaultDomain?.trim() || undefined,
+        defaultDomain: defaultDomain.trim() || undefined,
         description: description.trim() || undefined,
         version: site.version,
       }),
@@ -73,84 +93,122 @@ function AgentBasicForm({ site }: { site: Site }) {
   }
 
   return (
-    <article className="admin-content-form rounded-xl border border-admin bg-admin-surface p-5">
-      <h2 className="text-base font-semibold text-admin">{t('detail.nav.basic')}</h2>
-      <p className="mt-1 text-sm text-admin-muted">{t('basic.description')}</p>
+    <section className="admin-content-form space-y-4">
+      <article className="rounded-xl border border-admin bg-admin-surface p-5">
+        <h2 className="text-base font-semibold text-admin">{t('detail.nav.basic')}</h2>
+        <p className="mt-1 text-sm text-admin-muted">{t('basic.description')}</p>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <label className="space-y-1.5 text-sm text-admin">
-          <span className="font-medium">{t('list.columns.agentName')}</span>
-          <input
-            value={agentName}
-            onChange={(event) => setAgentName(event.target.value)}
-            disabled={!canUpdate}
-            className={adminFieldClass}
-          />
-        </label>
-
-        <label className="space-y-1.5 text-sm text-admin">
-          <span className="font-medium">{t('create.fields.agentCode')}</span>
-          <input value={site.agentCode} disabled className={adminFieldClass} />
-        </label>
-
-        <label className="space-y-1.5 text-sm text-admin">
-          <span className="font-medium">{t('create.fields.agentType')}</span>
-          <select
-            value={customType ? '__CUSTOM__' : agentType}
-            onChange={(event) => handleTypeSelect(event.target.value)}
-            disabled={!canUpdate}
-            className={adminFieldClass}
-          >
-            {SITE_TYPE_PRESETS.map((value) => (
-              <option key={value} value={value}>
-                {t(`agentType.${value}`)}
-              </option>
-            ))}
-            {!customType && agentType && !SITE_TYPE_PRESETS.includes(agentType) ? (
-              <option value={agentType}>{t(`agentType.${agentType}`, { defaultValue: agentType })}</option>
-            ) : null}
-            <option value="__CUSTOM__">{t('create.fields.customAgentType')}</option>
-          </select>
-          {customType ? (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="space-y-1.5 text-sm text-admin">
+            <span className="font-medium">{t('list.columns.agentName')}</span>
             <input
-              value={agentType}
-              onChange={(event) => setAgentType(event.target.value)}
+              value={agentName}
+              onChange={(event) => setAgentName(event.target.value)}
               disabled={!canUpdate}
               className={adminFieldClass}
-              placeholder={t('create.placeholders.customAgentType')}
             />
-          ) : null}
-        </label>
+          </label>
 
-        <label className="space-y-1.5 text-sm text-admin sm:col-span-2">
-          <span className="font-medium">{t('create.fields.agentDescription')}</span>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            disabled={!canUpdate}
-            rows={4}
-            className={adminFieldClass}
-          />
-        </label>
-      </div>
+          <label className="space-y-1.5 text-sm text-admin">
+            <span className="font-medium">{t('create.fields.agentCode')}</span>
+            <input value={site.agentCode} disabled className={adminFieldClass} />
+          </label>
 
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-xs text-admin-muted">
-          {t('basic.versionLabel')}: {site.version}
-        </p>
-        {canUpdate ? (
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={updateMutation.isPending}
-            className={adminPrimaryButtonClass}
-          >
-            {updateMutation.isPending ? t('basic.actions.saving') : t('basic.actions.save')}
-          </button>
-        ) : (
-          <p className="text-xs text-admin-muted">{t('basic.noPermission')}</p>
-        )}
-      </div>
-    </article>
+          <label className="space-y-1.5 text-sm text-admin">
+            <span className="font-medium">{t('create.fields.agentType')}</span>
+            <select
+              value={customType ? '__CUSTOM__' : agentType}
+              onChange={(event) => handleTypeSelect(event.target.value)}
+              disabled={!canUpdate}
+              className={adminFieldClass}
+            >
+              {SITE_TYPE_PRESETS.map((value) => (
+                <option key={value} value={value}>
+                  {t(`agentType.${value}`)}
+                </option>
+              ))}
+              {!customType && agentType && !SITE_TYPE_PRESETS.includes(agentType) ? (
+                <option value={agentType}>{t(`agentType.${agentType}`, { defaultValue: agentType })}</option>
+              ) : null}
+              <option value="__CUSTOM__">{t('create.fields.customAgentType')}</option>
+            </select>
+            {customType ? (
+              <input
+                value={agentType}
+                onChange={(event) => setAgentType(event.target.value)}
+                disabled={!canUpdate}
+                className={adminFieldClass}
+                placeholder={t('create.placeholders.customAgentType')}
+              />
+            ) : null}
+          </label>
+
+          <label className="space-y-1.5 text-sm text-admin">
+            <span className="font-medium">{t('create.fields.defaultDomain')}</span>
+            <input
+              value={defaultDomain}
+              onChange={(event) => setDefaultDomain(event.target.value)}
+              disabled={!canUpdate}
+              placeholder={t('create.placeholders.domain')}
+              className={adminFieldClass}
+            />
+          </label>
+
+          <label className="space-y-1.5 text-sm text-admin sm:col-span-2">
+            <span className="font-medium">{t('create.fields.agentDescription')}</span>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              disabled={!canUpdate}
+              rows={4}
+              className={adminFieldClass}
+            />
+          </label>
+        </div>
+
+        <div className="mt-5 flex items-center justify-end gap-3 border-t border-admin pt-4">
+          {canUpdate ? (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!dirty || updateMutation.isPending}
+              className={adminPrimaryButtonClass}
+            >
+              {updateMutation.isPending ? t('basic.actions.saving') : t('basic.actions.save')}
+            </button>
+          ) : (
+            <p className="text-xs text-admin-muted">{t('basic.noPermission')}</p>
+          )}
+        </div>
+      </article>
+
+      <article className="rounded-xl border border-admin bg-admin-surface p-5">
+        <h2 className="text-base font-semibold text-admin">{t('basic.info.title')}</h2>
+        <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+          <div>
+            <dt className="text-xs font-medium text-admin-muted">{t('list.columns.status')}</dt>
+            <dd className="mt-1.5">
+              <StatusTag status={site.status} label={t(`status.${site.status}`, { defaultValue: site.status })} />
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-admin-muted">{t('basic.info.id')}</dt>
+            <dd className="mt-1 font-mono text-sm tabular-nums text-admin">{site.id}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-admin-muted">{t('basic.info.createdAt')}</dt>
+            <dd className="mt-1 text-sm tabular-nums text-admin">{formatDateTime(site.createdAt)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-admin-muted">{t('list.columns.updatedAt')}</dt>
+            <dd className="mt-1 text-sm tabular-nums text-admin">{formatDateTime(site.updatedAt)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-admin-muted">{t('basic.versionLabel')}</dt>
+            <dd className="mt-1 text-sm tabular-nums text-admin">{site.version}</dd>
+          </div>
+        </dl>
+      </article>
+    </section>
   )
 }
