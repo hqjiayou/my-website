@@ -31,11 +31,11 @@ function agentPanelPage(
       <section>
         <AdminPageHeader title={t(`workspace.nav.${navKey}`)} description={t('aiWorkspace.description')} />
         {allowed ? (
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <article className="rounded-xl border border-border bg-card p-5">
             <Panel agentId={site.id} />
           </article>
         ) : (
-          <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-sm">
+          <p className="rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
             {t('aiWorkspace.noPermission')}
           </p>
         )}
