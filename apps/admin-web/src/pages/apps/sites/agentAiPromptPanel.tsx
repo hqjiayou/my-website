@@ -39,10 +39,10 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
     },
   })
 
-  if (isPending) return <p className="text-sm text-slate-500">{t('aiWorkspace.loading')}</p>
+  if (isPending) return <p className="text-sm text-muted-foreground">{t('aiWorkspace.loading')}</p>
   if (isError) {
     return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
         <p>{error instanceof Error ? error.message : t('aiWorkspace.error')}</p>
         <button type="button" className="mt-2 underline" onClick={() => void refetch()}>
           {t('aiWorkspace.retry')}
@@ -61,9 +61,9 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
       }}
     >
       <label className="block">
-        <span className="text-sm font-medium text-slate-800">{t('aiWorkspace.prompt.systemPrompt')}</span>
+        <span className="text-sm font-medium text-foreground">{t('aiWorkspace.prompt.systemPrompt')}</span>
         <textarea
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
           rows={8}
           value={promptValue}
           disabled={!canUpdate}
@@ -71,9 +71,9 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
         />
       </label>
       <label className="block max-w-xs">
-        <span className="text-sm font-medium text-slate-800">{t('aiWorkspace.prompt.temperature')}</span>
+        <span className="text-sm font-medium text-foreground">{t('aiWorkspace.prompt.temperature')}</span>
         <input
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
           type="number"
           min={0}
           max={2}
@@ -87,7 +87,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
         <button
           type="submit"
           disabled={saveMutation.isPending}
-          className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
           {saveMutation.isPending ? t('aiWorkspace.prompt.saving') : t('aiWorkspace.prompt.save')}
         </button>
