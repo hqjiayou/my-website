@@ -7,9 +7,13 @@ Google 未直配 key 时由 Provider 读取 GOOGLE_API_KEY 或 GEMINI_API_KEY。
 OpenAI 请求走已声明的 httpx。Google 走 Pydantic AI Embedder，不自写 Gemini REST。
 """
 
+import asyncio
 import logging
 import math
-from collections.abc import Sequence
+import re
+from collections.abc import Awaitable, Callable, Sequence
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Protocol
 
 import httpx
@@ -22,6 +26,16 @@ logger = logging.getLogger(__name__)
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 # OpenAI embeddings 单次 input 上限是 2048；按块发送，避免长文档一次请求被拒。
 _EMBED_BATCH_SIZE = 128
+# Gemini 硬上限是 100 条。免费额度大约每分钟 3 万 token，100 条长块一次就会打满，所以默认再小一档。
+_GOOGLE_EMBED_BATCH_LIMIT = 100
+_GOOGLE_EMBED_BATCH_SIZE = 16
+_MAX_EMBED_ATTEMPTS = 4
+_EMBED_BACKOFF_BASE_SECONDS = 0.5
+_EMBED_BACKOFF_MAX_SECONDS = 8.0
+# 服务端 Retry-After / retryDelay 可以到几十秒。上限停在 60，避免一条错误让索引睡太久。
+_RETRY_AFTER_MAX_SECONDS = 60.0
+_RETRY_IN_SECONDS = re.compile(r"retry in ([0-9]+(?:\.[0-9]+)?)s", re.IGNORECASE)
+_RETRY_DELAY_SECONDS = re.compile(r"([0-9]+(?:\.[0-9]+)?)s")
 
 
 class EmbeddingClient(Protocol):
@@ -30,6 +44,128 @@ class EmbeddingClient(Protocol):
     async def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
 
     async def embed_query(self, text: str) -> list[float]: ...
+
+
+def embed_status_code(exc: BaseException) -> int | None:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, bool) or not isinstance(status, int):
+        return None
+    return status
+
+
+def retryable_embed_error(exc: BaseException) -> bool:
+    """429 与 5xx 可以再试。400 这类请求错误重试不会变好。"""
+    code = embed_status_code(exc)
+    return code == 429 or (code is not None and 500 <= code <= 599)
+
+
+def _bounded_delay(seconds: float) -> float:
+    if seconds < 0:
+        return 0.0
+    return min(seconds, _RETRY_AFTER_MAX_SECONDS)
+
+
+def _delay_from_body(body: object) -> float | None:
+    """Gemini 把 retryDelay 放在错误体里，不放 HTTP Retry-After。"""
+    if isinstance(body, str):
+        match = _RETRY_IN_SECONDS.search(body)
+        return float(match.group(1)) if match else None
+    if not isinstance(body, dict):
+        return None
+    error = body.get("error")
+    payload = error if isinstance(error, dict) else body
+    if not isinstance(payload, dict):
+        return None
+    details = payload.get("details")
+    if isinstance(details, list):
+        for item in details:
+            if not isinstance(item, dict):
+                continue
+            raw = item.get("retryDelay")
+            if isinstance(raw, str):
+                match = _RETRY_DELAY_SECONDS.search(raw)
+                if match:
+                    return float(match.group(1))
+    message = payload.get("message")
+    if isinstance(message, str):
+        match = _RETRY_IN_SECONDS.search(message)
+        if match:
+            return float(match.group(1))
+    return None
+
+
+def retry_after_seconds(exc: BaseException, *, now: datetime | None = None) -> float | None:
+    """读取 Retry-After（秒或 HTTP-date）或错误体里的 retryDelay。没有则交给指数退避。"""
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is not None:
+        raw = headers.get("retry-after")
+        if isinstance(raw, str) and raw.strip():
+            text = raw.strip()
+            try:
+                return _bounded_delay(float(text))
+            except ValueError:
+                parsed = parsedate_to_datetime(text)
+                if parsed is not None:
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=timezone.utc)
+                    current = now or datetime.now(timezone.utc)
+                    return _bounded_delay((parsed - current).total_seconds())
+    body_delay = _delay_from_body(getattr(exc, "body", None))
+    if body_delay is None:
+        body_delay = _delay_from_body(str(exc))
+    if body_delay is None:
+        return None
+    return _bounded_delay(body_delay)
+
+
+async def call_with_embed_retry(
+    operation: Callable[[], Awaitable[list[list[float]]]],
+    *,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    attempts: int = _MAX_EMBED_ATTEMPTS,
+) -> list[list[float]]:
+    delay = _EMBED_BACKOFF_BASE_SECONDS
+    for attempt in range(max(1, attempts)):
+        try:
+            return await operation()
+        except Exception as exc:
+            if not retryable_embed_error(exc) or attempt >= attempts - 1:
+                raise
+            wait = retry_after_seconds(exc)
+            if wait is None:
+                wait = min(delay, _EMBED_BACKOFF_MAX_SECONDS)
+                delay = min(delay * 2, _EMBED_BACKOFF_MAX_SECONDS)
+            await sleep(wait)
+    raise RuntimeError("Embedding retry loop exited without a result.")
+
+
+async def embed_in_batches(
+    texts: list[str],
+    batch_size: int,
+    embed_batch: Callable[[list[str]], Awaitable[list[list[float]]]],
+    *,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> list[list[float]]:
+    """按批嵌入。一批在重试后仍是 429/5xx 时，只重试这一批里的各块，前面已成功的批保留。"""
+    vectors: list[list[float]] = []
+    size = batch_size if batch_size > 0 else 1
+    for start in range(0, len(texts), size):
+        batch = texts[start : start + size]
+        try:
+            vectors.extend(
+                await call_with_embed_retry(lambda batch=batch: embed_batch(batch), sleep=sleep)
+            )
+        except Exception as exc:
+            if not retryable_embed_error(exc) or len(batch) == 1:
+                raise
+            for text in batch:
+                vectors.extend(
+                    await call_with_embed_retry(lambda text=text: embed_batch([text]), sleep=sleep)
+                )
+    return vectors
 
 
 class OpenAIEmbeddingClient:
@@ -49,6 +185,7 @@ class OpenAIEmbeddingClient:
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(timeout=60.0)
         self._batch_size = batch_size if batch_size > 0 else _EMBED_BATCH_SIZE
+        self._sleep = asyncio.sleep
 
     async def aclose(self) -> None:
         if self._owns_client:
@@ -57,10 +194,7 @@ class OpenAIEmbeddingClient:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        vectors: list[list[float]] = []
-        for start in range(0, len(texts), self._batch_size):
-            vectors.extend(await self._embed_batch(texts[start : start + self._batch_size]))
-        return vectors
+        return await embed_in_batches(texts, self._batch_size, self._embed_batch, sleep=self._sleep)
 
     async def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         headers: dict[str, str] = {}
@@ -115,6 +249,7 @@ class GoogleEmbeddingClient:
         api_key: str | None,
         base_url: str | None,
         dimensions: int,
+        batch_size: int = _GOOGLE_EMBED_BATCH_SIZE,
     ) -> None:
         from pydantic_ai.embeddings import Embedder
         from pydantic_ai.embeddings.google import GoogleEmbeddingModel
@@ -123,6 +258,9 @@ class GoogleEmbeddingClient:
         provider = GoogleProvider(api_key=api_key or None, base_url=base_url or None)
         embedding_model = GoogleEmbeddingModel(model, provider=provider)
         self._embedder = Embedder(embedding_model, settings={"dimensions": dimensions})
+        chosen = batch_size if batch_size > 0 else _GOOGLE_EMBED_BATCH_SIZE
+        self._batch_size = min(chosen, _GOOGLE_EMBED_BATCH_LIMIT)
+        self._sleep = asyncio.sleep
 
     async def aclose(self) -> None:
         model = getattr(self._embedder, "model", None)
@@ -135,15 +273,23 @@ class GoogleEmbeddingClient:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         return await self.embed_documents(texts)
 
-    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        if not texts:
-            return []
+    async def _embed_document_batch(self, texts: list[str]) -> list[list[float]]:
         result = await self._embedder.embed_documents(texts)
         return _embedding_vectors(result.embeddings, expected=len(texts))
 
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        return await embed_in_batches(
+            texts, self._batch_size, self._embed_document_batch, sleep=self._sleep
+        )
+
     async def embed_query(self, text: str) -> list[float]:
-        result = await self._embedder.embed_query(text)
-        return _embedding_vectors(result.embeddings, expected=1)[0]
+        async def once() -> list[list[float]]:
+            result = await self._embedder.embed_query(text)
+            return _embedding_vectors(result.embeddings, expected=1)
+
+        return (await call_with_embed_retry(once, sleep=self._sleep))[0]
 
 
 def _embedding_vectors(raw: object, *, expected: int) -> list[list[float]]:

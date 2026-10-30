@@ -39,7 +39,7 @@ public interface AgentClient {
      */
     void chatStream(AgentChatRequest request, AgentStreamListener listener);
 
-    /** KB 派生索引同步（同 sourceId 覆盖）；检索未配置时抛 EXTERNAL_DEPENDENCY_BLOCKED。 */
+    /** KB 派生索引同步（同 sourceId 覆盖）；检索未配置时抛 RETRIEVAL_NOT_CONFIGURED，message 列出缺的键。 */
     void upsertRetrievalDocument(AgentRetrievalDocument document);
 
     /**

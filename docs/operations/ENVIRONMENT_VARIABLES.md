@@ -98,9 +98,9 @@ last_verified: 2026-10-30
 | `AI_PROVIDER_BASE_URL` | 否 | 空 | 直配时传给 Provider |
 | `AI_FALLBACK_MODELS` | 否 | 空 | 逗号分隔 fallback spec。**只挂进程主模型**（无入口路径）；Java 模型入口的备援来自请求带入的入口链，不读此变量。仅 Provider API 错误时切换。主模型或入口本身 BLOCKED 时不顶替。备用凭证走各 Provider 原生变量，不复用入口 apiKey |
 | `AI_ALLOW_PROCESS_MODEL` | 否 | `false` | 请求未带 Java 模型入口时，是否允许用进程 `AI_MODEL` 顶替作答。默认关：入口驱动的对话（门户/试聊/OCR）没选到入口即 BLOCKED，不许环境模型静默顶上（Issue #145 F1）。仅本机调试可设 `true` |
-| `RETRIEVAL_DATABASE_URL` | 否 | 空 | 独立 `agent_retrieval` 库（专用 DB 用户，禁止读 Java 业务表）；缺失 → 检索 BLOCKED（问答仍可用） |
-| `AI_EMBEDDING_MODEL` | 否 | 空 | 例 `openai:text-embedding-3-small`；缺失 → 检索 BLOCKED |
-| `AI_EMBEDDING_DIMENSIONS` | 否 | `1536` | 遗留 `chunks` 表的向量维度（如 gemini-embedding-001 可设 768）。同维度的其它嵌入模型共用这张表，查询按模型名过滤；维度不同则另建 `chunks_d<维度>`，不删除已有类 |
+| `RETRIEVAL_DATABASE_URL` | 否 | 空 | 独立 `agent_retrieval` 库（专用 DB 用户，禁止读 Java 业务表）。与下面两个嵌入键任一缺失时，启动日志和 health `retrievalBlockedReason` 列出缺的键名；索引请求 503 `RETRIEVAL_NOT_CONFIGURED`（message 点名缺项，不是 `EXTERNAL_DEPENDENCY_BLOCKED`）。问答仍可用，检索失败只降级 |
+| `AI_EMBEDDING_MODEL` | 否 | 空 | 例 `openai:text-embedding-3-small` 或 `google:gemini-embedding-001`。缺失时与上一行同一套启动日志、health 缺项和索引错误 |
+| `AI_EMBEDDING_DIMENSIONS` | 否 | `1536` | 遗留 `chunks` 表的向量维度（如 gemini-embedding-001 可设 768）。小于 1 视为未配置，同样列入缺项。同维度的其它嵌入模型共用这张表，查询按模型名过滤；维度不同则另建 `chunks_d<维度>`，不删除已有类 |
 | `RETRIEVAL_MIN_SCORE` | 否 | `0.35` | 余弦门槛；低于此分的向量命中不返回。`0` 关闭；越界或非数字 → 启动 fail-fast |
 | `RETRIEVAL_SCORE_RATIO_FLOOR` | 否 | `0.7` | 与最高分比值的下限（`config.py`） |
 | `RETRIEVAL_MAX_CHUNKS_PER_SOURCE` | 否 | `2` | 每来源最多返回块数 |

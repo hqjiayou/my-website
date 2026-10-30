@@ -27,7 +27,12 @@ public enum ErrorCode {
      * 400；点名的模型入口不在该模式的生效链上（停用、删除、模式不符，或解不开 key）。
      * 这一轮失败，不得改走该模式的默认入口。
      */
-    MODEL_ENTRY_UNAVAILABLE(1009, "common.error.model-entry-unavailable");
+    MODEL_ENTRY_UNAVAILABLE(1009, "common.error.model-entry-unavailable"),
+    /**
+     * 503；检索配置缺项（如 RETRIEVAL_DATABASE_URL）。索引失败时 message 参数列出缺的键。
+     * 不是外部依赖故障，不得收成 {@link #EXTERNAL_DEPENDENCY_BLOCKED}。
+     */
+    RETRIEVAL_NOT_CONFIGURED(1010, "common.error.retrieval-not-configured");
 
     private final int code;
 

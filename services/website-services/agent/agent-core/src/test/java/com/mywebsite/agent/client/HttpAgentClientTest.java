@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.dto.AgentChatRequest;
+import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentModelSelection;
@@ -346,6 +347,24 @@ class HttpAgentClientTest {
                 "{\"ok\":true,\"data\":{\"skills\":[{\"id\":\"orchestration\",\"description\":\"plan\",\"version\":\"1\"}]}}"));
 
         assertThat(client.listSkills()).containsExactly(new AgentSkillSummary("orchestration", "plan", "1"));
+    }
+
+    @Test
+    void upsertMapsRetrievalNotConfiguredAheadOfBlockedProviderStatus() throws IOException {
+        server.createContext("/internal/v1/retrieval/documents", exchange -> write(
+                exchange,
+                503,
+                "{\"ok\":false,\"errorCode\":\"RETRIEVAL_NOT_CONFIGURED\",\"providerStatus\":\"BLOCKED\","
+                        + "\"message\":\"Retrieval is not configured (missing RETRIEVAL_DATABASE_URL).\"}"));
+
+        assertThatThrownBy(() -> client.upsertRetrievalDocument(new AgentRetrievalDocument("1", "kb:1", "t", "hello")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> {
+                    BusinessException business = (BusinessException) ex;
+                    assertThat(business.getCode()).isEqualTo(ErrorCode.RETRIEVAL_NOT_CONFIGURED.getCode());
+                    assertThat(business.getMessageArgs())
+                            .containsExactly("Retrieval is not configured (missing RETRIEVAL_DATABASE_URL).");
+                });
     }
 
     @Test

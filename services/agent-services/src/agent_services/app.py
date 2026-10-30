@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -16,10 +17,14 @@ from agent_services.config import (
     assert_skills_max_instruction_chars,
     assert_skills_unknown_policy,
     get_settings,
+    missing_retrieval_settings,
+    retrieval_not_configured_message,
 )
 from agent_services.observability.otel import setup_otel
 from agent_services.observability.request_id import install_request_id_middleware
 from agent_services.retrieval.service import RetrievalService, create_retrieval_service
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -56,10 +61,18 @@ def create_app(
     if retrieval_service is not None:
         app.state.retrieval_service = retrieval_service
         app.state.retrieval_blocked_reason = None
+        # 测试注入的检索服务不套用进程缺项，避免夹具被空配置拦住。
+        app.state.retrieval_missing_settings = []
     else:
+        missing = missing_retrieval_settings(resolved)
+        app.state.retrieval_missing_settings = missing
+        if missing:
+            logger.warning("Retrieval configuration is missing: %s", ", ".join(missing))
         service, blocked_reason = create_retrieval_service(resolved)
         app.state.retrieval_service = service
-        app.state.retrieval_blocked_reason = blocked_reason
+        app.state.retrieval_blocked_reason = (
+            retrieval_not_configured_message(missing) if missing else blocked_reason
+        )
 
     register_error_handlers(app)
     app.include_router(internal_router)

@@ -228,6 +228,22 @@ def assert_contract_test_model_allowed(settings: Settings) -> None:
     )
 
 
+def missing_retrieval_settings(settings: Settings) -> list[str]:
+    """检索写入依赖的键。维度小于 1 视为没配。聊天不读这份清单。"""
+    missing: list[str] = []
+    if not settings.retrieval_database_url.strip():
+        missing.append("RETRIEVAL_DATABASE_URL")
+    if not settings.ai_embedding_model.strip():
+        missing.append("AI_EMBEDDING_MODEL")
+    if isinstance(settings.ai_embedding_dimensions, bool) or settings.ai_embedding_dimensions < 1:
+        missing.append("AI_EMBEDDING_DIMENSIONS")
+    return missing
+
+
+def retrieval_not_configured_message(missing: list[str]) -> str:
+    return "Retrieval is not configured (missing " + ", ".join(missing) + ")."
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

@@ -544,6 +544,14 @@ public class HttpAgentClient implements AgentClient {
         if ("DIMENSION_CHANGE_REQUIRED".equals(errorCode)) {
             return dimensionChangeRequired(node);
         }
+        // 必须先于 providerStatus=BLOCKED：索引缺配置不是外部故障，message 里有缺的键名。
+        if ("RETRIEVAL_NOT_CONFIGURED".equals(errorCode)) {
+            String message = textOrNull(node, "message");
+            if (!StringUtils.hasText(message)) {
+                return new BusinessException(ErrorCode.RETRIEVAL_NOT_CONFIGURED);
+            }
+            return new BusinessException(ErrorCode.RETRIEVAL_NOT_CONFIGURED, message);
+        }
         // MCP 不可用与 Provider BLOCKED 同属外部依赖失败（ADR-0004/§19.10）
         if ("EXTERNAL_DEPENDENCY_BLOCKED".equals(errorCode)
                 || "MCP_UNAVAILABLE".equals(errorCode)

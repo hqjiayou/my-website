@@ -197,6 +197,28 @@ class AdminAiKnowledgeServiceImplTest {
                 .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getMessageKey());
     }
 
+    @Test
+    void reembedRecordsMissingRetrievalKeysInsteadOfGenericDependencyError() {
+        AgentModelSelection selection = selection("openai:embed-a");
+        when(knowledgeMapper.selectList(any()))
+                .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
+        when(modelEntryService.embeddingSelection(1L)).thenReturn(selection);
+        when(agentClient.prepareReembed(selection, false))
+                .thenReturn(new AgentReembedPrepareResult(3, 3, false));
+        org.mockito.Mockito.doThrow(new BusinessException(
+                        ErrorCode.RETRIEVAL_NOT_CONFIGURED,
+                        "Retrieval is not configured (missing RETRIEVAL_DATABASE_URL)."))
+                .when(agentClient)
+                .upsertRetrievalDocument(any());
+
+        var result = service.reembedAll();
+
+        assertThat(result.failed()).hasSize(1);
+        assertThat(result.failed().getFirst().error()).contains("RETRIEVAL_DATABASE_URL");
+        assertThat(result.failed().getFirst().error())
+                .isNotEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getMessageKey());
+    }
+
     private static AgentModelSelection selection(String embeddingSpec) {
         return new AgentModelSelection("openai:gpt", "key", null, embeddingSpec);
     }

@@ -257,32 +257,6 @@ class RetrievalStore(Protocol):
 
     async def current_dimensions(self) -> int | None: ...
 
-    @staticmethod
-    async def _rename_legacy_agent_column(conn) -> None:
-        """存量库列名迁移：chunks 表的租户列旧名 site_id → agent_id。
-        幂等：仅当旧列存在且新列不存在时才改名；新库无此列直接跳过。"""
-        legacy = await conn.fetchval(
-            "SELECT 1 FROM information_schema.columns "
-            "WHERE table_schema = 'agent_retrieval' AND table_name = 'chunks' "
-            "AND column_name = 'site_id'"
-        )
-        if legacy is None:
-            return
-        current = await conn.fetchval(
-            "SELECT 1 FROM information_schema.columns "
-            "WHERE table_schema = 'agent_retrieval' AND table_name = 'chunks' "
-            "AND column_name = 'agent_id'"
-        )
-        if current is not None:
-            return
-        await conn.execute(
-            "ALTER TABLE agent_retrieval.chunks RENAME COLUMN site_id TO agent_id"
-        )
-        await conn.execute(
-            "ALTER INDEX IF EXISTS agent_retrieval.idx_agent_retrieval_chunks_site_source "
-            "RENAME TO idx_agent_retrieval_chunks_agent_source"
-        )
-
     async def ensure_schema(self, dimensions: int) -> None: ...
 
     async def recreate_schema(self, new_dimensions: int) -> None: ...
@@ -332,6 +306,8 @@ class PgVectorRetrievalStore:
         assert self._pool is not None
         async with self._pool.acquire() as conn:
             await self._install_vector_extension(conn)
+            # 连接池这条路径也会建索引。旧库租户列还叫 site_id 时，必须先改名，否则索引语句找不到 agent_id。
+            await self._rename_legacy_agent_column(conn)
             await self._create_chunks(conn, self._dimensions)
 
     @staticmethod
@@ -425,6 +401,32 @@ class PgVectorRetrievalStore:
         if isinstance(typmod, bool) or not isinstance(typmod, int) or typmod < 1:
             return None
         return typmod
+
+    @staticmethod
+    async def _rename_legacy_agent_column(conn) -> None:
+        """存量库列名迁移：chunks 表的租户列旧名 site_id → agent_id。
+        幂等：仅当旧列存在且新列不存在时才改名；新库无此列直接跳过。"""
+        legacy = await conn.fetchval(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = 'agent_retrieval' AND table_name = 'chunks' "
+            "AND column_name = 'site_id'"
+        )
+        if legacy is None:
+            return
+        current = await conn.fetchval(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = 'agent_retrieval' AND table_name = 'chunks' "
+            "AND column_name = 'agent_id'"
+        )
+        if current is not None:
+            return
+        await conn.execute(
+            "ALTER TABLE agent_retrieval.chunks RENAME COLUMN site_id TO agent_id"
+        )
+        await conn.execute(
+            "ALTER INDEX IF EXISTS agent_retrieval.idx_agent_retrieval_chunks_site_source "
+            "RENAME TO idx_agent_retrieval_chunks_agent_source"
+        )
 
     async def ensure_schema(self, dimensions: int) -> None:
         """表不存在时按给定维度建表与索引。成功后更新 self._dimensions。"""

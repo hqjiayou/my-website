@@ -34,6 +34,7 @@
 |------|------|
 | `AGENT_INTERNAL_SERVICE_TOKEN` 缺失 | **启动 fail-fast**（安全配置错误） |
 | `AI_MODEL` / 凭证缺失 | 正常启动；health BLOCKED；chat 503 `EXTERNAL_DEPENDENCY_BLOCKED` |
+| `RETRIEVAL_DATABASE_URL` / `AI_EMBEDDING_MODEL` / `AI_EMBEDDING_DIMENSIONS` 缺失 | 正常启动；日志列出缺的键；health `retrievalBlockedReason` 同样列出；索引 503 `RETRIEVAL_NOT_CONFIGURED`（不带 `providerStatus`）。问答不因此阻断 |
 
 ## 环境变量
 

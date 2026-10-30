@@ -30,7 +30,8 @@ public final class GlobalExceptionHttpStatus {
         if (code == ErrorCode.TOO_MANY_REQUESTS.getCode()) {
             return HttpStatus.TOO_MANY_REQUESTS;
         }
-        if (code == ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()) {
+        if (code == ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()
+                || code == ErrorCode.RETRIEVAL_NOT_CONFIGURED.getCode()) {
             return HttpStatus.SERVICE_UNAVAILABLE;
         }
         if (code == ErrorCode.AGENT_BUDGET_EXCEEDED.getCode()) {

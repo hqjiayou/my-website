@@ -4,6 +4,8 @@
 Java mapErrorBody 不解析 {"detail": {...}} 嵌套。
 """
 
+import logging
+
 from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.models.test import TestModel
@@ -140,6 +142,15 @@ def test_health_reports_blocked_without_model() -> None:
     assert body["retrievalStatus"] == "BLOCKED"
     assert body["retrievalDegraded"] is False
     assert "RETRIEVAL_DATABASE_URL" in body["retrievalBlockedReason"]
+    assert "AI_EMBEDDING_MODEL" in body["retrievalBlockedReason"]
+
+
+def test_startup_logs_each_missing_retrieval_setting(caplog) -> None:
+    with caplog.at_level(logging.WARNING):
+        create_app(make_settings())
+    text = caplog.text
+    assert "RETRIEVAL_DATABASE_URL" in text
+    assert "AI_EMBEDDING_MODEL" in text
 
 
 def test_health_reports_live_with_model() -> None:

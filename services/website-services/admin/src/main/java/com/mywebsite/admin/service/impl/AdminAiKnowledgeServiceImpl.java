@@ -1046,6 +1046,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
     private static String indexError(RuntimeException ex) {
         if (ex instanceof BusinessException business) {
+            if (business.getCode() == ErrorCode.RETRIEVAL_NOT_CONFIGURED.getCode()) {
+                Object[] args = business.getMessageArgs();
+                if (args.length > 0 && args[0] != null) {
+                    return String.valueOf(args[0]);
+                }
+            }
             return business.getMessageKey();
         }
         return ex.getClass().getSimpleName();

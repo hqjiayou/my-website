@@ -34,7 +34,7 @@ from agent_services.agent.todo_tools import todo_store_from_request
 from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.api.errors import InternalApiError, external_failure_message
 from agent_services.auth.internal_token import require_internal_service_token
-from agent_services.config import Settings
+from agent_services.config import Settings, retrieval_not_configured_message
 from agent_services.retrieval.embeddings import (
     EmbeddingClient,
     create_embedding_client_for,
@@ -139,6 +139,18 @@ def _require_retrieval_service(request: Request) -> RetrievalService:
             provider_status="BLOCKED",
         )
     return service
+
+
+def _raise_if_retrieval_not_configured(request: Request) -> None:
+    """索引写入在检索键缺失时立刻失败，并点名缺哪些键。不带 providerStatus，避免 Java 收成通用外部故障。"""
+    missing = list(getattr(request.app.state, "retrieval_missing_settings", []) or [])
+    if not missing:
+        return
+    raise InternalApiError(
+        status_code=503,
+        error_code="RETRIEVAL_NOT_CONFIGURED",
+        message=retrieval_not_configured_message(missing),
+    )
 
 
 def _request_embedder(
@@ -638,6 +650,7 @@ async def upsert_retrieval_document(
             error_code="BAD_REQUEST",
             message="agentId, sourceId and content are required.",
         )
+    _raise_if_retrieval_not_configured(request)
     service = _require_retrieval_service(request)
     try:
         embedding_classes = _embedding_classes_for(request, body.embedding_classes)
@@ -672,6 +685,7 @@ async def prepare_retrieval_reembed(
     request: Request, body: ReembedPrepareRequest
 ) -> dict[str, object]:
     """探针目标 embedding 维度。列维度不同且未确认时 409，不改表。"""
+    _raise_if_retrieval_not_configured(request)
     service = _require_retrieval_service(request)
     selection = body.model_selection
     embedder = (
@@ -718,6 +732,7 @@ async def delete_retrieval_document(
             error_code="BAD_REQUEST",
             message="agentId and sourceId are required.",
         )
+    _raise_if_retrieval_not_configured(request)
     service = _require_retrieval_service(request)
     try:
         await service.delete_document(agent_id=agent_id, source_id=source_id)

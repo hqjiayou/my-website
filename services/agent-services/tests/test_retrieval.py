@@ -180,6 +180,99 @@ async def test_embedding_client_batches_long_inputs() -> None:
     assert calls == [["a", "b"], ["c"]]
 
 
+def test_retry_after_reads_provider_retry_delay() -> None:
+    from agent_services.retrieval.embeddings import retry_after_seconds
+
+    class RateLimited(Exception):
+        status_code = 429
+        body = {"error": {"details": [{"retryDelay": "25s"}]}}
+
+    assert retry_after_seconds(RateLimited()) == 25.0
+
+    class FromMessage(Exception):
+        status_code = 429
+
+        def __str__(self) -> str:
+            return "Please retry in 39.4s."
+
+    assert retry_after_seconds(FromMessage()) == 39.4
+
+
+async def test_embedding_client_retries_retryable_status_and_honors_retry_after() -> None:
+    calls = {"n": 0}
+    slept: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(429, headers={"Retry-After": "1.5"}, json={"error": "slow"})
+        body = json.loads(request.content)
+        data = [{"index": index, "embedding": [float(index)]} for index, _ in enumerate(body["input"])]
+        return httpx.Response(200, json={"data": data})
+
+    async def sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    client = OpenAIEmbeddingClient(
+        "text-embedding-3-small",
+        api_key="sk-test",
+        base_url="http://embed.local/v1",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    client._sleep = sleep
+    assert await client.embed(["a", "b"]) == [[0.0], [1.0]]
+    assert calls["n"] == 2
+    assert slept == [1.5]
+
+
+async def test_embedding_client_retries_failed_chunks_after_batch_gives_up() -> None:
+    calls: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        inputs = list(body["input"])
+        calls.append(inputs)
+        if len(inputs) > 1:
+            return httpx.Response(503, json={"error": "unavailable"})
+        return httpx.Response(200, json={"data": [{"index": 0, "embedding": [float(len(calls))]}]})
+
+    async def sleep(_seconds: float) -> None:
+        return None
+
+    client = OpenAIEmbeddingClient(
+        "text-embedding-3-small",
+        api_key="sk-test",
+        base_url="http://embed.local/v1",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        batch_size=2,
+    )
+    client._sleep = sleep
+    assert await client.embed(["a", "b"]) == [[5.0], [6.0]]
+    assert calls[:4] == [["a", "b"], ["a", "b"], ["a", "b"], ["a", "b"]]
+    assert calls[4:] == [["a"], ["b"]]
+
+
+async def test_embedding_client_does_not_retry_request_errors() -> None:
+    calls = {"n": 0}
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(400, json={"error": "bad"})
+
+    client = OpenAIEmbeddingClient(
+        "text-embedding-3-small",
+        api_key="sk-test",
+        base_url="http://embed.local/v1",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    try:
+        await client.embed(["a"])
+        raise AssertionError("expected request error")
+    except httpx.HTTPStatusError as exc:
+        assert exc.response.status_code == 400
+    assert calls["n"] == 1
+
+
 async def test_embedding_client_rejects_count_mismatch() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"data": [{"index": 0, "embedding": [0.1]}]})
@@ -201,6 +294,25 @@ async def test_embedding_client_closes_owned_client() -> None:
     client = OpenAIEmbeddingClient("m", api_key="sk-test", base_url="http://embed.local/v1")
     await client.aclose()
     assert client._client.is_closed
+
+
+async def test_rename_legacy_agent_column_when_site_id_remains() -> None:
+    class _Conn:
+        def __init__(self) -> None:
+            self.sql: list[str] = []
+
+        async def fetchval(self, sql: str):
+            self.sql.append(sql)
+            if "site_id" in sql:
+                return 1
+            return None
+
+        async def execute(self, sql: str) -> None:
+            self.sql.append(sql)
+
+    conn = _Conn()
+    await PgVectorRetrievalStore._rename_legacy_agent_column(conn)
+    assert any("RENAME COLUMN site_id TO agent_id" in sql for sql in conn.sql)
 
 
 async def test_service_close_closes_embedder() -> None:
@@ -323,6 +435,38 @@ async def test_google_embedding_uses_document_and_query_paths(monkeypatch: pytes
     assert await client.embed_query("lookup") == [0.3, 0.4]
     assert embedder.document_calls == [["alpha", "beta"]]
     assert embedder.query_calls == ["lookup"]
+
+
+async def test_google_embedding_batches_at_provider_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, embedder = _google_embedding_client(monkeypatch)
+    client._batch_size = 2
+    assert await client.embed_documents(["a", "b", "c"]) == [[0.1, 0.2], [0.1, 0.2], [0.1, 0.2]]
+    assert embedder.document_calls == [["a", "b"], ["c"]]
+
+
+async def test_google_embedding_retries_query_on_server_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, embedder = _google_embedding_client(monkeypatch)
+    slept: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    client._sleep = sleep
+    attempts = {"n": 0}
+    original = embedder.embed_query
+
+    async def flaky(text: str):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            error = RuntimeError("upstream")
+            error.status_code = 503  # type: ignore[attr-defined]
+            raise error
+        return await original(text)
+
+    embedder.embed_query = flaky
+    assert await client.embed_query("lookup") == [0.3, 0.4]
+    assert attempts["n"] == 2
+    assert slept == [0.5]
 
 
 async def test_google_embedding_rejects_count_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -588,6 +732,21 @@ def test_retrieval_upsert_blocked_without_configuration() -> None:
         "/internal/v1/retrieval/documents",
         headers=TOKEN_HEADER,
         json={"agentId": "1", "sourceId": "kb:1", "title": "t", "content": "hello"},
+    )
+    assert response.status_code == 503
+    body = response.json()
+    assert body["errorCode"] == "RETRIEVAL_NOT_CONFIGURED"
+    assert "providerStatus" not in body
+    assert "RETRIEVAL_DATABASE_URL" in body["message"]
+    assert "AI_EMBEDDING_MODEL" in body["message"]
+    assert body["errorCode"] != "EXTERNAL_DEPENDENCY_BLOCKED"
+
+
+def test_retrieval_search_without_configuration_stays_external_dependency() -> None:
+    response = TestClient(create_app(make_settings())).post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"agentId": "1", "query": "hello"},
     )
     assert response.status_code == 503
     body = response.json()
