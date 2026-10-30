@@ -194,6 +194,25 @@ routing:
   # Ignored when routing.session-affinity is false.
   session-affinity-rebind-on: "any"
 
+  # Local account pacing (#152). Applied only on the local selection path.
+  # A process started with -home-jwt ignores this section. State (next allowed
+  # time and in-flight counts) lives in memory and is cleared on restart, the
+  # same as cooldown. Set any gate to 0 to turn that gate off; all three gates
+  # at 0 restores selection to the upstream behavior. This is the rollback path.
+  # Omitted fields use the defaults below. See docs/LOCAL_PATCHES.md before
+  # upgrading the vendored proxy.
+  account-pacing:
+    # Minimum time between two successful completions on the same account.
+    min-interval: 2s
+    # Extra delay added to min-interval, chosen uniformly from [0, this value].
+    min-interval-jitter: 500ms
+    # How many requests may be in flight for one account. Chosen accounts take
+    # a slot immediately and release it on success, failure, cancel, and panic.
+    max-in-flight: 2
+    # Used-percent at or above this value leaves the account out of selection
+    # until a later observation falls below it. No observation means no block.
+    quota-used-percent: 85
+
   # When true, unprefixed model requests only use credentials without a prefix (except when prefix == model name).
   force-model-prefix: false
 

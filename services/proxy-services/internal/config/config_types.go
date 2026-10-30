@@ -487,6 +487,31 @@ type RoutingConfig struct {
 	//     auth errors (429, 401/402/403, 404/model support, invalid_grant) rebind as normal.
 	// Ignored when SessionAffinity is false.
 	SessionAffinityRebindOn string `yaml:"session-affinity-rebind-on,omitempty" json:"session-affinity-rebind-on,omitempty"`
+
+	// AccountPacing is the local per-account success interval, in-flight cap, and quota threshold.
+	// See services/proxy-services/docs/LOCAL_PATCHES.md and issue #152.
+	AccountPacing AccountPacingConfig `yaml:"account-pacing,omitempty" json:"account-pacing,omitempty"`
+}
+
+// AccountPacingConfig is the local selection gate from issue #152.
+// Empty strings and nil ints mean the documented defaults. Explicit 0 turns that gate off.
+// A process started with -home-jwt does not apply this section.
+type AccountPacingConfig struct {
+	// MinInterval is the minimum gap between two successful completions on one account.
+	// Examples: "2s", "0s". Empty uses 2s.
+	MinInterval string `yaml:"min-interval,omitempty" json:"min-interval,omitempty"`
+
+	// MinIntervalJitter is the inclusive upper bound of the random extra delay.
+	// Empty uses 500ms. "0s" adds no jitter.
+	MinIntervalJitter string `yaml:"min-interval-jitter,omitempty" json:"min-interval-jitter,omitempty"`
+
+	// MaxInFlight is how many requests may occupy one account at once.
+	// Nil uses 2. Explicit 0 turns the gate off.
+	MaxInFlight *int `yaml:"max-in-flight,omitempty" json:"max-in-flight,omitempty"`
+
+	// QuotaUsedPercent drops an account from selection when its observed used percent
+	// is greater than or equal to this value. Nil uses 85. Explicit 0 turns the gate off.
+	QuotaUsedPercent *int `yaml:"quota-used-percent,omitempty" json:"quota-used-percent,omitempty"`
 }
 
 // OAuthModelAlias defines a model ID alias for a specific channel.

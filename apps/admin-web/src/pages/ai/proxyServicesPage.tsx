@@ -16,7 +16,7 @@ import {
 } from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
-import type { ProxyLoginProvider, ProxyServicesAccount } from '@/types/ai'
+import type { ProxyLoginProvider, ProxyServicesAccount, ProxyServicesAccountPacing } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 
 import { ProviderIcon } from './providerIcon'
@@ -26,6 +26,20 @@ type PendingLogin = { provider: ProxyLoginProvider; url: string; state: string }
 type ShownAccount = ProxyServicesAccount & { modelIds: string[] | null | undefined }
 
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000
+
+function pacingDuration(
+  ms: number | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (ms == null || ms <= 0) return t('proxyServices.pacingOff')
+  if (ms % 1000 === 0) return t('proxyServices.pacingSeconds', { count: ms / 1000 })
+  return t('proxyServices.pacingMillis', { count: ms })
+}
+
+function pacingCount(value: number | null | undefined, t: (key: string) => string): string {
+  if (value == null || value <= 0) return t('proxyServices.pacingOff')
+  return String(value)
+}
 
 const LOGIN_OPTIONS: { id: ProxyLoginProvider; titleKey: string; noteKey: string }[] = [
   { id: 'codex', titleKey: 'proxyServices.providerCodex', noteKey: 'proxyServices.loginCodexNote' },
@@ -67,6 +81,44 @@ function accountTitle(account: ProxyServicesAccount) {
   const at = found[0].lastIndexOf('@')
   const local = found[0].slice(0, at).split('-').pop()
   return `${local}@${found[0].slice(at + 1)}`
+}
+
+function PacingStrip({
+  pacing,
+  t,
+}: {
+  pacing: ProxyServicesAccountPacing | null
+  t: (key: string, options?: Record<string, unknown>) => string
+}) {
+  const interval = pacingDuration(pacing?.minIntervalMs, t)
+  const jitter =
+    pacing != null && pacing.minIntervalMs > 0 && pacing.minIntervalJitterMs > 0
+      ? t('proxyServices.pacingJitter', { value: pacingDuration(pacing.minIntervalJitterMs, t) })
+      : null
+  const rows = [
+    {
+      label: t('proxyServices.pacingInterval'),
+      value: jitter ? `${interval}（${jitter}）` : interval,
+    },
+    { label: t('proxyServices.pacingInFlight'), value: pacingCount(pacing?.maxInFlight, t) },
+    {
+      label: t('proxyServices.pacingQuota'),
+      value:
+        pacing == null || pacing.quotaUsedPercent <= 0
+          ? t('proxyServices.pacingOff')
+          : `${pacing.quotaUsedPercent}%`,
+    },
+  ]
+  return (
+    <dl className="grid gap-3 border-b border-admin px-4 py-3 sm:grid-cols-3">
+      {rows.map((row) => (
+        <div key={row.label}>
+          <dt className="text-[11px] text-admin-muted">{row.label}</dt>
+          <dd className="mt-1 text-sm text-admin">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
 function accountStatus(account: ProxyServicesAccount, t: (key: string) => string) {
@@ -326,6 +378,7 @@ export function ProxyServicesPage() {
                 <p>{usageReason}</p>
               </div>
             ) : null}
+            <PacingStrip pacing={status.accountPacing} t={t} />
 
           <div className="grid items-stretch lg:h-[calc(100vh-15.5rem)] lg:grid-cols-[15rem_minmax(0,1fr)]">
             <div className="border-b border-admin lg:border-b-0 lg:border-r lg:border-admin">

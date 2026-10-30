@@ -668,6 +668,8 @@ func (s *Service) applyRetryConfig(cfg *config.Config) {
 	}
 	maxInterval := time.Duration(cfg.MaxRetryInterval) * time.Second
 	s.coreManager.SetRetryConfig(cfg.RequestRetry, maxInterval, cfg.MaxRetryCredentials)
+	interval, jitter, inFlight, quotaPercent := cfg.EffectiveAccountPacing()
+	s.coreManager.SetAccountPacingConfig(interval, jitter, inFlight, quotaPercent)
 	coreauth.SetTransientErrorCooldownSeconds(cfg.TransientErrorCooldownSeconds)
 }
 

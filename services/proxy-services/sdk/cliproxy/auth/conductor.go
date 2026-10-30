@@ -209,6 +209,12 @@ type Manager struct {
 	maxRetryCredentials atomic.Int32
 	maxRetryInterval    atomic.Int64
 
+	// accountPacing is the local per-account gate from issue #152. Memory only.
+	accountPacing      atomic.Pointer[accountPacingSettings]
+	accountPacingClock atomic.Pointer[pacingClockHolder]
+	accountPacingMu    sync.Mutex
+	accountPacingSlots map[string]*accountPacingSlot
+
 	// oauthModelAlias stores global OAuth model alias mappings (alias -> upstream name) keyed by channel.
 	oauthModelAlias atomic.Value
 

@@ -22,6 +22,15 @@ export interface ProxyServicesStatus {
   reachable: boolean
   managementConfigured: boolean
   accounts: ProxyServicesAccount[]
+  /** 代理进程里正在生效的按账号 pacing。拿不到时为 null。某一项为 0 表示该闸关闭。 */
+  accountPacing: ProxyServicesAccountPacing | null
+}
+
+export interface ProxyServicesAccountPacing {
+  minIntervalMs: number
+  minIntervalJitterMs: number
+  maxInFlight: number
+  quotaUsedPercent: number
 }
 
 export interface ProxyServicesAccount {

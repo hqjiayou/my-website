@@ -51,6 +51,38 @@ class AdminProxyServicesServiceImplTest {
             assertThat(status.accounts().get(0).failed()).isEqualTo(1);
             assertThat(status.accounts().get(0).usedPercent()).isEqualTo(58);
             assertThat(status.accounts().get(0).modelUsedPercent()).containsEntry("gpt-6-sol", 40);
+            assertThat(status.accountPacing()).isNull();
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void statusPassesThroughEffectiveAccountPacing() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/models", exchange -> {
+            exchange.sendResponseHeaders(401, -1);
+            exchange.close();
+        });
+        server.createContext("/v8/management/credentials", exchange -> writeJson(exchange, "{\"files\":[]}"));
+        server.createContext("/v8/management/routing/account-pacing", exchange -> {
+            if (!"Bearer test-management-key".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+                exchange.sendResponseHeaders(401, -1);
+                exchange.close();
+                return;
+            }
+            writeJson(
+                    exchange,
+                    "{\"min-interval-ms\":2000,\"min-interval-jitter-ms\":500,\"max-in-flight\":2,\"quota-used-percent\":85}");
+        });
+        server.start();
+        try {
+            var pacing = service(server.getAddress().getPort()).status().accountPacing();
+            assertThat(pacing).isNotNull();
+            assertThat(pacing.minIntervalMs()).isEqualTo(2000);
+            assertThat(pacing.minIntervalJitterMs()).isEqualTo(500);
+            assertThat(pacing.maxInFlight()).isEqualTo(2);
+            assertThat(pacing.quotaUsedPercent()).isEqualTo(85);
         } finally {
             server.stop(0);
         }
@@ -66,6 +98,7 @@ class AdminProxyServicesServiceImplTest {
         var status = new AdminProxyServicesServiceImpl(properties, new ObjectMapper()).status();
         assertThat(status.reachable()).isFalse();
         assertThat(status.accounts()).isEmpty();
+        assertThat(status.accountPacing()).isNull();
     }
 
     @Test

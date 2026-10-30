@@ -1850,6 +1850,25 @@ func extractConversationAlias(payload []byte) string {
 	return ""
 }
 
+// boundAuthID reads the session binding without refreshing TTL or rebinding.
+// The cache key matches Pick: provider, bound session id, and canonical model.
+func (s *SessionAffinitySelector) boundAuthID(provider, model string, opts cliproxyexecutor.Options) (string, bool) {
+	if s == nil || s.cache == nil {
+		return "", false
+	}
+	meta := cloneSchedulerAnyMap(opts.Metadata)
+	primaryID, _ := extractExplicitSessionIDs(opts.Headers, opts.OriginalRequest, meta)
+	if primaryID == "" {
+		primaryID, _ = extractSessionIDs(opts.Headers, opts.OriginalRequest, meta)
+	}
+	if primaryID == "" {
+		return "", false
+	}
+	primaryID = cliproxysession.BoundSessionIdentity(primaryID)
+	cacheKey := provider + "::" + primaryID + "::" + canonicalModelKey(model)
+	return s.cache.Get(cacheKey)
+}
+
 // extractExplicitSessionIDs returns only client- or execution-provided identities.
 // LCP fallback must run after this function so explicit harness sessions remain authoritative.
 func extractExplicitSessionIDs(headers http.Header, payload []byte, metadata map[string]any) (string, string) {

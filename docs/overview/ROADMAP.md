@@ -44,7 +44,7 @@ last_verified: 2026-10-28
 | Portal 双模式（CLI / Key）切换 | 进行中（UoW-1 后端 PR #109、UoW-2 前端 PR #114 已合入 dev） | [#110](https://github.com/hqjiayou/my-website/issues/110) |
 | 知识库向量按嵌入模型分库，检索跨库合并 | 未做 | [#126](https://github.com/hqjiayou/my-website/issues/126) |
 | 试聊与接入模型不一致、切换后无响应 | 调查已记录；对应改动在工作区，未提交 | [#127](https://github.com/hqjiayou/my-website/issues/127) |
-| CLI 代理按账号限制在途请求与成功请求间隔 | 未做 | [#152](https://github.com/hqjiayou/my-website/issues/152) |
+| CLI 代理按账号限制在途请求与成功请求间隔 | 已实现（资格过滤；补丁见 `services/proxy-services/docs/LOCAL_PATCHES.md`） | [#152](https://github.com/hqjiayou/my-website/issues/152) |
 | 同一会话按轮切换对话模型 | 进行中 | [#153](https://github.com/hqjiayou/my-website/issues/153) |
 
 ## 建议下一阶段顺序

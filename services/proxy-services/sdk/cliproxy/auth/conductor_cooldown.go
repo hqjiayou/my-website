@@ -946,6 +946,8 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 		auth.recordRecentRequest(now, result.Success)
 		if result.Success {
 			auth.Success++
+			// Success clock for local account pacing. Failures do not touch it. Issue #152.
+			m.noteAccountPacingSuccess(result.AuthID, m.pacingNow())
 		} else {
 			auth.Failed++
 		}

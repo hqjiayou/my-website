@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.admin.constant.AdminProxyServicesMessageKeys;
 import com.mywebsite.admin.dto.AdminProxyServicesDtos.AdminProxyServicesAccountDto;
+import com.mywebsite.admin.dto.AdminProxyServicesDtos.AdminProxyServicesAccountPacingDto;
 import com.mywebsite.admin.dto.AdminProxyServicesDtos.AdminProxyServicesApiKeysDto;
 import com.mywebsite.admin.dto.AdminProxyServicesDtos.AdminProxyServicesLoginDto;
 import com.mywebsite.admin.dto.AdminProxyServicesDtos.AdminProxyServicesLoginStatusDto;
@@ -42,6 +43,8 @@ public class AdminProxyServicesServiceImpl implements AdminProxyServicesService 
 
     private static final String API_KEYS_PATH = "/v8/management/config/access/api-keys";
 
+    private static final String ACCOUNT_PACING_PATH = "/v8/management/routing/account-pacing";
+
     private static final Set<String> LOGIN_PROVIDERS = Set.of("codex", "claude", "antigravity", "meta");
 
     private static final Pattern OAUTH_STATE = Pattern.compile("[A-Za-z0-9_-]{16,80}");
@@ -77,12 +80,14 @@ public class AdminProxyServicesServiceImpl implements AdminProxyServicesService 
         String baseUrl = normalizeBaseUrl(properties.getBaseUrl());
         boolean managementConfigured = StringUtils.hasText(properties.getManagementKey());
         if (baseUrl == null) {
-            return new AdminProxyServicesStatusDto(NAME, "", false, managementConfigured, List.of());
+            return new AdminProxyServicesStatusDto(NAME, "", false, managementConfigured, List.of(), null);
         }
         boolean reachable = probe(baseUrl);
-        List<AdminProxyServicesAccountDto> accounts =
-                reachable && managementConfigured ? accounts(baseUrl) : List.of();
-        return new AdminProxyServicesStatusDto(NAME, baseUrl, reachable, managementConfigured, accounts);
+        boolean ready = reachable && managementConfigured;
+        List<AdminProxyServicesAccountDto> accounts = ready ? accounts(baseUrl) : List.of();
+        AdminProxyServicesAccountPacingDto accountPacing = ready ? accountPacing(baseUrl) : null;
+        return new AdminProxyServicesStatusDto(
+                NAME, baseUrl, reachable, managementConfigured, accounts, accountPacing);
     }
 
     @Override
@@ -285,6 +290,31 @@ public class AdminProxyServicesServiceImpl implements AdminProxyServicesService 
             return List.of();
         } catch (Exception ex) {
             return List.of();
+        }
+    }
+
+    /** 读代理管理 API 上的生效 pacing。失败或非 200 时返回 null，页面显示未启用。 */
+    private AdminProxyServicesAccountPacingDto accountPacing(String baseUrl) {
+        try {
+            HttpResponse<String> response = httpClient.send(
+                    request(baseUrl + ACCOUNT_PACING_PATH, properties.getManagementKey().trim())
+                            .GET()
+                            .build(),
+                    HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200 || !StringUtils.hasText(response.body())) {
+                return null;
+            }
+            JsonNode node = objectMapper.readTree(response.body());
+            return new AdminProxyServicesAccountPacingDto(
+                    node.path("min-interval-ms").asLong(0),
+                    node.path("min-interval-jitter-ms").asLong(0),
+                    node.path("max-in-flight").asInt(0),
+                    node.path("quota-used-percent").asInt(0));
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (Exception ex) {
+            return null;
         }
     }
 

@@ -7,13 +7,21 @@ public final class AdminProxyServicesDtos {
 
     private AdminProxyServicesDtos() {}
 
-    /** 不含管理密钥与客户端 key。 */
+    /** 不含管理密钥与客户端 key。accountPacing 来自代理管理 API 的生效值；拿不到时为 null。 */
     public record AdminProxyServicesStatusDto(
             String name,
             String baseUrl,
             boolean reachable,
             boolean managementConfigured,
-            List<AdminProxyServicesAccountDto> accounts) {}
+            List<AdminProxyServicesAccountDto> accounts,
+            AdminProxyServicesAccountPacingDto accountPacing) {}
+
+    /**
+     * 代理进程里正在生效的按账号 pacing。某一项为 0 表示该闸关闭。
+     * 数值来自管理 API，不读配置文件。
+     */
+    public record AdminProxyServicesAccountPacingDto(
+            long minIntervalMs, long minIntervalJitterMs, int maxInFlight, int quotaUsedPercent) {}
 
     /**
      * success / failed 是这次进程启动后的次数。usedPercent、modelUsedPercent 只在上游有额度观察时有值。

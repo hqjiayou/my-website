@@ -527,7 +527,10 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 	attempted := make(map[string]struct{})
 	var lastErr error
 	var upstreamErr error
+	var inFlightLease accountInFlightLease
+	defer inFlightLease.Release()
 	for {
+		inFlightLease.Release()
 		if maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
 			if lastErr != nil {
 				return cliproxyexecutor.Response{}, preferredExecutionAttemptError(lastErr, upstreamErr)
@@ -554,6 +557,9 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 		publishSelectedAuthMetadata(opts.Metadata, auth)
 
 		tried[auth.ID] = struct{}{}
+		if !homeMode && !m.holdAccountInFlight(&inFlightLease, auth.ID) {
+			continue
+		}
 		execCtx := ctx
 		if rt := m.roundTripperFor(auth); rt != nil {
 			execCtx = context.WithValue(execCtx, roundTripperContextKey{}, rt)
@@ -745,7 +751,10 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 	attempted := make(map[string]struct{})
 	var lastErr error
 	var upstreamErr error
+	var inFlightLease accountInFlightLease
+	defer inFlightLease.Release()
 	for {
+		inFlightLease.Release()
 		if maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
 			if lastErr != nil {
 				return cliproxyexecutor.Response{}, preferredExecutionAttemptError(lastErr, upstreamErr)
@@ -772,6 +781,9 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 		publishSelectedAuthMetadata(opts.Metadata, auth)
 
 		tried[auth.ID] = struct{}{}
+		if !homeMode && !m.holdAccountInFlight(&inFlightLease, auth.ID) {
+			continue
+		}
 		execCtx := ctx
 		if rt := m.roundTripperFor(auth); rt != nil {
 			execCtx = context.WithValue(execCtx, roundTripperContextKey{}, rt)
@@ -973,7 +985,10 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 	var lastErr error
 	var upstreamErr error
 	var roundTiming homeRetryRoundTiming
+	var inFlightLease accountInFlightLease
+	defer inFlightLease.Release()
 	for {
+		inFlightLease.Release()
 		allowSameAuthRetry := homeMode && homeSameAuthRetryPending && lastHomeAuthID != "" && homeSameAuthRetries[lastHomeAuthID] == 0
 		if maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials && !allowSameAuthRetry {
 			if lastErr != nil {
@@ -1085,6 +1100,9 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 		publishSelectedAuthMetadata(opts.Metadata, auth)
 
 		tried[auth.ID] = struct{}{}
+		if selection == nil && !m.holdAccountInFlight(&inFlightLease, auth.ID) {
+			continue
+		}
 		execCtx := ctx
 		releaseAttempt := func() {}
 		if selection != nil {
@@ -1278,6 +1296,11 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 				return wrapHomeStream(ctx, streamResult, nil, releaseAttempt), nil
 			}
 			return wrapHomeStream(ctx, streamResult, selection, releaseAttempt), nil
+		}
+		if inFlightLease.release != nil {
+			release := inFlightLease.release
+			inFlightLease.release = nil
+			return wrapAccountPacingStream(ctx, streamResult, release), nil
 		}
 		return streamResult, nil
 	}
