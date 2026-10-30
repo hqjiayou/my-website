@@ -1,12 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowRight, Info, KeyRound } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
 import { agentApi } from '@/api/apps/agentApi'
-import { CopyableText } from '@/components/admin/copyableText'
-import { AdminPageHeader } from '@/components/admin'
+import { AdminPageHeader, CopyableText, StatusTag } from '@/components/admin'
+import {
+  adminDangerGhostButtonClass,
+  adminDangerGhostButtonSmClass,
+  adminFieldClass,
+  adminFormActionsClass,
+  adminGhostButtonClass,
+  adminPrimaryButtonClass,
+} from '@/components/admin/controls'
+import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import type {
   AiModelEntry,
@@ -97,6 +106,76 @@ function gatewayKeyStatus(key: GatewayAccessKey): GatewayKeyStatus {
   return 'ACTIVE'
 }
 
+/** 网关 Key 明文固定以此为前缀签发（见 AdminGatewayAccessKeyServiceImpl.KEY_PREFIX），keyHint 只是尾 4 位。 */
+const GATEWAY_KEY_PREFIX = 'mwgw_'
+
+/** 家族图标砖：按 modelSpec 协议前缀映射色板 token，字母取家族名首字母。前缀未知时归为「其他」。 */
+function familyTile(modelSpec: string): { letter: string; className: string } {
+  const prefix = modelSpec.split(':')[0]?.trim().toLowerCase() ?? ''
+  if (prefix === 'google') return { letter: 'G', className: 'bg-[rgb(var(--info)/.12)] text-info' }
+  if (prefix === 'openai') return { letter: 'G', className: 'bg-[rgb(var(--chart-2)/.12)] text-chart-2' }
+  if (prefix === 'anthropic') return { letter: 'C', className: 'bg-[rgb(var(--chart-3)/.12)] text-chart-3' }
+  if (prefix === 'azure') return { letter: 'A', className: 'bg-[rgb(var(--chart-1)/.12)] text-chart-1' }
+  return { letter: 'M', className: 'bg-admin-surface-muted text-admin-muted' }
+}
+
+/** 组链预览按模式拆分的一段：同一作用域下该模式的生效链。 */
+function ModeChainSection({ mode, chain }: { mode: string; chain: AiModelEntry[] }) {
+  const { t } = useTranslation('aiAdmin')
+  return (
+    <div className="space-y-2">
+      <h4 className="flex items-center gap-2 text-xs font-semibold text-admin">
+        <span
+          className={cn(
+            'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+            mode === 'CLI' ? 'bg-[rgb(var(--chart-4)/.12)] text-chart-4' : 'bg-[rgb(var(--chart-1)/.12)] text-chart-1',
+          )}
+        >
+          {mode}
+        </span>
+        {mode === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
+      </h4>
+      {chain.length === 0 ? (
+        <p className="text-sm text-admin-muted">{t('settings.chainModeEmpty')}</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {chain.map((entry, index) => (
+            <div key={entry.id} className="flex items-center gap-2">
+              {index > 0 ? <ArrowRight className="h-3.5 w-3.5 shrink-0 text-admin-muted" aria-hidden /> : null}
+              <span
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs',
+                  index === 0 ? 'border-primary/45 bg-primary/7 text-primary' : 'border-admin bg-admin-surface-muted text-admin',
+                )}
+              >
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+                <span className="flex flex-col">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
+                    <span className="text-[10px] font-bold uppercase tracking-wide opacity-75">
+                      {index === 0 ? t('settings.chainPrimary') : t('settings.chainFallback', { n: index })}
+                    </span>
+                  </span>
+                  <span className="text-[11px] font-normal text-admin-muted">
+                    {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
+                    {entry.agentId == null ? ` · ${t('settings.agentPlatform')}` : ''}
+                  </span>
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const GATEWAY_KEY_STATUS_TONE: Record<GatewayKeyStatus, 'active' | 'danger' | 'warning'> = {
+  ACTIVE: 'active',
+  REVOKED: 'danger',
+  EXPIRED: 'warning',
+}
+
 /**
  * 明文 apiKey 只在签发响应中出现一次：只放组件本地 state 展示，
  * 不写 localStorage，不进 React Query cache 的列表数据。
@@ -147,19 +226,19 @@ function GatewayAccessKeysCard() {
   }
 
   return (
-    <article className="space-y-3 rounded-xl border border-border bg-card p-5">
-      <h3 className="text-sm font-semibold text-foreground">{t('settings.gatewayKeys.title')}</h3>
-      <p className="text-sm text-muted-foreground">{t('settings.gatewayKeys.description')}</p>
+    <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
+      <h3 className="text-sm font-semibold text-admin">{t('settings.gatewayKeys.title')}</h3>
+      <p className="text-sm text-admin-muted">{t('settings.gatewayKeys.description')}</p>
 
       {issuedKey ? (
         <div className="rounded-lg border border-warning/35 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis">
           <p className="font-medium">{t('settings.gatewayKeys.oneTimeWarning')}</p>
-          <div className="mt-2 flex items-center gap-2 rounded bg-card px-3 py-2">
+          <div className="mt-2 flex items-center gap-2 rounded bg-admin-surface px-3 py-2">
             <CopyableText value={issuedKey.apiKey} className="font-mono text-xs" />
           </div>
           <button
             type="button"
-            className="mt-2 text-xs underline"
+            className="mt-2 text-xs text-warning-emphasis underline"
             onClick={() => setIssuedKey(null)}
           >
             {t('settings.gatewayKeys.close')}
@@ -168,9 +247,9 @@ function GatewayAccessKeysCard() {
       ) : null}
 
       {isPending ? (
-        <p className="text-sm text-muted-foreground">{t('loading')}</p>
+        <p className="text-sm text-admin-muted">{t('loading')}</p>
       ) : keys.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t('settings.gatewayKeys.empty')}</p>
+        <p className="text-sm text-admin-muted">{t('settings.gatewayKeys.empty')}</p>
       ) : (
         <ul className="space-y-2">
           {keys.map((key) => {
@@ -178,46 +257,41 @@ function GatewayAccessKeysCard() {
             return (
               <li
                 key={key.id}
-                className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+                className="flex items-center gap-3 rounded-lg border border-admin px-3 py-2.5 text-sm"
               >
-                <span>
-                  <span className="font-medium text-foreground">{key.name}</span>
-                  <span className="ml-2 font-mono text-xs text-muted-foreground">…{key.keyHint}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    <span className="text-muted-foreground">{t('settings.gatewayKeys.createdAtTag')}</span>{' '}
-                    {new Date(key.createdAt).toLocaleString()}
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md bg-admin-surface-muted text-admin-muted">
+                  <KeyRound className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="truncate font-medium text-admin">{key.name}</span>
+                    <span className="truncate font-mono text-xs text-admin-muted">
+                      {GATEWAY_KEY_PREFIX}
+                      {'•'.repeat(12)}
+                      {key.keyHint}
+                    </span>
                   </span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    <span className="text-muted-foreground">{t('settings.gatewayKeys.expiresAtTag')}</span>{' '}
+                  <span className="mt-0.5 block text-xs text-admin-muted">
+                    {t('settings.gatewayKeys.createdAtTag')} {new Date(key.createdAt).toLocaleString()} ·{' '}
                     {key.expiresAt
-                      ? new Date(key.expiresAt).toLocaleString()
+                      ? `${t('settings.gatewayKeys.expiresAtTag')} ${new Date(key.expiresAt).toLocaleString()}`
                       : t('settings.gatewayKeys.neverExpires')}
                   </span>
                 </span>
-                <span className="flex items-center gap-2">
-                  <span
-                    className={
-                      status === 'ACTIVE'
-                        ? 'rounded bg-success-muted px-1.5 py-0.5 text-xs text-success-emphasis'
-                        : 'rounded bg-card-muted px-1.5 py-0.5 text-xs text-muted-foreground'
-                    }
+                <StatusTag status={status} tone={GATEWAY_KEY_STATUS_TONE[status]} label={statusLabel[status]} />
+                {canUpdate && status === 'ACTIVE' ? (
+                  <button
+                    type="button"
+                    className={cn(adminDangerGhostButtonSmClass, 'shrink-0')}
+                    disabled={revokeMutation.isPending}
+                    onClick={() => {
+                      if (!window.confirm(t('settings.gatewayKeys.confirmRevoke'))) return
+                      revokeMutation.mutate(key.id)
+                    }}
                   >
-                    {statusLabel[status]}
-                  </span>
-                  {canUpdate && status === 'ACTIVE' ? (
-                    <button
-                      type="button"
-                      className="rounded-lg border border-danger/35 px-2 py-1 text-xs text-danger-emphasis disabled:opacity-50"
-                      disabled={revokeMutation.isPending}
-                      onClick={() => {
-                        if (!window.confirm(t('settings.gatewayKeys.confirmRevoke'))) return
-                        revokeMutation.mutate(key.id)
-                      }}
-                    >
-                      {t('settings.gatewayKeys.revoke')}
-                    </button>
-                  ) : null}
-                </span>
+                    {t('settings.gatewayKeys.revoke')}
+                  </button>
+                ) : null}
               </li>
             )
           })}
@@ -233,78 +307,36 @@ function GatewayAccessKeysCard() {
             issueMutation.mutate()
           }}
         >
-          <label className="block">
-            <span className="text-xs font-medium text-foreground">{t('settings.gatewayKeys.name')}</span>
+          <label className="block text-sm text-admin">
+            {t('settings.gatewayKeys.name')}
             <input
-              className="mt-1 rounded-lg border border-border px-3 py-2 text-sm"
+              className={`${adminFieldClass} mt-1`}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
           </label>
-          <label className="block">
-            <span className="text-xs font-medium text-foreground">
-              {t('settings.gatewayKeys.expiresAt')}
-            </span>
+          <label className="block text-sm text-admin">
+            {t('settings.gatewayKeys.expiresAt')}
             <input
               type="datetime-local"
-              className="mt-1 rounded-lg border border-border px-3 py-2 text-sm"
+              className={`${adminFieldClass} mt-1`}
               value={expiresAt}
               onChange={(event) => setExpiresAt(event.target.value)}
             />
-            <span className="mt-1 block text-xs text-muted-foreground">
+            <span className="mt-1 block text-xs text-admin-muted">
               {t('settings.gatewayKeys.expiresAtHint')}
             </span>
           </label>
           <button
             type="submit"
             disabled={issueMutation.isPending || !name.trim()}
-            className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            className={adminPrimaryButtonClass}
           >
             {issueMutation.isPending ? t('settings.gatewayKeys.issuing') : t('settings.gatewayKeys.issue')}
           </button>
         </form>
       </PermissionGate>
     </article>
-  )
-}
-
-/** 组链预览按模式拆分的一段：同一作用域下该模式的生效链。 */
-function ModeChainSection({ mode, chain }: { mode: string; chain: AiModelEntry[] }) {
-  const { t } = useTranslation('aiAdmin')
-  return (
-    <div className="space-y-1">
-      <h4 className="text-xs font-semibold text-foreground">
-        {mode === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
-      </h4>
-      {chain.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t('settings.chainModeEmpty')}</p>
-      ) : (
-        <ol className="space-y-1">
-          {chain.map((entry, index) => (
-            <li key={entry.id} className="flex items-center gap-2 text-sm">
-              <span
-                className={
-                  index === 0
-                    ? 'rounded bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground'
-                    : 'rounded bg-card-muted px-2 py-0.5 text-xs text-muted-foreground'
-                }
-              >
-                {index === 0 ? t('settings.chainPrimary') : t('settings.chainFallback', { n: index })}
-              </span>
-              <span className="font-medium text-foreground">
-                {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
-              </span>
-              <span className="text-muted-foreground">
-                {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {entry.agentId == null ? t('settings.agentPlatform') : null}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
   )
 }
 
@@ -391,7 +423,7 @@ export function AiSettingsPage() {
     },
   })
 
-  if (isPending) return <p className="text-sm text-muted-foreground">{t('loading')}</p>
+  if (isPending) return <p className="text-sm text-admin-muted">{t('loading')}</p>
   if (isError) {
     return (
       <section className="admin-content-form">
@@ -419,6 +451,14 @@ export function AiSettingsPage() {
   const clientKeys = keysQuery.data?.apiKeys ?? []
   const cliModelId = modelIdFromSpec(draft?.modelSpec ?? '')
   const cliReady = Boolean(cliBaseUrl) && cliAccounts.some((account) => cliModels(account).length > 0) && clientKeys.length > 0
+  const draftTitle =
+    draft == null
+      ? ''
+      : draft.id == null
+        ? t('settings.add')
+        : draft.mode === 'CLI'
+          ? modelIdFromSpec(draft.modelSpec) || t('settings.name')
+          : draft.displayName || t('settings.name')
 
   function submitDraft() {
     if (!draft || !canUpdate) return
@@ -440,73 +480,85 @@ export function AiSettingsPage() {
   }
 
   return (
-    <section>
+    <section className="admin-content-form">
       <AdminPageHeader title={t('settings.title')} description={t('settings.description')} />
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">{t('settings.fallbackHint')}</p>
-        <article className="space-y-3 rounded-xl border border-border bg-card p-5">
-          {entries.length === 0 ? <p className="text-sm text-muted-foreground">{t('settings.empty')}</p> : null}
+        <div className="flex gap-2 rounded-xl border border-info/28 bg-[rgb(var(--info)/.07)] px-4 py-3 text-sm text-admin">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
+          <p>{t('settings.fallbackHint')}</p>
+        </div>
+        <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
+          {entries.length === 0 ? <p className="text-sm text-admin-muted">{t('settings.empty')}</p> : null}
           <ul className="space-y-2">
-            {entries.map((entry) => (
-              <li key={entry.id} className="flex items-stretch gap-2">
-                <button
-                  type="button"
-                  className="flex flex-1 items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-card-muted"
-                  onClick={() => setDraft(draftFromEntry(entry))}
-                >
-                  <span>
-                    <span className="font-medium text-foreground">
-                      {(entry.mode ?? 'KEY') === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
-                    </span>
-                    {entry.alias ? (
-                      <span className="ml-2 rounded bg-card-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                        {entry.alias}
-                      </span>
-                    ) : null}
-                    <span className="ml-2 text-muted-foreground">
-                      {(entry.mode ?? 'KEY') === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
-                    </span>
-                  </span>
-                  <span className="flex flex-wrap items-center gap-1">
-                    {entry.defaultEntry ? (
-                      <span className="rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
-                        {(entry.mode ?? 'KEY') === 'CLI'
-                          ? t('settings.defaultBadgeCli')
-                          : t('settings.defaultBadgeKey')}
-                      </span>
-                    ) : null}
-                    <span className="rounded bg-card-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                      {(entry.mode ?? 'KEY') === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
-                    </span>
-                    {!entry.enabled ? (
-                      <span className="rounded bg-danger-muted px-1.5 py-0.5 text-xs text-danger-emphasis">
-                        {t('settings.disabledBadge')}
-                      </span>
-                    ) : null}
-                    {entry.apiKeyConfigured ? (
-                      <span className="rounded bg-card-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                        {entry.apiKeyHint}
-                      </span>
-                    ) : null}
-                  </span>
-                </button>
-                {canUpdate && entry.enabled && !entry.defaultEntry ? (
+            {entries.map((entry) => {
+              const tile = familyTile(entry.modelSpec)
+              const entryMode = entry.mode ?? 'KEY'
+              return (
+                <li key={entry.id} className="flex items-stretch gap-2">
                   <button
                     type="button"
-                    className="shrink-0 rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50"
-                    disabled={setDefaultMutation.isPending}
-                    onClick={() => setDefaultMutation.mutate(entry)}
+                    className="flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-admin-surface-muted admin-focus-ring"
+                    onClick={() => setDraft(draftFromEntry(entry))}
                   >
-                    {t('settings.setDefault')}
+                    <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md text-sm font-bold', tile.className)}>
+                      {tile.letter}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-admin">
+                          {entryMode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
+                        </span>
+                        {entry.alias ? (
+                          <span className="rounded-md bg-admin-surface-muted px-1.5 py-0.5 font-mono text-xs text-admin-muted">
+                            {entry.alias}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="mt-0.5 block truncate font-mono text-xs text-admin-muted">
+                        {entryMode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
+                        {entryMode !== 'CLI' && entry.embeddingSpec ? ` · ${entry.embeddingSpec}` : ''}
+                      </span>
+                    </span>
+                    <span className="flex flex-wrap items-center justify-end gap-1.5">
+                      {entry.defaultEntry ? (
+                        <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+                          {entryMode === 'CLI' ? t('settings.defaultBadgeCli') : t('settings.defaultBadgeKey')}
+                        </span>
+                      ) : null}
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-xs font-medium',
+                          entryMode === 'CLI' ? 'bg-[rgb(var(--chart-4)/.12)] text-chart-4' : 'bg-[rgb(var(--chart-1)/.12)] text-chart-1',
+                        )}
+                      >
+                        {entryMode === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
+                      </span>
+                      {!entry.enabled ? <StatusTag status="DISABLED" tone="danger" label={t('settings.disabledBadge')} /> : null}
+                      {entry.apiKeyConfigured ? (
+                        <span className="rounded-md bg-admin-surface-muted px-1.5 py-0.5 font-mono text-xs text-admin-muted">
+                          {entry.apiKeyHint}
+                        </span>
+                      ) : null}
+                    </span>
                   </button>
-                ) : null}
-              </li>
-            ))}
+                  {canUpdate && entry.enabled && !entry.defaultEntry ? (
+                    <button
+                      type="button"
+                      className={cn(adminGhostButtonClass, 'shrink-0')}
+                      disabled={setDefaultMutation.isPending}
+                      onClick={() => setDefaultMutation.mutate(entry)}
+                    >
+                      {t('settings.setDefault')}
+                    </button>
+                  ) : null}
+                </li>
+              )
+            })}
           </ul>
           <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
             <button
               type="button"
-              className="rounded-lg border border-border px-3 py-2 text-sm"
+              className={adminPrimaryButtonClass}
               onClick={() => setDraft(emptyDraft(entries.length === 0))}
             >
               {t('settings.add')}
@@ -516,11 +568,11 @@ export function AiSettingsPage() {
 
         <GatewayAccessKeysCard />
 
-        <article className="space-y-3 rounded-xl border border-border bg-card p-5">
+        <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-foreground">{t('settings.chainTitle')}</h3>
+            <h3 className="text-sm font-semibold text-admin">{t('settings.chainTitle')}</h3>
             <select
-              className="rounded-lg border border-border px-2 py-1 text-sm"
+              className={`${adminFieldClass} w-auto`}
               value={chainScope}
               onChange={(event) => setChainScope(event.target.value)}
             >
@@ -532,7 +584,7 @@ export function AiSettingsPage() {
               ))}
             </select>
           </div>
-          <p className="text-sm text-muted-foreground">{t('settings.chainHint')}</p>
+          <p className="text-sm text-admin-muted">{t('settings.chainHint')}</p>
           <div className="space-y-4">
             <ModeChainSection mode="KEY" chain={keyChain} />
             <ModeChainSection mode="CLI" chain={cliChain} />
@@ -541,16 +593,17 @@ export function AiSettingsPage() {
 
         {draft ? (
           <form
-            className="space-y-4 rounded-xl border border-border bg-card p-5"
+            className="space-y-4 rounded-xl border border-admin bg-admin-surface p-5"
             onSubmit={(event) => {
               event.preventDefault()
               submitDraft()
             }}
           >
-            <label className="block">
-              <span className="text-sm font-medium text-foreground">{t('settings.name')}</span>
+            <h3 className="text-sm font-semibold text-admin">{draftTitle}</h3>
+            <label className="block text-sm text-admin">
+              {t('settings.name')}
               <input
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                className={`${adminFieldClass} mt-1`}
                 value={draft.displayName}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, displayName: event.target.value })}
@@ -559,10 +612,10 @@ export function AiSettingsPage() {
             {draft.mode === 'CLI' ? (
               cliReady ? (
                 <>
-                  <label className="block">
-                    <span className="text-sm font-medium text-foreground">{t('settings.cliModel')}</span>
+                  <label className="block text-sm text-admin">
+                    {t('settings.cliModel')}
                     <select
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                      className={`${adminFieldClass} mt-1`}
                       value={cliModelId}
                       disabled={!canUpdate}
                       onChange={(event) => setDraft({ ...draft, modelSpec: event.target.value })}
@@ -591,12 +644,12 @@ export function AiSettingsPage() {
                         )
                       })}
                     </select>
-                    <span className="mt-1 block text-xs text-muted-foreground">{t('settings.cliModelHint')}</span>
+                    <span className="mt-1 block text-xs text-admin-muted">{t('settings.cliModelHint')}</span>
                   </label>
-                  <label className="block">
-                    <span className="text-sm font-medium text-foreground">{t('settings.cliKey')}</span>
+                  <label className="block text-sm text-admin">
+                    {t('settings.cliKey')}
                     <select
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                      className={`${adminFieldClass} mt-1`}
                       value={draft.apiKey}
                       disabled={!canUpdate}
                       onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
@@ -608,29 +661,33 @@ export function AiSettingsPage() {
                         </option>
                       ))}
                     </select>
-                    <span className="mt-1 block text-xs text-muted-foreground">{t('settings.cliKeyHint')}</span>
+                    <span className="mt-1 block text-xs text-admin-muted">{t('settings.cliKeyHint')}</span>
                   </label>
-                  <p className="text-xs text-muted-foreground">{t('settings.cliAddressFixed', { baseUrl: cliBaseUrl })}</p>
+                  <p className="rounded-lg border border-success/35 bg-success-muted px-3 py-2 text-xs text-success-emphasis">
+                    {t('settings.cliAddressFixed', { baseUrl: cliBaseUrl })}
+                  </p>
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">{t('settings.cliNeedProxy')}</p>
+                <p className="rounded-lg border border-warning/35 bg-warning-muted px-3 py-2 text-sm text-warning-emphasis">
+                  {t('settings.cliNeedProxy')}
+                </p>
               )
             ) : (
               <>
-                <label className="block">
-                  <span className="text-sm font-medium text-foreground">{t('settings.spec')}</span>
+                <label className="block text-sm text-admin">
+                  {t('settings.spec')}
                   <input
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    className={`${adminFieldClass} mt-1`}
                     value={draft.modelSpec}
                     disabled={!canUpdate}
                     placeholder={t('settings.specHint')}
                     onChange={(event) => setDraft({ ...draft, modelSpec: event.target.value })}
                   />
                 </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-foreground">{t('settings.apiKey')}</span>
+                <label className="block text-sm text-admin">
+                  {t('settings.apiKey')}
                   <input
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    className={`${adminFieldClass} mt-1`}
                     type="password"
                     autoComplete="new-password"
                     value={draft.apiKey}
@@ -639,25 +696,25 @@ export function AiSettingsPage() {
                     onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
                   />
                   {draft.apiKeyHint ? (
-                    <span className="mt-1 block text-xs text-muted-foreground">
+                    <span className="mt-1 block text-xs text-admin-muted">
                       {t('settings.apiKeyHint', { hint: draft.apiKeyHint })}
                     </span>
                   ) : null}
                 </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-foreground">{t('settings.embeddingSpec')}</span>
+                <label className="block text-sm text-admin">
+                  {t('settings.embeddingSpec')}
                   <input
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    className={`${adminFieldClass} mt-1`}
                     value={draft.embeddingSpec}
                     disabled={!canUpdate}
                     placeholder={t('settings.embeddingSpecHint')}
                     onChange={(event) => setDraft({ ...draft, embeddingSpec: event.target.value })}
                   />
                 </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-foreground">{t('settings.baseUrl')}</span>
+                <label className="block text-sm text-admin">
+                  {t('settings.baseUrl')}
                   <input
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    className={`${adminFieldClass} mt-1`}
                     value={draft.baseUrl}
                     disabled={!canUpdate}
                     placeholder={t('settings.baseUrlHint')}
@@ -666,23 +723,23 @@ export function AiSettingsPage() {
                 </label>
               </>
             )}
-            <label className="block">
-              <span className="text-sm font-medium text-foreground">{t('settings.alias')}</span>
+            <label className="block text-sm text-admin">
+              {t('settings.alias')}
               <input
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                className={`${adminFieldClass} mt-1`}
                 value={draft.alias}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, alias: event.target.value })}
               />
-              <span className="mt-1 block text-xs text-muted-foreground">{t('settings.aliasHint')}</span>
+              <span className="mt-1 block text-xs text-admin-muted">{t('settings.aliasHint')}</span>
               {aliasInvalid ? (
                 <span className="mt-1 block text-xs text-danger-emphasis">{t('settings.aliasInvalid')}</span>
               ) : null}
             </label>
-            <label className="block">
-              <span className="text-sm font-medium text-foreground">{t('settings.site')}</span>
+            <label className="block text-sm text-admin">
+              {t('settings.site')}
               <select
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                className={`${adminFieldClass} mt-1`}
                 value={draft.agentId}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, agentId: event.target.value })}
@@ -695,10 +752,10 @@ export function AiSettingsPage() {
                 ))}
               </select>
             </label>
-            <label className="block">
-              <span className="text-sm font-medium text-foreground">{t('settings.mode')}</span>
+            <label className="block text-sm text-admin">
+              {t('settings.mode')}
               <select
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
+                className={`${adminFieldClass} mt-1`}
                 value={draft.mode}
                 disabled={!canUpdate}
                 onChange={(event) => setDraft({ ...draft, mode: event.target.value })}
@@ -706,9 +763,9 @@ export function AiSettingsPage() {
                 <option value="KEY">{t('settings.modeKey')}</option>
                 <option value="CLI">{t('settings.modeCli')}</option>
               </select>
-              <span className="mt-1 block text-xs text-muted-foreground">{t('settings.modeHint')}</span>
+              <span className="mt-1 block text-xs text-admin-muted">{t('settings.modeHint')}</span>
             </label>
-            <label className="flex items-center gap-2 text-sm text-foreground">
+            <label className="flex items-center gap-2 text-sm text-admin">
               <input
                 type="checkbox"
                 className="admin-check"
@@ -718,7 +775,7 @@ export function AiSettingsPage() {
               />
               {t('settings.enabled')}
             </label>
-            <label className="flex items-center gap-2 text-sm text-foreground">
+            <label className="flex items-center gap-2 text-sm text-admin">
               <input
                 type="checkbox"
                 className="admin-check"
@@ -729,18 +786,11 @@ export function AiSettingsPage() {
               {t('settings.defaultEntry')}
             </label>
             <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={saveMutation.isPending || aliasInvalid}
-                  className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                >
-                  {saveMutation.isPending ? t('settings.saving') : t('settings.save')}
-                </button>
+              <div className={adminFormActionsClass}>
                 {draft.id != null ? (
                   <button
                     type="button"
-                    className="rounded-lg border border-danger/35 px-3 py-2 text-sm text-danger-emphasis"
+                    className={adminDangerGhostButtonClass}
                     disabled={deleteMutation.isPending}
                     onClick={() => {
                       if (draft.id == null) return
@@ -751,6 +801,13 @@ export function AiSettingsPage() {
                     {t('settings.remove')}
                   </button>
                 ) : null}
+                <button
+                  type="submit"
+                  disabled={saveMutation.isPending || aliasInvalid}
+                  className={adminPrimaryButtonClass}
+                >
+                  {saveMutation.isPending ? t('settings.saving') : t('settings.save')}
+                </button>
               </div>
             </PermissionGate>
           </form>
