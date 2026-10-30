@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { type ReactNode } from 'react'
+import { ArrowRight, BookOpen, Code, Zap } from 'lucide-react'
+import { Fragment, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useOutletContext } from 'react-router-dom'
 
-import { aiApi } from '@/api'
+import { aiApi, SITE_STATUS } from '@/api'
+import { StatusTag } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
@@ -62,6 +64,18 @@ function modelFace(spec: string) {
   return { family, name }
 }
 
+/** 家族色映射（共同红线）：Gemini=info、GPT=chart-2、Claude=chart-3、Muse/其他=chart-4。 */
+const FAMILY_CHIP_CLASS: Record<string, string> = {
+  Gemini: 'bg-[rgb(var(--info)/.12)] text-[rgb(var(--info))]',
+  GPT: 'bg-[rgb(var(--chart-2)/.12)] text-[rgb(var(--chart-2))]',
+  Claude: 'bg-[rgb(var(--chart-3)/.13)] text-[rgb(var(--chart-3))]',
+}
+const FAMILY_CHIP_FALLBACK = 'bg-[rgb(var(--chart-4)/.12)] text-[rgb(var(--chart-4))]'
+
+function familyChipClass(family: string) {
+  return FAMILY_CHIP_CLASS[family] ?? FAMILY_CHIP_FALLBACK
+}
+
 function formatWhen(value: string | null) {
   if (!value) return ''
   const date = new Date(value)
@@ -69,30 +83,59 @@ function formatWhen(value: string | null) {
   return date.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+/** 模型链节点：主用节点描边高亮，备援节点为普通底色，均带表示在线的小圆点。 */
+function ChainNode({ main, children }: { main?: boolean; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold',
+        main
+          ? 'border-[rgb(var(--primary)/.4)] bg-[rgb(var(--primary)/.08)] text-[rgb(var(--primary))]'
+          : 'border-admin bg-admin-surface-muted text-admin',
+      )}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-admin-success" />
+      {children}
+    </span>
+  )
+}
+
 function Fact({
+  icon: Icon,
   label,
+  badge,
   value,
-  detail,
+  sub,
+  footerLabel,
   to,
-  className,
 }: {
+  icon: typeof Zap
   label: string
+  badge?: ReactNode
   value: ReactNode
-  detail?: ReactNode
+  sub?: ReactNode
+  footerLabel: string
   to: string
-  className?: string
 }) {
   return (
     <Link
       to={to}
       className={cn(
-        'block rounded-xl border border-admin bg-admin-surface px-4 py-3 transition hover:bg-admin-surface-muted admin-focus-ring',
-        className,
+        'flex flex-col gap-2 rounded-[14px] border border-admin bg-admin-surface px-4 py-3.5 transition admin-focus-ring',
+        'hover:border-[rgb(var(--muted-foreground)/.35)] hover:shadow-admin-pop',
       )}
     >
-      <p className="text-xs font-medium text-admin-muted">{label}</p>
-      <p className="mt-1 break-all text-sm font-semibold leading-5 text-admin">{value}</p>
-      {detail ? <p className="mt-1 text-xs leading-5 text-admin-muted">{detail}</p> : null}
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-admin-muted">
+        <Icon className="h-3.5 w-3.5 shrink-0 text-admin-muted" />
+        {label}
+        {badge ? <span className="ml-auto">{badge}</span> : null}
+      </p>
+      {value}
+      {sub ? <p className="text-xs leading-5 text-admin-muted">{sub}</p> : null}
+      <p className="mt-auto flex items-center gap-1 border-t border-dashed border-admin pt-2 text-xs font-semibold text-[rgb(var(--primary))]">
+        {footerLabel}
+        <ArrowRight className="h-3 w-3" />
+      </p>
     </Link>
   )
 }
@@ -179,39 +222,102 @@ export function AgentOverviewPage() {
         .filter(Boolean)
         .join(' · ')
     : undefined
+  const modelChainReady =
+    canPrompt && !runtimeQuery.isPending && runtime != null && runtime.reachable && runtimeStatus != null && configuredModel != null
+  const modelValueNode = modelChainReady ? (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <ChainNode main>{modelFace(configuredModel as string).name}</ChainNode>
+      {runtimeStatus!.fallbackProviders.map((spec) => (
+        <Fragment key={spec}>
+          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-admin-muted" />
+          <ChainNode>{modelFace(spec).name}</ChainNode>
+        </Fragment>
+      ))}
+    </div>
+  ) : (
+    <p className="text-sm font-semibold leading-5 text-admin">{modelValue}</p>
+  )
 
+  const promptConfigured = promptQuery.data?.id != null
   const promptValue = !canPrompt || promptQuery.isPending
     ? unavailable
-    : promptQuery.data?.id != null
+    : promptConfigured
       ? t('agentOverview.prompt.configured')
       : t('agentOverview.prompt.notConfigured')
+  const promptBadge =
+    canPrompt && !promptQuery.isPending ? (
+      <StatusTag status={promptConfigured ? SITE_STATUS.ACTIVE : SITE_STATUS.DISABLED} label={promptValue} />
+    ) : undefined
+  const promptSummary = promptQuery.data?.systemPrompt?.trim() || null
+  const promptValueNode = promptSummary ? (
+    <blockquote className="line-clamp-2 border-l-[3px] border-[rgb(var(--primary)/.35)] pl-2.5 text-xs leading-relaxed text-admin-muted">
+      {promptSummary}
+    </blockquote>
+  ) : (
+    <p className="text-sm font-semibold leading-5 text-admin">{promptValue}</p>
+  )
 
-  const knowledgeValue = !canKnowledge || knowledgeQuery.isPending
-    ? unavailable
-    : String(knowledgeQuery.data?.total ?? 0)
-  const knowledgeDetail = canKnowledge && !knowledgeQuery.isPending
-    ? `${t('agentOverview.knowledge.indexed')} ${indexedCount}${failedCount > 0 ? ` · ${t('agentOverview.knowledge.failed')} ${failedCount}` : ''}`
-    : undefined
+  const knowledgeReady = canKnowledge && !knowledgeQuery.isPending
+  const knowledgeTotal = knowledgeQuery.data?.total ?? 0
+  const knowledgeValue = knowledgeReady ? String(knowledgeTotal) : unavailable
+  const knowledgeValueNode = knowledgeReady ? (
+    <div className="space-y-1.5">
+      <p className="flex items-baseline gap-1.5">
+        <span className="text-2xl font-bold leading-none text-admin">{knowledgeValue}</span>
+        <span className="text-xs text-admin-muted">{t('agentOverview.knowledge.documents')}</span>
+      </p>
+      {knowledgeTotal > 0 ? (
+        <div className="h-1.5 overflow-hidden rounded-full bg-admin-surface-muted">
+          <div
+            className="h-full rounded-full bg-[rgb(var(--chart-2))]"
+            style={{ width: `${Math.min(100, Math.round((indexedCount / knowledgeTotal) * 100))}%` }}
+          />
+        </div>
+      ) : null}
+    </div>
+  ) : (
+    <p className="text-sm font-semibold leading-5 text-admin">{knowledgeValue}</p>
+  )
+  const knowledgeSub = knowledgeReady ? (
+    <>
+      {t('agentOverview.knowledge.indexed')} {indexedCount}
+      {failedCount > 0 ? (
+        <>
+          {' · '}
+          <span className="font-semibold text-admin-danger">
+            {t('agentOverview.knowledge.failed')} {failedCount}
+          </span>
+        </>
+      ) : null}
+    </>
+  ) : undefined
 
   return (
     <section className="admin-content-data grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_26rem]">
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <Fact
+            icon={Zap}
             label={t('agentOverview.cards.modelChain')}
-            value={modelValue}
-            detail={modelDetail}
+            value={modelValueNode}
+            sub={modelDetail}
+            footerLabel={t('agentOverview.actions.openRuntime')}
             to={ROUTES.apps.agentRuntime(site.id)}
           />
           <Fact
+            icon={Code}
             label={t('agentOverview.cards.prompt')}
-            value={promptValue}
+            badge={promptBadge}
+            value={promptValueNode}
+            footerLabel={t('agentOverview.actions.openPrompt')}
             to={ROUTES.apps.agentPrompt(site.id)}
           />
           <Fact
+            icon={BookOpen}
             label={t('agentOverview.cards.knowledge')}
-            value={knowledgeValue}
-            detail={knowledgeDetail}
+            value={knowledgeValueNode}
+            sub={knowledgeSub}
+            footerLabel={t('agentOverview.actions.openKnowledge')}
             to={ROUTES.apps.agentKnowledge(site.id)}
           />
         </div>
@@ -292,18 +398,26 @@ function HarnessPanel({
             {HARNESS_FILES.map((key) => {
               const on = files?.[key] === true
               return (
-                <div key={key} className="flex items-center justify-between gap-3 border-b border-admin px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
-                  <span className="text-sm text-admin">{t(`agentOverview.harness.${key}`)}</span>
-                  <span className={cn('text-xs font-medium', on ? 'text-success-emphasis' : 'text-warning-emphasis')}>
-                    {t(on ? 'agentOverview.harness.present' : 'agentOverview.harness.missing')}
-                  </span>
+                <div
+                  key={key}
+                  className="flex items-center gap-2.5 border-b border-admin px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+                >
+                  <StatusTag
+                    status={on ? SITE_STATUS.ACTIVE : SITE_STATUS.DISABLED}
+                    tone={on ? 'active' : 'warning'}
+                    label={t(on ? 'agentOverview.harness.present' : 'agentOverview.harness.missing')}
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-[12.5px] font-semibold text-admin">{key}</p>
+                    <p className="truncate text-[11.5px] text-admin-muted">{t(`agentOverview.harness.${key}`)}</p>
+                  </div>
                 </div>
               )
             })}
           </div>
           <div className="grid border-t border-admin lg:grid-cols-2">
             <section className="border-b border-admin px-4 py-3 lg:border-b-0 lg:border-r">
-              <h3 className="text-xs font-medium text-admin-muted">{t('agentOverview.harness.skills')}</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-admin-muted">{t('agentOverview.harness.skills')}</h3>
               {skillsPending ? (
                 <p className="mt-2 text-sm text-admin-muted">…</p>
               ) : skillsError ? (
@@ -311,9 +425,9 @@ function HarnessPanel({
               ) : !skills || skills.length === 0 ? (
                 <p className="mt-2 text-sm text-admin-muted">{t('agentOverview.harness.noSkills')}</p>
               ) : (
-                <ul className="mt-2 space-y-2">
+                <ul className="mt-2">
                   {skills.map((skill) => (
-                    <li key={skill.id}>
+                    <li key={skill.id} className="border-b border-dashed border-admin py-2 first:pt-0 last:border-b-0 last:pb-0">
                       <p className="text-sm font-medium text-admin">
                         {skill.id}
                         {skill.version ? <span className="ml-1.5 text-xs font-normal text-admin-muted">v{skill.version}</span> : null}
@@ -326,12 +440,12 @@ function HarnessPanel({
             </section>
             <section className="space-y-4 px-4 py-3">
               <div>
-                <h3 className="text-xs font-medium text-admin-muted">{t('aiWorkspace.runtime.limits.title')}</h3>
+                <h3 className="text-xs font-medium uppercase tracking-wide text-admin-muted">{t('aiWorkspace.runtime.limits.title')}</h3>
                 <dl className="mt-2 space-y-1.5">
                   {LIMIT_KEYS.map((key) => (
                     <div key={key} className="flex items-baseline justify-between gap-3 text-sm">
                       <dt className="text-admin-muted">{t(`aiWorkspace.runtime.limits.${key}`)}</dt>
-                      <dd className="tabular-nums text-admin">
+                      <dd className="font-semibold tabular-nums text-admin">
                         {status.limits[key] ?? t('aiWorkspace.runtime.limits.unlimited')}
                       </dd>
                     </div>
@@ -339,9 +453,9 @@ function HarnessPanel({
                 </dl>
               </div>
               <div>
-                <h3 className="flex items-center gap-2 text-xs font-medium text-admin-muted">
+                <h3 className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-admin-muted">
                   {t('agentOverview.harness.mcp')}
-                  {status.mcpStatus ? <span className="font-normal">{status.mcpStatus}</span> : null}
+                  {status.mcpStatus ? <span className="font-normal normal-case">{status.mcpStatus}</span> : null}
                 </h3>
                 {status.mcpServers.length === 0 ? (
                   <p className="mt-2 text-sm text-admin-muted">{t('agentOverview.harness.noMcp')}</p>
@@ -349,7 +463,12 @@ function HarnessPanel({
                   <ul className="mt-2 space-y-1">
                     {status.mcpServers.map((server) => (
                       <li key={server.name} className="flex items-center justify-between gap-3 text-sm">
-                        <span className="truncate text-admin">{server.name}</span>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className={cn('h-1.5 w-1.5 shrink-0 rounded-full', server.enabled ? 'bg-admin-success' : 'bg-admin-muted-foreground')}
+                          />
+                          <span className="truncate font-mono text-admin">{server.name}</span>
+                        </span>
                         <span className={server.enabled ? 'text-success-emphasis' : 'text-admin-muted'}>
                           {t(server.enabled ? 'aiWorkspace.runtime.enabled' : 'aiWorkspace.runtime.disabled')}
                         </span>
@@ -381,30 +500,42 @@ function ConversationRow({
   const spec = stats?.model || fallbackModel
   const face = spec ? modelFace(spec) : null
   const count = (value: number) => value.toLocaleString()
+  const statItems: Array<{ key: 'length' | 'context' | 'input' | 'output'; value: number }> = stats
+    ? [
+        { key: 'length', value: stats.messageCount },
+        { key: 'context', value: stats.contextTokens },
+        { key: 'input', value: stats.inputTokens },
+        { key: 'output', value: stats.outputTokens },
+      ]
+    : []
 
   return (
     <li className="border-b border-admin px-4 py-3 last:border-b-0">
-      <div className="flex items-start justify-between gap-3">
-        <p className="min-w-0 truncate text-sm font-medium text-admin">{item.title?.trim() || `#${item.id}`}</p>
-        <time className="shrink-0 text-xs tabular-nums text-admin-muted">{formatWhen(item.lastMessageAt)}</time>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="min-w-0 truncate text-sm font-semibold text-admin">{item.title?.trim() || `#${item.id}`}</p>
+        <time className="shrink-0 text-[11.5px] tabular-nums text-admin-muted">{formatWhen(item.lastMessageAt)}</time>
       </div>
       <p className="mt-1.5 flex min-w-0 items-center gap-2 text-xs">
         {face ? (
           <>
-            <span className="shrink-0 font-medium text-admin">{face.family}</span>
-            {face.name !== face.family ? <span className="truncate text-admin-muted">{face.name}</span> : null}
+            <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold', familyChipClass(face.family))}>
+              {face.family}
+            </span>
+            {face.name !== face.family ? <span className="truncate font-mono text-admin-muted">{face.name}</span> : null}
           </>
         ) : (
           <span className="text-admin-muted">{t('agentOverview.recent.modelUnknown')}</span>
         )}
       </p>
       {stats ? (
-        <p className="mt-1.5 grid grid-cols-4 gap-2 text-xs tabular-nums text-admin-muted">
-          <span>{t('agentOverview.recent.length', { value: stats.messageCount })}</span>
-          <span>{t('agentOverview.recent.context', { value: count(stats.contextTokens) })}</span>
-          <span>{t('agentOverview.recent.input', { value: count(stats.inputTokens) })}</span>
-          <span>{t('agentOverview.recent.output', { value: count(stats.outputTokens) })}</span>
-        </p>
+        <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+          {statItems.map(({ key, value }) => (
+            <div key={key} className="rounded-md bg-admin-surface-muted px-1.5 py-1">
+              <p className="text-xs font-semibold tabular-nums text-admin">{count(value)}</p>
+              <p className="truncate text-[10.5px] text-admin-muted">{t(`agentOverview.recent.${key}`, { value: '' }).trim()}</p>
+            </div>
+          ))}
+        </div>
       ) : pending ? (
         <p className="mt-1.5 text-xs text-admin-muted">…</p>
       ) : null}

@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 
 import { agentApi, SITE_STATUS, type Site } from '@/api'
 import { StatusTag } from '@/components/admin'
+import { adminDangerGhostButtonMdClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
 import { RouteFallback } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
@@ -30,6 +31,12 @@ export interface AgentWorkspaceOutletContext {
 
 const headerControlClass =
   'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium leading-none transition admin-focus-ring disabled:opacity-60'
+
+function formatUpdatedAt(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
 
 interface WorkspaceNavItem {
   key: string
@@ -154,19 +161,30 @@ export function AgentWorkspaceLayout() {
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3.5">
+        <div className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[13px] bg-gradient-to-br from-[rgb(var(--primary))] to-[rgb(var(--info))] text-admin-on-primary shadow-admin-pop">
+          <Bot className="h-6 w-6" />
+        </div>
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold text-admin">{site.agentName}</h1>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-xl font-bold text-admin">{site.agentName}</h1>
             <StatusTag status={site.status} label={t(`status.${site.status}`, { defaultValue: site.status })} />
           </div>
-          <p className="mt-1 text-sm text-admin-muted">
-            {site.agentCode}
+          <p className="mt-0.5 flex flex-wrap items-center text-xs text-admin-muted">
+            <span className="font-mono">{site.agentCode}</span>
             <span className="mx-1.5">·</span>
-            {t(`agentType.${site.agentType}`, { defaultValue: site.agentType })}
+            <span>{t(`agentType.${site.agentType}`, { defaultValue: site.agentType })}</span>
+            {site.updatedAt ? (
+              <>
+                <span className="mx-1.5">·</span>
+                <span>
+                  {t('list.columns.updatedAt')} {formatUpdatedAt(site.updatedAt)}
+                </span>
+              </>
+            ) : null}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           {agents.length > 1 ? (
             <select
               className={cn(headerControlClass, 'w-44 border-admin bg-admin-surface text-admin')}
@@ -183,7 +201,7 @@ export function AgentWorkspaceLayout() {
           {canStatus ? (
             <button
               type="button"
-              className={cn(headerControlClass, 'border-admin bg-admin-surface text-admin hover:bg-admin-surface-muted')}
+              className={adminSecondaryButtonClass}
               disabled={statusMutation.isPending}
               onClick={() => statusMutation.mutate()}
             >
@@ -193,7 +211,7 @@ export function AgentWorkspaceLayout() {
           {canDelete ? (
             <button
               type="button"
-              className={cn(headerControlClass, 'border-danger/35 bg-admin-surface text-danger-emphasis hover:bg-danger-muted')}
+              className={adminDangerGhostButtonMdClass}
               disabled={deleteMutation.isPending}
               onClick={() => {
                 if (!window.confirm(t('list.messages.confirmDelete', { name: site.agentName }))) return
@@ -204,11 +222,7 @@ export function AgentWorkspaceLayout() {
             </button>
           ) : null}
           <PermissionGate code={PERMISSION_CODES.agentCreate}>
-            <button
-              type="button"
-              className={cn(headerControlClass, 'border-admin bg-admin-surface text-admin hover:bg-admin-surface-muted')}
-              onClick={() => navigate(ROUTES.apps.agentCreate)}
-            >
+            <button type="button" className={adminPrimaryButtonClass} onClick={() => navigate(ROUTES.apps.agentCreate)}>
               <Plus className="h-4 w-4" />
               {t('list.createSite')}
             </button>
