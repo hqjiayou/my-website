@@ -82,7 +82,7 @@ export function Header() {
           </button>
 
           <nav className="mr-auto min-w-0 text-sm" aria-label={tLayout('header.subtitle')}>
-            <p className="truncate font-medium text-primary">{pageTitle}</p>
+            <p className="truncate font-semibold text-admin">{pageTitle}</p>
           </nav>
 
           <div className="admin-seg hidden lg:flex" role="group" aria-label={tLayout('preferences.pageDensity.label')}>

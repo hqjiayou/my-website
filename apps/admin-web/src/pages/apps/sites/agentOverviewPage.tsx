@@ -9,43 +9,10 @@ import { StatusTag } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
-import type { AiConversationListItem, AiMessage, AiRuntimeLimits, AiRuntimeStatus } from '@/types/ai'
+import type { AiRuntimeLimits, AiRuntimeStatus } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 
 import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
-
-interface ConversationStats {
-  messageCount: number
-  contextTokens: number
-  inputTokens: number
-  outputTokens: number
-  model: string | null
-}
-
-function summarizeMessages(messages: AiMessage[]): ConversationStats {
-  let inputTokens = 0
-  let outputTokens = 0
-  let contextTokens = 0
-  let model: string | null = null
-  for (const message of messages) {
-    const usage = message.agentMeta?.usage
-    if (message.role === 'ASSISTANT' && usage) {
-      inputTokens += usage.inputTokens
-      outputTokens += usage.outputTokens
-      contextTokens = usage.inputTokens
-    }
-    if (message.role === 'ASSISTANT' && message.agentMeta?.model) {
-      model = message.agentMeta.model
-    }
-  }
-  return {
-    messageCount: messages.length,
-    contextTokens,
-    inputTokens,
-    outputTokens,
-    model,
-  }
-}
 
 function familyOf(value: string) {
   if (value.includes('gpt') || value.includes('codex') || value === 'openai') return 'GPT'
@@ -62,25 +29,6 @@ function modelFace(spec: string) {
   const prefix = colon >= 0 ? spec.slice(0, colon).toLowerCase() : ''
   const family = familyOf(name.toLowerCase()) ?? familyOf(prefix) ?? name
   return { family, name }
-}
-
-/** 家族色映射（共同红线）：Gemini=info、GPT=chart-2、Claude=chart-3、Muse/其他=chart-4。 */
-const FAMILY_CHIP_CLASS: Record<string, string> = {
-  Gemini: 'bg-[rgb(var(--info)/.12)] text-[rgb(var(--info))]',
-  GPT: 'bg-[rgb(var(--chart-2)/.12)] text-[rgb(var(--chart-2))]',
-  Claude: 'bg-[rgb(var(--chart-3)/.13)] text-[rgb(var(--chart-3))]',
-}
-const FAMILY_CHIP_FALLBACK = 'bg-[rgb(var(--chart-4)/.12)] text-[rgb(var(--chart-4))]'
-
-function familyChipClass(family: string) {
-  return FAMILY_CHIP_CLASS[family] ?? FAMILY_CHIP_FALLBACK
-}
-
-function formatWhen(value: string | null) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 /** 模型链节点：主用节点描边高亮，备援节点为普通底色，均带表示在线的小圆点。 */
@@ -150,13 +98,12 @@ const LIMIT_KEYS: Array<keyof AiRuntimeLimits> = [
   'historyMaxChars',
 ]
 
-/** 概览：上面是模型、Prompt、知识库，中间是 Harness，右边是对话列表。 */
+/** 概览：上面是模型、Prompt、知识库，下面是 Harness。 */
 export function AgentOverviewPage() {
   const { t } = useTranslation('sites')
   const { site } = useOutletContext<AgentWorkspaceOutletContext>()
   const canPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
   const canKnowledge = useHasPermission(PERMISSION_CODES.aiKbList)
-  const canConversations = useHasPermission(PERMISSION_CODES.aiConversationList)
   const unavailable = t('agentOverview.unavailable')
 
   const runtimeQuery = useQuery({
@@ -179,24 +126,6 @@ export function AgentOverviewPage() {
     queryFn: () => aiApi.listKnowledgeDocuments(site.id, { pageNum: 1, pageSize: 100 }),
     enabled: canKnowledge,
   })
-  const conversationsQuery = useQuery({
-    queryKey: ['sites', site.id, 'ai', 'conversations', 'overview'],
-    queryFn: () => aiApi.listConversations(site.id, { pageNum: 1, pageSize: 20 }),
-    enabled: canConversations,
-  })
-
-  const conversations = conversationsQuery.data?.records ?? []
-  const conversationIds = conversations.map((item) => item.id)
-  const statsQuery = useQuery({
-    queryKey: ['sites', site.id, 'ai', 'conversations', 'overview-stats', conversationIds],
-    queryFn: async () => {
-      const pages = await Promise.all(
-        conversationIds.map(async (id) => [id, summarizeMessages(await aiApi.listConversationMessages(site.id, id))] as const),
-      )
-      return Object.fromEntries(pages) as Record<number, ConversationStats>
-    },
-    enabled: canConversations && conversationIds.length > 0,
-  })
 
   const runtime = runtimeQuery.data
   const runtimeStatus = runtime?.status ?? null
@@ -214,7 +143,6 @@ export function AgentOverviewPage() {
         : unavailable
   const modelDetail = runtimeStatus
     ? [
-        runtimeStatus.providerStatus,
         runtimeStatus.fallbackProviders.length > 0
           ? runtimeStatus.fallbackProviders.map((spec) => modelFace(spec).name).join('、')
           : null,
@@ -293,7 +221,7 @@ export function AgentOverviewPage() {
   ) : undefined
 
   return (
-    <section className="admin-content-data grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_26rem]">
+    <section className="admin-content-data">
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <Fact
@@ -331,35 +259,6 @@ export function AgentOverviewPage() {
         />
       </div>
 
-      <aside className="flex max-h-[calc(100vh-11rem)] flex-col overflow-hidden rounded-xl border border-admin bg-admin-surface lg:sticky lg:top-4">
-        <div className="flex items-center justify-between gap-3 border-b border-admin px-4 py-3">
-          <h2 className="text-sm font-semibold text-admin">{t('agentOverview.recent.title')}</h2>
-          <Link
-            to={ROUTES.apps.agentConversations(site.id)}
-            className="text-xs font-medium text-admin-muted underline-offset-2 hover:text-admin hover:underline"
-          >
-            {t('agentOverview.actions.openConversations')}
-            {conversationsQuery.data ? ` ${conversationsQuery.data.total}` : ''}
-          </Link>
-        </div>
-        {!canConversations || conversationsQuery.isPending ? (
-          <p className="px-4 py-4 text-sm text-admin-muted">{unavailable}</p>
-        ) : conversations.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-admin-muted">{t('agentOverview.recent.empty')}</p>
-        ) : (
-          <ul className="min-h-0 flex-1 overflow-auto">
-            {conversations.map((item) => (
-              <ConversationRow
-                key={item.id}
-                item={item}
-                stats={statsQuery.data?.[item.id]}
-                pending={statsQuery.isPending}
-                fallbackModel={configuredModel}
-              />
-            ))}
-          </ul>
-        )}
-      </aside>
     </section>
   )
 }
@@ -485,60 +384,3 @@ function HarnessPanel({
   )
 }
 
-function ConversationRow({
-  item,
-  stats,
-  pending,
-  fallbackModel,
-}: {
-  item: AiConversationListItem
-  stats: ConversationStats | undefined
-  pending: boolean
-  fallbackModel: string | null
-}) {
-  const { t } = useTranslation('sites')
-  const spec = stats?.model || fallbackModel
-  const face = spec ? modelFace(spec) : null
-  const count = (value: number) => value.toLocaleString()
-  const statItems: Array<{ key: 'length' | 'context' | 'input' | 'output'; value: number }> = stats
-    ? [
-        { key: 'length', value: stats.messageCount },
-        { key: 'context', value: stats.contextTokens },
-        { key: 'input', value: stats.inputTokens },
-        { key: 'output', value: stats.outputTokens },
-      ]
-    : []
-
-  return (
-    <li className="border-b border-admin px-4 py-3 last:border-b-0">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="min-w-0 truncate text-sm font-semibold text-admin">{item.title?.trim() || `#${item.id}`}</p>
-        <time className="shrink-0 text-[11.5px] tabular-nums text-admin-muted">{formatWhen(item.lastMessageAt)}</time>
-      </div>
-      <p className="mt-1.5 flex min-w-0 items-center gap-2 text-xs">
-        {face ? (
-          <>
-            <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold', familyChipClass(face.family))}>
-              {face.family}
-            </span>
-            {face.name !== face.family ? <span className="truncate font-mono text-admin-muted">{face.name}</span> : null}
-          </>
-        ) : (
-          <span className="text-admin-muted">{t('agentOverview.recent.modelUnknown')}</span>
-        )}
-      </p>
-      {stats ? (
-        <div className="mt-1.5 grid grid-cols-4 gap-1.5">
-          {statItems.map(({ key, value }) => (
-            <div key={key} className="rounded-md bg-admin-surface-muted px-1.5 py-1">
-              <p className="text-xs font-semibold tabular-nums text-admin">{count(value)}</p>
-              <p className="truncate text-[10.5px] text-admin-muted">{t(`agentOverview.recent.${key}`, { value: '' }).trim()}</p>
-            </div>
-          ))}
-        </div>
-      ) : pending ? (
-        <p className="mt-1.5 text-xs text-admin-muted">…</p>
-      ) : null}
-    </li>
-  )
-}
