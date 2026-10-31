@@ -1,5 +1,6 @@
 package com.mywebsite.agent.dto;
 
+import com.mywebsite.agent.dto.AgentCitation;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -15,7 +16,18 @@ public record AgentAiMessageDto(
         String requestedModel) {
 
     /** 本轮实际采用的检索引用。外层列表无引用时为 null，与 {@code attachments} 相同。 */
-    public record Citation(String sourceId, int chunkIndex, double score) {}
+    public record Citation(
+            String sourceId,
+            int chunkIndex,
+            double score,
+            String title,
+            AgentCitation.Location location,
+            Integer cite) {
+
+        public Citation(String sourceId, int chunkIndex, double score) {
+            this(sourceId, chunkIndex, score, null, null, null);
+        }
+    }
 
     /**
      * 本轮过程摘要（自 agent_meta 回放）：工具名与成败、知识搜索的查询词与命中数。

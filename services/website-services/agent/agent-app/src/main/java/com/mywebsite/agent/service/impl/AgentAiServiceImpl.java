@@ -341,7 +341,12 @@ public class AgentAiServiceImpl implements AgentAiService {
     private static List<AgentAiChatResponseDto.Citation> toCitations(List<AgentCitation> citations) {
         return citations.stream()
                 .map(citation -> new AgentAiChatResponseDto.Citation(
-                        citation.sourceId(), citation.chunkIndex(), citation.score()))
+                        citation.sourceId(),
+                        citation.chunkIndex(),
+                        citation.score(),
+                        citation.title(),
+                        citation.location(),
+                        citation.cite()))
                 .toList();
     }
 

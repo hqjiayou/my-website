@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 
-import type { AiRunMeta, AiRunUsage } from '@/types/ai'
+import type { AiCitation, AiRunMeta, AiRunUsage } from '@/types/ai'
 
 /** spec（provider:model）取冒号后模型段，与执行层回报的裸 model_name 同口径比较。 */
 function modelPartOfSpec(spec: string): string {
@@ -52,6 +52,25 @@ export function AiRunMetaSummary({ meta }: { meta: AiRunMeta }) {
       {meta.mode ? (
         <p className="text-xs text-muted-foreground">{t('aiWorkspace.runMeta.mode', { mode: meta.mode })}</p>
       ) : null}
+      {meta.citations?.length ? (
+        <ul className="space-y-0.5">
+          {meta.citations.map((citation, index) => (
+            <li key={`${citation.sourceId}-${citation.chunkIndex}-${index}`} className="text-xs text-muted-foreground">
+              {t('aiWorkspace.runMeta.citation', {
+                n: citation.cite ?? index + 1,
+                title: citation.title || citation.sourceId,
+                location: citationLocationText(citation),
+              })}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
+}
+
+function citationLocationText(citation: AiCitation): string {
+  const page = citation.location?.page
+  const text = typeof page === 'number' && page > 0 ? `第 ${page} 页` : (citation.location?.sheet ?? '')
+  return text ? ` · ${text}` : ''
 }

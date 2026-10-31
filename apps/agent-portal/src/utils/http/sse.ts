@@ -242,7 +242,28 @@ function readCitation(value: unknown): AgentAiCitation | null {
   if (typeof sourceId !== 'string' || sourceId.length === 0) return null
   if (typeof chunkIndex !== 'number' || !Number.isInteger(chunkIndex)) return null
   if (typeof score !== 'number' || !Number.isFinite(score)) return null
-  return { sourceId, chunkIndex, score }
+  const citation: AgentAiCitation = { sourceId, chunkIndex, score }
+  if (typeof value.title === 'string' && value.title.length > 0) citation.title = value.title
+  if (typeof value.cite === 'number' && Number.isInteger(value.cite)) citation.cite = value.cite
+  if (isRecord(value.location)) {
+    const location: NonNullable<AgentAiCitation['location']> = {}
+    if (typeof value.location.page === 'number' && Number.isInteger(value.location.page)) {
+      location.page = value.location.page
+    }
+    if (typeof value.location.sheet === 'string' && value.location.sheet.length > 0) {
+      location.sheet = value.location.sheet
+    }
+    if (typeof value.location.rowStart === 'number' && Number.isInteger(value.location.rowStart)) {
+      location.rowStart = value.location.rowStart
+    }
+    if (typeof value.location.rowEnd === 'number' && Number.isInteger(value.location.rowEnd)) {
+      location.rowEnd = value.location.rowEnd
+    }
+    if (location.page != null || location.sheet || location.rowStart != null || location.rowEnd != null) {
+      citation.location = location
+    }
+  }
+  return citation
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

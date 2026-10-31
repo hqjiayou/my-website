@@ -73,6 +73,9 @@ class AdminAiKnowledgeServiceImplTest {
     @Mock
     private com.mywebsite.admin.mapper.AdminAiKnowledgeBaseLinkMapper linkMapper;
 
+    @Mock
+    private com.mywebsite.infra.service.ObjectStorageService objectStorageService;
+
     private AdminAiKnowledgeServiceImpl service;
 
     @BeforeEach
@@ -82,7 +85,7 @@ class AdminAiKnowledgeServiceImplTest {
                 adminAgentMapper,
                 agentClient,
                 modelEntryService,
-                org.mockito.Mockito.mock(com.mywebsite.infra.service.ObjectStorageService.class),
+                objectStorageService,
                 new com.mywebsite.infra.properties.StorageProperties(),
                 baseMapper,
                 linkMapper);
@@ -656,6 +659,63 @@ class AdminAiKnowledgeServiceImplTest {
         assertThat(captor.getValue().embeddingClasses())
                 .extracting(AgentEmbeddingClass::embeddingSpec)
                 .containsExactly("openai:embed-a", "openai:embed-b");
+    }
+
+    @Test
+    void reindexOmitsSegmentsWhenStoredContentDiffersFromOriginal() throws Exception {
+        byte[] bytes = workbookBytes("Hours", 1, "Day", "9:00-18:00");
+        AdminAiKnowledgeDocumentEntity doc = spreadsheetDocument("edited by hand");
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(objectStorageService.get("bucket", "key")).thenReturn(bytes);
+
+        service.reindexDocument(1L, 11L);
+
+        ArgumentCaptor<AgentRetrievalDocument> captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getValue().segments()).isNull();
+        assertThat(captor.getValue().content()).isEqualTo("edited by hand");
+        assertThat(captor.getValue().content()).doesNotContain("rowStart");
+    }
+
+    @Test
+    void reindexAttachesRowSegmentsWhenStoredContentMatchesOriginal() throws Exception {
+        byte[] bytes = workbookBytes("Hours", 4, "Day", "9:00-18:00");
+        String stored = com.mywebsite.infra.knowledge.KnowledgeContentConverter.toStoredContent("xlsx", bytes);
+        AdminAiKnowledgeDocumentEntity doc = spreadsheetDocument(stored);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(objectStorageService.get("bucket", "key")).thenReturn(bytes);
+
+        service.reindexDocument(1L, 11L);
+
+        ArgumentCaptor<AgentRetrievalDocument> captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getValue().content()).doesNotContain("rowStart");
+        assertThat(captor.getValue().segments()).hasSize(1);
+        assertThat(captor.getValue().segments().getFirst().sheet()).isEqualTo("Hours");
+        assertThat(captor.getValue().segments().getFirst().rowStart()).isEqualTo(5);
+        assertThat(captor.getValue().segments().getFirst().rowEnd()).isEqualTo(5);
+    }
+
+    private static AdminAiKnowledgeDocumentEntity spreadsheetDocument(String content) {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setContent(content);
+        doc.setSourceFormat("xlsx");
+        doc.setStorageBucket("bucket");
+        doc.setStorageKey("key");
+        return doc;
+    }
+
+    private static byte[] workbookBytes(String sheet, int rowIndex, String a, String b) throws Exception {
+        try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+            var row = workbook.createSheet(sheet).createRow(rowIndex);
+            row.createCell(0).setCellValue(a);
+            row.createCell(1).setCellValue(b);
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            workbook.write(out);
+            return out.toByteArray();
+        }
     }
 
     private static AdminAiKnowledgeDocumentEntity document(long agentId, long id, String status) {

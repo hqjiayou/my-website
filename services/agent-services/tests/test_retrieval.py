@@ -1330,9 +1330,9 @@ _CITATION_HITS = [
 
 # 默认门槛 0.35：0.4 留下，0.3 及以下不进 citations。此组用例关掉相对裁剪，只验绝对门槛与上限。
 _EXPECTED_CITATIONS = [
-    {"sourceId": "s", "chunkIndex": 0, "score": 0.95},
-    {"sourceId": "b", "chunkIndex": 1, "score": 0.5},
-    {"sourceId": "c", "chunkIndex": 0, "score": 0.4},
+    {"cite": 1, "sourceId": "s", "chunkIndex": 0, "score": 0.95},
+    {"cite": 2, "sourceId": "b", "chunkIndex": 1, "score": 0.5},
+    {"cite": 3, "sourceId": "c", "chunkIndex": 0, "score": 0.4},
 ]
 
 

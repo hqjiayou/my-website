@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Search, X } from 'lucide-react'
 
 import { agentAiApi } from '@/api/agentAiApi'
@@ -18,6 +18,9 @@ import { errorMessage } from '@/utils/http/apiError'
  */
 export function KnowledgePage() {
   const site = useMemo(() => resolvePortalAgentId(useAuthStore.getState().site?.agentId), [])
+  const [searchParams] = useSearchParams()
+  const requestedDocumentId = Number(searchParams.get('doc'))
+  const requestedHeading = searchParams.get('heading') ?? ''
   const [documents, setDocuments] = useState<AgentKnowledgeDocumentListItem[] | null>(null)
   const [documentsError, setDocumentsError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -40,6 +43,39 @@ export function KnowledgePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site.ok])
+
+  useEffect(() => {
+    if (!site.ok || !Number.isInteger(requestedDocumentId) || requestedDocumentId <= 0) return
+    if (!documents?.some((document) => document.id === requestedDocumentId)) return
+    setOpenDocumentId(requestedDocumentId)
+    if (details[requestedDocumentId] !== undefined) return
+    let cancelled = false
+    setDetails((current) => ({ ...current, [requestedDocumentId]: 'loading' }))
+    agentAiApi
+      .getKnowledgeDocument(site.agentId, requestedDocumentId)
+      .then((detail) => {
+        if (!cancelled) setDetails((current) => ({ ...current, [requestedDocumentId]: detail }))
+      })
+      .catch(() => {
+        if (!cancelled) setDetails((current) => ({ ...current, [requestedDocumentId]: 'error' }))
+      })
+    return () => {
+      cancelled = true
+    }
+    // 只在深鏈或文件列表變化時展開；details 由本次請求寫入。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documents, requestedDocumentId, site.ok])
+
+  useEffect(() => {
+    if (!requestedHeading || !Number.isInteger(requestedDocumentId)) return
+    const detail = details[requestedDocumentId]
+    if (detail === undefined || detail === 'loading' || detail === 'error') return
+    const root = document.getElementById(`kb-doc-${requestedDocumentId}`)
+    const heading = [...(root?.querySelectorAll('h1, h2, h3, h4') ?? [])].find(
+      (node) => node.textContent?.trim() === requestedHeading,
+    )
+    heading?.scrollIntoView({ block: 'start' })
+  }, [details, requestedDocumentId, requestedHeading])
 
   async function toggleDocument(document: AgentKnowledgeDocumentListItem) {
     if (!site.ok) return
@@ -158,7 +194,9 @@ export function KnowledgePage() {
                         ) : detail === 'error' ? (
                           <p className="text-sm text-danger">文件載入失敗，請稍後重試</p>
                         ) : (
-                          <MarkdownText>{detail.content}</MarkdownText>
+                          <div id={`kb-doc-${document.id}`}>
+                            <MarkdownText>{detail.content}</MarkdownText>
+                          </div>
                         )}
                       </div>
                     ) : null}

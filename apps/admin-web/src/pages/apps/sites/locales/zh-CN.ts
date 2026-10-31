@@ -552,6 +552,7 @@ export default {
       modelActual: '实际作答：{{model}}',
       modelRequested: '请求主用：{{model}}（已由备援接手）',
       mode: '模式：{{mode}}',
+      citation: '引用 {{n}} · {{title}}{{location}}',
     },
     runtime: {
       hint: 'agent-services 当前生效的平台配置（全平台共享，只读；不显示凭证）。',

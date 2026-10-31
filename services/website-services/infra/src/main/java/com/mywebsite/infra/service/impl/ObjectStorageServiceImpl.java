@@ -1,6 +1,7 @@
 package com.mywebsite.infra.service.impl;
 
 import com.mywebsite.infra.service.ObjectStorageService;
+import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.Http;
 import io.minio.MinioClient;
@@ -36,6 +37,18 @@ public class ObjectStorageServiceImpl implements ObjectStorageService {
                     .build());
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to put object: " + objectKey, ex);
+        }
+    }
+
+    @Override
+    public byte[] get(String bucket, String objectKey) {
+        Assert.hasText(bucket, "bucket must not be blank");
+        Assert.hasText(objectKey, "objectKey must not be blank");
+        try (InputStream in = minioClient.getObject(
+                GetObjectArgs.builder().bucket(bucket).object(objectKey).build())) {
+            return in.readAllBytes();
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to get object: " + objectKey, ex);
         }
     }
 

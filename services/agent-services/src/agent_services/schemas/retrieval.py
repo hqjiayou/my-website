@@ -15,6 +15,18 @@ MAX_CONTENT_LENGTH = 3_000_000
 MAX_SEARCH_TOP_K = 20
 
 
+class RetrievalSegment(BaseModel):
+    """可选索引入库段。缺省时 Python 仍按 content 整篇切块。"""
+
+    text: str = Field(max_length=MAX_CONTENT_LENGTH)
+    page: int | None = None
+    sheet: str | None = Field(default=None, max_length=256)
+    row_start: int | None = Field(default=None, alias="rowStart")
+    row_end: int | None = Field(default=None, alias="rowEnd")
+
+    model_config = {"populate_by_name": True}
+
+
 class RetrievalUpsertRequest(BaseModel):
     agent_id: str = Field(alias="agentId", max_length=MAX_SITE_ID_LENGTH)
     source_id: str = Field(alias="sourceId", max_length=MAX_SOURCE_ID_LENGTH)
@@ -26,6 +38,7 @@ class RetrievalUpsertRequest(BaseModel):
     embedding_classes: list[EmbeddingClassCredentials] | None = Field(
         default=None, alias="embeddingClasses"
     )
+    segments: list[RetrievalSegment] | None = None
 
     model_config = {"populate_by_name": True}
 

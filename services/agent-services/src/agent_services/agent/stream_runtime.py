@@ -29,6 +29,7 @@ from agent_services.agent.runtime import (
     MAX_TOOL_TRACE,
     RunBudget,
     UserPrompt,
+    _apply_search_grounding,
     budget_exceeded_message,
     build_agent,
     build_run_kwargs,
@@ -187,13 +188,32 @@ async def stream_chat_events(
         yield _error_event("EXTERNAL_DEPENDENCY_BLOCKED", "AI provider returned an empty response.")
         return
 
+    identity = model_identity_line(model)
+    base_prompt = f"{system_prompt}\n\n{identity}" if identity else system_prompt
+    grounded_reply, clear_citations, grounded_usage, grounded_tools = await _apply_search_grounding(
+        model=model,
+        message=message,
+        reply=output.reply,
+        locale=locale,
+        collector=knowledge_collector,
+        budget=resolved_budget,
+        usage=output.usage,
+        tools=list(output.tools),
+        base_prompt=base_prompt,
+        user_prompt=user_prompt,
+        toolsets=toolsets,
+        prompt_profile=prompt_profile,
+        history=list(harness.memory),
+        needs_mcp_context=execution_needs_agent_context(toolsets or []),
+    )
+
     # 与同步 chat 一样恒带 retrievalDegraded：预取降级或知识搜索工具降级任一成立即为真
     tool_degraded = knowledge_collector.degraded if knowledge_collector is not None else False
     done_data: dict[str, object] = {
-        "reply": output.reply,
+        "reply": grounded_reply,
         "providerStatus": "LIVE",
-        "usage": output.usage,
-        "tools": output.tools,
+        "usage": grounded_usage,
+        "tools": grounded_tools,
         "retrievalDegraded": retrieval_degraded or tool_degraded,
     }
     if output.model:
@@ -206,11 +226,13 @@ async def stream_chat_events(
         snapshot = todo_store.snapshot()
         if snapshot.items:
             done_data["todos"] = snapshot.to_api()
-    citations = reply_citations(
-        retrieval_context,
-        retrieval_chunks,
-        knowledge_collector.chunks if knowledge_collector is not None else None,
-    )
+    citations = None
+    if not clear_citations:
+        citations = reply_citations(
+            retrieval_context,
+            retrieval_chunks,
+            knowledge_collector.chunks if knowledge_collector is not None else None,
+        )
     if citations:
         done_data["citations"] = citations
     # 搜索摘要随 DONE 落库（Java agentMeta），供历史回放显示过程摘要。
@@ -221,7 +243,7 @@ async def stream_chat_events(
         extracted = await extract_memories(
             model,
             user_message=message,
-            assistant_reply=output.reply,
+            assistant_reply=grounded_reply,
             existing=memories,
         )
         if extracted:
