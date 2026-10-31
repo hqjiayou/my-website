@@ -26,10 +26,48 @@ from agent_services.retrieval.embeddings import (
     create_embedding_client,
     embedding_class_name,
 )
-from agent_services.retrieval.store import RetrievalStore, RetrievedChunk
+from agent_services.retrieval.store import ChunkLocation, RetrievalStore, RetrievedChunk
 from agent_services.schemas.chat import ModelSelection
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class IndexSegment:
+    """索引入库的一段正文及其位置。不带 segments 时不使用。"""
+
+    text: str
+    page: int | None = None
+    sheet: str | None = None
+    row_start: int | None = None
+    row_end: int | None = None
+
+
+def _chunks_for_index(
+    content: str, segments: list[IndexSegment] | None
+) -> tuple[list[str], list[ChunkLocation | None] | None]:
+    """无 segments 时切块与现行 split_text(content) 相同，位置为 None。
+
+    有 segments 时每段单独 split_text，位置抄到该段切出的每个块上，不跨段合并。
+    """
+    if segments is None:
+        return split_text(content), None
+    chunks: list[str] = []
+    locations: list[ChunkLocation | None] = []
+    for segment in segments:
+        location = ChunkLocation(
+            page=segment.page,
+            sheet=segment.sheet,
+            row_start=segment.row_start,
+            row_end=segment.row_end,
+        )
+        if not location.to_meta():
+            location = None
+        for piece in split_text(segment.text):
+            chunks.append(piece)
+            locations.append(location)
+    return chunks, locations
+
 
 # 只用来量向量长度，不写入索引。
 _DIMENSION_PROBE_TEXT = "dimension probe"
@@ -234,14 +272,9 @@ def _ranked_hits(
         key = (hit.source_id, hit.chunk_index)
         previous = chosen.get(key)
         if previous is None:
-            chosen[key] = RetrievedChunk(hit.source_id, hit.chunk_index, hit.content, coverage)
+            chosen[key] = hit.with_score(coverage)
             continue
-        chosen[key] = RetrievedChunk(
-            previous.source_id,
-            previous.chunk_index,
-            previous.content,
-            max(previous.score, coverage),
-        )
+        chosen[key] = previous.with_score(max(previous.score, coverage))
     return sorted(chosen.values(), key=lambda item: (-item.score, item.source_id, item.chunk_index))
 
 
@@ -261,10 +294,10 @@ def merge_by_rank(paths: list[list[RetrievedChunk]]) -> list[RetrievedChunk]:
             previous = best_rank.get(key)
             if previous is None or rank < previous:
                 best_rank[key] = rank
-                content = chunk.content
+                base = chunk
             else:
-                content = chosen[key].content
-            chosen[key] = RetrievedChunk(chunk.source_id, chunk.chunk_index, content, totals[key])
+                base = chosen[key]
+            chosen[key] = base.with_score(totals[key])
     return sorted(chosen.values(), key=lambda item: (-item.score, item.source_id, item.chunk_index))
 
 
@@ -277,7 +310,7 @@ def lexical_rank_path(
         coverage = code_coverage(hit.content, tokens)
         if coverage <= 0:
             continue
-        ranked.append(RetrievedChunk(hit.source_id, hit.chunk_index, hit.content, coverage))
+        ranked.append(hit.with_score(coverage))
     ranked.sort(key=lambda item: (-item.score, item.source_id, item.chunk_index))
     return ranked
 
@@ -473,18 +506,22 @@ class RetrievalService:
         title: str,
         chunks: list[str],
         item: EmbeddingClass,
+        locations: list[ChunkLocation | None] | None = None,
     ) -> int:
         if item.client is None:
             raise RuntimeError("Embedding client is not configured.")
         embeddings = await item.client.embed_documents(chunks)
-        return await self._store.upsert_document(
-            agent_id=agent_id,
-            source_id=source_id,
-            title=title,
-            chunks=chunks,
-            embeddings=embeddings,
-            embedding_model=item.name,
-        )
+        stored = {
+            "agent_id": agent_id,
+            "source_id": source_id,
+            "title": title,
+            "chunks": chunks,
+            "embeddings": embeddings,
+            "embedding_model": item.name,
+        }
+        if locations is not None:
+            stored["locations"] = locations
+        return await self._store.upsert_document(**stored)
 
     async def upsert_document(
         self,
@@ -496,8 +533,9 @@ class RetrievalService:
         embedder: EmbeddingClient | None = None,
         embedding_model: str | None = None,
         embedding_classes: list[EmbeddingClass] | None = None,
+        segments: list[IndexSegment] | None = None,
     ) -> int:
-        chunks = split_text(content)
+        chunks, locations = _chunks_for_index(content, segments)
         if not chunks:
             await self._store.delete_document(agent_id=agent_id, source_id=source_id)
             return 0
@@ -513,6 +551,7 @@ class RetrievalService:
                 title=title,
                 chunks=chunks,
                 item=classes[0],
+                locations=locations,
             )
         count = 0
         failures = 0
@@ -524,6 +563,7 @@ class RetrievalService:
                     title=title,
                     chunks=chunks,
                     item=item,
+                    locations=locations,
                 )
             except Exception:
                 failures += 1
