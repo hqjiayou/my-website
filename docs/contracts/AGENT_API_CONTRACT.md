@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: CONTRACT
 status: CURRENT
-last_verified: 2026-10-26
+last_verified: 2026-10-31
 ```
 
 前缀：`/api/agent/**`（业务）+ `/api/auth/agent/**`（认证）。
@@ -62,3 +62,14 @@ Audience 必须为 SITE；Admin token 不可调用 Site 受保护资源（反之
 | GET | `/api/agent/public/{siteCode}` | 匿名。站点摘要：siteCode、siteName、siteType、description |
 | GET | `/api/agent/public/{siteCode}/contents` | 匿名。只回 PUBLISHED 列表：id、type、title、coverMediaId、publishedAt（不含 body） |
 | GET | `/api/agent/public/{siteCode}/contents/{contentId}` | 匿名。只回该站 PUBLISHED 详情（含 body） |
+
+### 派生索引 `PUT /internal/v1/retrieval/documents`
+
+Java 在正文与原件重抽一致时才带下列可选字段。不一致、读不到原件或抽取失败时字段缺席。缺席 `tables` 不改变切块，并清掉该 `sourceId` 已入库的结构化行。
+
+| 字段 | 说明 |
+|------|------|
+| `segments` | 可选。位置段：`text`，以及 `page` 或 `sheet` + `rowStart`/`rowEnd`。缺省时仍按 `content` 整篇切块 |
+| `tables` | 可选。结构化表：`sheet`、`headerRow`、`headers`、`rows[{rowNumber, cells}]`、`truncated`。`rowNumber` 是工作表原始行号；表头行不在 `rows` 里。单元格为原始文本。仅写入 Python `agent_retrieval`，不进 Java 主库 |
+
+管理端知识库文档列表与详情另有 `unevaluatedFormulaCount`（未求值公式格数量，0 表示没有）。大于 0 时正文里这些格子为空，界面标记「含未计算的公式，数值可能缺失」。该计数不阻断索引。
