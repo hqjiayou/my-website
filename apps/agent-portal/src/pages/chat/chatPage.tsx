@@ -18,6 +18,16 @@ import { useKeyboardInset } from './useKeyboardInset'
 import { useSpeechInput } from './useSpeechInput'
 
 const MAX_MESSAGE_CHARS = 16_000
+
+/** 每次請求現取瀏覽器時區，不緩存。取不到就不帶，由服務端回退 UTC。 */
+function sessionTimeZoneField(): { timezone: string } | Record<string, never> {
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone?.trim()
+    return timezone ? { timezone } : {}
+  } catch {
+    return {}
+  }
+}
 const MAX_IMAGES = 3
 const MAX_IMAGE_EDGE = 1600
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
@@ -835,6 +845,7 @@ export function ChatPage() {
         {
           message: trimmed,
           mode: effectiveMode,
+          ...sessionTimeZoneField(),
           ...(entryId ? { modelEntryId: Number(entryId) } : {}),
           ...(conversationId ? { conversationId } : {}),
           ...(images.length
