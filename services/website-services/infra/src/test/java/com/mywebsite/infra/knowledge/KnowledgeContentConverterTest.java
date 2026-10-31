@@ -225,6 +225,65 @@ class KnowledgeContentConverterTest {
         assertThat(markdown).contains("# Chapter One").contains("Hello EPUB.");
     }
 
+    @Test
+    void unevaluatedFormulaCellIsBlankAndCounted() throws IOException {
+        byte[] bytes;
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            var row = workbook.createSheet("Hours").createRow(0);
+            row.createCell(0).setCellValue("Label");
+            row.createCell(1).setCellFormula("1+1");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            bytes = out.toByteArray();
+        }
+        var extraction = KnowledgeContentConverter.readSpreadsheet(bytes);
+        assertThat(extraction.unevaluatedFormulaCount()).isGreaterThanOrEqualTo(1);
+        assertThat(extraction.markdown()).contains("Label").doesNotContain("1+1").doesNotContain("SUM");
+    }
+
+    @Test
+    void cachedFormulaValueIsKeptWithoutWarning() throws IOException {
+        byte[] bytes;
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            var sheet = workbook.createSheet("Hours");
+            var row = sheet.createRow(0);
+            row.createCell(0).setCellValue("Label");
+            var formula = row.createCell(1);
+            formula.setCellFormula("1+1");
+            workbook.getCreationHelper().createFormulaEvaluator().evaluateFormulaCell(formula);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            bytes = out.toByteArray();
+        }
+        var extraction = KnowledgeContentConverter.readSpreadsheet(bytes);
+        assertThat(extraction.unevaluatedFormulaCount()).isZero();
+        assertThat(extraction.markdown()).contains("Label").contains("2").doesNotContain("1+1");
+    }
+
+    @Test
+    void spreadsheetTablesKeepOriginalRowNumbersAcrossBlankRows() throws IOException {
+        byte[] bytes;
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            var sheet = workbook.createSheet("Hours");
+            var header = sheet.createRow(0);
+            header.createCell(0).setCellValue("Day");
+            header.createCell(1).setCellValue("Hours");
+            sheet.createRow(1);
+            var data = sheet.createRow(4);
+            data.createCell(0).setCellValue("Mon");
+            data.createCell(1).setCellValue("8:00");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            bytes = out.toByteArray();
+        }
+        var table = KnowledgeContentConverter.readSpreadsheet(bytes).tables().getFirst();
+        assertThat(table.headerRow()).isEqualTo(1);
+        assertThat(table.headers()).containsExactly("Day", "Hours");
+        assertThat(table.rows()).hasSize(1);
+        assertThat(table.rows().getFirst().rowNumber()).isEqualTo(5);
+        assertThat(table.rows().getFirst().cells()).contains("8:00");
+    }
+
     private static byte[] zipOf(String name, String content) throws IOException {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(buffer)) {

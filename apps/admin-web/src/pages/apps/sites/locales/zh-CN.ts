@@ -533,6 +533,7 @@ export default {
         PENDING: '待索引',
       },
       indexStale: '索引模型已变更',
+      unevaluatedFormulas: '含未计算的公式，数值可能缺失',
     },
     conversations: {
       empty: '暂无会话',

@@ -32,6 +32,8 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     private String storageKey;
     private Long fileSizeBytes;
     private String sha256;
+    /** 未求值公式格数量。0 表示没有。不阻断索引。 */
+    private Integer unevaluatedFormulaCount;
 
     public Long getBaseId() {
         return baseId;
@@ -151,5 +153,13 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public void setSha256(String sha256) {
         this.sha256 = sha256;
+    }
+
+    public Integer getUnevaluatedFormulaCount() {
+        return unevaluatedFormulaCount;
+    }
+
+    public void setUnevaluatedFormulaCount(Integer unevaluatedFormulaCount) {
+        this.unevaluatedFormulaCount = unevaluatedFormulaCount;
     }
 }

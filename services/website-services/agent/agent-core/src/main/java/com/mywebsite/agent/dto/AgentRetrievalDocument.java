@@ -14,7 +14,21 @@ public record AgentRetrievalDocument(
         String apiKey,
         String baseUrl,
         List<AgentEmbeddingClass> embeddingClasses,
-        List<AgentRetrievalSegment> segments) {
+        List<AgentRetrievalSegment> segments,
+        List<AgentRetrievalTable> tables) {
+
+    public AgentRetrievalDocument(
+            String agentId,
+            String sourceId,
+            String title,
+            String content,
+            String embeddingSpec,
+            String apiKey,
+            String baseUrl,
+            List<AgentEmbeddingClass> embeddingClasses,
+            List<AgentRetrievalSegment> segments) {
+        this(agentId, sourceId, title, content, embeddingSpec, apiKey, baseUrl, embeddingClasses, segments, null);
+    }
 
     public AgentRetrievalDocument(
             String agentId,
@@ -25,7 +39,7 @@ public record AgentRetrievalDocument(
             String apiKey,
             String baseUrl,
             List<AgentEmbeddingClass> embeddingClasses) {
-        this(agentId, sourceId, title, content, embeddingSpec, apiKey, baseUrl, embeddingClasses, null);
+        this(agentId, sourceId, title, content, embeddingSpec, apiKey, baseUrl, embeddingClasses, null, null);
     }
 
     public AgentRetrievalDocument(

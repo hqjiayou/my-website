@@ -27,7 +27,8 @@ public final class AdminAiKnowledgeDtos {
             boolean hasOriginal,
             Integer version,
             OffsetDateTime createdAt,
-            OffsetDateTime updatedAt) {}
+            OffsetDateTime updatedAt,
+            int unevaluatedFormulaCount) {}
 
     public record AdminAiKnowledgeDetailDto(
             Long id,
@@ -48,7 +49,8 @@ public final class AdminAiKnowledgeDtos {
             boolean hasOriginal,
             Integer version,
             OffsetDateTime createdAt,
-            OffsetDateTime updatedAt) {}
+            OffsetDateTime updatedAt,
+            int unevaluatedFormulaCount) {}
 
     /** 上传元信息（原档留存与去重）：bytes 为原始文件内容，sha256 为其十六进制指纹。 */
     public record AdminAiKnowledgeUploadMeta(

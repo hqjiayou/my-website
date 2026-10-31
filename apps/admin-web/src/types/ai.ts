@@ -173,6 +173,8 @@ export interface AiKnowledgeListItem {
   version: number
   createdAt: string
   updatedAt: string
+  /** 未求值公式格数量。大于 0 时正文里这些格子是空的。 */
+  unevaluatedFormulaCount?: number
 }
 
 export interface AiKnowledgeAgentStat {

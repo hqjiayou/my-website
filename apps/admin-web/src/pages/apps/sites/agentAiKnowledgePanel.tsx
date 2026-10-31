@@ -34,6 +34,7 @@ interface EditorState {
   title: string
   content: string
   status: (typeof AI_KB_STATUS)[keyof typeof AI_KB_STATUS]
+  unevaluatedFormulaCount?: number
 }
 
 interface UploadDialogState {
@@ -288,6 +289,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
       title: detail.title,
       content: detail.content,
       status: detail.status,
+      unevaluatedFormulaCount: detail.unevaluatedFormulaCount,
     })
   }, [agentId])
 
@@ -336,6 +338,11 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             {item.indexStale ? (
               <span className="ml-2 rounded bg-warning/[0.12] px-1.5 py-0.5 text-xs font-medium text-warning-emphasis">
                 {t('aiWorkspace.knowledge.indexStale')}
+              </span>
+            ) : null}
+            {(item.unevaluatedFormulaCount ?? 0) > 0 ? (
+              <span className="ml-2 rounded bg-warning/[0.12] px-1.5 py-0.5 text-xs font-medium text-warning-emphasis">
+                {t('aiWorkspace.knowledge.unevaluatedFormulas')}
               </span>
             ) : null}
           </span>
@@ -580,6 +587,11 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             else updateMutation.mutate()
           }}
         >
+          {(editor.unevaluatedFormulaCount ?? 0) > 0 ? (
+            <p className="rounded-lg bg-warning/[0.12] px-3 py-2 text-sm text-warning-emphasis">
+              {t('aiWorkspace.knowledge.unevaluatedFormulas')}
+            </p>
+          ) : null}
           <input
             className="w-full rounded-lg border border-border px-3 py-2 text-sm"
             value={editor.title}

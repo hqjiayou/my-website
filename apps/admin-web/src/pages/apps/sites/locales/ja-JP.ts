@@ -536,6 +536,7 @@ export default {
         PENDING: '未インデックス',
       },
       indexStale: 'インデックスモデルが変更されました',
+      unevaluatedFormulas: '未計算の数式があり、数値が欠けている可能性があります',
     },
     conversations: {
       empty: '会話がありません',

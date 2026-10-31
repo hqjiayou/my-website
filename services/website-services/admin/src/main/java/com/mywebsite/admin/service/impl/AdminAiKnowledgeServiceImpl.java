@@ -42,6 +42,8 @@ import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.agent.dto.AgentRetrievalSegment;
+import com.mywebsite.agent.dto.AgentRetrievalTable;
+import com.mywebsite.agent.dto.AgentRetrievalTableRow;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.page.PageResult;
@@ -162,6 +164,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         entity.setTitle(request.title().trim());
         entity.setContent(request.content());
         entity.setStatus(AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        entity.setUnevaluatedFormulaCount(0);
         knowledgeMapper.insert(entity);
 
         AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(agentId, entity.getId());
@@ -187,6 +190,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         entity.setBaseId(resolveWritableBaseId(agentId, request.baseId()));
         entity.setTitle(request.title().trim());
         entity.setContent(storedUploadContent(request.content(), meta));
+        entity.setUnevaluatedFormulaCount(unevaluatedFormulaCount(meta));
         entity.setStatus(AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         entity.setSourceFormat(meta.sourceFormat());
         entity.setOriginalFilename(meta.originalFilename());
@@ -882,13 +886,13 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     private void syncDerivedIndex(
             AdminAiKnowledgeDocumentEntity entity, boolean allowFillMissing, byte[] originalBytes) {
         List<Long> targets = partitionAgentIds(entity);
-        List<AgentRetrievalSegment> segments = segmentsMatchingContent(entity, originalBytes);
+        DerivedIndexParts parts = derivedIndexParts(entity, originalBytes);
         if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
             List<AgentModelSelection> ownerClasses = registeredClasses(entity.getAgentId());
             List<AgentModelSelection> toWrite = classesToWrite(entity, ownerClasses, allowFillMissing);
             RuntimeException ownerFailure = null;
             try {
-                upsertDerivedIndexForSite(entity, entity.getAgentId(), toWrite, segments);
+                upsertDerivedIndexForSite(entity, entity.getAgentId(), toWrite, parts);
             } catch (RuntimeException ex) {
                 ownerFailure = ex;
             }
@@ -897,7 +901,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     continue;
                 }
                 try {
-                    upsertDerivedIndexForSite(entity, target, segments);
+                    upsertDerivedIndexForSite(entity, target, parts);
                 } catch (RuntimeException ex) {
                     log.warn(
                             "KB fan-out sync failed (ownerAgentId={}, targetAgentId={}, documentId={});"
@@ -938,25 +942,27 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
     /** 以目标站点已登记的嵌入类 upsert。没有则不带凭证，由进程嵌入模型写入。不跟随对话主用入口。 */
     private void upsertDerivedIndexForSite(
-            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, List<AgentRetrievalSegment> segments) {
-        upsertDerivedIndexForSite(entity, targetAgentId, registeredClasses(targetAgentId), segments);
+            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, DerivedIndexParts parts) {
+        upsertDerivedIndexForSite(entity, targetAgentId, registeredClasses(targetAgentId), parts);
     }
 
     private void upsertDerivedIndexForSite(
             AdminAiKnowledgeDocumentEntity entity,
             long targetAgentId,
             List<AgentModelSelection> classes,
-            List<AgentRetrievalSegment> segments) {
-        agentClient.upsertRetrievalDocument(retrievalDocument(entity, targetAgentId, classes, segments));
+            DerivedIndexParts parts) {
+        agentClient.upsertRetrievalDocument(retrievalDocument(entity, targetAgentId, classes, parts));
     }
 
     private static AgentRetrievalDocument retrievalDocument(
             AdminAiKnowledgeDocumentEntity entity,
             long targetAgentId,
             List<AgentModelSelection> classes,
-            List<AgentRetrievalSegment> segments) {
+            DerivedIndexParts parts) {
         List<AgentModelSelection> registered = classes == null ? List.of() : classes;
         AgentModelSelection first = registered.isEmpty() ? null : registered.get(0);
+        List<AgentRetrievalSegment> segments = parts == null ? null : parts.segments();
+        List<AgentRetrievalTable> tables = parts == null ? null : parts.tables();
         return new AgentRetrievalDocument(
                 String.valueOf(targetAgentId),
                 sourceId(entity.getId()),
@@ -966,11 +972,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 first == null ? null : first.apiKey(),
                 first == null ? null : first.baseUrl(),
                 AgentEmbeddingClassUtils.wire(registered),
-                segments == null || segments.isEmpty() ? null : segments);
+                segments == null || segments.isEmpty() ? null : segments,
+                tables == null || tables.isEmpty() ? null : tables);
     }
 
     private void upsertDerivedIndexForSite(AdminAiKnowledgeDocumentEntity entity, long targetAgentId) {
-        upsertDerivedIndexForSite(entity, targetAgentId, segmentsMatchingContent(entity, null));
+        upsertDerivedIndexForSite(entity, targetAgentId, derivedIndexParts(entity, null));
     }
 
     private List<AgentModelSelection> registeredClasses(long agentId) {
@@ -1057,28 +1064,30 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
     private void upsertDerivedIndex(AdminAiKnowledgeDocumentEntity entity, List<AgentModelSelection> classes) {
         agentClient.upsertRetrievalDocument(retrievalDocument(
-                entity, entity.getAgentId(), classes, segmentsMatchingContent(entity, null)));
+                entity, entity.getAgentId(), classes, derivedIndexParts(entity, null)));
     }
 
     /**
-     * 只有正文与原件重抽结果一致时才带位置段。手改过的正文、读不到原件、或抽取失败时不带，
-     * 也不改 index 状态，避免把未改动文档判成需要全量重嵌。
+     * 只有正文与原件重抽结果一致时才带位置段和结构化表。手改过的正文、读不到原件、或抽取失败时都不带，
+     * 也不改 index 状态，避免把未改动文档判成需要全量重嵌。tables 不改写 entity.content。
      */
-    private List<AgentRetrievalSegment> segmentsMatchingContent(
-            AdminAiKnowledgeDocumentEntity entity, byte[] originalBytes) {
+    private record DerivedIndexParts(
+            List<AgentRetrievalSegment> segments, List<AgentRetrievalTable> tables) {}
+
+    private DerivedIndexParts derivedIndexParts(AdminAiKnowledgeDocumentEntity entity, byte[] originalBytes) {
         String format = entity.getSourceFormat();
         if (!StringUtils.hasText(format) || !StringUtils.hasText(entity.getContent())) {
-            return null;
+            return new DerivedIndexParts(null, null);
         }
         byte[] bytes = originalBytes != null ? originalBytes : readOriginal(entity);
         if (bytes == null || bytes.length == 0) {
-            return null;
+            return new DerivedIndexParts(null, null);
         }
         try {
             if ("pdf".equals(format)) {
                 List<KnowledgeTextExtractor.PageText> pages = KnowledgeTextExtractor.pages(bytes);
                 if (!KnowledgeTextExtractor.pagedMarkdown(pages).equals(entity.getContent())) {
-                    return null;
+                    return new DerivedIndexParts(null, null);
                 }
                 List<AgentRetrievalSegment> segments = new ArrayList<>();
                 for (KnowledgeTextExtractor.PageText page : pages) {
@@ -1089,19 +1098,21 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     segments.add(new AgentRetrievalSegment(
                             "## 第 " + page.page() + " 页\n\n" + body, page.page(), null, null, null));
                 }
-                return segments.isEmpty() ? null : List.copyOf(segments);
+                return new DerivedIndexParts(segments.isEmpty() ? null : List.copyOf(segments), null);
             }
             if ("xlsx".equals(format) || "xlsm".equals(format) || "xls".equals(format)) {
-                if (!KnowledgeContentConverter.toStoredContent(format, bytes).equals(entity.getContent())) {
-                    return null;
+                KnowledgeContentConverter.SpreadsheetExtraction extraction =
+                        KnowledgeContentConverter.readSpreadsheet(bytes);
+                if (!extraction.markdown().equals(entity.getContent())) {
+                    return new DerivedIndexParts(null, null);
                 }
                 List<AgentRetrievalSegment> segments = new ArrayList<>();
-                for (KnowledgeContentConverter.IndexSegment segment :
-                        KnowledgeContentConverter.spreadsheetSegments(bytes)) {
+                for (KnowledgeContentConverter.IndexSegment segment : extraction.segments()) {
                     segments.add(new AgentRetrievalSegment(
                             segment.text(), segment.page(), segment.sheet(), segment.rowStart(), segment.rowEnd()));
                 }
-                return segments.isEmpty() ? null : List.copyOf(segments);
+                return new DerivedIndexParts(
+                        segments.isEmpty() ? null : List.copyOf(segments), sheetTables(extraction.tables()));
             }
         } catch (RuntimeException ex) {
             log.warn(
@@ -1110,7 +1121,39 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     entity.getId(),
                     ex);
         }
-        return null;
+        return new DerivedIndexParts(null, null);
+    }
+
+    private static List<AgentRetrievalTable> sheetTables(
+            List<KnowledgeContentConverter.SheetTable> tables) {
+        if (tables == null || tables.isEmpty()) {
+            return null;
+        }
+        List<AgentRetrievalTable> out = new ArrayList<>();
+        for (KnowledgeContentConverter.SheetTable table : tables) {
+            List<AgentRetrievalTableRow> rows = new ArrayList<>();
+            for (KnowledgeContentConverter.SheetRow row : table.rows()) {
+                rows.add(new AgentRetrievalTableRow(row.rowNumber(), row.cells()));
+            }
+            out.add(new AgentRetrievalTable(
+                    table.sheet(), table.headerRow(), table.headers(), List.copyOf(rows), table.truncated()));
+        }
+        return List.copyOf(out);
+    }
+
+    private static int unevaluatedFormulaCount(AdminAiKnowledgeUploadMeta meta) {
+        if (meta == null || meta.bytes() == null || meta.bytes().length == 0) {
+            return 0;
+        }
+        String format = meta.sourceFormat();
+        if (!"xlsx".equals(format) && !"xlsm".equals(format) && !"xls".equals(format)) {
+            return 0;
+        }
+        try {
+            return KnowledgeContentConverter.unevaluatedFormulaCount(meta.bytes());
+        } catch (RuntimeException ex) {
+            return 0;
+        }
     }
 
     private byte[] readOriginal(AdminAiKnowledgeDocumentEntity entity) {
@@ -1211,7 +1254,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 StringUtils.hasText(entity.getStorageKey()),
                 entity.getVersion(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                entity.getUpdatedAt(),
+                formulaCount(entity));
     }
 
     private static AdminAiKnowledgeDetailDto toDetail(AdminAiKnowledgeDocumentEntity entity, boolean indexStale) {
@@ -1234,6 +1278,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 StringUtils.hasText(entity.getStorageKey()),
                 entity.getVersion(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                entity.getUpdatedAt(),
+                formulaCount(entity));
+    }
+
+    private static int formulaCount(AdminAiKnowledgeDocumentEntity entity) {
+        Integer count = entity.getUnevaluatedFormulaCount();
+        return count == null ? 0 : count;
     }
 }

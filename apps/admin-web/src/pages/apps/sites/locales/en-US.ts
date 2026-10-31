@@ -536,6 +536,7 @@ export default {
         PENDING: 'Pending',
       },
       indexStale: 'Index model changed',
+      unevaluatedFormulas: 'Contains formulas that were not calculated; values may be missing',
     },
     conversations: {
       empty: 'No conversations',

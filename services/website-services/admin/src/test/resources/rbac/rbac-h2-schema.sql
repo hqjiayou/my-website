@@ -318,6 +318,7 @@ CREATE TABLE IF NOT EXISTS agent_ai_knowledge_document (
     storage_key         VARCHAR(512),
     file_size_bytes     BIGINT,
     sha256              VARCHAR(64),
+    unevaluated_formula_count INTEGER NOT NULL DEFAULT 0,
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by          BIGINT,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

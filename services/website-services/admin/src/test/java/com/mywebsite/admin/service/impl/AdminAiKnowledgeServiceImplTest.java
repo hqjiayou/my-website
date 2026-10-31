@@ -674,6 +674,7 @@ class AdminAiKnowledgeServiceImplTest {
         ArgumentCaptor<AgentRetrievalDocument> captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
         verify(agentClient).upsertRetrievalDocument(captor.capture());
         assertThat(captor.getValue().segments()).isNull();
+        assertThat(captor.getValue().tables()).isNull();
         assertThat(captor.getValue().content()).isEqualTo("edited by hand");
         assertThat(captor.getValue().content()).doesNotContain("rowStart");
     }
@@ -696,6 +697,43 @@ class AdminAiKnowledgeServiceImplTest {
         assertThat(captor.getValue().segments().getFirst().sheet()).isEqualTo("Hours");
         assertThat(captor.getValue().segments().getFirst().rowStart()).isEqualTo(5);
         assertThat(captor.getValue().segments().getFirst().rowEnd()).isEqualTo(5);
+        assertThat(captor.getValue().content()).isEqualTo(stored);
+        assertThat(captor.getValue().tables()).hasSize(1);
+        assertThat(captor.getValue().tables().getFirst().headerRow()).isEqualTo(5);
+        assertThat(captor.getValue().tables().getFirst().rows()).isEmpty();
+    }
+
+    @Test
+    void reindexAttachesTablesWithOriginalRowNumbersWhenContentMatches() throws Exception {
+        byte[] bytes;
+        try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+            var sheet = workbook.createSheet("Hours");
+            var header = sheet.createRow(0);
+            header.createCell(0).setCellValue("Day");
+            header.createCell(1).setCellValue("Hours");
+            sheet.createRow(2);
+            var data = sheet.createRow(4);
+            data.createCell(0).setCellValue("Mon");
+            data.createCell(1).setCellValue("8:00");
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            workbook.write(out);
+            bytes = out.toByteArray();
+        }
+        String stored = com.mywebsite.infra.knowledge.KnowledgeContentConverter.toStoredContent("xlsx", bytes);
+        AdminAiKnowledgeDocumentEntity doc = spreadsheetDocument(stored);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(objectStorageService.get("bucket", "key")).thenReturn(bytes);
+
+        service.reindexDocument(1L, 11L);
+
+        ArgumentCaptor<AgentRetrievalDocument> captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getValue().content()).isEqualTo(stored);
+        assertThat(captor.getValue().tables()).hasSize(1);
+        assertThat(captor.getValue().tables().getFirst().headerRow()).isEqualTo(1);
+        assertThat(captor.getValue().tables().getFirst().rows()).hasSize(1);
+        assertThat(captor.getValue().tables().getFirst().rows().getFirst().rowNumber()).isEqualTo(5);
     }
 
     private static AdminAiKnowledgeDocumentEntity spreadsheetDocument(String content) {

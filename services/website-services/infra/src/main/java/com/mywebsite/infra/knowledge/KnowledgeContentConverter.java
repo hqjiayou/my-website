@@ -23,9 +23,12 @@ import org.apache.poi.hslf.usermodel.HSLFShape;
 import org.apache.poi.hslf.usermodel.HSLFSlideShow;
 import org.apache.poi.hslf.usermodel.HSLFTextShape;
 import org.apache.poi.hwpf.extractor.WordExtractor;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xssf.usermodel.XSSFCell;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
 import org.apache.poi.xslf.usermodel.XSLFShape;
 import org.apache.poi.xslf.usermodel.XSLFTable;
@@ -63,6 +66,23 @@ public final class KnowledgeContentConverter {
      * page 与 sheet 不同时使用。
      */
     public record IndexSegment(String text, Integer page, String sheet, Integer rowStart, Integer rowEnd) {}
+
+    /** 一张表的结构化行。表头行不进入 rows；rowNumber 是工作表原始行号（1 起）。 */
+    public record SheetRow(int rowNumber, List<String> cells) {}
+
+    public record SheetTable(
+            String sheet,
+            int headerRow,
+            List<String> headers,
+            List<SheetRow> rows,
+            boolean truncated) {}
+
+    /** 一次电子表格读取：正文、位置段、结构化行、未求值公式格计数。 */
+    public record SpreadsheetExtraction(
+            String markdown,
+            List<IndexSegment> segments,
+            List<SheetTable> tables,
+            int unevaluatedFormulaCount) {}
 
     private static final int MAX_TABLE_ROWS = 1000;
     private static final int MAX_TABLE_COLS = 50;
@@ -284,33 +304,7 @@ public final class KnowledgeContentConverter {
     // ---------- XLSX → Md ----------
 
     private static String workbookToMarkdown(byte[] bytes) {
-        // WorkbookFactory 按魔数自动区分 OOXML（xlsx/xlsm）与旧版二进制（xls/HSSF）
-        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(bytes))) {
-            DataFormatter formatter = new DataFormatter();
-            StringBuilder out = new StringBuilder();
-            for (var sheet : workbook) {
-                List<List<String>> rows = new ArrayList<>();
-                for (var row : sheet) {
-                    List<String> cells = new ArrayList<>();
-                    for (var cell : row) {
-                        cells.add(formatter.formatCellValue(cell));
-                    }
-                    if (cells.stream().anyMatch(value -> !value.isBlank())) {
-                        rows.add(cells);
-                    }
-                    if (rows.size() > MAX_TABLE_ROWS) {
-                        break;
-                    }
-                }
-                if (!rows.isEmpty()) {
-                    out.append("## ").append(sheet.getSheetName()).append("\n\n");
-                    out.append(renderMarkdownTable(rows)).append('\n');
-                }
-            }
-            return out.toString();
-        } catch (IOException | RuntimeException ex) {
-            throw new ExtractionException("failed to convert spreadsheet", ex);
-        }
+        return readSpreadsheet(bytes).markdown();
     }
 
     /**
@@ -318,17 +312,39 @@ public final class KnowledgeContentConverter {
      * rowStart/rowEnd 是工作表原始行号（1 起），空行不占正文但仍落在区间内。
      */
     public static List<IndexSegment> spreadsheetSegments(byte[] bytes) {
+        return readSpreadsheet(bytes).segments();
+    }
+
+    /** 未求值公式格计数。非电子表格或读失败时由调用方处理。 */
+    public static int unevaluatedFormulaCount(byte[] bytes) {
+        return readSpreadsheet(bytes).unevaluatedFormulaCount();
+    }
+
+    /**
+     * 一次读完正文、位置段和结构化行。公式格没有可用缓存结果时该格正文为空，公式原文不入库。
+     * 有缓存结果时写入缓存的显示文本，不重新计算公式。
+     */
+    public static SpreadsheetExtraction readSpreadsheet(byte[] bytes) {
+        // WorkbookFactory 按魔数自动区分 OOXML（xlsx/xlsm）与旧版二进制（xls/HSSF）
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(bytes))) {
             DataFormatter formatter = new DataFormatter();
+            int[] unevaluated = {0};
+            StringBuilder markdown = new StringBuilder();
             List<IndexSegment> segments = new ArrayList<>();
+            List<SheetTable> tables = new ArrayList<>();
             for (var sheet : workbook) {
                 List<List<String>> rows = new ArrayList<>();
+                List<Integer> excelRows = new ArrayList<>();
                 int rowStart = 0;
                 int rowEnd = 0;
+                boolean truncated = false;
                 for (var row : sheet) {
                     List<String> cells = new ArrayList<>();
                     for (var cell : row) {
-                        cells.add(formatter.formatCellValue(cell));
+                        cells.add(cellText(cell, formatter, unevaluated));
+                        if (cells.size() >= MAX_TABLE_COLS) {
+                            break;
+                        }
                     }
                     if (cells.stream().anyMatch(value -> !value.isBlank())) {
                         int excelRow = row.getRowNum() + 1;
@@ -337,20 +353,75 @@ public final class KnowledgeContentConverter {
                         }
                         rowEnd = excelRow;
                         rows.add(cells);
+                        excelRows.add(excelRow);
                     }
                     if (rows.size() > MAX_TABLE_ROWS) {
+                        truncated = true;
                         break;
                     }
                 }
-                if (!rows.isEmpty()) {
-                    String text = "## " + sheet.getSheetName() + "\n\n" + renderMarkdownTable(rows);
-                    segments.add(new IndexSegment(text, null, sheet.getSheetName(), rowStart, rowEnd));
+                if (rows.isEmpty()) {
+                    continue;
                 }
+                String text = "## " + sheet.getSheetName() + "\n\n" + renderMarkdownTable(rows);
+                markdown.append(text).append('\n');
+                segments.add(new IndexSegment(text, null, sheet.getSheetName(), rowStart, rowEnd));
+                List<String> headers = new ArrayList<>();
+                for (String header : rows.getFirst()) {
+                    headers.add(header == null ? "" : header.trim());
+                }
+                List<SheetRow> data = new ArrayList<>();
+                for (int index = 1; index < rows.size(); index++) {
+                    data.add(new SheetRow(excelRows.get(index), List.copyOf(rows.get(index))));
+                }
+                tables.add(new SheetTable(
+                        sheet.getSheetName(), excelRows.getFirst(), List.copyOf(headers), List.copyOf(data), truncated));
             }
-            return List.copyOf(segments);
+            return new SpreadsheetExtraction(
+                    markdown.toString(), List.copyOf(segments), List.copyOf(tables), unevaluated[0]);
         } catch (IOException | RuntimeException ex) {
             throw new ExtractionException("failed to convert spreadsheet", ex);
         }
+    }
+
+    /**
+     * 公式格且没有可用缓存（OOXML 无缓存值节点，或缓存类型不是数字/文本/布尔）时计一次并返回空串。
+     * 不调用 FormulaEvaluator，不计算公式。
+     */
+    private static String cellText(Cell cell, DataFormatter formatter, int[] unevaluated) {
+        if (cell == null) {
+            return "";
+        }
+        if (cell.getCellType() != CellType.FORMULA) {
+            return formatter.formatCellValue(cell);
+        }
+        if (!formulaCacheUsable(cell)) {
+            unevaluated[0]++;
+            return "";
+        }
+        CellType cached = cell.getCachedFormulaResultType();
+        if (cached == CellType.STRING) {
+            return cell.getStringCellValue();
+        }
+        if (cached == CellType.BOOLEAN) {
+            return cell.getBooleanCellValue() ? "TRUE" : "FALSE";
+        }
+        String format = cell.getCellStyle().getDataFormatString();
+        return formatter.formatRawCellContents(
+                cell.getNumericCellValue(),
+                cell.getCellStyle().getDataFormat(),
+                format == null || format.isBlank() ? "General" : format);
+    }
+
+    private static boolean formulaCacheUsable(Cell cell) {
+        if (cell instanceof XSSFCell xssf) {
+            var ct = xssf.getCTCell();
+            if (!ct.isSetV() && !ct.isSetIs()) {
+                return false;
+            }
+        }
+        CellType cached = cell.getCachedFormulaResultType();
+        return cached == CellType.NUMERIC || cached == CellType.STRING || cached == CellType.BOOLEAN;
     }
 
     // ---------- 旧版 Office 二进制（doc/ppt）：抽取器给纯文本，无结构可转 ----------
