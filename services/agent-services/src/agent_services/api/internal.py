@@ -30,6 +30,7 @@ from agent_services.agent.skills import (
     resolve_skills,
 )
 from agent_services.agent.stream_runtime import stream_chat_events
+from agent_services.agent.table_tools import structured_tables_available
 from agent_services.agent.todo_tools import todo_store_from_request
 from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.api.errors import InternalApiError, external_failure_message
@@ -44,6 +45,8 @@ from agent_services.retrieval.service import (
     DimensionChangeRequired,
     EmbeddingClass,
     IndexSegment,
+    IndexTable,
+    IndexTableRow,
     ReembedPrepared,
     RetrievalChunkLimitExceeded,
     RetrievalService,
@@ -262,7 +265,7 @@ def chat_embedding_credentials(body: ChatRequest) -> tuple[str | None, str | Non
     return selection.embedding_spec, selection.api_key, selection.base_url
 
 
-def _prepare_execution(request: Request, body: ChatRequest, agent_id: str, model: Model | None):
+async def _prepare_execution(request: Request, body: ChatRequest, agent_id: str, model: Model | None):
     settings = request.app.state.settings
     skills_dir = _skills_dir(request)
     resolution = resolve_skills(
@@ -287,17 +290,20 @@ def _prepare_execution(request: Request, body: ChatRequest, agent_id: str, model
         else _request_embedder(request, embedding_spec, embedding_api_key, embedding_base_url)
     )
     collector = KnowledgeSearchCollector()
+    retrieval = _retrieval_service_or_none(request)
+    tables_available = await structured_tables_available(retrieval, agent_id)
     toolsets = build_execution_toolsets(
         _business_settings(settings, body.business_api_base_url),
         agent_id,
         todo_store=todo_store,
         model=model,
-        retrieval=_retrieval_service_or_none(request),
+        retrieval=retrieval,
         retrieval_embedder=embedder,
         retrieval_embedding_model=None if embedding_classes else embedding_spec,
         retrieval_embedding_classes=embedding_classes,
         retrieval_model_selection=selection,
         knowledge_collector=collector,
+        tables_available=tables_available,
     )
     return resolution, todo_store, toolsets, collector
 
@@ -412,7 +418,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
             provider_status="BLOCKED",
         )
 
-    skill_resolution, todo_store, toolsets, collector = _prepare_execution(
+    skill_resolution, todo_store, toolsets, collector = await _prepare_execution(
         request, body, agent_id, handle.model
     )
 
@@ -595,7 +601,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             provider_status="BLOCKED",
         )
 
-    skill_resolution, todo_store, toolsets, collector = _prepare_execution(
+    skill_resolution, todo_store, toolsets, collector = await _prepare_execution(
         request, body, agent_id, handle.model
     )
 
@@ -680,6 +686,21 @@ async def upsert_retrieval_document(
                     row_end=item.row_end,
                 )
                 for item in body.segments
+            ],
+            tables=None
+            if body.tables is None
+            else [
+                IndexTable(
+                    sheet=item.sheet,
+                    header_row=item.header_row,
+                    headers=list(item.headers),
+                    rows=[
+                        IndexTableRow(row_number=row.row_number, cells=list(row.cells))
+                        for row in item.rows
+                    ],
+                    truncated=item.truncated,
+                )
+                for item in body.tables
             ],
         )
     except RetrievalChunkLimitExceeded as exc:

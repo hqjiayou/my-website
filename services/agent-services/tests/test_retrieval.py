@@ -619,6 +619,8 @@ class FakeStore:
         self.dimensions: int | None = None
         self.recreate_calls: list[int] = []
         self.ensure_calls: list[int] = []
+        self.sheets: dict[tuple[str, str], list[object]] = {}
+        self.sheet_replaces: list[tuple[str, str]] = []
 
     async def upsert_document(
         self, *, agent_id, source_id, title, chunks, embeddings, embedding_model: str = ""
@@ -629,6 +631,21 @@ class FakeStore:
 
     async def delete_document(self, *, agent_id, source_id) -> None:
         self.docs.pop((agent_id, source_id), None)
+        self.sheets.pop((agent_id, source_id), None)
+
+    async def replace_sheet_rows(self, *, agent_id, source_id, title, tables) -> None:
+        self.sheet_replaces.append((agent_id, source_id))
+        self.sheets[(agent_id, source_id)] = list(tables)
+
+    async def has_structured_tables(self, *, agent_id) -> bool:
+        return any(key[0] == agent_id and rows for key, rows in self.sheets.items())
+
+    async def load_structured_tables(self, *, agent_id) -> list[object]:
+        loaded: list[object] = []
+        for (sid, source_id), tables in self.sheets.items():
+            if sid == agent_id:
+                loaded.extend(tables)
+        return loaded
 
     async def search(self, *, agent_id, embedding, top_k, embedding_model: str = "") -> list[RetrievedChunk]:
         self.search_calls.append(agent_id)

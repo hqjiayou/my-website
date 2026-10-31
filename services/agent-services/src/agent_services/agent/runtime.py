@@ -312,6 +312,7 @@ def _tool_corpus(collector: KnowledgeSearchCollector | None) -> str:
         parts.append(chunk.content)
         if chunk.title:
             parts.append(chunk.title)
+    parts.extend(collector.passages)
     return "\n".join(parts)
 
 

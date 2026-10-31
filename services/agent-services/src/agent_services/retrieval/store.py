@@ -10,7 +10,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, replace
-from typing import Protocol
+from typing import Protocol, Sequence
 
 from agent_services.retrieval.embeddings import _finite_floats, embedding_class_name
 
@@ -230,6 +230,33 @@ def dimension_table_name(dimensions: int, *, legacy_dimensions: int | None) -> s
     return f"chunks_d{dimensions}"
 
 
+SHEET_ROWS_TABLE = "agent_retrieval.sheet_rows"
+
+
+def create_sheet_rows_table_sql() -> str:
+    """结构化行与 chunks 一样由 store 在首次使用时建表，不走 Flyway。"""
+    return (
+        f"CREATE TABLE IF NOT EXISTS {SHEET_ROWS_TABLE} ("
+        "agent_id TEXT NOT NULL, "
+        "source_id TEXT NOT NULL, "
+        "title TEXT NOT NULL, "
+        "sheet TEXT NOT NULL, "
+        "header_row INTEGER NOT NULL, "
+        "header JSONB NOT NULL, "
+        "row_number INTEGER NOT NULL, "
+        "cells JSONB NOT NULL, "
+        "truncated BOOLEAN NOT NULL DEFAULT FALSE, "
+        "PRIMARY KEY (agent_id, source_id, sheet, row_number))"
+    )
+
+
+def _json_text_list(value: object) -> list[str]:
+    parsed = json.loads(value) if isinstance(value, str) else value
+    if not isinstance(parsed, list):
+        return []
+    return ["" if item is None else str(item) for item in parsed]
+
+
 def create_class_table_sql(table: str, dimensions: int) -> str:
     """新建一类的表。只有 CREATE IF NOT EXISTS，不删除已有类。"""
     dimensions = _positive_dimensions(dimensions)
@@ -378,6 +405,19 @@ class RetrievalStore(Protocol):
 
     async def delete_document(self, *, agent_id: str, source_id: str) -> None: ...
 
+    async def replace_sheet_rows(
+        self,
+        *,
+        agent_id: str,
+        source_id: str,
+        title: str,
+        tables: Sequence[object],
+    ) -> None: ...
+
+    async def has_structured_tables(self, *, agent_id: str) -> bool: ...
+
+    async def load_structured_tables(self, *, agent_id: str) -> list[object]: ...
+
     async def search(
         self,
         *,
@@ -464,6 +504,7 @@ class PgVectorRetrievalStore:
         qualified = qualified_chunks_table(table)
         await conn.execute("CREATE SCHEMA IF NOT EXISTS agent_retrieval")
         await conn.execute(create_class_table_sql(table, dimensions))
+        await conn.execute(create_sheet_rows_table_sql())
         await self._ensure_embedding_model_column(conn, table)
         source_index, vector_index = _class_index_names(table)
         await conn.execute(
@@ -654,6 +695,127 @@ class PgVectorRetrievalStore:
                 )
         return len(chunks)
 
+    async def replace_sheet_rows(
+        self,
+        *,
+        agent_id: str,
+        source_id: str,
+        title: str,
+        tables: Sequence[object],
+    ) -> None:
+        """按 source 整表替换结构化行。空列表表示这份文档不再带结构化数据。"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn, conn.transaction():
+            await conn.execute("CREATE SCHEMA IF NOT EXISTS agent_retrieval")
+            await conn.execute(create_sheet_rows_table_sql())
+            await conn.execute(
+                f"DELETE FROM {SHEET_ROWS_TABLE} WHERE agent_id = $1 AND source_id = $2",
+                agent_id,
+                source_id,
+            )
+            for table in tables:
+                await self._insert_sheet(conn, agent_id, source_id, title, table)
+
+    @staticmethod
+    async def _insert_sheet(conn, agent_id: str, source_id: str, title: str, table: object) -> None:
+        sheet = str(getattr(table, "sheet", "") or "")
+        header_row = int(getattr(table, "header_row", 0) or 0)
+        headers = ["" if cell is None else str(cell) for cell in (getattr(table, "headers", None) or [])]
+        truncated = bool(getattr(table, "truncated", False))
+        data_rows = list(getattr(table, "rows", None) or [])
+        if not data_rows:
+            await conn.execute(
+                f"INSERT INTO {SHEET_ROWS_TABLE} "
+                "(agent_id, source_id, title, sheet, header_row, header, row_number, cells, truncated) "
+                "VALUES ($1, $2, $3, $4, $5, $6::jsonb, 0, '[]'::jsonb, $7)",
+                agent_id,
+                source_id,
+                title,
+                sheet,
+                header_row,
+                json.dumps(headers, ensure_ascii=False),
+                truncated,
+            )
+            return
+        for row in data_rows:
+            cells = ["" if cell is None else str(cell) for cell in (getattr(row, "cells", None) or [])]
+            await conn.execute(
+                f"INSERT INTO {SHEET_ROWS_TABLE} "
+                "(agent_id, source_id, title, sheet, header_row, header, row_number, cells, truncated) "
+                "VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $9)",
+                agent_id,
+                source_id,
+                title,
+                sheet,
+                header_row,
+                json.dumps(headers, ensure_ascii=False),
+                int(getattr(row, "row_number", 0) or 0),
+                json.dumps(cells, ensure_ascii=False),
+                truncated,
+            )
+
+    async def has_structured_tables(self, *, agent_id: str) -> bool:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            if await conn.fetchval("SELECT to_regclass($1)", SHEET_ROWS_TABLE) is None:
+                return False
+            found = await conn.fetchval(
+                f"SELECT 1 FROM {SHEET_ROWS_TABLE} WHERE agent_id = $1 LIMIT 1",
+                agent_id,
+            )
+        return found is not None
+
+    async def load_structured_tables(self, *, agent_id: str) -> list[object]:
+        from agent_services.retrieval.tables import StoredSheet
+
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            if await conn.fetchval("SELECT to_regclass($1)", SHEET_ROWS_TABLE) is None:
+                return []
+            records = await conn.fetch(
+                "SELECT source_id, title, sheet, header_row, header, row_number, cells, truncated "
+                f"FROM {SHEET_ROWS_TABLE} WHERE agent_id = $1 "
+                "ORDER BY source_id, sheet, row_number",
+                agent_id,
+            )
+        grouped: dict[tuple[str, str], dict[str, object]] = {}
+        order: list[tuple[str, str]] = []
+        for record in records:
+            key = (str(record["source_id"]), str(record["sheet"]))
+            bucket = grouped.get(key)
+            if bucket is None:
+                bucket = {
+                    "title": str(record["title"]),
+                    "header_row": int(record["header_row"]),
+                    "headers": _json_text_list(record["header"]),
+                    "rows": [],
+                    "truncated": bool(record["truncated"]),
+                }
+                grouped[key] = bucket
+                order.append(key)
+            row_number = int(record["row_number"])
+            if row_number >= 1:
+                rows = bucket["rows"]
+                assert isinstance(rows, list)
+                rows.append((row_number, _json_text_list(record["cells"])))
+        loaded: list[object] = []
+        for key in order:
+            bucket = grouped[key]
+            rows = bucket["rows"]
+            assert isinstance(rows, list)
+            loaded.append(
+                StoredSheet(
+                    source_id=key[0],
+                    title=str(bucket["title"]),
+                    sheet=key[1],
+                    header_row=int(bucket["header_row"]),
+                    headers=list(bucket["headers"]),  # type: ignore[arg-type]
+                    rows=rows,
+                    truncated=bool(bucket["truncated"]),
+                )
+            )
+        return loaded
+
     async def delete_document(self, *, agent_id: str, source_id: str) -> None:
         """删文档时清掉每一类里的这份。新增一类不会走到这里。"""
         pool = await self._get_pool()
@@ -663,6 +825,12 @@ class PgVectorRetrievalStore:
                 qualified = qualified_chunks_table(table)
                 await conn.execute(
                     f"DELETE FROM {qualified} WHERE agent_id = $1 AND source_id = $2",
+                    agent_id,
+                    source_id,
+                )
+            if await conn.fetchval("SELECT to_regclass($1)", SHEET_ROWS_TABLE) is not None:
+                await conn.execute(
+                    f"DELETE FROM {SHEET_ROWS_TABLE} WHERE agent_id = $1 AND source_id = $2",
                     agent_id,
                     source_id,
                 )

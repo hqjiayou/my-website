@@ -15,6 +15,9 @@ knowledge is not.
 - A question that needs a total, count, or duration across records cannot
   be answered by adding up passages. Say passage search cannot support a
   full total, and do not invent the number.
+- For a count, a sum, or a statistic over a period, first call
+  search_site_knowledge to locate the document, then call query_site_table
+  to compute it. State a number only when that number appears in the tool output.
 - Site profile and content listings come from the site data tools, not from
   memory of earlier requests.
 - MCP servers are external sources. Use one only when its name and purpose

@@ -82,8 +82,15 @@ class KnowledgeSearchCollector:
 
     chunks: list[RetrievedChunk] = field(default_factory=list)
     searches: list[dict[str, object]] = field(default_factory=list)
+    passages: list[str] = field(default_factory=list)
     degraded: bool = False
     _cites: dict[tuple[str, int], int] = field(default_factory=dict)
+
+    def record_passage(self, text: str) -> None:
+        """表格工具等非检索片段的原文。只进语料，不进 citations。"""
+        cleaned = text.strip()
+        if cleaned:
+            self.passages.append(cleaned)
 
     def record(self, query: str, chunks: list[RetrievedChunk]) -> list[tuple[int, RetrievedChunk]]:
         """按累积顺序分配 [cN]。同一片段再次命中沿用原编号，不按分数重排。"""

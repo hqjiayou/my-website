@@ -11,6 +11,7 @@ from agent_services.agent.knowledge_tools import (
 )
 from agent_services.agent.mcp_tools import build_mcp_toolsets, has_mcp_toolsets
 from agent_services.agent.subagent import build_delegate_tool
+from agent_services.agent.table_tools import build_table_toolset
 from agent_services.agent.todo_tools import TodoStore, build_todo_toolset
 from agent_services.config import Settings
 from agent_services.retrieval.embeddings import EmbeddingClient
@@ -32,6 +33,7 @@ def build_execution_toolsets(
     retrieval_embedding_classes: list[EmbeddingClass] | None = None,
     retrieval_model_selection: ModelSelection | None = None,
     knowledge_collector: KnowledgeSearchCollector | None = None,
+    tables_available: bool = False,
 ) -> list[object]:
     toolsets: list[object] = []
     business = build_business_toolset(settings, agent_id, client=client)
@@ -51,6 +53,8 @@ def build_execution_toolsets(
                 collector=knowledge_collector,
             )
         )
+        if tables_available:
+            toolsets.append(build_table_toolset(agent_id, retrieval, collector=knowledge_collector))
     if settings.agent_enable_todo_tools:
         toolsets.append(build_todo_toolset(todo_store))
     toolsets.extend(build_mcp_toolsets(settings))

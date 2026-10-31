@@ -43,6 +43,25 @@ class IndexSegment:
     row_end: int | None = None
 
 
+@dataclass(frozen=True)
+class IndexTableRow:
+    """结构化行。row_number 是工作表原始行号，不是切块序号。"""
+
+    row_number: int
+    cells: list[str]
+
+
+@dataclass(frozen=True)
+class IndexTable:
+    """一张表。缺省（None）的 upsert 不改变切块，并清掉该 source 已有的结构化行。"""
+
+    sheet: str
+    header_row: int
+    headers: list[str]
+    rows: list[IndexTableRow]
+    truncated: bool = False
+
+
 def _chunks_for_index(
     content: str, segments: list[IndexSegment] | None
 ) -> tuple[list[str], list[ChunkLocation | None] | None]:
@@ -534,10 +553,12 @@ class RetrievalService:
         embedding_model: str | None = None,
         embedding_classes: list[EmbeddingClass] | None = None,
         segments: list[IndexSegment] | None = None,
+        tables: list[IndexTable] | None = None,
     ) -> int:
         chunks, locations = _chunks_for_index(content, segments)
         if not chunks:
             await self._store.delete_document(agent_id=agent_id, source_id=source_id)
+            await self._replace_sheet_rows(agent_id, source_id, title, tables)
             return 0
         if len(chunks) > MAX_UPSERT_CHUNKS:
             raise RetrievalChunkLimitExceeded(
@@ -545,7 +566,7 @@ class RetrievalService:
             )
         classes = self._resolve_classes(embedder, embedding_classes, embedding_model)
         if len(classes) == 1:
-            return await self._upsert_one(
+            count = await self._upsert_one(
                 agent_id=agent_id,
                 source_id=source_id,
                 title=title,
@@ -553,6 +574,8 @@ class RetrievalService:
                 item=classes[0],
                 locations=locations,
             )
+            await self._replace_sheet_rows(agent_id, source_id, title, tables)
+            return count
         count = 0
         failures = 0
         for item in classes:
@@ -574,7 +597,39 @@ class RetrievalService:
                 )
         if failures:
             raise RuntimeError("One or more embedding classes failed to index.")
+        await self._replace_sheet_rows(agent_id, source_id, title, tables)
         return count
+
+    async def _replace_sheet_rows(
+        self,
+        agent_id: str,
+        source_id: str,
+        title: str,
+        tables: list[IndexTable] | None,
+    ) -> None:
+        """chunks 写完后整份替换一次。不带 tables 时清掉该 source 的结构化行，切块路径不变。"""
+        replace = getattr(self._store, "replace_sheet_rows", None)
+        if replace is None:
+            return
+        await replace(
+            agent_id=agent_id,
+            source_id=source_id,
+            title=title,
+            tables=[] if tables is None else tables,
+        )
+
+    async def has_structured_tables(self, agent_id: str) -> bool:
+        probe = getattr(self._store, "has_structured_tables", None)
+        if probe is None:
+            return False
+        return bool(await probe(agent_id=agent_id))
+
+    async def load_structured_tables(self, agent_id: str) -> list[object]:
+        load = getattr(self._store, "load_structured_tables", None)
+        if load is None:
+            return []
+        loaded = await load(agent_id=agent_id)
+        return list(loaded)
 
     async def prepare_reembed(
         self,

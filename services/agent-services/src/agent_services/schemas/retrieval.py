@@ -27,6 +27,27 @@ class RetrievalSegment(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class RetrievalTableRow(BaseModel):
+    """结构化行。rowNumber 是工作表原始行号。"""
+
+    row_number: int = Field(alias="rowNumber")
+    cells: list[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class RetrievalTable(BaseModel):
+    """可选结构化表。缺省时不改切块，并清掉该 source 已入库的结构化行。"""
+
+    sheet: str = Field(max_length=256)
+    header_row: int = Field(alias="headerRow")
+    headers: list[str] = Field(default_factory=list)
+    rows: list[RetrievalTableRow] = Field(default_factory=list)
+    truncated: bool = False
+
+    model_config = {"populate_by_name": True}
+
+
 class RetrievalUpsertRequest(BaseModel):
     agent_id: str = Field(alias="agentId", max_length=MAX_SITE_ID_LENGTH)
     source_id: str = Field(alias="sourceId", max_length=MAX_SOURCE_ID_LENGTH)
@@ -39,6 +60,7 @@ class RetrievalUpsertRequest(BaseModel):
         default=None, alias="embeddingClasses"
     )
     segments: list[RetrievalSegment] | None = None
+    tables: list[RetrievalTable] | None = None
 
     model_config = {"populate_by_name": True}
 
