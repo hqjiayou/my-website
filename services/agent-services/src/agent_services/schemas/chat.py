@@ -145,6 +145,8 @@ class ChatRequest(BaseModel):
     attachments: list[ChatAttachment] | None = Field(default=None, max_length=MAX_ATTACHMENTS)
     documents: list[ChatDocument] | None = Field(default=None, max_length=MAX_DOCUMENTS)
     locale: str | None = None
+    # 客户端只传 IANA 时区名。缺失或非法由组装段回退 UTC，这里不拒请求。
+    timezone: str | None = None
     conversation_id: str | None = Field(default=None, alias="conversationId")
     prompt_profile: PromptProfile | None = Field(default=None, alias="promptProfile")
     history: list[ChatHistoryMessage] | None = Field(default=None, max_length=MAX_HISTORY_ITEMS)

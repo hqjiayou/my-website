@@ -124,6 +124,8 @@ export interface AgentAiChatRequest {
   mode?: string
   /** 下一輪點名的入口。不傳則用該模式的預設入口。 */
   modelEntryId?: number
+  /** IANA 時區名。只傳名稱，不傳客戶端時間戳。 */
+  timezone?: string
 }
 
 /** Portal 雙模式可用性（GET /ai/model-modes）：available=false 表示該模式尚未配置入口。 */

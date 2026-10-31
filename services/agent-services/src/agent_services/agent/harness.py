@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -78,6 +79,8 @@ def assemble_harness(
     history: list[ChatHistoryMessage] | None = None,
     todos: list[TodoItem] | None = None,
     locale: str | None = None,
+    timezone_name: str | None = None,
+    now: datetime | None = None,
     skills_max_instruction_chars: int | None = None,
     toolsets: list[object] | None = None,
     budget: RunBudget | None = None,
@@ -105,6 +108,8 @@ def assemble_harness(
         skill_instructions=skill_instructions,
         todos=todos,
         locale=locale,
+        timezone_name=timezone_name,
+        now=now,
         skills_max_instruction_chars=skills_max_instruction_chars,
         knowledge_available=knowledge_available,
     )

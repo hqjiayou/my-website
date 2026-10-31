@@ -1,4 +1,6 @@
 import re
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from agent_services.agent.skills import limit_skill_instructions
 from agent_services.schemas.chat import PromptProfile
@@ -18,6 +20,8 @@ def build_prompt_parts(
     locale: str | None = None,
     skills_max_instruction_chars: int | None = None,
     knowledge_available: bool = False,
+    timezone_name: str | None = None,
+    now: datetime | None = None,
 ) -> tuple[str, str]:
     system = (
         prompt_profile.system_prompt.strip()
@@ -68,6 +72,48 @@ def build_prompt_parts(
             "prefer it when answering):\n"
             f"{knowledge}"
         )
+    # 与 locale 行同层，独立成段，不写进站点 Prompt，也不进 harness 平台文件。
+    # #159 定位、#160 身份在 session_context_section 里追加，本段目前只有时间。
+    moment = now if now is not None else datetime.now(timezone.utc)
+    system = f"{system}\n\n{session_context_section(timezone_name, moment)}"
     if locale and _LOCALE_RE.fullmatch(locale.strip()):
         system = f"{system}\n\nReply in this locale: {locale.strip()}."
     return system, user_message.strip()
+
+
+_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def session_context_section(timezone_name: str | None, now: datetime) -> str:
+    """会话上下文段。后续单只往 blocks 里加块，不改时间块的渲染。"""
+    blocks = [_time_context_block(timezone_name, now)]
+    return "\n\n".join(blocks)
+
+
+def _time_context_block(timezone_name: str | None, now: datetime) -> str:
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    zone, fallback = _resolve_zone(timezone_name)
+    local = now.astimezone(zone)
+    lines = [
+        "# Session context",
+        "",
+        f"Local date: {local.strftime('%Y-%m-%d')}",
+        f"Weekday: {_WEEKDAYS[local.weekday()]}",
+        f"Local time: {local.strftime('%H:%M')}",
+        f"Timezone: {zone.key}",
+    ]
+    if fallback:
+        lines.append("Timezone fallback: UTC")
+    return "\n".join(lines)
+
+
+def _resolve_zone(name: str | None) -> tuple[ZoneInfo, bool]:
+    """非法或缺失一律 UTC，并让调用方标 fallback。不抛给请求处理。"""
+    cleaned = name.strip() if isinstance(name, str) else ""
+    if not cleaned or len(cleaned) > 64 or any(ch.isspace() for ch in cleaned):
+        return ZoneInfo("UTC"), True
+    try:
+        return ZoneInfo(cleaned), False
+    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return ZoneInfo("UTC"), True
