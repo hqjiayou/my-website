@@ -28,7 +28,55 @@ public record AgentChatRequest(
         String embeddingApiKey,
         String embeddingBaseUrl,
         // 已登记的嵌入类。有值时执行层按类检索；不传时仍只用上面那一套。
-        List<AgentEmbeddingClass> embeddingClasses) {
+        List<AgentEmbeddingClass> embeddingClasses,
+        // 客户端 IANA 时区名。空则执行层回退 UTC。不传时间戳。
+        String timezone) {
+
+    /** 兼容尚无 timezone 的构造点（后台试聊走这条，执行层回退 UTC）。 */
+    public AgentChatRequest(
+            String agentId,
+            String message,
+            String locale,
+            String conversationId,
+            AgentPromptProfile promptProfile,
+            List<AgentChatHistoryMessage> history,
+            List<String> skills,
+            List<AgentTodoItem> todos,
+            AgentModelSelection model,
+            String businessApiBaseUrl,
+            List<String> knowledgeContext,
+            List<AgentAttachmentDto> attachments,
+            List<String> memories,
+            Boolean memoryEnabled,
+            List<AgentModelSelection> fallbackModels,
+            List<AgentDocumentContext> documents,
+            String embeddingSpec,
+            String embeddingApiKey,
+            String embeddingBaseUrl,
+            List<AgentEmbeddingClass> embeddingClasses) {
+        this(
+                agentId,
+                message,
+                locale,
+                conversationId,
+                promptProfile,
+                history,
+                skills,
+                todos,
+                model,
+                businessApiBaseUrl,
+                knowledgeContext,
+                attachments,
+                memories,
+                memoryEnabled,
+                fallbackModels,
+                documents,
+                embeddingSpec,
+                embeddingApiKey,
+                embeddingBaseUrl,
+                embeddingClasses,
+                null);
+    }
 
     public AgentChatRequest(
             String agentId,

@@ -13,15 +13,17 @@ public record AgentAiChatRequestDto(
          * 这一轮点名的入口。空则仍用该模式的默认入口。只影响这一轮，不改默认入口。
          * 不在该模式生效链上时拒绝，不改走默认（Issue #153）。
          */
-        Long modelEntryId) {
+        Long modelEntryId,
+        /** IANA 时区名。空则执行层回退 UTC。客户端不传自己的时间戳。 */
+        String timezone) {
 
     public AgentAiChatRequestDto(String message, String conversationId, List<AgentAiAttachmentDto> attachments) {
-        this(message, conversationId, attachments, null, null, null);
+        this(message, conversationId, attachments, null, null, null, null);
     }
 
     public AgentAiChatRequestDto(
             String message, String conversationId, List<AgentAiAttachmentDto> attachments, List<AgentAiDocumentDto> documents) {
-        this(message, conversationId, attachments, documents, null, null);
+        this(message, conversationId, attachments, documents, null, null, null);
     }
 
     public AgentAiChatRequestDto(
@@ -30,6 +32,16 @@ public record AgentAiChatRequestDto(
             List<AgentAiAttachmentDto> attachments,
             List<AgentAiDocumentDto> documents,
             String mode) {
-        this(message, conversationId, attachments, documents, mode, null);
+        this(message, conversationId, attachments, documents, mode, null, null);
+    }
+
+    public AgentAiChatRequestDto(
+            String message,
+            String conversationId,
+            List<AgentAiAttachmentDto> attachments,
+            List<AgentAiDocumentDto> documents,
+            String mode,
+            Long modelEntryId) {
+        this(message, conversationId, attachments, documents, mode, modelEntryId, null);
     }
 }

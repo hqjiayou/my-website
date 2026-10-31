@@ -226,7 +226,15 @@ public class AgentAiServiceImpl implements AgentAiService {
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
         AgentChatRequest agentRequest = buildAgentRequest(
-                agentId, message, attachments, validated.documents(), preparation, memories, mode, request.modelEntryId());
+                agentId,
+                message,
+                attachments,
+                validated.documents(),
+                preparation,
+                memories,
+                mode,
+                request.modelEntryId(),
+                request.timezone());
         AgentChatResponse response = agentClient.chat(agentRequest);
         persistTurn(
                 agentId,
@@ -366,7 +374,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                         preparation,
                         memories,
                         mode,
-                        request.modelEntryId());
+                        request.modelEntryId(),
+                        request.timezone());
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         List<AgentAttachmentDto> stored = storedAttachments(attachments, validated);
@@ -395,7 +404,8 @@ public class AgentAiServiceImpl implements AgentAiService {
             ChatPreparation preparation,
             List<String> memories,
             String mode,
-            Long modelEntryId) {
+            Long modelEntryId,
+            String timezone) {
         Long conversationId = preparation.conversation().getId();
         List<ChainLink> links = pinChain(loadModelChainLinks(agentId, mode), modelEntryId);
         List<AgentModelSelection> chain = links.stream().map(ChainLink::selection).toList();
@@ -427,7 +437,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                 embedding == null ? null : embedding.embeddingSpec(),
                 embedding == null ? null : embedding.apiKey(),
                 embedding == null ? null : embedding.baseUrl(),
-                AgentEmbeddingClassUtils.wire(embeddingClasses));
+                AgentEmbeddingClassUtils.wire(embeddingClasses),
+                timezone);
     }
 
     private void persistTurn(

@@ -185,6 +185,29 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
     }
 
     @Test
+    void chatForwardsTimezoneAndKeepsOldPayloadNullable() throws Exception {
+        String token = AgentTestJwtSigner.signAgentAccess(privateKey, "test-issuer", "AGENT", 200L, 10L);
+
+        mockMvc.perform(post("/api/agent/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"hi\",\"mode\":\"KEY\"}"))
+                .andExpect(status().isServiceUnavailable());
+        ArgumentCaptor<AgentChatRequest> without = ArgumentCaptor.forClass(AgentChatRequest.class);
+        verify(agentClient).chat(without.capture());
+        assertNull(without.getValue().timezone());
+
+        mockMvc.perform(post("/api/agent/10/ai/chat")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"hi\",\"mode\":\"KEY\",\"timezone\":\"Asia/Tokyo\"}"))
+                .andExpect(status().isServiceUnavailable());
+        ArgumentCaptor<AgentChatRequest> withZone = ArgumentCaptor.forClass(AgentChatRequest.class);
+        verify(agentClient, org.mockito.Mockito.times(2)).chat(withZone.capture());
+        assertEquals("Asia/Tokyo", withZone.getAllValues().get(1).timezone());
+    }
+
+    @Test
     void chatAllowsBlankMessageWhenAttachmentIsPresent() throws Exception {
         String token = AgentTestJwtSigner.signAgentAccess(privateKey, "test-issuer", "AGENT", 200L, 10L);
         String data =

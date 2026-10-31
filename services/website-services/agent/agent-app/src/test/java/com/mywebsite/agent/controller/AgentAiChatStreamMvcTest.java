@@ -3,6 +3,7 @@ package com.mywebsite.agent.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
@@ -12,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.client.AgentStreamListener;
 import com.mywebsite.agent.dto.AgentAiMessageDto;
+import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.service.AgentAiConversationService;
 import com.mywebsite.agent.testsupport.AbstractAgentSpringBootTest;
 import com.mywebsite.agent.testsupport.AgentTestJwtSigner;
@@ -19,6 +21,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -198,6 +201,37 @@ class AgentAiChatStreamMvcTest extends AbstractAgentSpringBootTest {
         assertThat(process).isNotNull();
         assertThat(process.tools()).containsExactly(new AgentAiMessageDto.Process.Tool("search_site_knowledge", true));
         assertThat(process.searches()).containsExactly(new AgentAiMessageDto.Process.Search("hours", 2));
+    }
+
+    @Test
+    void streamForwardsTimezoneAndKeepsOldPayloadNullable() throws Exception {
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        doAnswer(invocation -> {
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent("DONE", "{\"reply\":\"hi\",\"providerStatus\":\"LIVE\"}");
+                    return null;
+                })
+                .when(agentClient)
+                .chatStream(captor.capture(), any());
+
+        String token = AgentTestJwtSigner.signAgentAccess(privateKey, "test-issuer", "AGENT", 200L, 10L);
+        dispatch(token, "{\"message\":\"hello\",\"mode\":\"KEY\"}");
+        dispatch(token, "{\"message\":\"hello\",\"mode\":\"KEY\",\"timezone\":\"Pacific/Pago_Pago\"}");
+
+        assertThat(captor.getAllValues()).hasSize(2);
+        assertThat(captor.getAllValues().get(0).timezone()).isNull();
+        assertThat(captor.getAllValues().get(1).timezone()).isEqualTo("Pacific/Pago_Pago");
+        verify(agentClient, org.mockito.Mockito.times(2)).chatStream(any(), any());
+    }
+
+    private void dispatch(String token, String json) throws Exception {
+        MvcResult mvcResult = mockMvc.perform(post("/api/agent/10/ai/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(mvcResult)).andExpect(status().isOk());
     }
 
     private String streamBody() throws Exception {
