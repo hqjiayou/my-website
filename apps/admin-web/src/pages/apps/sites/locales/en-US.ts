@@ -555,6 +555,7 @@ export default {
       modelActual: 'Answered by: {{model}}',
       modelRequested: 'Requested primary: {{model}} (a fallback answered)',
       mode: 'Mode: {{mode}}',
+      citation: 'Citation {{n}} · {{title}}{{location}}',
     },
     runtime: {
       hint: 'Platform configuration currently in effect in agent-services (shared across sites, read-only; no credentials shown).',

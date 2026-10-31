@@ -301,6 +301,22 @@ export interface AiToolCallTrace {
   ok: boolean
 }
 
+export interface AiCitationLocation {
+  page?: number | null
+  sheet?: string | null
+  rowStart?: number | null
+  rowEnd?: number | null
+}
+
+export interface AiCitation {
+  sourceId: string
+  chunkIndex: number
+  score: number
+  title?: string | null
+  location?: AiCitationLocation | null
+  cite?: number | null
+}
+
 export interface AiRunMeta {
   usage: AiRunUsage
   tools: AiToolCallTrace[]
@@ -311,6 +327,8 @@ export interface AiRunMeta {
   requestedModel?: string | null
   /** 本轮模式（CLI / KEY）。旧消息没有。 */
   mode?: string | null
+  /** 本轮引用。旧消息没有。后台只展示，不打开阅读器。 */
+  citations?: AiCitation[] | null
 }
 
 export interface AiMessage {
