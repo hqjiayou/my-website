@@ -555,6 +555,7 @@ export default {
       modelActual: '実際の回答モデル：{{model}}',
       modelRequested: 'リクエスト主用：{{model}}（フォールバックが回答）',
       mode: 'モード：{{mode}}',
+      citation: '引用 {{n}} · {{title}}{{location}}',
     },
     runtime: {
       hint: 'agent-services で現在有効なプラットフォーム設定です（全サイト共通・読み取り専用・認証情報は表示しません）。',

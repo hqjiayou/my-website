@@ -21,7 +21,8 @@ public record AgentRunMeta(
         List<SearchSummary> searches,
         String model,
         String requestedModel,
-        String mode) {
+        String mode,
+        List<AgentCitation> citations) {
 
     public AgentRunMeta {
         usage = usage == null ? Usage.EMPTY : usage;
@@ -31,12 +32,13 @@ public record AgentRunMeta(
         model = model == null || model.isBlank() ? null : model.trim();
         requestedModel = requestedModel == null || requestedModel.isBlank() ? null : requestedModel.trim();
         mode = mode == null || mode.isBlank() ? null : mode.trim();
+        citations = citations == null || citations.isEmpty() ? null : List.copyOf(citations);
     }
 
     /** 兼容旧构造点与旧 JSON（无 model 时缺省为 null）。 */
     public AgentRunMeta(
             Usage usage, List<ToolCall> tools, List<String> skillsApplied, List<SearchSummary> searches) {
-        this(usage, tools, skillsApplied, searches, null);
+        this(usage, tools, skillsApplied, searches, null, null, null, null);
     }
 
     /** 兼容只有实际模型、无归属字段的构造点（执行层回报走这条）。 */
@@ -46,12 +48,24 @@ public record AgentRunMeta(
             List<String> skillsApplied,
             List<SearchSummary> searches,
             String model) {
-        this(usage, tools, skillsApplied, searches, model, null, null);
+        this(usage, tools, skillsApplied, searches, model, null, null, null);
     }
 
     /** 兼容旧构造点与旧 JSON（无 searches 字段时反序列化走规范构造、缺省为空）。 */
     public AgentRunMeta(Usage usage, List<ToolCall> tools, List<String> skillsApplied) {
-        this(usage, tools, skillsApplied, List.of(), null);
+        this(usage, tools, skillsApplied, List.of(), null, null, null, null);
+    }
+
+    /** 兼容尚无 citations 字段的构造点。 */
+    public AgentRunMeta(
+            Usage usage,
+            List<ToolCall> tools,
+            List<String> skillsApplied,
+            List<SearchSummary> searches,
+            String model,
+            String requestedModel,
+            String mode) {
+        this(usage, tools, skillsApplied, searches, model, requestedModel, mode, null);
     }
 
     public static final AgentRunMeta EMPTY = new AgentRunMeta(null, null, null, null);

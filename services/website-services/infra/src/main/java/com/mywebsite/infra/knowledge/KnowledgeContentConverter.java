@@ -58,6 +58,12 @@ import com.mywebsite.infra.knowledge.KnowledgeTextExtractor.ExtractionException;
  */
 public final class KnowledgeContentConverter {
 
+    /**
+     * 索引入库段。表格的行区间只放在这里，不写入 {@link #toStoredContent} 的正文。
+     * page 与 sheet 不同时使用。
+     */
+    public record IndexSegment(String text, Integer page, String sheet, Integer rowStart, Integer rowEnd) {}
+
     private static final int MAX_TABLE_ROWS = 1000;
     private static final int MAX_TABLE_COLS = 50;
     private static final Pattern HEADING_STYLE =
@@ -302,6 +308,46 @@ public final class KnowledgeContentConverter {
                 }
             }
             return out.toString();
+        } catch (IOException | RuntimeException ex) {
+            throw new ExtractionException("failed to convert spreadsheet", ex);
+        }
+    }
+
+    /**
+     * 表格位置段。正文仍是 {@link #workbookToMarkdown} 的 Markdown，不含行号标记。
+     * rowStart/rowEnd 是工作表原始行号（1 起），空行不占正文但仍落在区间内。
+     */
+    public static List<IndexSegment> spreadsheetSegments(byte[] bytes) {
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(bytes))) {
+            DataFormatter formatter = new DataFormatter();
+            List<IndexSegment> segments = new ArrayList<>();
+            for (var sheet : workbook) {
+                List<List<String>> rows = new ArrayList<>();
+                int rowStart = 0;
+                int rowEnd = 0;
+                for (var row : sheet) {
+                    List<String> cells = new ArrayList<>();
+                    for (var cell : row) {
+                        cells.add(formatter.formatCellValue(cell));
+                    }
+                    if (cells.stream().anyMatch(value -> !value.isBlank())) {
+                        int excelRow = row.getRowNum() + 1;
+                        if (rowStart == 0) {
+                            rowStart = excelRow;
+                        }
+                        rowEnd = excelRow;
+                        rows.add(cells);
+                    }
+                    if (rows.size() > MAX_TABLE_ROWS) {
+                        break;
+                    }
+                }
+                if (!rows.isEmpty()) {
+                    String text = "## " + sheet.getSheetName() + "\n\n" + renderMarkdownTable(rows);
+                    segments.add(new IndexSegment(text, null, sheet.getSheetName(), rowStart, rowEnd));
+                }
+            }
+            return List.copyOf(segments);
         } catch (IOException | RuntimeException ex) {
             throw new ExtractionException("failed to convert spreadsheet", ex);
         }

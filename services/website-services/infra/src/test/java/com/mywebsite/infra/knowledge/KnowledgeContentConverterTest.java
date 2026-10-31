@@ -40,6 +40,32 @@ class KnowledgeContentConverterTest {
     }
 
     @Test
+    void spreadsheetSegmentsKeepOriginalRowNumbersOutsideStoredContent() throws IOException {
+        byte[] xlsx;
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            var sheet = workbook.createSheet("Hours");
+            var header = sheet.createRow(0);
+            header.createCell(0).setCellValue("Day");
+            header.createCell(1).setCellValue("Hours");
+            sheet.createRow(3);
+            var data = sheet.createRow(4);
+            data.createCell(0).setCellValue("Mon");
+            data.createCell(1).setCellValue(8);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            xlsx = out.toByteArray();
+        }
+        String stored = KnowledgeContentConverter.toStoredContent("xlsx", xlsx);
+        var segments = KnowledgeContentConverter.spreadsheetSegments(xlsx);
+        assertThat(segments).hasSize(1);
+        assertThat(segments.getFirst().sheet()).isEqualTo("Hours");
+        assertThat(segments.getFirst().rowStart()).isEqualTo(1);
+        assertThat(segments.getFirst().rowEnd()).isEqualTo(5);
+        assertThat(stored).doesNotContain("rowStart").doesNotContain("第 5 行");
+        assertThat(stored).contains("| Day | Hours |").contains("| Mon | 8 |");
+    }
+
+    @Test
     void xlsxBecomesMarkdownTablePerSheet() throws IOException {
         byte[] bytes;
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {

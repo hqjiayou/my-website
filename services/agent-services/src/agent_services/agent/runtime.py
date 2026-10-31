@@ -7,6 +7,7 @@ Python 不保存会话状态（stateless between business requests）；
 
 import base64
 import logging
+import re
 from dataclasses import dataclass, field
 
 import anyio
@@ -224,6 +225,202 @@ def reply_citations(
     if not merged:
         return None
     return citation_sources(merged) or None
+
+
+# 记录类问句：没查到就不许给出具体值。能力边界题（能否读数据库）不在这张表里。
+_RECORD_CUES = (
+    "编号",
+    "編號",
+    "申请",
+    "申請",
+    "考勤",
+    "出勤",
+    "工时",
+    "工時",
+    "订单",
+    "訂單",
+    "金额",
+    "金額",
+    "证件",
+    "證件",
+    "入台证",
+    "入台證",
+    "状态",
+    "狀態",
+)
+# 「统计」覆盖黄金题「10 月考勤统计」；其余是定稿列出的汇总说法。
+_AGGREGATE_CUES = ("多久", "多少", "合计", "合計", "一共", "统计", "統計")
+_STATUS_CUES = (
+    "待送件",
+    "已送件",
+    "审核中",
+    "審核中",
+    "已通过",
+    "已通過",
+    "驳回",
+    "駁回",
+    "待审核",
+    "待審核",
+    "pending",
+    "approved",
+    "rejected",
+)
+_DATE_RE = re.compile(r"\d{4}\s*[-/.年]\s*\d{1,2}|\d{1,2}\s*月\s*\d{1,2}\s*日")
+_ID_RE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]{0,8}-?\d{5,}[A-Za-z0-9-]*")
+_NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
+_DEGRADED_CUES = ("不完整", "可靠性下降", "degraded", "incomplete")
+
+_REFUSAL = {
+    "zh": "这一轮没有查到知识库记录，不能给出具体编号、状态或数字。",
+    "en": "No knowledge-base record was retrieved this turn, so I cannot give a specific identifier, status, or number.",
+}
+_AGGREGATE = {
+    "zh": "片段检索无法给出全量统计。",
+    "en": "Passage search cannot support a full total.",
+}
+_DEGRADED_NOTE = {
+    "zh": "本次检索结果不完整：至少有一类嵌入失败，可靠性下降。",
+    "en": "This search result is incomplete: at least one embedding class failed, so reliability is lower.",
+}
+_RETRY_RECORD = (
+    "You must call search_site_knowledge before stating any identifier, status, date, or number "
+    "from the user's records or site documents. If the search returns nothing, say so and do not invent a value."
+)
+_RETRY_AGGREGATE = (
+    "Passage search cannot support a full count or total. Do not answer with a summed or counted number "
+    "unless that exact number appears in the tool result. Say that passage search cannot support a full total."
+)
+
+
+def fixed_sentence_locale(locale: str | None) -> str:
+    """固定句只备 zh/en。其余语言，以及空 locale，回退英文。"""
+    if not locale or not locale.strip():
+        return "en"
+    lang = locale.strip().lower().replace("_", "-").split("-", 1)[0]
+    return "zh" if lang == "zh" else "en"
+
+
+def _fixed(table: dict[str, str], locale: str | None) -> str:
+    return table[fixed_sentence_locale(locale)]
+
+
+def _tool_corpus(collector: KnowledgeSearchCollector | None) -> str:
+    if collector is None:
+        return ""
+    parts: list[str] = []
+    for chunk in collector.chunks:
+        parts.append(chunk.content)
+        if chunk.title:
+            parts.append(chunk.title)
+    return "\n".join(parts)
+
+
+def _is_record_question(message: str) -> bool:
+    return any(cue in message for cue in _RECORD_CUES)
+
+
+def _is_aggregate_question(message: str) -> bool:
+    return any(cue in message for cue in _AGGREGATE_CUES)
+
+
+def _has_record_value(reply: str) -> bool:
+    folded = reply.casefold()
+    if _DATE_RE.search(reply) or _ID_RE.search(reply):
+        return True
+    return any(cue.casefold() in folded for cue in _STATUS_CUES)
+
+
+def _unsupported_number(reply: str, question: str, corpus: str) -> bool:
+    for match in _NUMBER_RE.finditer(reply):
+        token = match.group(0)
+        if token in question or token in corpus:
+            continue
+        return True
+    return False
+
+
+def _has_degraded_cue(reply: str) -> bool:
+    folded = reply.casefold()
+    return any(cue.casefold() in folded for cue in _DEGRADED_CUES)
+
+
+def plan_search_grounding(
+    message: str,
+    reply: str,
+    collector: KnowledgeSearchCollector | None,
+    locale: str | None,
+    *,
+    allow_retry: bool,
+) -> tuple[str, str]:
+    """返回 (action, reply)。action 为 keep / retry_record / retry_aggregate / refuse / aggregate。
+
+    allow_retry 为假时不再要求重跑，直接换成固定句。降级说明加在最终回复末尾。
+    """
+    corpus = _tool_corpus(collector)
+    searched = bool(collector is not None and collector.searches)
+    action = "keep"
+    text = reply
+    # 零搜索就写出编号/日期/状态，优先于汇总数字：含「多少」的证件题要拒绝句，不是统计句。
+    if _is_record_question(message) and not searched and _has_record_value(reply):
+        if allow_retry:
+            return "retry_record", reply
+        action = "refuse"
+        text = _fixed(_REFUSAL, locale)
+    elif _is_aggregate_question(message) and _unsupported_number(reply, message, corpus):
+        if allow_retry:
+            return "retry_aggregate", reply
+        action = "aggregate"
+        text = _fixed(_AGGREGATE, locale)
+    if collector is not None and collector.degraded and not _has_degraded_cue(text):
+        text = text.rstrip() + "\n\n" + _fixed(_DEGRADED_NOTE, locale)
+    return action, text
+
+
+def retry_instruction(action: str) -> str | None:
+    if action == "retry_record":
+        return _RETRY_RECORD
+    if action == "retry_aggregate":
+        return _RETRY_AGGREGATE
+    return None
+
+
+def remaining_run_budget(
+    budget: RunBudget, used: dict[str, int], *, needs_tool: bool
+) -> RunBudget | None:
+    """第二轮计入同一 RunBudget。请求次数或 token 不够，或记录类重试已无工具次数时，不重跑。"""
+    limits = budget.usage_limits
+    if limits is None:
+        return budget
+
+    def left(limit: int | None, consumed: int) -> int | None:
+        if limit is None:
+            return None
+        return limit - consumed
+
+    requests_left = left(limits.request_limit, int(used.get("requests", 0)))
+    tools_left = left(limits.tool_calls_limit, int(used.get("toolCalls", 0)))
+    tokens_used = int(used.get("inputTokens", 0)) + int(used.get("outputTokens", 0))
+    tokens_left = left(limits.total_tokens_limit, tokens_used)
+    if requests_left is not None and requests_left < 1:
+        return None
+    if tokens_left is not None and tokens_left < 1:
+        return None
+    if needs_tool and tools_left is not None and tools_left < 1:
+        return None
+    return RunBudget(
+        usage_limits=UsageLimits(
+            request_limit=requests_left,
+            tool_calls_limit=tools_left,
+            total_tokens_limit=tokens_left,
+        ),
+        tool_timeout_seconds=budget.tool_timeout_seconds,
+        history_max_chars=budget.history_max_chars,
+    )
+
+
+def add_usage(first: dict[str, int], second: dict[str, int]) -> dict[str, int]:
+    keys = ("requests", "toolCalls", "inputTokens", "outputTokens")
+    return {key: int(first.get(key, 0)) + int(second.get(key, 0)) for key in keys}
 
 
 @dataclass(frozen=True)
@@ -499,6 +696,26 @@ async def run_chat(
     text = str(result.output).strip()
     if not text:
         return ChatBlocked(message="AI provider returned an empty response.")
+    usage = usage_to_api(result.usage)
+    tools = tool_trace_from_messages(result.new_messages())
+    identity = model_identity_line(model)
+    base_prompt = f"{harness.system_prompt}\n\n{identity}" if identity else harness.system_prompt
+    text, clear_citations, usage, tools = await _apply_search_grounding(
+        model=model,
+        message=message,
+        reply=text,
+        locale=locale,
+        collector=knowledge_collector,
+        budget=resolved_budget,
+        usage=usage,
+        tools=tools,
+        base_prompt=base_prompt,
+        user_prompt=user_prompt,
+        toolsets=toolsets,
+        prompt_profile=prompt_profile,
+        history=list(harness.memory),
+        needs_mcp_context=needs_mcp_context,
+    )
     # 独立 Agent，不传入本轮 UsageLimits，抽取不计入 run budget。
     extracted: list[str] = []
     if memory_enabled and memory_extraction_enabled:
@@ -509,15 +726,106 @@ async def run_chat(
             existing=memories,
         )
     served = getattr(getattr(result, "response", None), "model_name", None)
-    return ChatReply(
-        reply=text,
-        usage=usage_to_api(result.usage),
-        tools=tool_trace_from_messages(result.new_messages()),
-        citations=reply_citations(
+    citations = None
+    if not clear_citations:
+        citations = reply_citations(
             retrieval_context,
             retrieval_chunks,
             knowledge_collector.chunks if knowledge_collector is not None else None,
-        ),
+        )
+    return ChatReply(
+        reply=text,
+        usage=usage,
+        tools=tools,
+        citations=citations,
         extracted_memories=extracted,
         model=served.strip() if isinstance(served, str) and served.strip() else None,
     )
+
+
+async def _apply_search_grounding(
+    *,
+    model: Model,
+    message: str,
+    reply: str,
+    locale: str | None,
+    collector: KnowledgeSearchCollector | None,
+    budget: RunBudget,
+    usage: dict[str, int],
+    tools: list[dict[str, object]],
+    base_prompt: str,
+    user_prompt: UserPrompt,
+    toolsets: list[object] | None,
+    prompt_profile: PromptProfile | None,
+    history: list[ChatHistoryMessage],
+    needs_mcp_context: bool,
+) -> tuple[str, bool, dict[str, int], list[dict[str, object]]]:
+    """跑完再验。预算不够就不重跑，直接用固定句。返回 (回复, 是否清空 citations, 用量, 工具轨迹)。"""
+    action, _planned = plan_search_grounding(
+        message, reply, collector, locale, allow_retry=True
+    )
+    if action in {"retry_record", "retry_aggregate"}:
+        instruction = retry_instruction(action)
+        nxt = remaining_run_budget(budget, usage, needs_tool=action == "retry_record")
+        if nxt is None or instruction is None:
+            action, reply = plan_search_grounding(
+                message, reply, collector, locale, allow_retry=False
+            )
+        else:
+            second = await _run_grounding_retry(
+                model=model,
+                system_prompt=f"{base_prompt}\n\n{instruction}",
+                user_prompt=user_prompt,
+                toolsets=toolsets,
+                budget=nxt,
+                prompt_profile=prompt_profile,
+                history=history,
+                needs_mcp_context=needs_mcp_context,
+            )
+            if second is None:
+                action, reply = plan_search_grounding(
+                    message, reply, collector, locale, allow_retry=False
+                )
+            else:
+                second_text, second_usage, second_tools = second
+                usage = add_usage(usage, second_usage)
+                tools = (tools + second_tools)[:MAX_TOOL_TRACE]
+                action, reply = plan_search_grounding(
+                    message, second_text, collector, locale, allow_retry=False
+                )
+    else:
+        action, reply = plan_search_grounding(
+            message, reply, collector, locale, allow_retry=False
+        )
+    return reply, action == "refuse", usage, tools
+
+
+async def _run_grounding_retry(
+    *,
+    model: Model,
+    system_prompt: str,
+    user_prompt: UserPrompt,
+    toolsets: list[object] | None,
+    budget: RunBudget,
+    prompt_profile: PromptProfile | None,
+    history: list[ChatHistoryMessage],
+    needs_mcp_context: bool,
+) -> tuple[str, dict[str, int], list[dict[str, object]]] | None:
+    """第二轮失败或空回复时返回 None，由调用方改走固定句，不把第一轮未接地的草稿留下。"""
+    run_kwargs = build_run_kwargs(prompt_profile, history, budget)
+    agent = build_agent(model, system_prompt, toolsets, budget)
+    try:
+        if needs_mcp_context:
+            async with agent:
+                result = await agent.run(user_prompt, **run_kwargs)
+        else:
+            result = await agent.run(user_prompt, **run_kwargs)
+    except UsageLimitExceeded:
+        return None
+    except Exception:  # noqa: BLE001 — 重试失败不沿用未接地草稿
+        logger.warning("search grounding retry failed", exc_info=True)
+        return None
+    text = str(result.output).strip()
+    if not text:
+        return None
+    return text, usage_to_api(result.usage), tool_trace_from_messages(result.new_messages())

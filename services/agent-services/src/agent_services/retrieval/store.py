@@ -3,11 +3,13 @@
 所有查询强制携带 agent_id 过滤——多租户隔离是硬约束，不允许全库检索。
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from agent_services.retrieval.embeddings import _finite_floats, embedding_class_name
@@ -19,31 +21,169 @@ HNSW_MAX_DIMENSIONS = 2000
 
 
 @dataclass(frozen=True)
+class ChunkLocation:
+    """可核对位置。页码与表格行区间不会同时出现。"""
+
+    page: int | None = None
+    sheet: str | None = None
+    row_start: int | None = None
+    row_end: int | None = None
+
+    def to_meta(self) -> dict[str, object]:
+        payload: dict[str, object] = {}
+        if isinstance(self.page, int) and not isinstance(self.page, bool) and self.page >= 1:
+            payload["page"] = self.page
+        if isinstance(self.sheet, str) and self.sheet.strip():
+            payload["sheet"] = self.sheet.strip()
+        if isinstance(self.row_start, int) and not isinstance(self.row_start, bool) and self.row_start >= 1:
+            payload["rowStart"] = self.row_start
+        if isinstance(self.row_end, int) and not isinstance(self.row_end, bool) and self.row_end >= 1:
+            payload["rowEnd"] = self.row_end
+        return payload
+
+    def to_api(self) -> dict[str, object]:
+        return self.to_meta()
+
+
+@dataclass(frozen=True)
 class RetrievedChunk:
     source_id: str
     chunk_index: int
     content: str
     score: float
+    title: str | None = None
+    location: ChunkLocation | None = None
+    # collector 累积顺序（1 起）。分数截断不得改写这个编号。
+    cite: int | None = None
+
+    def with_score(self, score: float) -> RetrievedChunk:
+        return replace(self, score=score)
+
+    def with_cite(self, cite: int) -> RetrievedChunk:
+        return replace(self, cite=cite)
 
 
 CITATION_LIMIT = 5
 
 
+def location_from_meta(meta: object) -> ChunkLocation | None:
+    if not isinstance(meta, dict):
+        return None
+    location = ChunkLocation(
+        page=_positive_int(meta.get("page")),
+        sheet=meta.get("sheet").strip()
+        if isinstance(meta.get("sheet"), str) and meta.get("sheet").strip()
+        else None,
+        row_start=_positive_int(meta.get("rowStart")),
+        row_end=_positive_int(meta.get("rowEnd")),
+    )
+    return location if location.to_meta() else None
+
+
+def _positive_int(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return None
+    return value
+
+
+def _meta_dict(metadata: object) -> dict[str, object]:
+    if isinstance(metadata, str):
+        try:
+            parsed = json.loads(metadata)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    if isinstance(metadata, dict):
+        return metadata
+    return {}
+
+
+def _chunk_metadata(title: str, location: ChunkLocation | None) -> str:
+    payload: dict[str, object] = {}
+    if title:
+        payload["title"] = title
+    if location is not None:
+        payload.update(location.to_meta())
+    return json.dumps(payload)
+
+
+def _chunk_from_record(row: object) -> RetrievedChunk:
+    getter = row.__getitem__  # type: ignore[attr-defined]
+    return chunk_from_row(
+        source_id=getter("source_id"),
+        chunk_index=getter("chunk_index"),
+        content=getter("content"),
+        score=getter("score"),
+        metadata=getter("metadata"),
+    )
+
+
+def chunk_from_row(
+    *,
+    source_id: object,
+    chunk_index: object,
+    content: object,
+    score: object,
+    metadata: object = None,
+) -> RetrievedChunk:
+    """查询行还原片段。metadata 缺省时标题与位置为空，旧行仍可检索。"""
+    meta = _meta_dict(metadata)
+    raw_title = meta.get("title")
+    title = raw_title.strip() if isinstance(raw_title, str) and raw_title.strip() else None
+    return RetrievedChunk(
+        source_id=str(source_id),
+        chunk_index=int(chunk_index),
+        content=str(content),
+        score=float(score),
+        title=title,
+        location=location_from_meta(meta),
+    )
+
+
 def citation_sources(
     chunks: list[RetrievedChunk], *, limit: int = CITATION_LIMIT
 ) -> list[dict[str, object]]:
-    """同一 (source_id, chunk_index) 只留最高分，再按 score 降序取前 limit 条。"""
-    chosen: dict[tuple[str, int], RetrievedChunk] = {}
+    """同一 (source_id, chunk_index) 只留最高分，顺序保持首次出现。
+
+    超过 limit 时按分数丢掉低分项，留下的编号与相对顺序不变。
+    cite 已由 collector 分配时沿用；否则用去重后的序号。
+    """
+    ordered: list[RetrievedChunk] = []
+    position: dict[tuple[str, int], int] = {}
     for chunk in chunks:
         key = (chunk.source_id, chunk.chunk_index)
-        previous = chosen.get(key)
-        if previous is None or chunk.score > previous.score:
-            chosen[key] = chunk
-    ranked = sorted(chosen.values(), key=lambda item: (-item.score, item.source_id, item.chunk_index))
-    return [
-        {"sourceId": item.source_id, "chunkIndex": item.chunk_index, "score": item.score}
-        for item in ranked[:limit]
+        slot = position.get(key)
+        if slot is None:
+            position[key] = len(ordered)
+            ordered.append(chunk)
+            continue
+        previous = ordered[slot]
+        if chunk.score > previous.score:
+            ordered[slot] = previous.with_score(chunk.score)
+    numbered = [
+        (item.cite if item.cite is not None else index, item)
+        for index, item in enumerate(ordered, start=1)
     ]
+    if limit >= 0 and len(numbered) > limit:
+        keep = {
+            cite
+            for cite, _item in sorted(numbered, key=lambda pair: (-pair[1].score, pair[0]))[:limit]
+        }
+        numbered = [(cite, item) for cite, item in numbered if cite in keep]
+    citations: list[dict[str, object]] = []
+    for cite, item in numbered:
+        entry: dict[str, object] = {
+            "cite": cite,
+            "sourceId": item.source_id,
+            "chunkIndex": item.chunk_index,
+            "score": item.score,
+        }
+        if item.title:
+            entry["title"] = item.title
+        if item.location is not None and item.location.to_api():
+            entry["location"] = item.location.to_api()
+        citations.append(entry)
+    return citations
 
 
 def hnsw_index_allowed(dimensions: int) -> bool:
@@ -142,7 +282,7 @@ def vector_search_sql(table: str, *, include_legacy_nulls: bool = False) -> str:
     else:
         predicate = "embedding_model = $3"
     return (
-        "SELECT source_id, chunk_index, content, "
+        "SELECT source_id, chunk_index, content, metadata, "
         "1 - (embedding <=> $2::vector) AS score "
         f"FROM {qualified} "
         f"WHERE agent_id = $1 AND {predicate} "
@@ -192,7 +332,7 @@ def lexical_search_statement(
     arguments.append(limit)
     rank_expr = " + ".join(rank_terms)
     sql = (
-        "SELECT source_id, chunk_index, content, "
+        "SELECT source_id, chunk_index, content, metadata, "
         f"({rank_expr})::float8 AS score "
         f"FROM {qualified_chunks_table(table)} "
         f"WHERE agent_id = $1 AND ({' OR '.join(clauses)}){model_sql} "
@@ -233,6 +373,7 @@ class RetrievalStore(Protocol):
         chunks: list[str],
         embeddings: list[list[float]],
         embedding_model: str = "",
+        locations: list[ChunkLocation | None] | None = None,
     ) -> int: ...
 
     async def delete_document(self, *, agent_id: str, source_id: str) -> None: ...
@@ -471,6 +612,7 @@ class PgVectorRetrievalStore:
         chunks: list[str],
         embeddings: list[list[float]],
         embedding_model: str = "",
+        locations: list[ChunkLocation | None] | None = None,
     ) -> int:
         if not embeddings:
             return 0
@@ -481,7 +623,6 @@ class PgVectorRetrievalStore:
         # 只有写进遗留表、且模型名就是进程模型时，才把未标注的存量行一起换掉。
         include_nulls = table == "chunks" and model == self._legacy_embedding_model
         pool = await self._get_pool()
-        metadata = json.dumps({"title": title})
         async with pool.acquire() as conn, conn.transaction():
             # 同一文件的删除与插入都在这个事务里。锁键是 agent_id:source_id 的 64-bit hash，
             # 只串行化这一份文件；事务提交或回滚时 pg_advisory_xact_lock 自动释放，其它 source 不互相阻塞。
@@ -498,6 +639,7 @@ class PgVectorRetrievalStore:
                 model,
             )
             for index, (content, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
+                location = None if locations is None or index >= len(locations) else locations[index]
                 await conn.execute(
                     f"INSERT INTO {qualified} "
                     "(agent_id, source_id, chunk_index, content, embedding, embedding_model, metadata) "
@@ -508,7 +650,7 @@ class PgVectorRetrievalStore:
                     content,
                     self._vector_literal(embedding, dimensions=dimensions),
                     model,
-                    metadata,
+                    _chunk_metadata(title, location),
                 )
         return len(chunks)
 
@@ -558,15 +700,7 @@ class PgVectorRetrievalStore:
                 model,
                 top_k,
             )
-        return [
-            RetrievedChunk(
-                source_id=row["source_id"],
-                chunk_index=row["chunk_index"],
-                content=row["content"],
-                score=float(row["score"]),
-            )
-            for row in rows
-        ]
+        return [_chunk_from_record(row) for row in rows]
 
     async def search_lexical(
         self,
@@ -608,17 +742,7 @@ class PgVectorRetrievalStore:
                     include_legacy_nulls=include_nulls,
                 )
                 rows = await conn.fetch(sql, *arguments)
-                groups.append(
-                    [
-                        RetrievedChunk(
-                            source_id=row["source_id"],
-                            chunk_index=row["chunk_index"],
-                            content=row["content"],
-                            score=float(row["score"]),
-                        )
-                        for row in rows
-                    ]
-                )
+                groups.append([_chunk_from_record(row) for row in rows])
         return merge_lexical_candidates(groups, limit=limit)
 
     async def close(self) -> None:

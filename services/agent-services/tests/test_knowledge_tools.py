@@ -75,7 +75,7 @@ async def test_knowledge_tool_returns_formatted_chunks_with_sources() -> None:
     retrieval = _FakeRetrieval()
     toolset = build_knowledge_toolset("42", retrieval)  # type: ignore[arg-type]
     result = await _call_search(toolset, "hours")
-    assert result == "- KB-FACT (source: kb:1#2)"
+    assert result == "- [c1] KB-FACT (source: kb:1#2)"
     assert retrieval.calls == [("42", "hours")]
 
 
@@ -91,7 +91,11 @@ async def test_knowledge_tool_returns_partial_hits_when_degraded() -> None:
         _FakeRetrieval(degraded=True, partial=True),  # type: ignore[arg-type]
         collector=collector,
     )
-    assert await _call_search(toolset, "hours") == "- KB-FACT (source: kb:1#2)"
+    assert await _call_search(toolset, "hours") == (
+        "Search degraded: at least one embedding class failed. "
+        "The passages below are incomplete.\n\n"
+        "- [c1] KB-FACT (source: kb:1#2)"
+    )
     assert collector.degraded is True
     assert [(chunk.source_id, chunk.chunk_index) for chunk in collector.chunks] == [("kb:1", 2)]
 

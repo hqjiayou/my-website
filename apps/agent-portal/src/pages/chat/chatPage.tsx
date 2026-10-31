@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Check, Copy, Download, Ellipsis, FileText, ImagePlus, Mic, Pencil, Plus, RotateCcw, Share2, Square, SquarePen, Trash, Unlink, Volume2, VolumeX, X } from 'lucide-react'
 
 import { agentAiApi, sseErrorText } from '@/api/agentAiApi'
@@ -47,6 +47,32 @@ const DOCUMENT_EXTENSIONS = [
   'hs', 'ex', 'exs', 'tf', 'proto',
 ]
 const DOCUMENT_ACCEPT = DOCUMENT_EXTENSIONS.map((ext) => `.${ext}`).join(',')
+
+/** PDF 滾到 `## 第 N 页`，表格滾到 `## {sheet}`。表內行號不參與滾動。 */
+function citationHeading(citation: AgentAiCitation): string | null {
+  const page = citation.location?.page
+  if (typeof page === 'number' && page > 0) return `第 ${page} 页`
+  const sheet = citation.location?.sheet
+  return sheet ? sheet : null
+}
+
+function citationDocumentHref(citation: AgentAiCitation): string | null {
+  const match = /^kb:(\d+)$/.exec(citation.sourceId)
+  if (!match) return null
+  const params = new URLSearchParams({ doc: match[1] })
+  const heading = citationHeading(citation)
+  if (heading) params.set('heading', heading)
+  return `${ROUTES.knowledge}?${params.toString()}`
+}
+
+function citationLabel(citation: AgentAiCitation, index: number): string {
+  const parts = [`來源 ${citation.cite ?? index + 1}`]
+  if (citation.title) parts.push(citation.title)
+  const heading = citationHeading(citation)
+  if (heading) parts.push(heading)
+  parts.push(formatSimilarityPercent(citation.score))
+  return parts.join(' · ')
+}
 
 interface ChatImage {
   mediaType: string
@@ -1690,15 +1716,23 @@ export function ChatPage() {
                     ) : null}
                     {hasCitations ? (
                       <ul className="mt-3 flex flex-wrap gap-1.5">
-                        {message.citations?.map((citation, index) => (
-                          <li
-                            key={`${citation.sourceId}-${citation.chunkIndex}-${index}`}
-                            title={citation.sourceId}
-                            className="max-w-full rounded-full bg-gpt-sidebar px-2.5 py-1 text-xs text-gpt-muted"
-                          >
-                            來源 {index + 1} · {formatSimilarityPercent(citation.score)}
-                          </li>
-                        ))}
+                        {message.citations?.map((citation, index) => {
+                          const href = citationDocumentHref(citation)
+                          const label = citationLabel(citation, index)
+                          const className =
+                            'max-w-full truncate rounded-full bg-gpt-sidebar px-2.5 py-1 text-xs text-gpt-muted'
+                          return (
+                            <li key={`${citation.sourceId}-${citation.chunkIndex}-${index}`} title={label}>
+                              {href ? (
+                                <Link to={href} className={`${className} inline-block hover:text-gpt-ink`}>
+                                  {label}
+                                </Link>
+                              ) : (
+                                <span className={`inline-block ${className}`}>{label}</span>
+                              )}
+                            </li>
+                          )
+                        })}
                       </ul>
                     ) : null}
                     {message.providerStatus !== undefined && message.providerStatus !== 'LIVE' ? (

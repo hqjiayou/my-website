@@ -21,14 +21,55 @@ logger = logging.getLogger(__name__)
 
 SEARCH_TOOL_NAME = "search_site_knowledge"
 
+# 工具原文给模型看，与 harness 一样用英文。用户可见的降级说明另按 locale 追加。
+DEGRADED_TOOL_LINE = (
+    "Search degraded: at least one embedding class failed. The passages below are incomplete."
+)
 
-def format_knowledge_chunks(chunks: list[RetrievedChunk]) -> str:
-    """与 chat grounding 一样用 `- ` 片段；工具返回另附来源标识。"""
-    if not chunks:
+
+def format_knowledge_chunks(
+    chunks: list[RetrievedChunk] | list[tuple[int, RetrievedChunk]],
+    *,
+    degraded: bool = False,
+) -> str:
+    """片段前标 [cN]。编号由调用方传入；只传片段时从 1 顺序编号。"""
+    numbered = _numbered_chunks(chunks)
+    if not numbered:
         return "No matching site knowledge."
-    return "\n\n".join(
-        f"- {chunk.content} (source: {chunk.source_id}#{chunk.chunk_index})" for chunk in chunks
+    lines = [DEGRADED_TOOL_LINE] if degraded else []
+    lines.extend(
+        f"- [c{cite}] {chunk.content} ({_chunk_suffix(chunk)})" for cite, chunk in numbered
     )
+    return "\n\n".join(lines)
+
+
+def _numbered_chunks(
+    chunks: list[RetrievedChunk] | list[tuple[int, RetrievedChunk]],
+) -> list[tuple[int, RetrievedChunk]]:
+    if not chunks:
+        return []
+    first = chunks[0]
+    if isinstance(first, tuple):
+        return [(cite, chunk) for cite, chunk in chunks]  # type: ignore[misc]
+    return [(chunk.cite if chunk.cite is not None else index, chunk) for index, chunk in enumerate(chunks, start=1)]  # type: ignore[arg-type]
+
+
+def _chunk_suffix(chunk: RetrievedChunk) -> str:
+    parts: list[str] = []
+    if chunk.title:
+        parts.append(f"title: {chunk.title}")
+    parts.append(f"source: {chunk.source_id}#{chunk.chunk_index}")
+    if chunk.location is not None:
+        meta = chunk.location.to_api()
+        if "page" in meta:
+            parts.append(f"page: {meta['page']}")
+        if "sheet" in meta:
+            parts.append(f"sheet: {meta['sheet']}")
+        if "rowStart" in meta or "rowEnd" in meta:
+            start = meta.get("rowStart", "")
+            end = meta.get("rowEnd", "")
+            parts.append(f"rows: {start}-{end}")
+    return ", ".join(parts)
 
 
 @dataclass
@@ -42,14 +83,22 @@ class KnowledgeSearchCollector:
     chunks: list[RetrievedChunk] = field(default_factory=list)
     searches: list[dict[str, object]] = field(default_factory=list)
     degraded: bool = False
+    _cites: dict[tuple[str, int], int] = field(default_factory=dict)
 
-    def record(self, query: str, chunks: list[RetrievedChunk]) -> dict[str, object]:
-        seen = {(chunk.source_id, chunk.chunk_index) for chunk in self.chunks}
+    def record(self, query: str, chunks: list[RetrievedChunk]) -> list[tuple[int, RetrievedChunk]]:
+        """按累积顺序分配 [cN]。同一片段再次命中沿用原编号，不按分数重排。"""
+        numbered: list[tuple[int, RetrievedChunk]] = []
         for chunk in chunks:
             key = (chunk.source_id, chunk.chunk_index)
-            if key not in seen:
-                seen.add(key)
-                self.chunks.append(chunk)
+            cite = self._cites.get(key)
+            if cite is None:
+                cite = len(self.chunks) + 1
+                stored = chunk.with_cite(cite)
+                self._cites[key] = cite
+                self.chunks.append(stored)
+            else:
+                stored = self.chunks[cite - 1]
+            numbered.append((cite, stored))
         summary: dict[str, object] = {
             "query": query,
             "hitCount": len(chunks),
@@ -59,7 +108,7 @@ class KnowledgeSearchCollector:
             ],
         }
         self.searches.append(summary)
-        return summary
+        return numbered
 
     def summary_for(self, call_index: int) -> dict[str, object] | None:
         """第 n 次（1 起）搜索调用的摘要；不存在时返回 None。"""
@@ -82,7 +131,9 @@ def build_knowledge_toolset(
 
     @toolset.tool_plain(name=SEARCH_TOOL_NAME)
     async def search_site_knowledge(query: str) -> str:
-        """Search this site's knowledge base and return matching passages with their source ids.
+        """Search this site's knowledge base and return matching passages.
+
+        Each passage is labeled [cN]. Cite that label inline. The label is the collector order, not a rank.
 
         Args:
             query: what to look up in the site knowledge base.
@@ -111,8 +162,11 @@ def build_knowledge_toolset(
         # 某一类失败时 degraded 为真，但其它类和字面命中仍然返回。
         if retrieval.degraded and not chunks:
             return "Site knowledge search failed."
+        numbered: list[tuple[int, RetrievedChunk]] | list[RetrievedChunk]
         if collector is not None:
-            collector.record(cleaned, chunks)
-        return format_knowledge_chunks(chunks)
+            numbered = collector.record(cleaned, chunks)
+        else:
+            numbered = chunks
+        return format_knowledge_chunks(numbered, degraded=bool(retrieval.degraded and chunks))
 
     return toolset

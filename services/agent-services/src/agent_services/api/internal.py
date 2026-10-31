@@ -43,6 +43,7 @@ from agent_services.retrieval.embeddings import (
 from agent_services.retrieval.service import (
     DimensionChangeRequired,
     EmbeddingClass,
+    IndexSegment,
     ReembedPrepared,
     RetrievalChunkLimitExceeded,
     RetrievalService,
@@ -668,6 +669,18 @@ async def upsert_retrieval_document(
             ),
             embedding_model=None if embedding_classes else body.embedding_spec,
             embedding_classes=embedding_classes,
+            segments=None
+            if body.segments is None
+            else [
+                IndexSegment(
+                    text=item.text,
+                    page=item.page,
+                    sheet=item.sheet,
+                    row_start=item.row_start,
+                    row_end=item.row_end,
+                )
+                for item in body.segments
+            ],
         )
     except RetrievalChunkLimitExceeded as exc:
         raise InternalApiError(status_code=400, error_code="BAD_REQUEST", message=str(exc)) from exc

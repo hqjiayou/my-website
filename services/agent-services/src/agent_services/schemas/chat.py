@@ -3,7 +3,7 @@ import binascii
 import math
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_serializer
 
 from agent_services.retrieval.embeddings import limit_embedding_class_specs
 from agent_services.schemas.todo import MAX_TODO_ITEMS, TodoItem
@@ -241,14 +241,45 @@ class ToolTraceItem(BaseModel):
     ok: bool
 
 
-class ChatCitation(BaseModel):
-    """本轮 grounding 实际采用的来源。无采用时响应里不出现该字段。"""
+class CitationLocation(BaseModel):
+    """页码或表格行区间。缺的字段不写出。"""
 
+    page: int | None = None
+    sheet: str | None = None
+    row_start: int | None = Field(default=None, alias="rowStart")
+    row_end: int | None = Field(default=None, alias="rowEnd")
+
+    model_config = {"populate_by_name": True}
+
+    @model_serializer(mode="wrap")
+    def _drop_nulls(self, handler):  # type: ignore[no-untyped-def]
+        data = handler(self)
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if value is not None}
+        return data
+
+
+class ChatCitation(BaseModel):
+    """本轮 grounding 实际采用的来源。无采用时响应里不出现该字段。
+
+    cite 是 collector 顺序编号。title / location 只在索引 metadata 里有时出现。
+    """
+
+    cite: int | None = None
     source_id: str = Field(alias="sourceId")
     chunk_index: int = Field(alias="chunkIndex")
     score: float
+    title: str | None = None
+    location: CitationLocation | None = None
 
     model_config = {"populate_by_name": True}
+
+    @model_serializer(mode="wrap")
+    def _drop_nulls(self, handler):  # type: ignore[no-untyped-def]
+        data = handler(self)
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if value is not None}
+        return data
 
 
 class SearchSummaryItem(BaseModel):

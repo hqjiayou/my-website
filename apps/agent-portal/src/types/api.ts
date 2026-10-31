@@ -146,11 +146,22 @@ export interface AgentAiModelModes {
   modes: AgentAiModelModeOption[]
 }
 
+/** 片段在原件中的位置。頁碼與表名用於跳到對應標題，不滾表內行。 */
+export interface AgentAiCitationLocation {
+  page?: number | null
+  sheet?: string | null
+  rowStart?: number | null
+  rowEnd?: number | null
+}
+
 /** 本輪實際採用的知識庫引用。歷史訊息的 ASSISTANT 項也帶回這個欄位。 */
 export interface AgentAiCitation {
   sourceId: string
   chunkIndex: number
   score: number
+  title?: string | null
+  location?: AgentAiCitationLocation | null
+  cite?: number | null
 }
 
 /** 知识搜索工具的安全摘要（TOOL_RESULT 事件携带）：只有查询词、命中数与来源标识，不含片段正文。 */
