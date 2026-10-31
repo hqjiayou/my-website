@@ -234,7 +234,10 @@ public class AgentAiServiceImpl implements AgentAiService {
                 memories,
                 mode,
                 request.modelEntryId(),
-                request.timezone());
+                request.timezone(),
+                request.latitude(),
+                request.longitude(),
+                request.accuracyMeters());
         AgentChatResponse response = agentClient.chat(agentRequest);
         persistTurn(
                 agentId,
@@ -380,7 +383,10 @@ public class AgentAiServiceImpl implements AgentAiService {
                         memories,
                         mode,
                         request.modelEntryId(),
-                        request.timezone());
+                        request.timezone(),
+                        request.latitude(),
+                        request.longitude(),
+                        request.accuracyMeters());
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         List<AgentAttachmentDto> stored = storedAttachments(attachments, validated);
@@ -410,7 +416,10 @@ public class AgentAiServiceImpl implements AgentAiService {
             List<String> memories,
             String mode,
             Long modelEntryId,
-            String timezone) {
+            String timezone,
+            Double latitude,
+            Double longitude,
+            Double accuracyMeters) {
         Long conversationId = preparation.conversation().getId();
         List<ChainLink> links = pinChain(loadModelChainLinks(agentId, mode), modelEntryId);
         List<AgentModelSelection> chain = links.stream().map(ChainLink::selection).toList();
@@ -443,7 +452,10 @@ public class AgentAiServiceImpl implements AgentAiService {
                 embedding == null ? null : embedding.apiKey(),
                 embedding == null ? null : embedding.baseUrl(),
                 AgentEmbeddingClassUtils.wire(embeddingClasses),
-                timezone);
+                timezone,
+                latitude,
+                longitude,
+                accuracyMeters);
     }
 
     private void persistTurn(

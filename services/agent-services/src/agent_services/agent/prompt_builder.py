@@ -22,6 +22,9 @@ def build_prompt_parts(
     knowledge_available: bool = False,
     timezone_name: str | None = None,
     now: datetime | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    accuracy_meters: float | None = None,
 ) -> tuple[str, str]:
     system = (
         prompt_profile.system_prompt.strip()
@@ -73,9 +76,11 @@ def build_prompt_parts(
             f"{knowledge}"
         )
     # 与 locale 行同层，独立成段，不写进站点 Prompt，也不进 harness 平台文件。
-    # #159 定位、#160 身份在 session_context_section 里追加，本段目前只有时间。
+    # 钟点用 IANA 时区。位置只来自浏览器或手机定位权限，不从时区推断城市。
     moment = now if now is not None else datetime.now(timezone.utc)
-    system = f"{system}\n\n{session_context_section(timezone_name, moment)}"
+    system = (
+        f"{system}\n\n{session_context_section(timezone_name, moment, latitude, longitude, accuracy_meters)}"
+    )
     if locale and _LOCALE_RE.fullmatch(locale.strip()):
         system = f"{system}\n\nReply in this locale: {locale.strip()}."
     return system, user_message.strip()
@@ -84,28 +89,103 @@ def build_prompt_parts(
 _WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 
-def session_context_section(timezone_name: str | None, now: datetime) -> str:
+def session_context_section(
+    timezone_name: str | None,
+    now: datetime,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    accuracy_meters: float | None = None,
+) -> str:
     """会话上下文段。后续单只往 blocks 里加块，不改时间块的渲染。"""
-    blocks = [_time_context_block(timezone_name, now)]
+    blocks = [_time_context_block(timezone_name, now, latitude, longitude, accuracy_meters)]
     return "\n\n".join(blocks)
 
 
-def _time_context_block(timezone_name: str | None, now: datetime) -> str:
+def _time_context_block(
+    timezone_name: str | None,
+    now: datetime,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    accuracy_meters: float | None = None,
+) -> str:
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
     zone, fallback = _resolve_zone(timezone_name)
     local = now.astimezone(zone)
+    offset = local.strftime("%z")
+    offset_label = f"UTC{offset[0]}{offset[1:3]}:{offset[3:5]}" if len(offset) == 5 else "UTC"
+    position = _accepted_position(latitude, longitude, accuracy_meters)
     lines = [
         "# Session context",
         "",
-        f"Local date: {local.strftime('%Y-%m-%d')}",
-        f"Weekday: {_WEEKDAYS[local.weekday()]}",
-        f"Local time: {local.strftime('%H:%M')}",
-        f"Timezone: {zone.key}",
+        "These fields are the user's current local time. Timezone is only the clock.",
+        "If the user asks what time it is or what the date is, answer from Local time, Local date, and Weekday. "
+        "Do not convert Local time to UTC.",
     ]
+    if position is None:
+        lines.append(
+            "Location permission was not granted. Timezone is only the clock, not a city. "
+            "If the user asks where they are, or for local weather without naming a place, "
+            "say the browser or phone has not granted location permission. Do not invent a city from Timezone."
+        )
+    else:
+        lines.extend(
+            [
+                "Location comes from the browser or phone Geolocation API after the user granted permission. "
+                "It is not the timezone.",
+                "This position is the user's location. Keep it for the whole thread. Do not retract it.",
+                "Do not treat Timezone as the city.",
+                "If they ask how you know, say the browser or phone location permission.",
+                "If they ask for a finer point than Accuracy meters, say the fix is only that accurate. "
+                "Do not claim the position had no basis.",
+                "If they ask about local conditions such as weather without naming a place, use this position. "
+                "Do not ask which city.",
+                "If no listed tool can look that up, name this position and say the live data is unavailable.",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            f"Local date: {local.strftime('%Y-%m-%d')}",
+            f"Weekday: {_WEEKDAYS[local.weekday()]}",
+            f"Local time: {local.strftime('%H:%M')} ({offset_label})",
+            f"Timezone: {zone.key}",
+        ]
+    )
     if fallback:
         lines.append("Timezone fallback: UTC")
+    if position is not None:
+        lat, lng, accuracy = position
+        lines.append(f"Latitude: {lat:.5f}")
+        lines.append(f"Longitude: {lng:.5f}")
+        if accuracy is not None:
+            lines.append(f"Accuracy meters: {accuracy:.0f}")
     return "\n".join(lines)
+
+
+def _accepted_position(
+    latitude: float | None,
+    longitude: float | None,
+    accuracy_meters: float | None,
+) -> tuple[float, float, float | None] | None:
+    """经纬度必须成对且在范围内。精度非法只丢掉精度。"""
+    if latitude is None or longitude is None:
+        return None
+    try:
+        lat = float(latitude)
+        lng = float(longitude)
+    except (TypeError, ValueError):
+        return None
+    if lat < -90 or lat > 90 or lng < -180 or lng > 180:
+        return None
+    accuracy: float | None
+    try:
+        accuracy = None if accuracy_meters is None else float(accuracy_meters)
+    except (TypeError, ValueError):
+        accuracy = None
+    if accuracy is None or accuracy < 0 or accuracy > 100_000:
+        accuracy = None
+    return lat, lng, accuracy
 
 
 def _resolve_zone(name: str | None) -> tuple[ZoneInfo, bool]:

@@ -29,10 +29,14 @@ public record AgentChatRequest(
         String embeddingBaseUrl,
         // 已登记的嵌入类。有值时执行层按类检索；不传时仍只用上面那一套。
         List<AgentEmbeddingClass> embeddingClasses,
-        // 客户端 IANA 时区名。空则执行层回退 UTC。不传时间戳。
-        String timezone) {
+        // 客户端 IANA 时区名。空则执行层回退 UTC。不传时间戳。只用于钟点。
+        String timezone,
+        // 浏览器或手机定位权限授予后的坐标。不成对则执行层忽略，不从时区推断城市。
+        Double latitude,
+        Double longitude,
+        Double accuracyMeters) {
 
-    /** 兼容尚无 timezone 的构造点（后台试聊走这条，执行层回退 UTC）。 */
+    /** 兼容不带 timezone 的构造点。缺省时执行层回退 UTC。 */
     public AgentChatRequest(
             String agentId,
             String message,
@@ -75,6 +79,9 @@ public record AgentChatRequest(
                 embeddingApiKey,
                 embeddingBaseUrl,
                 embeddingClasses,
+                null,
+                null,
+                null,
                 null);
     }
 

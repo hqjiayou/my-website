@@ -145,8 +145,12 @@ class ChatRequest(BaseModel):
     attachments: list[ChatAttachment] | None = Field(default=None, max_length=MAX_ATTACHMENTS)
     documents: list[ChatDocument] | None = Field(default=None, max_length=MAX_DOCUMENTS)
     locale: str | None = None
-    # 客户端只传 IANA 时区名。缺失或非法由组装段回退 UTC，这里不拒请求。
+    # 客户端只传 IANA 时区名。缺失或非法由组装段回退 UTC，这里不拒请求。只用于钟点。
     timezone: str | None = None
+    # 浏览器或手机定位权限授予后的坐标。不成对或越界由组装段忽略，不因此拒绝整次对话。
+    latitude: float | None = None
+    longitude: float | None = None
+    accuracy_meters: float | None = Field(default=None, alias="accuracyMeters")
     conversation_id: str | None = Field(default=None, alias="conversationId")
     prompt_profile: PromptProfile | None = Field(default=None, alias="promptProfile")
     history: list[ChatHistoryMessage] | None = Field(default=None, max_length=MAX_HISTORY_ITEMS)

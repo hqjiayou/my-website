@@ -102,6 +102,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         AgentModelSelection embedding = embeddingClasses == null || embeddingClasses.isEmpty()
                 ? null
                 : embeddingClasses.get(0);
+        String timezone = StringUtils.hasText(request.timezone()) ? request.timezone().trim() : null;
         AgentChatRequest agentRequest = new AgentChatRequest(
                 String.valueOf(agentId),
                 request.message().trim(),
@@ -122,7 +123,11 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 embedding == null ? null : embedding.embeddingSpec(),
                 embedding == null ? null : embedding.apiKey(),
                 embedding == null ? null : embedding.baseUrl(),
-                AgentEmbeddingClassUtils.wire(embeddingClasses));
+                AgentEmbeddingClassUtils.wire(embeddingClasses),
+                timezone,
+                request.latitude(),
+                request.longitude(),
+                request.accuracyMeters());
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
         adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter));
         return emitter;

@@ -9,6 +9,44 @@ import type {
   AiSearchSummary,
 } from '@/types/ai'
 
+function sessionTimeZone(): string | undefined {
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone?.trim()
+    return timezone || undefined
+  } catch {
+    return undefined
+  }
+}
+
+function sessionLocation(): Promise<{ latitude: number; longitude: number; accuracyMeters?: number } | undefined> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return Promise.resolve(undefined)
+  }
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => resolve(undefined), 12_000)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        window.clearTimeout(timer)
+        const { latitude, longitude, accuracy } = position.coords
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          resolve(undefined)
+          return
+        }
+        resolve({
+          latitude,
+          longitude,
+          ...(Number.isFinite(accuracy) && accuracy >= 0 ? { accuracyMeters: accuracy } : {}),
+        })
+      },
+      () => {
+        window.clearTimeout(timer)
+        resolve(undefined)
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
+    )
+  })
+}
+
 function textOf(message: {
   content?: string | ReadonlyArray<{ type?: string; text?: string }>
 }): string {
@@ -146,6 +184,8 @@ export function createJavaPreviewAdapter(
       const todos = options.getTodos()
       const modelEntryId = options.getModelEntryId()
       const requestedModel = options.getRequestedSpec()
+      const timezone = sessionTimeZone()
+      const location = await sessionLocation()
 
       const response = await streamPreviewChat(
         agentId,
@@ -156,6 +196,8 @@ export function createJavaPreviewAdapter(
           todos: todos.length ? todos : undefined,
           mode: options.getMode(),
           ...(modelEntryId != null ? { modelEntryId } : {}),
+          ...(timezone ? { timezone } : {}),
+          ...(location ?? {}),
         },
         abortSignal,
       )

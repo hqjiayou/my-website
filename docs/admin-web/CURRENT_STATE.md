@@ -22,7 +22,7 @@ source_of_truth: apps/admin-web/src
 | Appearance | FORCE REAL | `heroLayout` |
 | Media | FORCE REAL | |
 | Content | FORCE REAL | |
-| AI 工作台与全局 Prompt / 知识库 / 会话 | FORCE REAL | 工作台概览、试聊、Prompt、知识库、对话、运行状态走 `aiApi`。试聊按 CLI / API key 选择接入，并可在该模式的生效链里指定下一轮入口；不指定则用该模式的默认入口，只调用这一条；不勾选 skill 则本轮不注入。「正在使用 X / 无可用入口」文案、默认模式初始化与 DONE 回传模型的比对基准，均来自 `GET .../ai/preview/model` 回填（`mode` 缺省拿服务端默认判定，切换 CLI/KEY 带 `mode` 重查），与后端 `previewStream` 同一判定路径；本页不再本地拉全平台入口列表算这条规则。概览读运行状态里的 Harness（平台文件、技能、运行上限、MCP）、Prompt、知识库和会话消息上的用量；会话列表按条展示模型、条数、最近一轮上下文和累计输入输出 token。新的一轮会把请求的模型 spec 记在助手消息上，更早的消息没有这条记录时列表用当前模型名。`pages/ai/settingsPage` 是模型入口。 |
+| AI 工作台与全局 Prompt / 知识库 / 会话 | FORCE REAL | 工作台概览、试聊、Prompt、知识库、对话、运行状态走 `aiApi`。试聊按 CLI / API key 选择接入，请求带上浏览器 IANA 时区和用户授予的定位坐标，并可在该模式的生效链里指定下一轮入口；不指定则用该模式的默认入口，只调用这一条；不勾选 skill 则本轮不注入。「正在使用 X / 无可用入口」文案、默认模式初始化与 DONE 回传模型的比对基准，均来自 `GET .../ai/preview/model` 回填（`mode` 缺省拿服务端默认判定，切换 CLI/KEY 带 `mode` 重查），与后端 `previewStream` 同一判定路径；本页不再本地拉全平台入口列表算这条规则。概览读运行状态里的 Harness（平台文件、技能、运行上限、MCP）、Prompt、知识库和会话消息上的用量；会话列表按条展示模型、条数、最近一轮上下文和累计输入输出 token。新的一轮会把请求的模型 spec 记在助手消息上，更早的消息没有这条记录时列表用当前模型名。`pages/ai/settingsPage` 是模型入口。 |
 | 占位页 | 无后端 | 域名页已从工作台拿掉，`/domain` 回到基础信息。`ParamsConfigPage`、`AnalyticsPage`、`SystemSettingsPage`、`DeveloperPage` 仍是 `EmptyModulePage` |
 | 运营全局 Contents/Files | REAL | `api/operation/*` 客户端跨站聚合，无单独跨站后端 |
 

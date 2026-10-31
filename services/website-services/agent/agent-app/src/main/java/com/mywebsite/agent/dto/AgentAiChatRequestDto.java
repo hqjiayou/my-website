@@ -14,16 +14,22 @@ public record AgentAiChatRequestDto(
          * 不在该模式生效链上时拒绝，不改走默认（Issue #153）。
          */
         Long modelEntryId,
-        /** IANA 时区名。空则执行层回退 UTC。客户端不传自己的时间戳。 */
-        String timezone) {
+        /** IANA 时区名。空则执行层回退 UTC。客户端不传自己的时间戳。只用于钟点，不当成城市。 */
+        String timezone,
+        /** 浏览器或手机定位权限授予后的纬度。与经度成对，缺一则忽略。 */
+        Double latitude,
+        /** 浏览器或手机定位权限授予后的经度。 */
+        Double longitude,
+        /** 定位精度，单位米。可空。 */
+        Double accuracyMeters) {
 
     public AgentAiChatRequestDto(String message, String conversationId, List<AgentAiAttachmentDto> attachments) {
-        this(message, conversationId, attachments, null, null, null, null);
+        this(message, conversationId, attachments, null, null, null, null, null, null, null);
     }
 
     public AgentAiChatRequestDto(
             String message, String conversationId, List<AgentAiAttachmentDto> attachments, List<AgentAiDocumentDto> documents) {
-        this(message, conversationId, attachments, documents, null, null, null);
+        this(message, conversationId, attachments, documents, null, null, null, null, null, null);
     }
 
     public AgentAiChatRequestDto(
@@ -32,7 +38,7 @@ public record AgentAiChatRequestDto(
             List<AgentAiAttachmentDto> attachments,
             List<AgentAiDocumentDto> documents,
             String mode) {
-        this(message, conversationId, attachments, documents, mode, null, null);
+        this(message, conversationId, attachments, documents, mode, null, null, null, null, null);
     }
 
     public AgentAiChatRequestDto(
@@ -42,6 +48,6 @@ public record AgentAiChatRequestDto(
             List<AgentAiDocumentDto> documents,
             String mode,
             Long modelEntryId) {
-        this(message, conversationId, attachments, documents, mode, modelEntryId, null);
+        this(message, conversationId, attachments, documents, mode, modelEntryId, null, null, null, null);
     }
 }

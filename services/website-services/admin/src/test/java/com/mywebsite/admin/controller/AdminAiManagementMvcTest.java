@@ -245,7 +245,8 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .chatStream(captor.capture(), any());
 
         String body = "{\"message\":\"hello\",\"skills\":[\" orchestration \",\"orchestration\"],"
-                + "\"todos\":[{\"id\":\"t1\",\"title\":\"Step 1\",\"status\":\"IN_PROGRESS\"}]}";
+                + "\"todos\":[{\"id\":\"t1\",\"title\":\"Step 1\",\"status\":\"IN_PROGRESS\"}],"
+                + "\"timezone\":\" Asia/Tokyo \",\"latitude\":35.68124,\"longitude\":139.76712,\"accuracyMeters\":18}";
         MvcResult mvcResult = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .header(HttpHeaders.ACCEPT_LANGUAGE, "zh-CN")
@@ -257,6 +258,10 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
 
         AgentChatRequest sent = captor.getValue();
         assertThat(sent.locale()).isEqualTo("zh-CN");
+        assertThat(sent.timezone()).isEqualTo("Asia/Tokyo");
+        assertThat(sent.latitude()).isEqualTo(35.68124);
+        assertThat(sent.longitude()).isEqualTo(139.76712);
+        assertThat(sent.accuracyMeters()).isEqualTo(18.0);
         assertThat(sent.skills()).containsExactly("orchestration");
         assertThat(sent.todos()).containsExactly(new AgentTodoItem("t1", "Step 1", "IN_PROGRESS"));
     }
@@ -300,6 +305,9 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
 
         AgentChatRequest sent = captor.getValue();
         assertThat(sent.skills()).isEmpty();
+        assertThat(sent.timezone()).isNull();
+        assertThat(sent.latitude()).isNull();
+        assertThat(sent.longitude()).isNull();
         assertThat(sent.fallbackModels()).isNull();
         assertThat(sent.model().spec()).isEqualTo("openai:muse-wonder-1.0");
     }

@@ -454,6 +454,14 @@ export interface AiPreviewChatInput {
   mode?: 'CLI' | 'KEY'
   /** 这一轮点名的入口。不传则用该模式链首。 */
   modelEntryId?: number
+  /** 浏览器 IANA 时区。缺省时执行层回退 UTC。只用于钟点。 */
+  timezone?: string
+  /** 浏览器或手机定位权限授予后的纬度。须与经度一起传。 */
+  latitude?: number
+  /** 浏览器或手机定位权限授予后的经度。 */
+  longitude?: number
+  /** 定位精度，单位米。 */
+  accuracyMeters?: number
 }
 
 /** 知识搜索工具的安全摘要：查询词与命中数（片段正文不进预览事件）。 */

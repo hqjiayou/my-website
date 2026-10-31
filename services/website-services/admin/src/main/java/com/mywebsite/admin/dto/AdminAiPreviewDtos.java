@@ -29,7 +29,15 @@ public final class AdminAiPreviewDtos {
              */
             @Size(max = 8) String mode,
             /** 这一轮点名的入口。空则用该模式链首。不在链上时这一轮失败。 */
-            Long modelEntryId) {}
+            Long modelEntryId,
+            /** 浏览器 IANA 时区名。空则执行层回退 UTC。不传时间戳。只用于钟点。 */
+            @Size(max = 64) String timezone,
+            /** 浏览器或手机定位权限授予后的纬度。与经度成对。 */
+            Double latitude,
+            /** 浏览器或手机定位权限授予后的经度。 */
+            Double longitude,
+            /** 定位精度，单位米。可空。 */
+            Double accuracyMeters) {}
 
     public record AdminAiPreviewHistoryMessage(
             @NotBlank @Size(max = 16) String role, @NotBlank @Size(max = 8000) String content) {}

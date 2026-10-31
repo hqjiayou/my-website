@@ -19,7 +19,7 @@ import { useSpeechInput } from './useSpeechInput'
 
 const MAX_MESSAGE_CHARS = 16_000
 
-/** 每次請求現取瀏覽器時區，不緩存。取不到就不帶，由服務端回退 UTC。 */
+/** 每次請求現取瀏覽器時區，不緩存。取不到就不帶，由服務端回退 UTC。只用於鐘點。 */
 function sessionTimeZoneField(): { timezone: string } | Record<string, never> {
   try {
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone?.trim()
@@ -27,6 +27,36 @@ function sessionTimeZoneField(): { timezone: string } | Record<string, never> {
   } catch {
     return {}
   }
+}
+
+/** 發送時向瀏覽器或手機申請定位權限。拒絕或超時就不帶座標，服務端不從時區猜城市。 */
+function sessionLocationField(): Promise<{ latitude: number; longitude: number; accuracyMeters?: number } | Record<string, never>> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return Promise.resolve({})
+  }
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => resolve({}), 12_000)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        window.clearTimeout(timer)
+        const { latitude, longitude, accuracy } = position.coords
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          resolve({})
+          return
+        }
+        resolve({
+          latitude,
+          longitude,
+          ...(Number.isFinite(accuracy) && accuracy >= 0 ? { accuracyMeters: accuracy } : {}),
+        })
+      },
+      () => {
+        window.clearTimeout(timer)
+        resolve({})
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
+    )
+  })
 }
 const MAX_IMAGES = 3
 const MAX_IMAGE_EDGE = 1600
@@ -866,12 +896,14 @@ export function ChatPage() {
       )
     }
     try {
+      const location = await sessionLocationField()
       await agentAiApi.streamChat(
         site.agentId,
         {
           message: trimmed,
           mode: effectiveMode,
           ...sessionTimeZoneField(),
+          ...location,
           ...(entryId ? { modelEntryId: Number(entryId) } : {}),
           ...(conversationId ? { conversationId } : {}),
           ...(images.length

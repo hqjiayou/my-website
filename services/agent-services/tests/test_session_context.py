@@ -12,7 +12,7 @@ _CROSS_DATE = datetime(2026, 10, 31, 10, 30, tzinfo=timezone.utc)
 _DST = datetime(2026, 3, 8, 7, 30, tzinfo=timezone.utc)
 
 
-def _system(zone: str | None, now: datetime) -> str:
+def _system(zone: str | None, now: datetime, **location: float) -> str:
     system, user = build_prompt_parts(
         "1",
         "hi",
@@ -20,6 +20,7 @@ def _system(zone: str | None, now: datetime) -> str:
         locale="zh-CN",
         timezone_name=zone,
         now=now,
+        **location,
     )
     assert user == "hi"
     assert system.startswith("SITE-PROMPT-ONLY")
@@ -36,6 +37,18 @@ def test_chat_request_accepts_missing_and_present_timezone() -> None:
     )
     assert present.timezone == "Asia/Tokyo"
     assert present.locale == "zh-CN"
+    located = ChatRequest.model_validate(
+        {
+            "agentId": "1",
+            "message": "hi",
+            "latitude": 35.6,
+            "longitude": 139.7,
+            "accuracyMeters": 12,
+        }
+    )
+    assert located.latitude == 35.6
+    assert located.longitude == 139.7
+    assert located.accuracy_meters == 12
 
 
 def test_same_instant_renders_different_dates_across_zones() -> None:
@@ -46,7 +59,13 @@ def test_same_instant_renders_different_dates_across_zones() -> None:
     assert "Local date: 2026-10-31" in tokyo
     assert "Weekday: Saturday" in tokyo
     assert "Local time: 19:30" in tokyo
+    assert "UTC+09:00" in tokyo
     assert "Timezone: Asia/Tokyo" in tokyo
+    assert "answer from Local time" in tokyo
+    assert "Do not convert Local time to UTC." in tokyo
+    assert "Location permission was not granted" in tokyo
+    assert "Do not invent a city from Timezone." in tokyo
+    assert "Latitude:" not in tokyo
     assert "Timezone fallback" not in tokyo
 
     assert "Local date: 2026-11-01" in kiritimati
@@ -87,7 +106,10 @@ def test_missing_or_invalid_timezone_falls_back_to_utc() -> None:
         assert "Local date: 2026-10-31" in system
         assert "Local time: 10:30" in system
         assert "Timezone: UTC" in system
+        assert "UTC+00:00" in system
+        assert "Location permission was not granted" in system
         assert "Timezone fallback: UTC" in system
+        assert "Latitude:" not in system
         assert "Not/AZone" not in system
         assert "UTC+9" not in system
 
@@ -105,4 +127,29 @@ def test_assembled_harness_prompt_contains_session_context() -> None:
     assert "Local date: 2026-10-31" in harness.system_prompt
     assert "Local time: 19:30" in harness.system_prompt
     assert "Timezone: Asia/Tokyo" in harness.system_prompt
+    assert "Location permission was not granted" in harness.system_prompt
     assert "Timezone fallback" not in harness.system_prompt
+
+
+def test_geolocation_permission_is_the_position_and_timezone_stays_the_clock() -> None:
+    system = _system(
+        "Asia/Tokyo",
+        _CROSS_DATE,
+        latitude=35.681236,
+        longitude=139.767125,
+        accuracy_meters=18,
+    )
+    assert "Latitude: 35.68124" in system
+    assert "Longitude: 139.76712" in system
+    assert "Accuracy meters: 18" in system
+    assert "Geolocation API" in system
+    assert "Do not ask which city." in system
+    assert "Do not treat Timezone as the city." in system
+    assert "Location permission was not granted" not in system
+
+    missing_one = _system("Asia/Tokyo", _CROSS_DATE, latitude=35.6)
+    assert "Latitude:" not in missing_one
+    assert "Location permission was not granted" in missing_one
+
+    out_of_range = _system("Asia/Tokyo", _CROSS_DATE, latitude=95, longitude=139)
+    assert "Latitude:" not in out_of_range

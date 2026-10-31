@@ -124,8 +124,14 @@ export interface AgentAiChatRequest {
   mode?: string
   /** 下一輪點名的入口。不傳則用該模式的預設入口。 */
   modelEntryId?: number
-  /** IANA 時區名。只傳名稱，不傳客戶端時間戳。 */
+  /** IANA 時區名。只傳名稱，不傳客戶端時間戳。只用於鐘點。 */
   timezone?: string
+  /** 瀏覽器或手機定位權限授予後的緯度。須與經度一起傳。 */
+  latitude?: number
+  /** 瀏覽器或手機定位權限授予後的經度。 */
+  longitude?: number
+  /** 定位精度，單位米。 */
+  accuracyMeters?: number
 }
 
 /** Portal 雙模式可用性（GET /ai/model-modes）：available=false 表示該模式尚未配置入口。 */
