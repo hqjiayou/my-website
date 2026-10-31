@@ -171,6 +171,44 @@ class AgentAiChatStreamMvcTest extends AbstractAgentSpringBootTest {
     }
 
     @Test
+    void streamKeepsCitationTitleAndLocationOnClientEventAndStoredMeta() throws Exception {
+        doAnswer(invocation -> {
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent(
+                            "DONE",
+                            "{\"reply\":\"查到了\",\"providerStatus\":\"LIVE\",\"citations\":[{"
+                                    + "\"sourceId\":\"kb:4\",\"chunkIndex\":1,\"score\":0.25,\"cite\":2,"
+                                    + "\"title\":\"10月考勤表\","
+                                    + "\"location\":{\"page\":3,\"sheet\":\"Hours\",\"rowStart\":2,\"rowEnd\":5}}]}");
+                    return null;
+                })
+                .when(agentClient)
+                .chatStream(any(), any());
+
+        String body = streamBody();
+        assertThat(body).contains("10月考勤表", "\"page\":3", "Hours", "\"cite\":2");
+        assertThat(body).doesNotContain("retrievalDegraded");
+
+        Matcher matcher = Pattern.compile("\"conversationId\":\"(\\d+)\"").matcher(body);
+        assertThat(matcher.find()).isTrue();
+        long conversationId = Long.parseLong(matcher.group(1));
+        String assistantMeta = jdbcTemplate.queryForObject(
+                "SELECT agent_meta FROM agent_ai_message WHERE conversation_id = ? AND role = 'ASSISTANT'",
+                String.class,
+                conversationId);
+        assertThat(assistantMeta).contains("10月考勤表", "\"page\":3", "\"cite\":2");
+
+        AgentAiMessageDto.Citation citation =
+                conversationService.listMessages(10L, 200L, conversationId).get(1).citations().getFirst();
+        assertThat(citation.title()).isEqualTo("10月考勤表");
+        assertThat(citation.cite()).isEqualTo(2);
+        assertThat(citation.location().page()).isEqualTo(3);
+        assertThat(citation.location().sheet()).isEqualTo("Hours");
+        assertThat(citation.location().rowStart()).isEqualTo(2);
+        assertThat(citation.location().rowEnd()).isEqualTo(5);
+    }
+
+    @Test
     void streamPersistsProcessSummaryOnAssistantMessage() throws Exception {
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
@@ -212,6 +250,6 @@ class AgentAiChatStreamMvcTest extends AbstractAgentSpringBootTest {
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
-                .getContentAsString();
+                .getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
     }
 }
