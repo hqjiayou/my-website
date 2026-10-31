@@ -6,9 +6,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
@@ -282,6 +284,85 @@ class KnowledgeContentConverterTest {
         assertThat(table.rows()).hasSize(1);
         assertThat(table.rows().getFirst().rowNumber()).isEqualTo(5);
         assertThat(table.rows().getFirst().cells()).contains("8:00");
+    }
+
+    @Test
+    void attendanceShapedSheetTakesHeaderAboveTheDateBlock() throws IOException {
+        byte[] bytes;
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            var sheet = workbook.createSheet("10月");
+            sheet.createRow(0).createCell(0).setCellValue("勤務管理表2026");
+            var person = sheet.createRow(1);
+            person.createCell(0).setCellValue("氏名");
+            person.createCell(1).setCellValue("山田");
+            var team = sheet.createRow(2);
+            team.createCell(0).setCellValue("所属");
+            team.createCell(1).setCellValue("開発");
+            var header = sheet.createRow(18);
+            header.createCell(0).setCellValue("日付");
+            header.createCell(1).setCellValue("ｺｰﾄﾞ");
+            header.createCell(2).setCellValue("出勤");
+            header.createCell(3).setCellValue("退勤");
+            header.createCell(4).setCellValue("休憩時間");
+            header.createCell(5).setCellValue("勤務時間");
+            fillAttendance(sheet.createRow(19), "2026/10/1", "40", "9:00", "18:00", "60", "8:00");
+            fillAttendance(sheet.createRow(20), "10/2", "40", "9:00", "18:00", "60", "8:00");
+            var dated = sheet.createRow(21);
+            CellStyle dateStyle = workbook.createCellStyle();
+            dateStyle.setDataFormat(workbook.getCreationHelper().createDataFormat().getFormat("yyyy/m/d"));
+            var dateCell = dated.createCell(0);
+            dateCell.setCellValue(LocalDate.of(2026, 10, 3));
+            dateCell.setCellStyle(dateStyle);
+            dated.createCell(1).setCellValue("40");
+            dated.createCell(2).setCellValue("9:00");
+            dated.createCell(3).setCellValue("18:00");
+            dated.createCell(4).setCellValue("60");
+            dated.createCell(5).setCellValue("8:00");
+            var total = sheet.createRow(22);
+            total.createCell(0).setCellValue("合計");
+            total.createCell(5).setCellValue("24:00");
+            var project = sheet.createRow(23);
+            project.createCell(0).setCellValue("プロジェクトコード");
+            project.createCell(1).setCellValue("P-100");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            bytes = out.toByteArray();
+        }
+        var extraction = KnowledgeContentConverter.readSpreadsheet(bytes);
+        assertThat(extraction.markdown()).contains("勤務管理表2026").contains("合計").contains("プロジェクトコード");
+        assertThat(extraction.segments()).hasSize(1);
+        assertThat(extraction.segments().getFirst().rowStart()).isEqualTo(1);
+        assertThat(extraction.segments().getFirst().rowEnd()).isEqualTo(24);
+        assertThat(extraction.unevaluatedFormulaCount()).isZero();
+        var table = extraction.tables().getFirst();
+        assertThat(table.headerRow()).isEqualTo(19);
+        assertThat(table.headers()).containsExactly("日付", "ｺｰﾄﾞ", "出勤", "退勤", "休憩時間", "勤務時間");
+        assertThat(table.rows()).hasSize(3);
+        assertThat(table.rows().get(0).rowNumber()).isEqualTo(20);
+        assertThat(table.rows().get(0).cells().getFirst()).isEqualTo("2026/10/1");
+        assertThat(table.rows().get(1).rowNumber()).isEqualTo(21);
+        assertThat(table.rows().get(1).cells().getFirst()).isEqualTo("10/2");
+        assertThat(table.rows().get(2).rowNumber()).isEqualTo(22);
+        assertThat(table.rows().get(2).cells().getFirst()).matches("\\d{4}/\\d{1,2}/\\d{1,2}");
+        assertThat(table.rows())
+                .extracting(row -> row.cells().getFirst())
+                .noneMatch(cell -> cell.contains("合計") || cell.contains("プロジェクトコード") || cell.contains("氏名"));
+    }
+
+    private static void fillAttendance(
+            org.apache.poi.ss.usermodel.Row row,
+            String date,
+            String code,
+            String start,
+            String end,
+            String breakMinutes,
+            String hours) {
+        row.createCell(0).setCellValue(date);
+        row.createCell(1).setCellValue(code);
+        row.createCell(2).setCellValue(start);
+        row.createCell(3).setCellValue(end);
+        row.createCell(4).setCellValue(breakMinutes);
+        row.createCell(5).setCellValue(hours);
     }
 
     private static byte[] zipOf(String name, String content) throws IOException {

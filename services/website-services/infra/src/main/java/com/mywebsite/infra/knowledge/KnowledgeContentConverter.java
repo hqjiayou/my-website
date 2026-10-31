@@ -26,6 +26,7 @@ import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFCell;
@@ -88,6 +89,13 @@ public final class KnowledgeContentConverter {
     private static final int MAX_TABLE_COLS = 50;
     private static final Pattern HEADING_STYLE =
             Pattern.compile("(?i)(heading|标题|見出し)\\s*([1-6])");
+    /** 整格文本是日期样式才算。yyyy/M/d、yyyy-M-d、M/d、M-d。 */
+    private static final Pattern DATE_TEXT = Pattern.compile(
+            "^\\d{4}[/-]\\d{1,2}[/-]\\d{1,2}$|^\\d{1,2}[/-]\\d{1,2}$");
+
+    /** 结构化表定位用。正文和位置段仍只收非空行。 */
+    private record SheetScanRow(
+            int excelRow, List<String> cells, boolean blank, boolean dateFirst, int textCells) {}
 
     private KnowledgeContentConverter() {}
 
@@ -334,26 +342,40 @@ public final class KnowledgeContentConverter {
             List<SheetTable> tables = new ArrayList<>();
             for (var sheet : workbook) {
                 List<List<String>> rows = new ArrayList<>();
-                List<Integer> excelRows = new ArrayList<>();
+                List<SheetScanRow> scans = new ArrayList<>();
                 int rowStart = 0;
                 int rowEnd = 0;
                 boolean truncated = false;
                 for (var row : sheet) {
                     List<String> cells = new ArrayList<>();
+                    boolean dateFirst = false;
+                    boolean seenValue = false;
+                    int textCells = 0;
                     for (var cell : row) {
-                        cells.add(cellText(cell, formatter, unevaluated));
+                        String text = cellText(cell, formatter, unevaluated);
+                        cells.add(text);
+                        if (!text.isBlank()) {
+                            boolean date = isDateValue(cell, text);
+                            if (!seenValue) {
+                                dateFirst = date;
+                                seenValue = true;
+                            }
+                            if (!date) {
+                                textCells++;
+                            }
+                        }
                         if (cells.size() >= MAX_TABLE_COLS) {
                             break;
                         }
                     }
-                    if (cells.stream().anyMatch(value -> !value.isBlank())) {
-                        int excelRow = row.getRowNum() + 1;
+                    int excelRow = row.getRowNum() + 1;
+                    scans.add(new SheetScanRow(excelRow, cells, !seenValue, dateFirst, textCells));
+                    if (seenValue) {
                         if (rowStart == 0) {
                             rowStart = excelRow;
                         }
                         rowEnd = excelRow;
                         rows.add(cells);
-                        excelRows.add(excelRow);
                     }
                     if (rows.size() > MAX_TABLE_ROWS) {
                         truncated = true;
@@ -366,21 +388,104 @@ public final class KnowledgeContentConverter {
                 String text = "## " + sheet.getSheetName() + "\n\n" + renderMarkdownTable(rows);
                 markdown.append(text).append('\n');
                 segments.add(new IndexSegment(text, null, sheet.getSheetName(), rowStart, rowEnd));
-                List<String> headers = new ArrayList<>();
-                for (String header : rows.getFirst()) {
-                    headers.add(header == null ? "" : header.trim());
+                SheetTable table = structuredTable(sheet.getSheetName(), scans, truncated);
+                if (table != null) {
+                    tables.add(table);
                 }
-                List<SheetRow> data = new ArrayList<>();
-                for (int index = 1; index < rows.size(); index++) {
-                    data.add(new SheetRow(excelRows.get(index), List.copyOf(rows.get(index))));
-                }
-                tables.add(new SheetTable(
-                        sheet.getSheetName(), excelRows.getFirst(), List.copyOf(headers), List.copyOf(data), truncated));
             }
             return new SpreadsheetExtraction(
                     markdown.toString(), List.copyOf(segments), List.copyOf(tables), unevaluated[0]);
         } catch (IOException | RuntimeException ex) {
             throw new ExtractionException("failed to convert spreadsheet", ex);
+        }
+    }
+
+    /**
+     * 有日期型数据行时，表头是其上方最近的非空文本行，结构化行只取表头后连续的日期行块。
+     * 没有日期型数据行时，仍用第一个非空行作表头、其后各非空行作数据。
+     * 不改 Markdown 与位置段：那些仍包含标题行和合计行。
+     */
+    private static SheetTable structuredTable(String sheet, List<SheetScanRow> scans, boolean truncated) {
+        int firstDate = -1;
+        for (int index = 0; index < scans.size(); index++) {
+            if (scans.get(index).dateFirst()) {
+                firstDate = index;
+                break;
+            }
+        }
+        if (firstDate < 0) {
+            return legacyTable(sheet, scans, truncated);
+        }
+        int header = -1;
+        for (int index = firstDate - 1; index >= 0; index--) {
+            SheetScanRow row = scans.get(index);
+            if (!row.blank() && row.textCells() >= 2 && !row.dateFirst()) {
+                header = index;
+                break;
+            }
+        }
+        if (header < 0) {
+            return legacyTable(sheet, scans, truncated);
+        }
+        SheetScanRow headerRow = scans.get(header);
+        List<SheetRow> data = new ArrayList<>();
+        int previous = headerRow.excelRow();
+        for (int index = header + 1; index < scans.size(); index++) {
+            SheetScanRow row = scans.get(index);
+            if (row.excelRow() > previous + 1 || row.blank() || !row.dateFirst()) {
+                break;
+            }
+            data.add(new SheetRow(row.excelRow(), List.copyOf(row.cells())));
+            previous = row.excelRow();
+        }
+        return new SheetTable(
+                sheet, headerRow.excelRow(), headerTexts(headerRow.cells()), List.copyOf(data), truncated);
+    }
+
+    /** 第一个非空行是表头，其后非空行都是数据。空行不进结构化行，但原始行号保留。 */
+    private static SheetTable legacyTable(String sheet, List<SheetScanRow> scans, boolean truncated) {
+        List<SheetScanRow> filled = new ArrayList<>();
+        for (SheetScanRow row : scans) {
+            if (!row.blank()) {
+                filled.add(row);
+            }
+        }
+        if (filled.isEmpty()) {
+            return null;
+        }
+        List<SheetRow> data = new ArrayList<>();
+        for (int index = 1; index < filled.size(); index++) {
+            SheetScanRow row = filled.get(index);
+            data.add(new SheetRow(row.excelRow(), List.copyOf(row.cells())));
+        }
+        return new SheetTable(
+                sheet, filled.getFirst().excelRow(), headerTexts(filled.getFirst().cells()), List.copyOf(data), truncated);
+    }
+
+    private static List<String> headerTexts(List<String> cells) {
+        List<String> headers = new ArrayList<>();
+        for (String header : cells) {
+            headers.add(header == null ? "" : header.trim());
+        }
+        return List.copyOf(headers);
+    }
+
+    /** 首个非空格是 POI 日期格式的数值，或整格文本是日期样式。 */
+    private static boolean isDateValue(Cell cell, String text) {
+        if (DATE_TEXT.matcher(text.trim()).matches()) {
+            return true;
+        }
+        CellType type = cell.getCellType();
+        if (type == CellType.FORMULA) {
+            type = cell.getCachedFormulaResultType();
+        }
+        if (type != CellType.NUMERIC) {
+            return false;
+        }
+        try {
+            return DateUtil.isCellDateFormatted(cell);
+        } catch (RuntimeException ex) {
+            return false;
         }
     }
 
