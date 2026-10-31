@@ -1,6 +1,8 @@
 package com.mywebsite.infra.knowledge;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -30,5 +32,48 @@ public final class KnowledgeTextExtractor {
         } catch (IOException | RuntimeException ex) {
             throw new ExtractionException("failed to extract PDF text", ex);
         }
+    }
+
+    /** 一页文字层。page 是 PDF 页序（1 起），空文字层也保留页码。 */
+    public record PageText(int page, String text) {}
+
+    /**
+     * 按页抽取。聊天附件仍走 {@link #extractText}，不插入页标题。
+     */
+    public static List<PageText> pages(byte[] bytes) {
+        try (PDDocument document = Loader.loadPDF(bytes)) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            int count = document.getNumberOfPages();
+            List<PageText> pages = new ArrayList<>();
+            for (int page = 1; page <= count; page++) {
+                stripper.setStartPage(page);
+                stripper.setEndPage(page);
+                String text = stripper.getText(document);
+                pages.add(new PageText(page, text == null ? "" : text));
+            }
+            return List.copyOf(pages);
+        } catch (IOException | RuntimeException ex) {
+            throw new ExtractionException("failed to extract PDF text", ex);
+        }
+    }
+
+    /** 知识库正文：非空页前插入 {@code ## 第 N 页}。全空则返回空串。 */
+    public static String pagedMarkdown(byte[] bytes) {
+        return pagedMarkdown(pages(bytes));
+    }
+
+    public static String pagedMarkdown(List<PageText> pages) {
+        StringBuilder out = new StringBuilder();
+        for (PageText page : pages) {
+            String body = page.text() == null ? "" : page.text().strip();
+            if (body.isEmpty()) {
+                continue;
+            }
+            if (!out.isEmpty()) {
+                out.append("\n\n");
+            }
+            out.append("## 第 ").append(page.page()).append(" 页\n\n").append(body);
+        }
+        return out.toString();
     }
 }

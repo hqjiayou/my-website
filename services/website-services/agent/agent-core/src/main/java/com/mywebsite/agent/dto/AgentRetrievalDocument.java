@@ -13,7 +13,20 @@ public record AgentRetrievalDocument(
         String embeddingSpec,
         String apiKey,
         String baseUrl,
-        List<AgentEmbeddingClass> embeddingClasses) {
+        List<AgentEmbeddingClass> embeddingClasses,
+        List<AgentRetrievalSegment> segments) {
+
+    public AgentRetrievalDocument(
+            String agentId,
+            String sourceId,
+            String title,
+            String content,
+            String embeddingSpec,
+            String apiKey,
+            String baseUrl,
+            List<AgentEmbeddingClass> embeddingClasses) {
+        this(agentId, sourceId, title, content, embeddingSpec, apiKey, baseUrl, embeddingClasses, null);
+    }
 
     public AgentRetrievalDocument(
             String agentId,

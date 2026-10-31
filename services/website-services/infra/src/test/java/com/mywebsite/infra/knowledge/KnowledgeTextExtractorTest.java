@@ -21,6 +21,22 @@ import com.mywebsite.infra.knowledge.KnowledgeTextExtractor.ExtractionException;
 class KnowledgeTextExtractorTest {
 
     @Test
+    void pagedMarkdownInsertsPageHeading() throws IOException {
+        byte[] pdf;
+        try (PDDocument document = new PDDocument()) {
+            addTextPage(document, "Page one");
+            document.addPage(new PDPage());
+            addTextPage(document, "Page three");
+            pdf = toBytes(document);
+        }
+        String markdown = KnowledgeTextExtractor.pagedMarkdown(pdf);
+        assertThat(markdown).contains("## 第 1 页").contains("Page one");
+        assertThat(markdown).contains("## 第 3 页").contains("Page three");
+        assertThat(markdown).doesNotContain("## 第 2 页");
+        assertThat(KnowledgeTextExtractor.extractText("pdf", pdf)).doesNotContain("## 第");
+    }
+
+    @Test
     void extractsPdfTextLayer() throws IOException {
         String text = KnowledgeTextExtractor.extractText("pdf", pdfWithText("Hello KB PDF"));
         assertThat(text).contains("Hello KB PDF");
@@ -49,16 +65,20 @@ class KnowledgeTextExtractorTest {
 
     private static byte[] pdfWithText(String content) throws IOException {
         try (PDDocument document = new PDDocument()) {
-            PDPage page = new PDPage();
-            document.addPage(page);
-            try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
-                stream.beginText();
-                stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
-                stream.newLineAtOffset(72, 720);
-                stream.showText(content);
-                stream.endText();
-            }
+            addTextPage(document, content);
             return toBytes(document);
+        }
+    }
+
+    private static void addTextPage(PDDocument document, String content) throws IOException {
+        PDPage page = new PDPage();
+        document.addPage(page);
+        try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+            stream.beginText();
+            stream.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+            stream.newLineAtOffset(72, 720);
+            stream.showText(content);
+            stream.endText();
         }
     }
 

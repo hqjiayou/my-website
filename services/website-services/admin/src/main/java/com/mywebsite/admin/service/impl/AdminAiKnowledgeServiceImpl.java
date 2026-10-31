@@ -41,9 +41,13 @@ import com.mywebsite.agent.dto.AgentOcrPdfRequest;
 import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
+import com.mywebsite.agent.dto.AgentRetrievalSegment;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.page.PageResult;
+import com.mywebsite.infra.knowledge.KnowledgeContentConverter;
+import com.mywebsite.infra.knowledge.KnowledgeTextExtractor;
+import com.mywebsite.infra.knowledge.KnowledgeTextExtractor.ExtractionException;
 import com.mywebsite.infra.properties.StorageProperties;
 import com.mywebsite.infra.service.ObjectStorageService;
 import java.io.ByteArrayInputStream;
@@ -182,7 +186,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         entity.setAgentId(agentId);
         entity.setBaseId(resolveWritableBaseId(agentId, request.baseId()));
         entity.setTitle(request.title().trim());
-        entity.setContent(request.content());
+        entity.setContent(storedUploadContent(request.content(), meta));
         entity.setStatus(AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         entity.setSourceFormat(meta.sourceFormat());
         entity.setOriginalFilename(meta.originalFilename());
@@ -212,7 +216,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         knowledgeMapper.insert(entity);
 
         AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(agentId, entity.getId());
-        syncDerivedIndex(saved);
+        syncDerivedIndex(saved, false, meta.bytes());
         return toDetail(saved, isIndexStale(saved, new LinkedHashMap<>()));
     }
 
@@ -864,21 +868,27 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
      * 链接分区的失败只记日志（其健康在消费站点的实际检索中体现）。
      */
     private void syncDerivedIndex(AdminAiKnowledgeDocumentEntity entity) {
-        syncDerivedIndex(entity, false);
+        syncDerivedIndex(entity, false, null);
+    }
+
+    private void syncDerivedIndex(AdminAiKnowledgeDocumentEntity entity, boolean allowFillMissing) {
+        syncDerivedIndex(entity, allowFillMissing, null);
     }
 
     /**
      * {@code allowFillMissing} 为真且正文没变、文档已是 INDEXED、记下的类名是当前登记的真子集时，
      * 只补缺的类。正文变了必须整份重写。失败不把文档标成 INDEXED，已记下的类名保留。
      */
-    private void syncDerivedIndex(AdminAiKnowledgeDocumentEntity entity, boolean allowFillMissing) {
+    private void syncDerivedIndex(
+            AdminAiKnowledgeDocumentEntity entity, boolean allowFillMissing, byte[] originalBytes) {
         List<Long> targets = partitionAgentIds(entity);
+        List<AgentRetrievalSegment> segments = segmentsMatchingContent(entity, originalBytes);
         if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
             List<AgentModelSelection> ownerClasses = registeredClasses(entity.getAgentId());
             List<AgentModelSelection> toWrite = classesToWrite(entity, ownerClasses, allowFillMissing);
             RuntimeException ownerFailure = null;
             try {
-                upsertDerivedIndexForSite(entity, entity.getAgentId(), toWrite);
+                upsertDerivedIndexForSite(entity, entity.getAgentId(), toWrite, segments);
             } catch (RuntimeException ex) {
                 ownerFailure = ex;
             }
@@ -887,7 +897,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     continue;
                 }
                 try {
-                    upsertDerivedIndexForSite(entity, target);
+                    upsertDerivedIndexForSite(entity, target, segments);
                 } catch (RuntimeException ex) {
                     log.warn(
                             "KB fan-out sync failed (ownerAgentId={}, targetAgentId={}, documentId={});"
@@ -927,17 +937,24 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     /** 以目标站点已登记的嵌入类 upsert。没有则不带凭证，由进程嵌入模型写入。不跟随对话主用入口。 */
-    private void upsertDerivedIndexForSite(AdminAiKnowledgeDocumentEntity entity, long targetAgentId) {
-        upsertDerivedIndexForSite(entity, targetAgentId, registeredClasses(targetAgentId));
+    private void upsertDerivedIndexForSite(
+            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, List<AgentRetrievalSegment> segments) {
+        upsertDerivedIndexForSite(entity, targetAgentId, registeredClasses(targetAgentId), segments);
     }
 
     private void upsertDerivedIndexForSite(
-            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, List<AgentModelSelection> classes) {
-        agentClient.upsertRetrievalDocument(retrievalDocument(entity, targetAgentId, classes));
+            AdminAiKnowledgeDocumentEntity entity,
+            long targetAgentId,
+            List<AgentModelSelection> classes,
+            List<AgentRetrievalSegment> segments) {
+        agentClient.upsertRetrievalDocument(retrievalDocument(entity, targetAgentId, classes, segments));
     }
 
     private static AgentRetrievalDocument retrievalDocument(
-            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, List<AgentModelSelection> classes) {
+            AdminAiKnowledgeDocumentEntity entity,
+            long targetAgentId,
+            List<AgentModelSelection> classes,
+            List<AgentRetrievalSegment> segments) {
         List<AgentModelSelection> registered = classes == null ? List.of() : classes;
         AgentModelSelection first = registered.isEmpty() ? null : registered.get(0);
         return new AgentRetrievalDocument(
@@ -948,7 +965,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 first == null ? null : first.embeddingSpec(),
                 first == null ? null : first.apiKey(),
                 first == null ? null : first.baseUrl(),
-                AgentEmbeddingClassUtils.wire(registered));
+                AgentEmbeddingClassUtils.wire(registered),
+                segments == null || segments.isEmpty() ? null : segments);
+    }
+
+    private void upsertDerivedIndexForSite(AdminAiKnowledgeDocumentEntity entity, long targetAgentId) {
+        upsertDerivedIndexForSite(entity, targetAgentId, segmentsMatchingContent(entity, null));
     }
 
     private List<AgentModelSelection> registeredClasses(long agentId) {
@@ -1034,7 +1056,90 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     private void upsertDerivedIndex(AdminAiKnowledgeDocumentEntity entity, List<AgentModelSelection> classes) {
-        agentClient.upsertRetrievalDocument(retrievalDocument(entity, entity.getAgentId(), classes));
+        agentClient.upsertRetrievalDocument(retrievalDocument(
+                entity, entity.getAgentId(), classes, segmentsMatchingContent(entity, null)));
+    }
+
+    /**
+     * 只有正文与原件重抽结果一致时才带位置段。手改过的正文、读不到原件、或抽取失败时不带，
+     * 也不改 index 状态，避免把未改动文档判成需要全量重嵌。
+     */
+    private List<AgentRetrievalSegment> segmentsMatchingContent(
+            AdminAiKnowledgeDocumentEntity entity, byte[] originalBytes) {
+        String format = entity.getSourceFormat();
+        if (!StringUtils.hasText(format) || !StringUtils.hasText(entity.getContent())) {
+            return null;
+        }
+        byte[] bytes = originalBytes != null ? originalBytes : readOriginal(entity);
+        if (bytes == null || bytes.length == 0) {
+            return null;
+        }
+        try {
+            if ("pdf".equals(format)) {
+                List<KnowledgeTextExtractor.PageText> pages = KnowledgeTextExtractor.pages(bytes);
+                if (!KnowledgeTextExtractor.pagedMarkdown(pages).equals(entity.getContent())) {
+                    return null;
+                }
+                List<AgentRetrievalSegment> segments = new ArrayList<>();
+                for (KnowledgeTextExtractor.PageText page : pages) {
+                    String body = page.text() == null ? "" : page.text().strip();
+                    if (body.isEmpty()) {
+                        continue;
+                    }
+                    segments.add(new AgentRetrievalSegment(
+                            "## 第 " + page.page() + " 页\n\n" + body, page.page(), null, null, null));
+                }
+                return segments.isEmpty() ? null : List.copyOf(segments);
+            }
+            if ("xlsx".equals(format) || "xlsm".equals(format) || "xls".equals(format)) {
+                if (!KnowledgeContentConverter.toStoredContent(format, bytes).equals(entity.getContent())) {
+                    return null;
+                }
+                List<AgentRetrievalSegment> segments = new ArrayList<>();
+                for (KnowledgeContentConverter.IndexSegment segment :
+                        KnowledgeContentConverter.spreadsheetSegments(bytes)) {
+                    segments.add(new AgentRetrievalSegment(
+                            segment.text(), segment.page(), segment.sheet(), segment.rowStart(), segment.rowEnd()));
+                }
+                return segments.isEmpty() ? null : List.copyOf(segments);
+            }
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "KB location segments skipped (agentId={}, documentId={})",
+                    entity.getAgentId(),
+                    entity.getId(),
+                    ex);
+        }
+        return null;
+    }
+
+    private byte[] readOriginal(AdminAiKnowledgeDocumentEntity entity) {
+        if (!StringUtils.hasText(entity.getStorageBucket()) || !StringUtils.hasText(entity.getStorageKey())) {
+            return null;
+        }
+        try {
+            return objectStorageService.get(entity.getStorageBucket(), entity.getStorageKey());
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "KB original read failed (agentId={}, documentId={}); indexing without location",
+                    entity.getAgentId(),
+                    entity.getId(),
+                    ex);
+            return null;
+        }
+    }
+
+    /** PDF 新上传把页标题写入正文。扫描件抽不出文字层时保留调用方已经转写的正文。 */
+    private static String storedUploadContent(String requested, AdminAiKnowledgeUploadMeta meta) {
+        if (meta == null || !"pdf".equals(meta.sourceFormat()) || meta.bytes() == null) {
+            return requested;
+        }
+        try {
+            String paged = KnowledgeTextExtractor.pagedMarkdown(meta.bytes());
+            return StringUtils.hasText(paged) ? paged : requested;
+        } catch (ExtractionException ex) {
+            return requested;
+        }
     }
 
     /** 从文档的全部目标分区移除（所有者 + 共享链接站点），逐个 best-effort。 */
