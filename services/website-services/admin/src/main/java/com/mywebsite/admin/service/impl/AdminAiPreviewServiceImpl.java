@@ -17,10 +17,15 @@ import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiModelEntryService.ChainCandidate;
 import com.mywebsite.admin.service.AdminAiPreviewService;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentChatHistoryMessage;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.dto.AgentRunMeta;
+import com.mywebsite.agent.dto.AgentUsageRecord;
+import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
 import com.mywebsite.agent.dto.AgentPromptProfile;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
@@ -34,6 +39,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -59,6 +66,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     private final AdminAiModelEntryService modelEntryService;
     private final LocalizedMessageService localizedMessageService;
     private final ExecutorService adminAiStreamExecutor;
+    private final AgentUsageService usageService;
+    private final ObjectMapper objectMapper;
 
     public AdminAiPreviewServiceImpl(
             AgentClient agentClient,
@@ -68,7 +77,9 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper,
             AdminAiModelEntryService modelEntryService,
             LocalizedMessageService localizedMessageService,
-            ExecutorService adminAiStreamExecutor) {
+            ExecutorService adminAiStreamExecutor,
+            AgentUsageService usageService,
+            ObjectMapper objectMapper) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.adminAgentMapper = adminAgentMapper;
@@ -77,6 +88,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         this.modelEntryService = modelEntryService;
         this.localizedMessageService = localizedMessageService;
         this.adminAiStreamExecutor = adminAiStreamExecutor;
+        this.usageService = usageService;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -128,8 +141,16 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 request.latitude(),
                 request.longitude(),
                 request.accuracyMeters());
+        // 用量记账归属（Issue #140）：试聊只打单入口——点名时就是点名 id，未点名时
+        // 是该模式链首（与 previewModel 回填同一口径：chainCandidates 的首元）。
+        Long usageEntryId = request.modelEntryId();
+        if (usageEntryId == null) {
+            List<ChainCandidate> candidates = modelEntryService.chainCandidates(agentId, mode);
+            usageEntryId = candidates.isEmpty() ? null : candidates.get(0).id();
+        }
+        Long usageEntryIdFinal = usageEntryId;
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
-        adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter));
+        adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter, agentId, usageEntryIdFinal, mode));
         return emitter;
     }
 
@@ -344,17 +365,27 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         return mapped;
     }
 
-    private void forwardStream(AgentChatRequest agentRequest, SseEmitter emitter) {
+    private void forwardStream(
+            AgentChatRequest agentRequest, SseEmitter emitter, long agentId, Long usageEntryId, String mode) {
+        long usageStartedNanos = System.nanoTime();
+        AtomicReference<AgentRunMeta> doneMeta = new AtomicReference<>();
+        AtomicBoolean usageRecorded = new AtomicBoolean(false);
         try {
             agentClient.chatStream(agentRequest, (event, dataJson) -> {
+                if ("DONE".equals(event)) {
+                    doneMeta.set(parseDoneRunMeta(dataJson));
+                }
                 try {
                     emitter.send(SseEmitter.event().name(event).data(dataJson, MediaType.APPLICATION_JSON));
                 } catch (IOException ex) {
                     throw new ClientDisconnectedException(ex);
                 }
             });
+            recordPreviewUsage(agentId, usageEntryId, mode, doneMeta.get(), usageStartedNanos, usageRecorded);
             emitter.complete();
         } catch (ClientDisconnectedException ex) {
+            // DONE 已到但最后一帧没发出去：这一轮真实发生过，照常记账（只记一次）。
+            recordPreviewUsage(agentId, usageEntryId, mode, doneMeta.get(), usageStartedNanos, usageRecorded);
             emitter.completeWithError(ex.getCause());
         } catch (BusinessException ex) {
             sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"" + toClientErrorCode(ex) + "\"}");
@@ -364,6 +395,44 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"SYSTEM_ERROR\"}");
             emitter.complete();
         }
+    }
+
+    /** 解析流式 DONE 的 runMeta（与 agent-app extractRunMeta 同法：整个 DONE 节点即 runMeta 形状）。 */
+    private AgentRunMeta parseDoneRunMeta(String dataJson) {
+        try {
+            return objectMapper
+                    .readerFor(AgentRunMeta.class)
+                    .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .readValue(dataJson);
+        } catch (IOException | IllegalArgumentException ex) {
+            log.warn("admin ai preview DONE carried malformed run metadata, usage skipped", ex);
+            return null;
+        }
+    }
+
+    /** 试聊用量记账（Issue #140）：只有拿到 DONE 才记；无 DONE（失败）不记。 */
+    private void recordPreviewUsage(
+            long agentId,
+            Long entryId,
+            String mode,
+            AgentRunMeta runMeta,
+            long startedNanos,
+            AtomicBoolean recorded) {
+        if (runMeta == null || !recorded.compareAndSet(false, true)) {
+            return;
+        }
+        AgentRunMeta.Usage usage = runMeta.usage();
+        usageService.recordUsage(new AgentUsageRecord(
+                agentId,
+                entryId,
+                null,
+                mode,
+                AgentUsageService.SOURCE_ADMIN_PREVIEW,
+                (long) usage.inputTokens(),
+                (long) usage.outputTokens(),
+                (System.nanoTime() - startedNanos) / 1_000_000L,
+                AgentUsageService.STATUS_SUCCESS,
+                null));
     }
 
     private static void sendEventQuietly(SseEmitter emitter, String event, String dataJson) {
