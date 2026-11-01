@@ -2,8 +2,10 @@ package com.mywebsite.agent.controller;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mywebsite.agent.dto.GatewayV1ModelDtos;
+import com.mywebsite.agent.security.GatewayAccessKeyAuthFilter;
 import com.mywebsite.agent.service.GatewayV1Service;
 import com.mywebsite.agent.service.GatewayV1Service.UpstreamResult;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.springframework.http.MediaType;
@@ -37,12 +39,17 @@ public class GatewayV1Controller {
     }
 
     @PostMapping("/chat/completions")
-    public void chatCompletions(@RequestBody ObjectNode body, HttpServletResponse response) throws IOException {
+    public void chatCompletions(
+            @RequestBody ObjectNode body, HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+        Long accessKeyId = request.getAttribute(GatewayAccessKeyAuthFilter.ACCESS_KEY_ID_ATTRIBUTE) instanceof Long id
+                ? id
+                : null;
         if (body.path("stream").asBoolean(false)) {
-            gatewayV1Service.chatCompletionStream(body, response);
+            gatewayV1Service.chatCompletionStream(body, response, accessKeyId);
             return;
         }
-        UpstreamResult result = gatewayV1Service.chatCompletion(body);
+        UpstreamResult result = gatewayV1Service.chatCompletion(body, accessKeyId);
         response.setStatus(result.status());
         response.setContentType(result.contentType() != null ? result.contentType() : MediaType.APPLICATION_JSON_VALUE);
         if (result.body() != null) {

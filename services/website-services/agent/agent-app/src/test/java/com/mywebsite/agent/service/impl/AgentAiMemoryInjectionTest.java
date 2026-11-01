@@ -28,6 +28,7 @@ import com.mywebsite.agent.mapper.AgentAiModelEntryMapper;
 import com.mywebsite.agent.service.AgentAiConversationService;
 import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
 import com.mywebsite.agent.service.AgentAiRateLimitService;
+import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
 import java.util.ArrayList;
 import java.util.List;
@@ -92,7 +93,8 @@ class AgentAiMemoryInjectionTest {
                 knowledgeDocumentMapper,
                 localizedMessageService,
                 agentAiStreamExecutor,
-                new ObjectMapper());
+                new ObjectMapper(),
+                org.mockito.Mockito.mock(AgentUsageService.class));
     }
 
     @AfterEach
@@ -171,7 +173,8 @@ class AgentAiMemoryInjectionTest {
                 List.of(),
                 new AgentChatRequest("10", "hello"),
                 "KEY",
-                org.mockito.Mockito.mock(SseEmitter.class));
+                org.mockito.Mockito.mock(SseEmitter.class),
+                List.of());
 
         verify(memoryService).storeExtracted(10L, 200L, 77L, List.of("likes tea"));
     }
