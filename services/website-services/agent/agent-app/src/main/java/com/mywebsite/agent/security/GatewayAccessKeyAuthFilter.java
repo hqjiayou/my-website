@@ -29,6 +29,9 @@ public class GatewayAccessKeyAuthFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String KEY_PREFIX = "mwgw_";
 
+    /** 鉴权成功后把访问 Key 的 id 留给下游（用量记账归属，Issue #140）；不放任何密钥材料。 */
+    public static final String ACCESS_KEY_ID_ATTRIBUTE = "gatewayAccessKeyId";
+
     private final AgentGatewayAccessKeyMapper accessKeyMapper;
     private final ObjectMapper objectMapper;
 
@@ -59,6 +62,7 @@ public class GatewayAccessKeyAuthFilter extends OncePerRequestFilter {
             writeUnauthorized(response);
             return;
         }
+        request.setAttribute(ACCESS_KEY_ID_ATTRIBUTE, entry.getId());
         filterChain.doFilter(request, response);
     }
 

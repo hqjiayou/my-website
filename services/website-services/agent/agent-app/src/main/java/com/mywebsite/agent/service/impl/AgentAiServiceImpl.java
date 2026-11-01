@@ -37,10 +37,12 @@ import com.mywebsite.agent.dto.AgentAiDocumentDto;
 import com.mywebsite.agent.service.ChatDocumentTextExtractor;
 import com.mywebsite.agent.dto.AgentKnowledgeSearchRequestDto;
 import com.mywebsite.agent.dto.AgentKnowledgeSearchResponseDto;
+import com.mywebsite.agent.dto.AgentUsageRecord;
 import com.mywebsite.agent.service.AgentAiConversationService;
 import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
 import com.mywebsite.agent.service.AgentAiRateLimitService;
 import com.mywebsite.agent.service.AgentAiService;
+import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
 import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
 import com.mywebsite.agent.utils.AgentModelChainUtils;
@@ -187,6 +189,7 @@ public class AgentAiServiceImpl implements AgentAiService {
     private final LocalizedMessageService localizedMessageService;
     private final ExecutorService agentAiStreamExecutor;
     private final ObjectMapper objectMapper;
+    private final AgentUsageService usageService;
 
     public AgentAiServiceImpl(
             AgentClient agentClient,
@@ -199,7 +202,8 @@ public class AgentAiServiceImpl implements AgentAiService {
             AgentAiKnowledgeDocumentMapper knowledgeDocumentMapper,
             LocalizedMessageService localizedMessageService,
             ExecutorService agentAiStreamExecutor,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            AgentUsageService usageService) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.modelEntryCipher = modelEntryCipher;
@@ -211,6 +215,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         this.localizedMessageService = localizedMessageService;
         this.agentAiStreamExecutor = agentAiStreamExecutor;
         this.objectMapper = objectMapper;
+        this.usageService = usageService;
     }
 
     @Override
@@ -225,7 +230,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         ChatPreparation preparation =
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
-        AgentChatRequest agentRequest = buildAgentRequest(
+        BuiltChatRequest built = buildAgentRequest(
                 agentId,
                 message,
                 attachments,
@@ -238,7 +243,10 @@ public class AgentAiServiceImpl implements AgentAiService {
                 request.latitude(),
                 request.longitude(),
                 request.accuracyMeters());
+        AgentChatRequest agentRequest = built.request();
+        long usageStartedNanos = System.nanoTime();
         AgentChatResponse response = agentClient.chat(agentRequest);
+        long usageLatencyMs = (System.nanoTime() - usageStartedNanos) / 1_000_000L;
         persistTurn(
                 agentId,
                 agentUserId,
@@ -252,6 +260,7 @@ public class AgentAiServiceImpl implements AgentAiService {
                 response.extractedMemories(),
                 requestedModel(agentRequest),
                 mode);
+        recordPortalUsage(agentId, built.links(), response.runMeta(), mode, usageLatencyMs);
 
         return new AgentAiChatResponseDto(
                 response.reply(),
@@ -373,7 +382,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         ChatPreparation preparation =
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
-        AgentChatRequest agentRequest =
+        BuiltChatRequest built =
                 buildAgentRequest(
                         agentId,
                         message,
@@ -392,7 +401,15 @@ public class AgentAiServiceImpl implements AgentAiService {
         List<AgentAttachmentDto> stored = storedAttachments(attachments, validated);
         agentAiStreamExecutor.execute(
                 () -> forwardStream(
-                        agentId, agentUserId, preparation, message, stored, agentRequest, mode, emitter));
+                        agentId,
+                        agentUserId,
+                        preparation,
+                        message,
+                        stored,
+                        built.request(),
+                        mode,
+                        emitter,
+                        built.links()));
         return emitter;
     }
 
@@ -407,7 +424,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         return List.copyOf(stored);
     }
 
-    private AgentChatRequest buildAgentRequest(
+    private BuiltChatRequest buildAgentRequest(
             long agentId,
             String message,
             List<AgentAttachmentDto> attachments,
@@ -430,7 +447,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         }
         List<AgentModelSelection> embeddingClasses = embeddingClasses(agentId);
         AgentModelSelection embedding = embeddingClasses.isEmpty() ? null : embeddingClasses.get(0);
-        return new AgentChatRequest(
+        AgentChatRequest request = new AgentChatRequest(
                 String.valueOf(agentId),
                 message,
                 localizedMessageService.currentLanguageTag(),
@@ -456,6 +473,48 @@ public class AgentAiServiceImpl implements AgentAiService {
                 latitude,
                 longitude,
                 accuracyMeters);
+        return new BuiltChatRequest(request, links);
+    }
+
+    /** 组装好的执行层请求与本轮链（链带入口 id，供用量记账归属，见 recordPortalUsage）。 */
+    private record BuiltChatRequest(AgentChatRequest request, List<ChainLink> links) {}
+
+    /**
+     * Portal 用量记账（Issue #140）。entry 归属是 best-effort：备援在 Python 执行层
+     * 内部切换，Java 只拿得到 runMeta 的实际模型名——与本轮链的 spec 模型名恰好
+     * 一条命中时用那条入口，多条同名或无命中时用链首（请求主用）。tokens 以
+     * runMeta 为准（与 UoW-4 验收口径一致：用量行与 runMeta 数字对得上）。
+     */
+    private void recordPortalUsage(
+            long agentId, List<ChainLink> links, AgentRunMeta runMeta, String mode, long latencyMs) {
+        AgentRunMeta.Usage usage = runMeta == null ? AgentRunMeta.Usage.EMPTY : runMeta.usage();
+        usageService.recordUsage(new AgentUsageRecord(
+                agentId,
+                resolveUsageEntryId(links, runMeta),
+                null,
+                mode,
+                AgentUsageService.SOURCE_PORTAL,
+                (long) usage.inputTokens(),
+                (long) usage.outputTokens(),
+                latencyMs,
+                AgentUsageService.STATUS_SUCCESS,
+                null));
+    }
+
+    private static Long resolveUsageEntryId(List<ChainLink> links, AgentRunMeta runMeta) {
+        if (links == null || links.isEmpty()) {
+            return null;
+        }
+        String actualModel = runMeta == null ? null : runMeta.model();
+        if (StringUtils.hasText(actualModel)) {
+            List<ChainLink> matches = links.stream()
+                    .filter(link -> actualModel.trim().equals(modelLabel(link.selection().spec())))
+                    .toList();
+            if (matches.size() == 1) {
+                return matches.get(0).id();
+            }
+        }
+        return links.get(0).id();
     }
 
     private void persistTurn(
@@ -867,7 +926,9 @@ public class AgentAiServiceImpl implements AgentAiService {
             List<AgentAttachmentDto> userAttachments,
             AgentChatRequest agentRequest,
             String mode,
-            SseEmitter emitter) {
+            SseEmitter emitter,
+            List<ChainLink> links) {
+        long usageStartedNanos = System.nanoTime();
         StringBuilder doneReply = new StringBuilder();
         List<AgentTodoItem> doneTodos = new ArrayList<>();
         AtomicReference<AgentRunMeta> doneMeta = new AtomicReference<>(AgentRunMeta.EMPTY);
@@ -908,6 +969,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                         doneMemories.get(),
                         requestedModel(agentRequest),
                         mode);
+                recordPortalUsage(
+                        agentId, links, doneMeta.get(), mode, (System.nanoTime() - usageStartedNanos) / 1_000_000L);
                 sendEventQuietly(
                         emitter,
                         "CONVERSATION",
@@ -931,6 +994,12 @@ public class AgentAiServiceImpl implements AgentAiService {
                             doneMemories.get(),
                             requestedModel(agentRequest),
                             mode);
+                    recordPortalUsage(
+                            agentId,
+                            links,
+                            doneMeta.get(),
+                            mode,
+                            (System.nanoTime() - usageStartedNanos) / 1_000_000L);
                 } catch (RuntimeException recordEx) {
                     log.warn("agent ai stream reply was not stored after client disconnect", recordEx);
                 }

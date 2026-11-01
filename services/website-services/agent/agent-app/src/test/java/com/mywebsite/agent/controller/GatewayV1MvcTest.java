@@ -47,6 +47,7 @@ class GatewayV1MvcTest extends AbstractAgentSpringBootTest {
     void setUp() {
         jdbcTemplate.update("DELETE FROM gateway_access_key");
         jdbcTemplate.update("DELETE FROM agent_model_entry");
+        jdbcTemplate.update("DELETE FROM agent_ai_usage");
         insertAccessKey("valid", VALID_KEY, null, null);
         insertAccessKey("revoked", REVOKED_KEY, OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1), null);
         insertAccessKey(
@@ -284,6 +285,117 @@ class GatewayV1MvcTest extends AbstractAgentSpringBootTest {
                         "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}",
                         "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"}}]}",
                         "data: [DONE]");
+    }
+
+    // ---- 用量记账（#140） ----
+
+    @Test
+    void chatCompletionsRecordsUsageWithTokensFromUpstreamBody() throws Exception {
+        int port = startStub("/chat/completions", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            byte[] resp = ("{\"id\":\"chatcmpl-1\",\"choices\":[],"
+                            + "\"usage\":{\"prompt_tokens\":21,\"completion_tokens\":9,\"total_tokens\":30}}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, resp.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(resp);
+            }
+        });
+        insertModelEntry(
+                "gpt", "openai:gpt-4o-mini", "upstream-plain-key", "http://127.0.0.1:" + port, null, true, "gpt-alias");
+
+        mockMvc.perform(post("/v1/chat/completions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + VALID_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"model\":\"gpt-alias\",\"messages\":[]}"))
+                .andExpect(status().isOk());
+
+        var rows = jdbcTemplate.queryForList("SELECT * FROM agent_ai_usage");
+        assertThat(rows).hasSize(1);
+        var row = rows.get(0);
+        assertThat(row.get("SOURCE")).isEqualTo("GATEWAY_V1");
+        assertThat(row.get("ALIAS")).isEqualTo("gpt-alias");
+        assertThat(row.get("STATUS")).isEqualTo("SUCCESS");
+        assertThat(((Number) row.get("PROMPT_TOKENS")).longValue()).isEqualTo(21L);
+        assertThat(((Number) row.get("COMPLETION_TOKENS")).longValue()).isEqualTo(9L);
+        Long entryId = jdbcTemplate.queryForObject(
+                "SELECT id FROM agent_model_entry WHERE alias = 'gpt-alias'", Long.class);
+        assertThat(((Number) row.get("ENTRY_ID")).longValue()).isEqualTo(entryId);
+        Long keyId = jdbcTemplate.queryForObject(
+                "SELECT id FROM gateway_access_key WHERE name = 'valid'", Long.class);
+        assertThat(((Number) row.get("GATEWAY_ACCESS_KEY_ID")).longValue()).isEqualTo(keyId);
+        assertThat(row.get("LATENCY_MS")).isNotNull();
+    }
+
+    @Test
+    void chatCompletionsRecordsUpstreamErrorWhenUpstreamFailsFinally() throws Exception {
+        int port = startStub("/chat/completions", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            byte[] resp = "{\"error\":{\"message\":\"boom\"}}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(500, resp.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(resp);
+            }
+        });
+        insertModelEntry(
+                "gpt", "openai:gpt-4o-mini", "upstream-plain-key", "http://127.0.0.1:" + port, null, true, "gpt-alias");
+
+        mockMvc.perform(post("/v1/chat/completions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + VALID_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"model\":\"gpt-alias\",\"messages\":[]}"))
+                .andExpect(status().isInternalServerError());
+
+        var rows = jdbcTemplate.queryForList("SELECT * FROM agent_ai_usage");
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).get("STATUS")).isEqualTo("UPSTREAM_ERROR");
+        assertThat(rows.get(0).get("PROMPT_TOKENS")).isNull();
+        assertThat(rows.get(0).get("COMPLETION_TOKENS")).isNull();
+    }
+
+    @Test
+    void chatCompletionsStreamRecordsUsageFromTailChunkAndRequestsIncludeUsage() throws Exception {
+        AtomicReference<String> capturedBody = new AtomicReference<>();
+        int port = startStub("/chat/completions", exchange -> {
+            capturedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write("data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n".getBytes(StandardCharsets.UTF_8));
+                os.flush();
+                os.write(("data: {\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,"
+                                + "\"total_tokens\":18}}\n\n")
+                        .getBytes(StandardCharsets.UTF_8));
+                os.flush();
+                os.write("data: [DONE]\n\n".getBytes(StandardCharsets.UTF_8));
+            }
+        });
+        insertModelEntry(
+                "gpt-stream",
+                "openai:gpt-4o-mini",
+                "upstream-plain-key",
+                "http://127.0.0.1:" + port,
+                null,
+                true,
+                "gpt-stream-alias");
+
+        mockMvc.perform(post("/v1/chat/completions")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + VALID_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"model\":\"gpt-stream-alias\",\"stream\":true,\"messages\":[]}"))
+                .andExpect(status().isOk());
+
+        JsonNode sentToUpstream = new ObjectMapper().readTree(capturedBody.get());
+        assertThat(sentToUpstream.path("stream_options").path("include_usage").asBoolean()).isTrue();
+
+        var rows = jdbcTemplate.queryForList("SELECT * FROM agent_ai_usage");
+        assertThat(rows).hasSize(1);
+        var row = rows.get(0);
+        assertThat(row.get("STATUS")).isEqualTo("SUCCESS");
+        assertThat(((Number) row.get("PROMPT_TOKENS")).longValue()).isEqualTo(11L);
+        assertThat(((Number) row.get("COMPLETION_TOKENS")).longValue()).isEqualTo(7L);
     }
 
     private interface StubHandler {
