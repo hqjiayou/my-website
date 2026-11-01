@@ -224,7 +224,7 @@ class GatewayV1MvcTest extends AbstractAgentSpringBootTest {
                     "k-fallback",
                     "http://127.0.0.1:" + fallbackServer.getAddress().getPort(),
                     30L,
-                    false,
+                    true,
                     null);
 
             String body = mockMvc.perform(post("/v1/chat/completions")
