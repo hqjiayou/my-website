@@ -15,6 +15,9 @@ public interface AdminAiModelEntryService {
 
     void deleteEntry(long id);
 
+    /** 删站点级联：软删该站点作用域的入口（全站入口 agent_id 为空、不受影响），避免密文 key 残留。 */
+    void softDeleteByAgentId(long agentId);
+
     /**
      * 该站点启用的默认入口；没有则用全站启用的默认入口。都没有时返回 null。
      */

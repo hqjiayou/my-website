@@ -115,6 +115,20 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
 
     @Override
     @Transactional
+    public void softDeleteByAgentId(long agentId) {
+        List<AdminAiModelEntryEntity> entries = modelEntryMapper.selectList(
+                new LambdaQueryWrapper<AdminAiModelEntryEntity>()
+                        .eq(AdminAiModelEntryEntity::getAgentId, agentId));
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        for (AdminAiModelEntryEntity entry : entries) {
+            entry.setDeletedAt(now);
+            modelEntryMapper.updateById(entry);
+            modelEntryMapper.deleteById(entry.getId());
+        }
+    }
+
+    @Override
+    @Transactional
     public AgentModelSelection currentSelection(long agentId) {
         List<AgentModelSelection> chain = selectionChain(agentId);
         return chain.isEmpty() ? null : chain.get(0);

@@ -350,6 +350,76 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
     }
 
     @Test
+    void deleteSiteCascadesToModelEntriesUsersMemoriesAndShares() throws Exception {
+        String token = tokenFor(500L);
+        long agentId = createAgent(token, "cascade_a");
+        long otherAgentId = createAgent(token, "cascade_b");
+
+        // 本站作用域入口 + 全站入口（agent_id 空）+ 他站入口：删站只应动本站作用域那条。
+        jdbcTemplate.update(
+                "INSERT INTO agent_model_entry (id, display_name, model_spec, api_key, agent_id) VALUES (910001, 'scoped', 'openai:x', 'enc:k1', ?)",
+                agentId);
+        jdbcTemplate.update(
+                "INSERT INTO agent_model_entry (id, display_name, model_spec, api_key, agent_id) VALUES (910002, 'global', 'openai:y', 'enc:k2', NULL)");
+        jdbcTemplate.update(
+                "INSERT INTO agent_model_entry (id, display_name, model_spec, api_key, agent_id) VALUES (910003, 'other', 'openai:z', 'enc:k3', ?)",
+                otherAgentId);
+        // 成员、长期记忆、会话与分享各一行（本站）；他站成员一行作对照。
+        jdbcTemplate.update(
+                "INSERT INTO agent_user (id, agent_id, username, status) VALUES (910011, ?, 'member_a', 'ACTIVE')",
+                agentId);
+        jdbcTemplate.update(
+                "INSERT INTO agent_user (id, agent_id, username, status) VALUES (910012, ?, 'member_b', 'ACTIVE')",
+                otherAgentId);
+        jdbcTemplate.update(
+                "INSERT INTO agent_user_memory (id, agent_id, user_id, content) VALUES (910021, ?, 910011, 'likes tea')",
+                agentId);
+        jdbcTemplate.update(
+                "INSERT INTO agent_ai_conversation (id, agent_id, agent_user_id, title) VALUES (910031, ?, 910011, 'chat')",
+                agentId);
+        jdbcTemplate.update(
+                "INSERT INTO agent_ai_conversation_share (id, conversation_id, agent_id, agent_user_id, token, snapshot)"
+                        + " VALUES (910041, 910031, ?, 910011, 'tok-cascade', '{}')",
+                agentId);
+
+        mockMvc.perform(delete("/api/admin/agents/" + agentId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk());
+
+        assertSoftDeleted("agent_model_entry", 910001L);
+        assertSoftDeleted("agent_user", 910011L);
+        assertSoftDeleted("agent_user_memory", 910021L);
+        assertSoftDeleted("agent_ai_conversation_share", 910041L);
+        assertStillActive("agent_model_entry", 910002L);
+        assertStillActive("agent_model_entry", 910003L);
+        assertStillActive("agent_user", 910012L);
+    }
+
+    private long createAgent(String token, String codePrefix) throws Exception {
+        String agentCode = codePrefix + "_" + Long.toHexString(System.nanoTime());
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminAgentCreateRequest(
+                                agentCode, "Cascade", "GYOSEISHOSHI", null, null, null))))
+                .andExpect(status().isOk())
+                .andReturn();
+        return MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
+    }
+
+    private void assertSoftDeleted(String table, long id) {
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT deleted, deleted_at FROM " + table + " WHERE id = ?", id);
+        assertThat(row.get("deleted")).as(table + " id=" + id).isEqualTo(true);
+        assertThat(row.get("deleted_at")).as(table + " id=" + id).isNotNull();
+    }
+
+    private void assertStillActive(String table, long id) {
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT deleted FROM " + table + " WHERE id = ?", id);
+        assertThat(row.get("deleted")).as(table + " id=" + id).isEqualTo(false);
+    }
+
+    @Test
     void emptyListReturnsPageShape() throws Exception {
         mockMvc.perform(get("/api/admin/agents").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenFor(500L)))
                 .andExpect(status().isOk())

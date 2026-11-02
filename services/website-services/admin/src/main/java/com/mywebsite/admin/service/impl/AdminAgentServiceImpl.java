@@ -1,6 +1,7 @@
 package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mywebsite.admin.constant.AdminAgentConstants;
 import com.mywebsite.admin.constant.AdminAgentMessageKeys;
@@ -14,16 +15,25 @@ import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
+import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiPromptService;
 import com.mywebsite.admin.service.AdminAppearanceService;
 import com.mywebsite.admin.service.AdminContentService;
 import com.mywebsite.admin.service.AdminMediaService;
 import com.mywebsite.admin.service.AdminAgentService;
+import com.mywebsite.agent.entity.AgentAiConversationShareEntity;
+import com.mywebsite.agent.entity.AgentUserEntity;
+import com.mywebsite.agent.entity.AgentUserMemoryEntity;
+import com.mywebsite.agent.mapper.AgentAiConversationShareMapper;
+import com.mywebsite.agent.mapper.AgentUserMapper;
+import com.mywebsite.agent.mapper.AgentUserMemoryMapper;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.page.PageResult;
+import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +49,10 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     private final AdminAiPromptService adminAiPromptService;
     private final AdminAiKnowledgeService adminAiKnowledgeService;
     private final AdminAiConversationService adminAiConversationService;
+    private final AdminAiModelEntryService adminAiModelEntryService;
+    private final AgentUserMapper agentUserMapper;
+    private final AgentUserMemoryMapper agentUserMemoryMapper;
+    private final AgentAiConversationShareMapper conversationShareMapper;
 
     public AdminAgentServiceImpl(
             AdminAgentMapper adminAgentMapper,
@@ -47,7 +61,11 @@ public class AdminAgentServiceImpl implements AdminAgentService {
             AdminContentService adminContentService,
             AdminAiPromptService adminAiPromptService,
             AdminAiKnowledgeService adminAiKnowledgeService,
-            AdminAiConversationService adminAiConversationService) {
+            AdminAiConversationService adminAiConversationService,
+            AdminAiModelEntryService adminAiModelEntryService,
+            AgentUserMapper agentUserMapper,
+            AgentUserMemoryMapper agentUserMemoryMapper,
+            AgentAiConversationShareMapper conversationShareMapper) {
         this.adminAgentMapper = adminAgentMapper;
         this.adminAppearanceService = adminAppearanceService;
         this.adminMediaService = adminMediaService;
@@ -55,6 +73,10 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         this.adminAiPromptService = adminAiPromptService;
         this.adminAiKnowledgeService = adminAiKnowledgeService;
         this.adminAiConversationService = adminAiConversationService;
+        this.adminAiModelEntryService = adminAiModelEntryService;
+        this.agentUserMapper = agentUserMapper;
+        this.agentUserMemoryMapper = agentUserMemoryMapper;
+        this.conversationShareMapper = conversationShareMapper;
     }
 
     @Override
@@ -148,17 +170,48 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     @Transactional
     public void deleteSite(long id) {
         AdminAgentEntity agent = requireSite(id);
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         adminAppearanceService.softDeleteByAgentId(id);
         adminContentService.softDeleteByAgentId(id);
         adminMediaService.softDeleteByAgentId(id);
         adminAiPromptService.softDeleteByAgentId(id);
         adminAiKnowledgeService.softDeleteByAgentId(id);
         adminAiConversationService.softDeleteByAgentId(id);
-        agent.setDeletedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        // 级联补全（#141 UoW-2）：模型入口（含密文 key）、成员关系、用户长期记忆、会话分享，
+        // 漏删会残留密文 Key 与成员行。四路同走既有软删口径（deleted_at＋@TableLogic）。
+        adminAiModelEntryService.softDeleteByAgentId(id);
+        softDeleteAll(
+                agentUserMapper.selectList(
+                        new LambdaQueryWrapper<AgentUserEntity>().eq(AgentUserEntity::getAgentId, id)),
+                agentUserMapper,
+                now);
+        softDeleteAll(
+                agentUserMemoryMapper.selectList(
+                        new LambdaQueryWrapper<AgentUserMemoryEntity>()
+                                .eq(AgentUserMemoryEntity::getAgentId, id)),
+                agentUserMemoryMapper,
+                now);
+        softDeleteAll(
+                conversationShareMapper.selectList(
+                        new LambdaQueryWrapper<AgentAiConversationShareEntity>()
+                                .eq(AgentAiConversationShareEntity::getAgentId, id)),
+                conversationShareMapper,
+                now);
+        agent.setDeletedAt(now);
         adminAgentMapper.updateById(agent);
         int deleted = adminAgentMapper.deleteById(id);
         if (deleted == 0) {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
+        }
+    }
+
+    /** 与各领域服务 softDeleteByAgentId 相同的逐行软删口径，供 agent-core 三张表在本类内收口。 */
+    private static <T extends AbstractAuditableEntity> void softDeleteAll(
+            List<T> rows, BaseMapper<T> mapper, OffsetDateTime now) {
+        for (T row : rows) {
+            row.setDeletedAt(now);
+            mapper.updateById(row);
+            mapper.deleteById(row.getId());
         }
     }
 
