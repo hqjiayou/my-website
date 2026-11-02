@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.agent.dto.AgentChatResponse;
+import com.mywebsite.agent.dto.AgentRuntimeConfigPayload;
+import com.mywebsite.agent.dto.AgentRuntimeConfigPushResult;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentPingResponse;
@@ -39,6 +41,11 @@ class HttpAgentClientTest {
     private HttpAgentClient client;
     private final AtomicInteger chatHits = new AtomicInteger();
     private final AtomicInteger healthHits = new AtomicInteger();
+    private final AtomicInteger pushStatus = new AtomicInteger(200);
+    private final java.util.concurrent.atomic.AtomicReference<String> pushResponseBody =
+            new java.util.concurrent.atomic.AtomicReference<>("{\"applied\":true,\"appliedVersion\":7}");
+    private final java.util.concurrent.atomic.AtomicReference<String> pushRequestBody =
+            new java.util.concurrent.atomic.AtomicReference<>();
 
     @BeforeEach
     void setUp() throws IOException {
@@ -54,6 +61,15 @@ class HttpAgentClientTest {
                     exchange,
                     200,
                     "{\"ok\":true,\"service\":\"agent-service\",\"providerStatus\":\"BLOCKED\"}");
+        });
+        server.createContext("/internal/v1/config/retrieval", exchange -> {
+            String token = exchange.getRequestHeaders().getFirst("X-Internal-Service-Token");
+            if (!"secret-token".equals(token)) {
+                write(exchange, 401, "{\"ok\":false,\"errorCode\":\"UNAUTHORIZED\"}");
+                return;
+            }
+            pushRequestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            write(exchange, pushStatus.get(), pushResponseBody.get());
         });
         server.createContext("/internal/v1/chat", exchange -> {
             chatHits.incrementAndGet();
@@ -557,5 +573,58 @@ class HttpAgentClientTest {
 
         String withoutDocuments = mapper.writeValueAsString(new AgentChatRequest("10", "hello"));
         assertThat(withoutDocuments).doesNotContain("documents");
+    }
+
+    // ---- 运行配置推送（Issue #146 UoW-1）----
+
+    private static AgentRuntimeConfigPayload samplePayload() {
+        return new AgentRuntimeConfigPayload(
+                "postgresql://user:pw@db.internal:5432/retrieval", "google:gemini-embedding-001", 768, "gemini-key-1", 7L);
+    }
+
+    @Test
+    void pushRuntimeConfigAppliedReturnsVersionAndSendsPayload() {
+        AgentRuntimeConfigPushResult result = client.pushRuntimeConfig(samplePayload());
+
+        assertThat(result.status()).isEqualTo(AgentRuntimeConfigPushResult.STATUS_APPLIED);
+        assertThat(result.appliedVersion()).isEqualTo(7L);
+        assertThat(pushRequestBody.get())
+                .contains("\"retrievalDatabaseUrl\":\"postgresql://user:pw@db.internal:5432/retrieval\"")
+                .contains("\"aiEmbeddingDimensions\":768")
+                .contains("\"configVersion\":7");
+    }
+
+    @Test
+    void pushRuntimeConfigBlockedCarriesReason() {
+        pushResponseBody.set("{\"applied\":false,\"blockedReason\":\"store probe failed\"}");
+
+        AgentRuntimeConfigPushResult result = client.pushRuntimeConfig(samplePayload());
+
+        assertThat(result.status()).isEqualTo(AgentRuntimeConfigPushResult.STATUS_BLOCKED);
+        assertThat(result.message()).isEqualTo("store probe failed");
+    }
+
+    @Test
+    void pushRuntimeConfigHttpErrorIsFailedNotThrown() {
+        pushStatus.set(404);
+        pushResponseBody.set("{\"detail\":\"Not Found\"}");
+
+        AgentRuntimeConfigPushResult result = client.pushRuntimeConfig(samplePayload());
+
+        assertThat(result.status()).isEqualTo(AgentRuntimeConfigPushResult.STATUS_FAILED);
+        assertThat(result.message()).contains("404");
+    }
+
+    @Test
+    void pushRuntimeConfigWithoutTokenIsFailedWithoutCalling() {
+        AgentProperties noToken = new AgentProperties();
+        noToken.setBaseUrl(properties.getBaseUrl());
+        noToken.setInternalServiceToken("");
+        HttpAgentClient unconfigured = new HttpAgentClient(noToken, new ObjectMapper(), null);
+
+        AgentRuntimeConfigPushResult result = unconfigured.pushRuntimeConfig(samplePayload());
+
+        assertThat(result.status()).isEqualTo(AgentRuntimeConfigPushResult.STATUS_FAILED);
+        assertThat(pushRequestBody.get()).isNull();
     }
 }

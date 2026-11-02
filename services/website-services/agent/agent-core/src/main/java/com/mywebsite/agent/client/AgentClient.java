@@ -12,6 +12,8 @@ import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
 import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
+import com.mywebsite.agent.dto.AgentRuntimeConfigPayload;
+import com.mywebsite.agent.dto.AgentRuntimeConfigPushResult;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
 import com.mywebsite.agent.dto.AgentSkillSummary;
 import java.util.List;
@@ -65,4 +67,12 @@ public interface AgentClient {
      * 复用 AgentOcrPdfResult 承载。失败语义同 ocrPdf。
      */
     AgentOcrPdfResult ocrImage(AgentOcrImageRequest request);
+
+    /**
+     * 推送运行配置四项到 agent-services 热替换（Issue #146 UoW-1）。
+     * 与本接口其他方法不同：推送失败不抛异常，结果以
+     * {@link AgentRuntimeConfigPushResult} 返回（APPLIED/BLOCKED/FAILED），
+     * 由调用方落 last_push_* 状态列；载荷含密钥明文，实现不得写入日志。
+     */
+    AgentRuntimeConfigPushResult pushRuntimeConfig(AgentRuntimeConfigPayload payload);
 }
