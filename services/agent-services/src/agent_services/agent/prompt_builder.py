@@ -126,7 +126,8 @@ def _time_context_block(
         lines.append(
             "Location permission was not granted. Timezone is only the clock, not a city. "
             "If the user asks where they are, or for local weather without naming a place, "
-            "say the browser or phone has not granted location permission. Do not invent a city from Timezone."
+            "say the browser or phone has not granted location permission. Do not ask which city. "
+            "Do not invent a city from Timezone."
         )
     else:
         lines.extend(
@@ -140,6 +141,8 @@ def _time_context_block(
                 "Do not claim the position had no basis.",
                 "If they ask about local conditions such as weather without naming a place, use this position. "
                 "Do not ask which city.",
+                "For live weather or a forecast here, call the get_weather tool with no coordinates: "
+                "it defaults to this position. Answer from its result, not from general knowledge.",
                 "If no listed tool can look that up, name this position and say the live data is unavailable.",
             ]
         )
