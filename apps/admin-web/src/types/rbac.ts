@@ -197,7 +197,10 @@ export const PERMISSION_CODES = {
   aiPromptRead: 'admin:ai-prompt:read',
   aiPromptUpdate: 'admin:ai-prompt:read',
   aiModelRead: 'admin:ai-model:read',
+  // 后端模型入口写接口实际只校验 read（AdminAiModelEntryController 全端点），与此处一致；
+  // 唯运行配置写接口（AdminAiRuntimeConfigController）校验 update，必须分开，见 aiRuntimeConfigUpdate。
   aiModelUpdate: 'admin:ai-model:read',
+  aiRuntimeConfigUpdate: 'admin:ai-model:update',
   aiKbList: 'admin:ai-kb:list',
   aiKbCreate: 'admin:ai-kb:list',
   aiKbUpdate: 'admin:ai-kb:list',
