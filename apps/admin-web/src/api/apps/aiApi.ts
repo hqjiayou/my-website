@@ -19,6 +19,8 @@ import type {
   AiPreviewHistoryMessage,
   AiPreviewModelBackfill,
   AiPreviewSkill,
+  AiEmbeddingClass,
+  AiEmbeddingClassSaveItem,
   AiModelEntry,
   AiModelEntryWriteInput,
   AiRuntimeConfig,
@@ -139,6 +141,28 @@ export const aiApi = {
     return httpClient
       .delete<HttpMessageBody<null | void>>(`/admin/ai/model-entries/${id}`)
       .then(unwrapVoid)
+  },
+
+  /** 嵌入类登记（Issue #126）：agentId 省略＝全站 scope；行内 spec/类键由服务端从入口解析。 */
+  listEmbeddingClasses(agentId?: number): Promise<AiEmbeddingClass[]> {
+    const qs = toQueryString({ agentId })
+    return httpClient
+      .get<HttpMessageBody<AiEmbeddingClass[]>>(`/admin/ai/embedding-classes${qs}`)
+      .then(unwrapData)
+  },
+
+  /** 整表保存：有序 items 整体替换该 scope 的登记，空列表＝清空。 */
+  replaceEmbeddingClasses(
+    agentId: number | undefined,
+    items: AiEmbeddingClassSaveItem[],
+  ): Promise<AiEmbeddingClass[]> {
+    const qs = toQueryString({ agentId })
+    return httpClient
+      .put<HttpMessageBody<AiEmbeddingClass[]>, { items: AiEmbeddingClassSaveItem[] }>(
+        `/admin/ai/embedding-classes${qs}`,
+        { items },
+      )
+      .then(unwrapData)
   },
 
   getRuntimeConfig(): Promise<AiRuntimeConfig> {
