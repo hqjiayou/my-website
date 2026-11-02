@@ -107,13 +107,12 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             String errorCode = request.modelEntryId() == null
                     ? "EXTERNAL_DEPENDENCY_BLOCKED"
                     : "MODEL_ENTRY_UNAVAILABLE";
-            // 与 forwardStream 同路径：事件经执行器在 emitter 注册后发送。
-            // 在请求线程里抢先 send 会与容器的异步分发并发写响应头（MockMvc 下
-            // 实测 ConcurrentModificationException，见 Issue #163）。
-            adminAiStreamExecutor.execute(() -> {
-                sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"" + errorCode + "\"}");
-                emitter.complete();
-            });
+            // 同步 send：ResponseBodyEmitter 对注册前 send 有缓冲重放语义（early sends），
+            // 容器/MockMvc 都按序交付。曾改走执行器异步发送，反而与 MockMvc 的响应打印
+            // 并发写响应头触发 ConcurrentModificationException（dev CI 41443553218 实锤，
+            // Issue #163），故保持同步。
+            sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"" + errorCode + "\"}");
+            emitter.complete();
             return emitter;
         }
         List<AgentModelSelection> embeddingClasses = modelEntryService.embeddingClasses(agentId);

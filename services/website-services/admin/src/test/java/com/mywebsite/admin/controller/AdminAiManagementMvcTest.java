@@ -218,6 +218,21 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     void previewStreamForwardsAgentEvents() throws Exception {
         String token = tokenFor(500L);
         long agentId = createSite(token);
+        // 自备站点 CLI 默认入口：链为空会诚实 BLOCKED、到不了 agentClient mock；
+        // 本类每方法前清空入口表（见 clearModelEntries），不能再靠其他方法的残留。
+        ObjectNode cliEntry = MAPPER.createObjectNode();
+        cliEntry.put("displayName", "CLI default");
+        cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
+        cliEntry.put("apiKey", "client-key");
+        cliEntry.put("agentId", agentId);
+        cliEntry.put("mode", "CLI");
+        cliEntry.put("enabled", true);
+        cliEntry.put("defaultEntry", true);
+        mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(cliEntry)))
+                .andExpect(status().isOk());
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
                     listener.onEvent("START", "{\"ok\":true}");
@@ -247,6 +262,20 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     void previewForwardsSkillsAndTodosToAgent() throws Exception {
         String token = tokenFor(500L);
         long agentId = createSite(token);
+        // 同 previewStreamForwardsAgentEvents：自备站点 CLI 默认入口，保证链非空。
+        ObjectNode cliEntry = MAPPER.createObjectNode();
+        cliEntry.put("displayName", "CLI default");
+        cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
+        cliEntry.put("apiKey", "client-key");
+        cliEntry.put("agentId", agentId);
+        cliEntry.put("mode", "CLI");
+        cliEntry.put("enabled", true);
+        cliEntry.put("defaultEntry", true);
+        mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(cliEntry)))
+                .andExpect(status().isOk());
         ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
