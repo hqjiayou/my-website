@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Info, KeyRound } from 'lucide-react'
+import { ArrowRight, Info, KeyRound, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
 import { agentApi } from '@/api/apps/agentApi'
-import { AdminPageHeader, CopyableText, StatusTag } from '@/components/admin'
+import { AdminPageHeader, CopyableText, FormDialog, StatusTag } from '@/components/admin'
 import {
   adminDangerGhostButtonClass,
   adminDangerGhostButtonSmClass,
@@ -14,12 +14,14 @@ import {
   adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
 } from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import type {
   AiModelEntry,
   AiModelEntryWriteInput,
+  AiRuntimeConfigUpdateInput,
   GatewayAccessKey,
   GatewayAccessKeyIssueResponse,
 } from '@/types/ai'
@@ -340,6 +342,291 @@ function GatewayAccessKeysCard() {
   )
 }
 
+/**
+ * agent-services 运行配置（Issue #146 UoW-3）：四项配置的真相源在服务端单行表，
+ * 保存后由 Java 推送 Python 热替换。密钥字段只写不回填：DSN 只显示服务端脱敏形、
+ * Gemini key 只显示末 4 位 hint；输入留空＝保留原值（后端语义）。
+ * 推没推成功看 lastPush* 状态，不看保存结果本身。
+ */
+function RuntimeConfigCard() {
+  const { t } = useTranslation('aiAdmin')
+  const queryClient = useQueryClient()
+  const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
+  const [dsn, setDsn] = useState('')
+  const [embeddingModel, setEmbeddingModel] = useState('')
+  const [dimensions, setDimensions] = useState('')
+  const [geminiKey, setGeminiKey] = useState('')
+  const [syncedVersion, setSyncedVersion] = useState<number | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  const { data, isPending, isError, error, refetch } = useQuery({
+    queryKey: ['ai', 'runtime-config'],
+    queryFn: () => aiApi.getRuntimeConfig(),
+  })
+
+  // 配置版本变化（首次加载、保存后回读）时把非密钥字段同步进表单；密钥字段永远清空、不回填。
+  // 用渲染期调整而非 effect：版本不变时不覆盖用户正在编辑的输入。
+  if (data && data.configVersion !== syncedVersion) {
+    setEmbeddingModel(data.aiEmbeddingModel ?? '')
+    setDimensions(data.aiEmbeddingDimensions == null ? '' : String(data.aiEmbeddingDimensions))
+    setDsn('')
+    setGeminiKey('')
+    setSyncedVersion(data.configVersion)
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: (input: AiRuntimeConfigUpdateInput) => aiApi.updateRuntimeConfig(input),
+    onSuccess: () => {
+      toast.success(t('settings.saved'))
+      setConfirmOpen(false)
+      setDsn('')
+      setGeminiKey('')
+      void queryClient.invalidateQueries({ queryKey: ['ai', 'runtime-config'] })
+    },
+    onError: (saveError: Error) => toast.error(saveError.message),
+  })
+
+  const retryMutation = useMutation({
+    mutationFn: () => aiApi.retryRuntimeConfigPush(),
+    onSuccess: () => {
+      toast.success(t('settings.runtimeConfig.retryDone'))
+      void queryClient.invalidateQueries({ queryKey: ['ai', 'runtime-config'] })
+    },
+    onError: (retryError: Error) => toast.error(retryError.message),
+  })
+
+  /** 维度输入解析：空＝清空（null）；不是 1–10000 的整数返回 undefined 表示非法。 */
+  function parsedDimensions(): number | null | undefined {
+    const trimmed = dimensions.trim()
+    if (trimmed === '') return null
+    const value = Number(trimmed)
+    if (!Number.isInteger(value) || value <= 0 || value > 10000) return undefined
+    return value
+  }
+
+  function buildInput(parsed: number | null): AiRuntimeConfigUpdateInput {
+    const input: AiRuntimeConfigUpdateInput = {
+      aiEmbeddingModel: embeddingModel.trim() || null,
+      aiEmbeddingDimensions: parsed,
+    }
+    if (dsn.trim()) input.retrievalDatabaseUrl = dsn.trim()
+    if (geminiKey.trim()) input.geminiApiKey = geminiKey.trim()
+    return input
+  }
+
+  function handleSubmit() {
+    if (!canUpdate || !data) return
+    const parsed = parsedDimensions()
+    if (parsed === undefined) {
+      toast.error(t('settings.runtimeConfig.dimensionsInvalid'))
+      return
+    }
+    // 只有维度变更才弹确认：变更后存量索引要全量重嵌、完成前检索 BLOCKED。
+    if (parsed !== data.aiEmbeddingDimensions) {
+      setConfirmOpen(true)
+      return
+    }
+    saveMutation.mutate(buildInput(parsed))
+  }
+
+  function confirmSave() {
+    const parsed = parsedDimensions()
+    if (parsed === undefined) {
+      setConfirmOpen(false)
+      toast.error(t('settings.runtimeConfig.dimensionsInvalid'))
+      return
+    }
+    saveMutation.mutate(buildInput(parsed))
+  }
+
+  const pushStatus = data?.lastPushStatus ?? null
+  const pendingDimensions = parsedDimensions()
+
+  return (
+    <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
+      <h3 className="text-sm font-semibold text-admin">{t('settings.runtimeConfig.title')}</h3>
+      <p className="text-sm text-admin-muted">{t('settings.runtimeConfig.description')}</p>
+
+      {isPending ? (
+        <p className="text-sm text-admin-muted">{t('loading')}</p>
+      ) : isError ? (
+        <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
+          <p>{error instanceof Error ? error.message : t('error')}</p>
+          <button type="button" className="mt-2 underline" onClick={() => void refetch()}>
+            {t('retry')}
+          </button>
+        </div>
+      ) : data ? (
+        <>
+          <div className="space-y-2 rounded-lg border border-admin px-4 py-3">
+            {data.configVersion === 0 ? (
+              <p className="text-sm text-admin-muted">{t('settings.runtimeConfig.pushNone')}</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-admin">{t('settings.runtimeConfig.pushTitle')}</span>
+                  {pushStatus === 'APPLIED' ? (
+                    <StatusTag
+                      status="APPLIED"
+                      tone="active"
+                      label={t('settings.runtimeConfig.pushApplied', { version: data.configVersion })}
+                    />
+                  ) : null}
+                  {pushStatus === 'BLOCKED' ? (
+                    <StatusTag status="BLOCKED" tone="warning" label={t('settings.runtimeConfig.pushBlocked')} />
+                  ) : null}
+                  {pushStatus === 'FAILED' ? (
+                    <StatusTag status="FAILED" tone="danger" label={t('settings.runtimeConfig.pushFailed')} />
+                  ) : null}
+                  {data.lastPushedAt ? (
+                    <span className="text-xs text-admin-muted">
+                      {t('settings.runtimeConfig.lastPushAtTag')} {new Date(data.lastPushedAt).toLocaleString()}
+                    </span>
+                  ) : null}
+                </div>
+                {data.lastPushMessage ? <p className="text-xs text-admin-muted">{data.lastPushMessage}</p> : null}
+                {(pushStatus === 'BLOCKED' || pushStatus === 'FAILED') && canUpdate ? (
+                  <button
+                    type="button"
+                    className={adminGhostButtonClass}
+                    disabled={retryMutation.isPending}
+                    onClick={() => retryMutation.mutate()}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                    {retryMutation.isPending
+                      ? t('settings.runtimeConfig.retrying')
+                      : t('settings.runtimeConfig.retryPush')}
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
+
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              handleSubmit()
+            }}
+          >
+            <label className="block text-sm text-admin">
+              {t('settings.runtimeConfig.dsn')}
+              <input
+                className={`${adminFieldClass} mt-1`}
+                type="password"
+                autoComplete="new-password"
+                value={dsn}
+                disabled={!canUpdate}
+                placeholder={
+                  data.retrievalDatabaseUrlMasked ??
+                  (data.retrievalDatabaseUrlConfigured ? t('settings.apiKeyKeep') : '')
+                }
+                onChange={(event) => setDsn(event.target.value)}
+              />
+              <span className="mt-1 block text-xs text-admin-muted">
+                {data.retrievalDatabaseUrlConfigured
+                  ? data.retrievalDatabaseUrlMasked
+                    ? t('settings.runtimeConfig.dsnHintMasked', { masked: data.retrievalDatabaseUrlMasked })
+                    : t('settings.runtimeConfig.dsnHintConfigured')
+                  : t('settings.runtimeConfig.dsnHintEmpty')}
+              </span>
+            </label>
+            <label className="block text-sm text-admin">
+              {t('settings.runtimeConfig.embeddingModel')}
+              <input
+                className={`${adminFieldClass} mt-1`}
+                value={embeddingModel}
+                disabled={!canUpdate}
+                onChange={(event) => setEmbeddingModel(event.target.value)}
+              />
+              <span className="mt-1 block text-xs text-admin-muted">
+                {t('settings.runtimeConfig.embeddingModelHint')}
+              </span>
+            </label>
+            <label className="block text-sm text-admin">
+              {t('settings.runtimeConfig.dimensions')}
+              <input
+                className={`${adminFieldClass} mt-1`}
+                type="number"
+                min={1}
+                max={10000}
+                step={1}
+                value={dimensions}
+                disabled={!canUpdate}
+                onChange={(event) => setDimensions(event.target.value)}
+              />
+              <span className="mt-1 block text-xs text-admin-muted">
+                {t('settings.runtimeConfig.dimensionsHint')}
+              </span>
+            </label>
+            <label className="block text-sm text-admin">
+              {t('settings.runtimeConfig.geminiKey')}
+              <input
+                className={`${adminFieldClass} mt-1`}
+                type="password"
+                autoComplete="new-password"
+                value={geminiKey}
+                disabled={!canUpdate}
+                placeholder={data.geminiApiKeyConfigured ? t('settings.apiKeyKeep') : ''}
+                onChange={(event) => setGeminiKey(event.target.value)}
+              />
+              <span className="mt-1 block text-xs text-admin-muted">
+                {data.geminiApiKeyConfigured
+                  ? data.geminiApiKeyHint
+                    ? t('settings.runtimeConfig.geminiKeyHint', { hint: data.geminiApiKeyHint })
+                    : t('settings.runtimeConfig.geminiKeyConfigured')
+                  : t('settings.runtimeConfig.geminiKeyEmpty')}
+              </span>
+            </label>
+            <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
+              <div className={adminFormActionsClass}>
+                <button type="submit" disabled={saveMutation.isPending} className={adminPrimaryButtonClass}>
+                  {saveMutation.isPending ? t('settings.saving') : t('settings.save')}
+                </button>
+              </div>
+            </PermissionGate>
+          </form>
+        </>
+      ) : null}
+
+      {confirmOpen && data ? (
+        <FormDialog
+          title={t('settings.runtimeConfig.dimensionConfirmTitle')}
+          closeLabel={t('settings.runtimeConfig.close')}
+          onClose={() => setConfirmOpen(false)}
+          size="s"
+        >
+          <p className="text-sm text-admin">
+            {t('settings.runtimeConfig.dimensionConfirmBody', {
+              from:
+                data.aiEmbeddingDimensions == null
+                  ? t('settings.runtimeConfig.dimensionsUnset')
+                  : String(data.aiEmbeddingDimensions),
+              to:
+                pendingDimensions == null
+                  ? t('settings.runtimeConfig.dimensionsUnset')
+                  : String(pendingDimensions),
+            })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button type="button" className={adminSecondaryButtonClass} onClick={() => setConfirmOpen(false)}>
+              {t('settings.runtimeConfig.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminPrimaryButtonClass}
+              disabled={saveMutation.isPending}
+              onClick={confirmSave}
+            >
+              {saveMutation.isPending ? t('settings.saving') : t('settings.runtimeConfig.confirmSave')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
+    </article>
+  )
+}
+
 function cliModelSpec(modelId: string) {
   const trimmed = modelId.trim()
   if (!trimmed) return trimmed
@@ -567,6 +854,8 @@ export function AiSettingsPage() {
         </article>
 
         <GatewayAccessKeysCard />
+
+        <RuntimeConfigCard />
 
         <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
           <div className="flex items-center justify-between gap-3">

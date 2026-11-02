@@ -21,6 +21,8 @@ import com.mywebsite.agent.dto.AgentRetrievalHit;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
 import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
 import com.mywebsite.agent.dto.AgentRunMeta;
+import com.mywebsite.agent.dto.AgentRuntimeConfigPayload;
+import com.mywebsite.agent.dto.AgentRuntimeConfigPushResult;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
 import com.mywebsite.agent.dto.AgentSkillSummary;
 import com.mywebsite.agent.dto.AgentTodoItem;
@@ -45,6 +47,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.BufferingClientHttpRequestFactory;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -154,6 +157,94 @@ public class HttpAgentClient implements AgentClient {
         } catch (RestClientException ex) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
+    }
+
+    /**
+     * 运行配置推送（Issue #146 UoW-1）：PUT /internal/v1/config/retrieval。
+     * 不走 exchangeWithRetry/mapErrorBody：推送的成败语义由返回体决定，且失败不抛异常
+     * （保存已落库、推送失败只记状态）。载荷含 DSN/key 明文：不写日志、不进异常信息。
+     * 不重试：PUT 换入带 configVersion 防旧，乱序到达由 Python 侧 stale 拒绝兜底，
+     * 失败后由页面「重试推送」显式再推最新版，比自动重试更可控。
+     */
+    @Override
+    public AgentRuntimeConfigPushResult pushRuntimeConfig(AgentRuntimeConfigPayload payload) {
+        if (payload == null) {
+            return AgentRuntimeConfigPushResult.failed("empty payload");
+        }
+        if (!StringUtils.hasText(properties.getInternalServiceToken())) {
+            return AgentRuntimeConfigPushResult.failed("internal service token not configured");
+        }
+        String requestId = MDC.get(HttpRequestCorrelation.MDC_REQUEST_ID);
+        try {
+            RestClient.RequestBodySpec spec = restClient
+                    .put()
+                    .uri("/internal/v1/config/retrieval")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header(AgentHttpHeaders.INTERNAL_SERVICE_TOKEN, properties.getInternalServiceToken());
+            if (StringUtils.hasText(requestId)) {
+                spec = spec.header(HttpRequestCorrelation.X_REQUEST_ID, requestId);
+            }
+            ResponseEntity<String> response = spec.body(payload).retrieve().toEntity(String.class);
+            return parsePushResponse(response.getBody(), payload.configVersion());
+        } catch (RestClientResponseException ex) {
+            AgentRuntimeConfigPushResult blocked = parseBlockedBody(ex.getResponseBodyAsString());
+            if (blocked != null) {
+                return blocked;
+            }
+            log.warn("agent-services runtime config push failed httpStatus={}", ex.getStatusCode().value());
+            return AgentRuntimeConfigPushResult.failed("agent-services HTTP " + ex.getStatusCode().value());
+        } catch (RestClientException ex) {
+            log.warn("agent-services runtime config push unreachable: {}", ex.getClass().getSimpleName());
+            return AgentRuntimeConfigPushResult.failed("agent-services unreachable");
+        }
+    }
+
+    /** 2xx 返回体：{applied:true, appliedVersion} 为 APPLIED；{applied:false, blockedReason} 为 BLOCKED。 */
+    private AgentRuntimeConfigPushResult parsePushResponse(String raw, long sentVersion) {
+        if (!StringUtils.hasText(raw)) {
+            return AgentRuntimeConfigPushResult.failed("agent-services returned empty body");
+        }
+        try {
+            JsonNode node = objectMapper.readTree(raw);
+            if (node.path("applied").isBoolean() && node.path("applied").asBoolean()) {
+                JsonNode version = node.get("appliedVersion");
+                Long appliedVersion = version != null && version.isNumber() ? version.asLong() : sentVersion;
+                return AgentRuntimeConfigPushResult.applied(appliedVersion);
+            }
+            String reason = firstText(node, "blockedReason", "message");
+            return AgentRuntimeConfigPushResult.blocked(reason != null ? reason : "agent-services rejected the config");
+        } catch (IOException ex) {
+            return AgentRuntimeConfigPushResult.failed("agent-services returned malformed body");
+        }
+    }
+
+    /** 非 2xx 时若 body 仍是 {applied:false, blockedReason} 形状，按 BLOCKED 记（原因可读优先于状态码）。 */
+    private AgentRuntimeConfigPushResult parseBlockedBody(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(raw);
+            if (node.path("applied").isBoolean() && !node.path("applied").asBoolean()) {
+                String reason = firstText(node, "blockedReason", "message");
+                if (reason != null) {
+                    return AgentRuntimeConfigPushResult.blocked(reason);
+                }
+            }
+        } catch (IOException ignored) {
+            // 不是可读的拒绝体，按通道失败处理
+        }
+        return null;
+    }
+
+    private static String firstText(JsonNode node, String... fields) {
+        for (String field : fields) {
+            String value = textOrNull(node, field);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private AgentMcpReady readMcpReady(String raw) {
