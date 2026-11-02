@@ -61,6 +61,22 @@ class AdminAiModelEntryServiceImplTest {
     }
 
     @Test
+    void softDeleteByAgentIdSoftDeletesEveryScopedEntry() {
+        AdminAiModelEntryEntity first = entry(1, 7L, "openai:a", true);
+        AdminAiModelEntryEntity second = entry(2, 7L, "openai:b", false);
+        when(modelEntryMapper.selectList(any())).thenReturn(List.of(first, second));
+
+        service.softDeleteByAgentId(7L);
+
+        assertThat(first.getDeletedAt()).isNotNull();
+        assertThat(second.getDeletedAt()).isNotNull();
+        org.mockito.Mockito.verify(modelEntryMapper, org.mockito.Mockito.times(2))
+                .updateById(any(AdminAiModelEntryEntity.class));
+        org.mockito.Mockito.verify(modelEntryMapper).deleteById(1L);
+        org.mockito.Mockito.verify(modelEntryMapper).deleteById(2L);
+    }
+
+    @Test
     void embeddingSelectionUsesKeyEntryAndSkipsCli() {
         AdminAiModelEntryEntity cli = entry(2L, 10L, "openai:gpt", true);
         cli.setMode("CLI");

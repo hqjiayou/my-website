@@ -1,0 +1,16 @@
+# 生产 profile（Issue #141 UoW-3）：收窄暴露面。
+#
+# 启用：--spring.profiles.active=prod（或 SPRING_PROFILES_ACTIVE=prod）
+# agent 随 Portal 暴露公网，生产关两样：actuator health 明细（各 indicator
+# 状态是情报面）与 springdoc（api-docs/swagger-ui 是接口清单，白送攻击面）。
+# local 不受影响，仍全量展示 health 明细且 springdoc 开启便于开发。
+management:
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

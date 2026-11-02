@@ -12,3 +12,10 @@ spring:
       server:
         webflux:
           trusted-proxies: "(?!)"
+
+# 暴露面收窄（Issue #141 UoW-3）：health 端点沿用 application.yml 的
+# exposure（仅 health），但生产不外泄各 indicator 明细。
+management:
+  endpoint:
+    health:
+      show-details: never
