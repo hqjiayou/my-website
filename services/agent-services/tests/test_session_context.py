@@ -170,12 +170,15 @@ def test_weather_wording_follows_location_availability() -> None:
     assert "it defaults to this position" in located
     assert "Answer from its result, not from general knowledge." in located
     assert located.index("get_weather") < located.index("If no listed tool can look that up")
+    # Issue 原文场景 (c)：点名别处问天气——只能查本定位、不能按地名查，明说而不用本定位顶替。
+    assert "cannot look up other places by name" in located
 
     # 场景 2：无定位——明说未获授权、不反问城市、不从时区编城市；本分支不点名工具。
     anonymous = _system("Asia/Tokyo", _CROSS_DATE)
     assert "has not granted location permission" in anonymous
     assert "Do not ask which city." in anonymous
     assert "Do not invent a city from Timezone." in anonymous
+    assert "never for a place name" in anonymous
     assert "get_weather" not in anonymous
 
     # 场景 3：无关问题防误触发——天气调用指令只出现在有定位组装里，

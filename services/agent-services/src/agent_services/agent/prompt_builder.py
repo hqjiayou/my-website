@@ -127,6 +127,7 @@ def _time_context_block(
             "Location permission was not granted. Timezone is only the clock, not a city. "
             "If the user asks where they are, or for local weather without naming a place, "
             "say the browser or phone has not granted location permission. Do not ask which city. "
+            "Weather can only be checked for a shared position, never for a place name. "
             "Do not invent a city from Timezone."
         )
     else:
@@ -143,6 +144,8 @@ def _time_context_block(
                 "Do not ask which city.",
                 "For live weather or a forecast here, call the get_weather tool with no coordinates: "
                 "it defaults to this position. Answer from its result, not from general knowledge.",
+                "Weather lookup covers only this position and cannot look up other places by name: "
+                "if they name another place, say so instead of answering for this position.",
                 "If no listed tool can look that up, name this position and say the live data is unavailable.",
             ]
         )
