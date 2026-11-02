@@ -56,6 +56,15 @@ class AdminGatewayAccessKeyServiceImplTest {
             captor.getValue().setId(1L);
             return 1;
         });
+        // issue() 在 insert 后会回读一行，取 DB 填充的 created_at / version；
+        // mock 须把回读行补上，否则 stored 为 null（Issue #163 的 NPE 来源）。
+        OffsetDateTime createdAt = OffsetDateTime.parse("2026-01-01T00:00:00Z");
+        when(accessKeyMapper.selectById(1L)).thenAnswer(invocation -> {
+            AdminGatewayAccessKeyEntity row = captor.getValue();
+            row.setCreatedAt(createdAt);
+            row.setVersion(0);
+            return row;
+        });
 
         AdminGatewayAccessKeyIssueResponse response = service.issue(new AdminGatewayAccessKeyIssueRequest("ext-client", null));
 
@@ -65,6 +74,8 @@ class AdminGatewayAccessKeyServiceImplTest {
         assertThat(stored.getKeyHash()).isNotEqualTo(response.apiKey());
         assertThat(response.keyHint()).isEqualTo(response.apiKey().substring(response.apiKey().length() - 4));
         assertThat(stored.getKeyHint()).isEqualTo(response.keyHint());
+        assertThat(response.createdAt()).isEqualTo(createdAt);
+        assertThat(response.version()).isEqualTo(0);
     }
 
     @Test
