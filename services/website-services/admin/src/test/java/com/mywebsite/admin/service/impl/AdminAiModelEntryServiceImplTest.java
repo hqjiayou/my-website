@@ -82,7 +82,8 @@ class AdminAiModelEntryServiceImplTest {
 
     // 嵌入类自 Issue #126 UoW-2 起改读登记：本类只委托 agent-core 共享服务，
     // 类的选择/合并/dedupe/物化语义由 AgentEmbeddingClassServiceImplTest 钉死；
-    // 这里只钉委托本身与 embeddingSelection 的首元语义。
+    // 这里只钉委托本身（顺序即登记序，消费方取首元的口径在知识服务侧钉死）。
+    // 单值接口 embeddingSelection 已于 UoW-5 退役删除。
     @Test
     void embeddingClassesDelegateToRegistrationService() {
         List<AgentModelSelection> registered =
@@ -96,25 +97,9 @@ class AdminAiModelEntryServiceImplTest {
     }
 
     @Test
-    void embeddingSelectionIsFirstRegisteredClass() {
-        AgentModelSelection first =
-                new AgentModelSelection("google:gemini-3-flash-preview", "key-5", null, "google:gemini-embedding-001");
-        AgentModelSelection second =
-                new AgentModelSelection("openai:chat", "key-9", null, "openai:text-embedding-3-small");
-        when(embeddingClassService.embeddingClasses(10L)).thenReturn(List.of(first, second));
-
-        AgentModelSelection selection = service.embeddingSelection(10L);
-
-        assertThat(selection).isSameAs(first);
-        assertThat(selection.embeddingSpec()).isEqualTo("google:gemini-embedding-001");
-        assertThat(selection.apiKey()).isEqualTo("key-5");
-    }
-
-    @Test
-    void embeddingSelectionIsNullWhenNoRegisteredClasses() {
+    void embeddingClassesIsEmptyWhenNoRegisteredClasses() {
         when(embeddingClassService.embeddingClasses(10L)).thenReturn(List.of());
 
-        assertThat(service.embeddingSelection(10L)).isNull();
         assertThat(service.embeddingClasses(10L)).isEmpty();
     }
 

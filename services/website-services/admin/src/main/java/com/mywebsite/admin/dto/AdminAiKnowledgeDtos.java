@@ -79,7 +79,7 @@ public final class AdminAiKnowledgeDtos {
             long indexedDocuments,
             long failedDocuments,
             long pendingDocuments,
-            /** 已索引文档中，记录的 embedding spec 与当前 embeddingSelection 不一致的数量（存量索引已过期）。 */
+            /** 已索引文档中，记录的嵌入类名集合与当前登记类集合不一致的数量（存量索引已过期）。 */
             long staleDocuments,
             long originalBytes,
             List<AdminAiKnowledgeAgentStatDto> sites,

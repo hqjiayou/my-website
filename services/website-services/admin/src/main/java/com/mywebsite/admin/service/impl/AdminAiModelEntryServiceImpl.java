@@ -194,12 +194,6 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         return embeddingClassService.embeddingClasses(agentId);
     }
 
-    @Override
-    public AgentModelSelection embeddingSelection(long agentId) {
-        List<AgentModelSelection> classes = embeddingClasses(agentId);
-        return classes.isEmpty() ? null : classes.get(0);
-    }
-
     /** 实体→中立快照：解密在本侧完成（解不出为 null），规则引擎只吃快照。 */
     private List<ModelChainResolver.EntrySnapshot> snapshots(List<AdminAiModelEntryEntity> entries) {
         if (entries == null) {

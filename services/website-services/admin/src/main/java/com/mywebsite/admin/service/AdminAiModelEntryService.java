@@ -59,10 +59,4 @@ public interface AdminAiModelEntryService {
      * 的门面。都没有时返回空列表，检索改用进程嵌入模型。
      */
     List<AgentModelSelection> embeddingClasses(long agentId);
-
-    /**
-     * {@link #embeddingClasses(long)} 的第一类。都没有时返回 null。
-     * 单类调用方仍用这一把，和以前「第一把 KEY embedding」一致。
-     */
-    AgentModelSelection embeddingSelection(long agentId);
 }
