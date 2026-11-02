@@ -43,6 +43,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -82,6 +83,17 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
 
     @MockBean
     private AgentClient agentClient;
+
+    /**
+     * 本类会创建全站（agentId 为空）模型入口，而 @Sql 的 rbac-h2-data.sql 只清
+     * RBAC/agent 等表、不清 agent_model_entry，入口会跨方法残留并污染后续方法
+     * （缺省模式判定、全站默认回退、runtime overlay 都读全站入口，见 Issue #163）。
+     * 每个方法前清干净，保证方法间隔离。
+     */
+    @BeforeEach
+    void clearModelEntries() {
+        modelEntryMapper.delete(new LambdaQueryWrapper<AdminAiModelEntryEntity>());
+    }
 
     private String tokenFor(long userId) throws Exception {
         RSAKey pk = AdminTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
