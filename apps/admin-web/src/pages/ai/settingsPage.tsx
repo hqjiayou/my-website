@@ -351,7 +351,8 @@ function GatewayAccessKeysCard() {
 function RuntimeConfigCard() {
   const { t } = useTranslation('aiAdmin')
   const queryClient = useQueryClient()
-  const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
+  // 运行配置写接口后端校验 admin:ai-model:update，与模型入口的 read 口径不同，单独用 aiRuntimeConfigUpdate。
+  const canUpdate = useHasPermission(PERMISSION_CODES.aiRuntimeConfigUpdate)
   const [dsn, setDsn] = useState('')
   const [embeddingModel, setEmbeddingModel] = useState('')
   const [dimensions, setDimensions] = useState('')
@@ -578,7 +579,7 @@ function RuntimeConfigCard() {
                   : t('settings.runtimeConfig.geminiKeyEmpty')}
               </span>
             </label>
-            <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
+            <PermissionGate code={PERMISSION_CODES.aiRuntimeConfigUpdate}>
               <div className={adminFormActionsClass}>
                 <button type="submit" disabled={saveMutation.isPending} className={adminPrimaryButtonClass}>
                   {saveMutation.isPending ? t('settings.saving') : t('settings.save')}
