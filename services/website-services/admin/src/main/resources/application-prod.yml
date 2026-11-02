@@ -1,0 +1,10 @@
+# 生产 profile（Issue #141 UoW-3）：收窄 actuator 暴露面。
+#
+# 启用：--spring.profiles.active=prod（或 SPRING_PROFILES_ACTIVE=prod）
+# health 端点本身沿用 application.yml 的 exposure（仅 health），但生产不外泄
+# 各 indicator 明细（DB/磁盘/依赖状态都是情报面）。local/test 不受影响，
+# 仍全量展示明细便于开发诊断。
+management:
+  endpoint:
+    health:
+      show-details: never
