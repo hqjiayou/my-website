@@ -3,7 +3,13 @@ import binascii
 import math
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator, model_serializer
+from pydantic import (
+    BaseModel,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_serializer,
+)
 
 from agent_services.retrieval.embeddings import limit_embedding_class_specs
 from agent_services.schemas.todo import MAX_TODO_ITEMS, TodoItem

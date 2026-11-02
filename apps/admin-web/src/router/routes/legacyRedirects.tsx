@@ -1,12 +1,8 @@
-import { Navigate, Route, useLocation } from 'react-router-dom'
+import { Navigate, Route } from 'react-router-dom'
 
 import { ROUTES } from '../config/routePaths'
 
-function RedirectAppsSites() {
-  const { pathname, search, hash } = useLocation()
-  const rest = pathname.slice(ROUTES.legacy.appsSites.length)
-  return <Navigate to={`${ROUTES.apps.sites}${rest}${search}${hash}`} replace />
-}
+import { RedirectAppsSites } from './redirectAppsSites'
 
 export const legacyRedirects = (
   <>

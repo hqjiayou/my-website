@@ -183,12 +183,16 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   }, [activeSpec, selection])
   const servedModel = trace.model ? modelIdFromSpec(trace.model) : ''
 
-  useEffect(() => {
-    if (modeChosen || !modelQuery.data) return
+  // 服务端默认模式只采纳一次（用户未手动选时）：按 React 官方推荐的渲染期调整，
+  // 不在 effect 里同步 setState。采纳后 modeChosen=true 使查询键切换为带 mode 重查，
+  // 回来的 mode 与已采纳值相同、不会重复触发。
+  const [adoptedServerMode, setAdoptedServerMode] = useState<'CLI' | 'KEY' | null>(null)
+  if (!modeChosen && modelQuery.data && adoptedServerMode !== modelQuery.data.mode) {
+    setAdoptedServerMode(modelQuery.data.mode)
     selection.setMode(modelQuery.data.mode)
     setMode(modelQuery.data.mode)
     setModeChosen(true)
-  }, [modeChosen, modelQuery.data, selection])
+  }
 
   const chooseMode = (next: 'CLI' | 'KEY') => {
     selection.setMode(next)
