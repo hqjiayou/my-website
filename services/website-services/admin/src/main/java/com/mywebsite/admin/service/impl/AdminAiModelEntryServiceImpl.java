@@ -10,13 +10,12 @@ import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiModelEntryService.ChainCandidate;
 import com.mywebsite.agent.dto.AgentModelSelection;
-import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
+import com.mywebsite.agent.utils.ModelChainResolver;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.infra.crypto.ModelEntryCipher;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -128,7 +127,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
     }
 
     /**
-     * 组链规则与 agent-app {@code AgentAiServiceImpl.loadModelChain} 一致。
+     * 组链规则在 agent-core {@code ModelChainResolver}，与 agent-app 共用同一份实现（Issue #132）。
      * 试聊传入模式，使用户端和后台打的是同一条接入；知识转写仍走不分模式的整链。
      */
     @Override
@@ -157,38 +156,20 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
     }
 
     /**
-     * 组链规则与 {@link #selectionChain(long, String)} 的原实现一致，并带上菜单需要的 id 与名称。
+     * 组链规则在 agent-core 的 {@code ModelChainResolver}（Issue #132，与 agent-app
+     * 共用同一份实现）；这里只做实体→快照映射与结果回译，规则不在本类重复。
      */
     private List<ChainLink> chainLinks(long agentId, String mode) {
         String normalized = chainMode(mode);
-        List<AdminAiModelEntryEntity> agentEntries = filterMode(enabledEntries(agentId), normalized);
-        List<AdminAiModelEntryEntity> globalEntries = filterMode(enabledEntries(null), normalized);
-        AdminAiModelEntryEntity primary = firstDefault(agentEntries);
-        if (primary == null) {
-            primary = firstDefault(globalEntries);
-        }
-        if (primary == null) {
-            return List.of();
-        }
-        AgentModelSelection primarySelection = toSelection(primary);
-        if (primarySelection == null) {
-            // 主用坏掉（无 spec / 解密不出 key）时整链不启用，与 currentSelection 旧口径一致：
-            // 备援不得越过坏主用顶上，否则坏 key 会被静默掩盖。
-            return List.of();
-        }
-        List<ChainLink> chain = new ArrayList<>();
-        chain.add(new ChainLink(primary.getId(), candidateName(primary), primarySelection));
-        appendLinks(chain, agentEntries, primary.getId());
-        appendLinks(chain, globalEntries, primary.getId());
-        return List.copyOf(chain);
+        return ModelChainResolver.resolveChain(snapshots(enabledEntries(agentId)), snapshots(enabledEntries(null)), normalized)
+                .stream()
+                .map(link -> new ChainLink(link.id(), link.displayName(), link.selection()))
+                .toList();
     }
 
     @Override
     public List<AgentModelSelection> embeddingClasses(long agentId) {
-        List<AgentModelSelection> raw = new ArrayList<>();
-        raw.addAll(keyEmbeddings(enabledEntries(agentId)));
-        raw.addAll(keyEmbeddings(enabledEntries(null)));
-        return AgentEmbeddingClassUtils.dedupe(raw);
+        return ModelChainResolver.resolveEmbeddingClasses(snapshots(enabledEntries(agentId)), snapshots(enabledEntries(null)));
     }
 
     @Override
@@ -197,19 +178,22 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         return classes.isEmpty() ? null : classes.get(0);
     }
 
-    /** 启用列表已是默认在前、id 升序。跳过 CLI 和没填 embedding spec 的入口。 */
-    private List<AgentModelSelection> keyEmbeddings(List<AdminAiModelEntryEntity> entries) {
-        List<AgentModelSelection> found = new ArrayList<>();
-        for (AdminAiModelEntryEntity entry : entries) {
-            if (!"KEY".equals(entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())) {
-                continue;
-            }
-            AgentModelSelection selection = toSelection(entry);
-            if (selection != null && StringUtils.hasText(selection.embeddingSpec())) {
-                found.add(selection);
-            }
+    /** 实体→中立快照：解密在本侧完成（解不出为 null），规则引擎只吃快照。 */
+    private List<ModelChainResolver.EntrySnapshot> snapshots(List<AdminAiModelEntryEntity> entries) {
+        if (entries == null) {
+            return List.of();
         }
-        return found;
+        return entries.stream()
+                .map(entry -> new ModelChainResolver.EntrySnapshot(
+                        entry.getId(),
+                        entry.getDisplayName(),
+                        entry.getModelSpec(),
+                        decryptKey(entry),
+                        entry.getBaseUrl(),
+                        entry.getEmbeddingSpec(),
+                        Boolean.TRUE.equals(entry.getDefaultEntry()),
+                        entry.getMode()))
+                .toList();
     }
 
     /** 作用域内启用入口：默认在前，其余 id 升序（与 listEntries 的展示序一致）。 */
@@ -224,34 +208,6 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
             query.eq(AdminAiModelEntryEntity::getAgentId, agentId);
         }
         return modelEntryMapper.selectList(query);
-    }
-
-    private static AdminAiModelEntryEntity firstDefault(List<AdminAiModelEntryEntity> entries) {
-        for (AdminAiModelEntryEntity entry : entries) {
-            if (Boolean.TRUE.equals(entry.getDefaultEntry())) {
-                return entry;
-            }
-        }
-        return null;
-    }
-
-    private void appendLinks(List<ChainLink> chain, List<AdminAiModelEntryEntity> entries, Long skipId) {
-        for (AdminAiModelEntryEntity entry : entries) {
-            if (entry.getId() != null && entry.getId().equals(skipId)) {
-                continue;
-            }
-            AgentModelSelection selection = toSelection(entry);
-            if (selection != null) {
-                chain.add(new ChainLink(entry.getId(), candidateName(entry), selection));
-            }
-        }
-    }
-
-    private static String candidateName(AdminAiModelEntryEntity entry) {
-        if (StringUtils.hasText(entry.getDisplayName())) {
-            return entry.getDisplayName().trim();
-        }
-        return entry.getModelSpec().trim();
     }
 
     private record ChainLink(Long id, String displayName, AgentModelSelection selection) {}
@@ -361,26 +317,6 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         return StringUtils.hasText(plain) ? plain : null;
     }
 
-    private AgentModelSelection toSelection(AdminAiModelEntryEntity entry) {
-        if (entry == null || !StringUtils.hasText(entry.getModelSpec())) {
-            return null;
-        }
-        String apiKey = decryptKey(entry);
-        if (!StringUtils.hasText(apiKey)) {
-            return null;
-        }
-        String baseUrl = StringUtils.hasText(entry.getBaseUrl()) ? entry.getBaseUrl().trim() : null;
-        return new AgentModelSelection(entry.getModelSpec().trim(), apiKey, baseUrl, embeddingSpecFor(entry));
-    }
-
-    /** CLI 客户端 key 只用于回答，不随入口带进嵌入。 */
-    private static String embeddingSpecFor(AdminAiModelEntryEntity entry) {
-        if ("CLI".equals(entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())) {
-            return null;
-        }
-        return entry.getEmbeddingSpec().trim();
-    }
-
     /** 空 mode 表示整链。CLI / KEY 以外拒绝，避免把拼错的模式当成整链。 */
     private static String chainMode(String mode) {
         if (!StringUtils.hasText(mode)) {
@@ -391,20 +327,6 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         return normalized;
-    }
-
-    private static List<AdminAiModelEntryEntity> filterMode(
-            List<AdminAiModelEntryEntity> entries, String mode) {
-        if (mode == null) {
-            return entries;
-        }
-        return entries.stream().filter(entry -> mode.equals(entryMode(entry))).toList();
-    }
-
-    private static String entryMode(AdminAiModelEntryEntity entry) {
-        return StringUtils.hasText(entry.getMode())
-                ? entry.getMode().trim().toUpperCase(java.util.Locale.ROOT)
-                : "KEY";
     }
 
     static String apiKeyHint(String apiKey) {

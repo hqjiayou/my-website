@@ -46,6 +46,7 @@ import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
 import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
 import com.mywebsite.agent.utils.AgentModelChainUtils;
+import com.mywebsite.agent.utils.ModelChainResolver;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -674,67 +675,52 @@ public class AgentAiServiceImpl implements AgentAiService {
     }
 
     /**
-     * 已登记的嵌入类，与当前对话模式无关。站点 KEY 入口里带 embedding spec 且能解密的，再接全站同样的入口。
-     * 同一模型名只留先出现的一把，最多 4 类。都没有时返回空列表，检索改用进程嵌入模型。CLI 入口不参与。
+     * 已登记的嵌入类，与当前对话模式无关。规则在 agent-core 的 {@code ModelChainResolver}
+     * （Issue #132，与 admin 共用同一份实现）；这里只做实体→快照映射。
+     * 都没有时返回空列表，检索改用进程嵌入模型。CLI 入口不参与。
      */
     private List<AgentModelSelection> embeddingClasses(long agentId) {
-        List<AgentModelSelection> raw = new ArrayList<>();
-        raw.addAll(keyEmbeddings(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId)));
-        raw.addAll(keyEmbeddings(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null)));
-        return AgentEmbeddingClassUtils.dedupe(raw);
-    }
-
-    private List<AgentModelSelection> keyEmbeddings(List<AgentAiModelEntryEntity> entries) {
-        List<AgentModelSelection> found = new ArrayList<>();
-        for (AgentAiModelEntryEntity entry : entries) {
-            if (!"KEY".equals(AgentModelChainUtils.entryMode(entry)) || !StringUtils.hasText(entry.getEmbeddingSpec())) {
-                continue;
-            }
-            AgentModelSelection selection = AgentModelChainUtils.toModelSelection(entry, modelEntryCipher);
-            if (selection != null && StringUtils.hasText(selection.embeddingSpec())) {
-                found.add(selection);
-            }
-        }
-        return found;
+        return ModelChainResolver.resolveEmbeddingClasses(
+                snapshots(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId)),
+                snapshots(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null)));
     }
 
     /**
-     * 生效链（与 admin AdminAiModelEntryServiceImpl.selectionChain 同规则，两处须一致）：
-     * 首元是主用（站点默认，否则全站默认），其后依次是同站其他启用入口、全站其他启用入口
-     * （各组内默认在前、id 升序）。主用不存在或解密不出 key 时返回空列表，备援不得越过坏主用顶上；
-     * 解密不出 key 的备援跳过。mode 非空时先按模式过滤（备援封闭在模式内）；为空时即整链。
+     * 生效链：规则在 agent-core 的 {@code ModelChainResolver}（Issue #132，与 admin
+     * {@code AdminAiModelEntryServiceImpl.selectionChain} 共用同一份实现，不再两处手写）。
+     * 首元是主用（站点默认，否则全站默认），主用坏掉整链为空（ADR-0004）；
+     * mode 非空时先按模式过滤（备援封闭在模式内）；为空时即整链。
      */
     private List<AgentModelSelection> loadModelChain(long agentId, String mode) {
         return loadModelChainLinks(agentId, mode).stream().map(ChainLink::selection).toList();
     }
 
     private List<ChainLink> loadModelChainLinks(long agentId, String mode) {
-        List<AgentAiModelEntryEntity> agentEntries = AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId);
-        List<AgentAiModelEntryEntity> globalEntries = AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null);
-        if (mode != null) {
-            agentEntries = agentEntries.stream()
-                    .filter(entry -> mode.equals(AgentModelChainUtils.entryMode(entry)))
-                    .toList();
-            globalEntries = globalEntries.stream()
-                    .filter(entry -> mode.equals(AgentModelChainUtils.entryMode(entry)))
-                    .toList();
-        }
-        AgentAiModelEntryEntity primary = AgentModelChainUtils.firstDefaultEntry(agentEntries);
-        if (primary == null) {
-            primary = AgentModelChainUtils.firstDefaultEntry(globalEntries);
-        }
-        if (primary == null) {
+        return ModelChainResolver.resolveChain(
+                        snapshots(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId)),
+                        snapshots(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null)),
+                        mode)
+                .stream()
+                .map(link -> new ChainLink(link.id(), link.displayName(), link.selection()))
+                .toList();
+    }
+
+    /** 实体→中立快照：解密在本侧完成（解不出为 null），规则引擎只吃快照。 */
+    private List<ModelChainResolver.EntrySnapshot> snapshots(List<AgentAiModelEntryEntity> entries) {
+        if (entries == null) {
             return List.of();
         }
-        AgentModelSelection primarySelection = AgentModelChainUtils.toModelSelection(primary, modelEntryCipher);
-        if (primarySelection == null) {
-            return List.of();
-        }
-        List<ChainLink> chain = new ArrayList<>();
-        chain.add(linkOf(primary, primarySelection));
-        appendLinks(chain, agentEntries, primary.getId());
-        appendLinks(chain, globalEntries, primary.getId());
-        return List.copyOf(chain);
+        return entries.stream()
+                .map(entry -> new ModelChainResolver.EntrySnapshot(
+                        entry.getId(),
+                        entry.getDisplayName(),
+                        entry.getModelSpec(),
+                        modelEntryCipher.decrypt(entry.getApiKey()),
+                        entry.getBaseUrl(),
+                        entry.getEmbeddingSpec(),
+                        Boolean.TRUE.equals(entry.getDefaultEntry()),
+                        entry.getMode()))
+                .toList();
     }
 
     /**
@@ -766,25 +752,6 @@ public class AgentAiServiceImpl implements AgentAiService {
             }
         }
         return List.copyOf(reordered);
-    }
-
-    private void appendLinks(List<ChainLink> chain, List<AgentAiModelEntryEntity> entries, Long skipId) {
-        for (AgentAiModelEntryEntity entry : entries) {
-            if (entry.getId() != null && entry.getId().equals(skipId)) {
-                continue;
-            }
-            AgentModelSelection selection = AgentModelChainUtils.toModelSelection(entry, modelEntryCipher);
-            if (selection != null) {
-                chain.add(linkOf(entry, selection));
-            }
-        }
-    }
-
-    private static ChainLink linkOf(AgentAiModelEntryEntity entry, AgentModelSelection selection) {
-        String name = StringUtils.hasText(entry.getDisplayName())
-                ? entry.getDisplayName().trim()
-                : selection.spec();
-        return new ChainLink(entry.getId(), name, selection);
     }
 
     private record ChainLink(Long id, String displayName, AgentModelSelection selection) {}
