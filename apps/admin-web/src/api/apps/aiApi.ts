@@ -23,6 +23,8 @@ import type {
   AiModelEntryWriteInput,
   AiRuntimeConfig,
   AiRuntimeConfigUpdateInput,
+  AiUsageReport,
+  AiUsageSource,
   ProxyLoginProvider,
   ProxyServicesApiKeyCreated,
   ProxyServicesApiKeys,
@@ -152,6 +154,13 @@ export const aiApi = {
   retryRuntimeConfigPush(): Promise<AiRuntimeConfig> {
     return httpClient
       .post<HttpMessageBody<AiRuntimeConfig>, Record<string, never>>('/admin/ai/runtime-config/retry-push', {})
+      .then(unwrapData)
+  },
+
+  /** 用量聚合（Issue #140 UoW-2）：窗口内一次返回 daily/byAgent/byModel/recent；source 省略＝全部。 */
+  getAiUsage(query: { source?: AiUsageSource; days?: number; limit?: number }): Promise<AiUsageReport> {
+    return httpClient
+      .get<HttpMessageBody<AiUsageReport>>(`/admin/ai/usage${toQueryString({ ...query })}`)
       .then(unwrapData)
   },
 
