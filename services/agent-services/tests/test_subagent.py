@@ -26,6 +26,7 @@ from agent_services.agent.subagent import (
 )
 from agent_services.agent.todo_tools import TodoStore, build_todo_toolset
 from agent_services.agent.toolset_factory import build_execution_toolsets
+from agent_services.agent.weather_tools import build_weather_toolset
 from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.stream import AgentStreamEventType
 
@@ -244,7 +245,9 @@ def test_disabled_omits_tool_and_leaves_harness_text_unchanged(tmp_path) -> None
     legacy = assemble_harness(
         agent_id="9",
         message="hi",
-        toolsets=[build_todo_toolset(TodoStore())],
+        # 基线＝子 agent 引入前的常开工具集；天气自 #164 起无条件注册，须一并列入，
+        # 顺序与 build_execution_toolsets 一致（weather 在 todo 之前）。
+        toolsets=[build_weather_toolset(None, None), build_todo_toolset(TodoStore())],
         harness_dir=str(tmp_path),
     )
     on = assemble_harness(agent_id="9", message="hi", toolsets=enabled, harness_dir=str(tmp_path))

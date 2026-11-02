@@ -304,6 +304,8 @@ async def _prepare_execution(request: Request, body: ChatRequest, agent_id: str,
         retrieval_model_selection=selection,
         knowledge_collector=collector,
         tables_available=tables_available,
+        default_latitude=body.latitude,
+        default_longitude=body.longitude,
     )
     return resolution, todo_store, toolsets, collector
 
