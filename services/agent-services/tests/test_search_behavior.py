@@ -3,6 +3,7 @@
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import UsageLimits
+from test_retrieval import FakeEmbedder, FakeStore
 
 from agent_services.agent.knowledge_tools import (
     DEGRADED_TOOL_LINE,
@@ -17,17 +18,19 @@ from agent_services.agent.runtime import (
     run_chat,
 )
 from agent_services.agent.stream_runtime import stream_chat_events
-from agent_services.retrieval.service import IndexSegment, RetrievalService, _ranked_hits
+from agent_services.retrieval.service import (
+    IndexSegment,
+    RetrievalService,
+    _ranked_hits,
+)
 from agent_services.retrieval.store import (
+    RetrievedChunk,
     chunk_from_row,
     citation_sources,
     lexical_search_statement,
     vector_search_sql,
 )
-from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.stream import AgentStreamEventType
-
-from test_retrieval import FakeEmbedder, FakeStore
 
 
 def test_query_sql_selects_metadata() -> None:
