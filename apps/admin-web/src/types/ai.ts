@@ -151,6 +151,63 @@ export interface AiRuntimeConfigUpdateInput {
   geminiApiKey?: string | null
 }
 
+/** AI 用量来源（与后端 AgentUsageService 的 SOURCE_* 常量一致）。 */
+export type AiUsageSource = 'PORTAL' | 'ADMIN_PREVIEW' | 'GATEWAY_V1'
+
+export type AiUsageStatus = 'SUCCESS' | 'UPSTREAM_ERROR'
+
+/**
+ * AI 用量聚合报告（Issue #140 UoW-2），字段与后端 AdminAiUsageDtos 逐项对齐：
+ * daily 按 UTC 日升序、byAgent/byModel 按调用数降序、recent 按时间倒序（条数受 limit 夹取）。
+ */
+export interface AiUsageReport {
+  daily: AiUsageDaily[]
+  byAgent: AiUsageByAgent[]
+  byModel: AiUsageByModel[]
+  recent: AiUsageRecent[]
+}
+
+/** 按 UTC 日聚合；unknownTokenCalls 是 tokens 记 NULL 的调用数（未知不并入 0 静默吞掉）。 */
+export interface AiUsageDaily {
+  date: string
+  calls: number
+  promptTokens: number
+  completionTokens: number
+  unknownTokenCalls: number
+}
+
+export interface AiUsageByAgent {
+  agentId: number | null
+  calls: number
+  promptTokens: number
+  completionTokens: number
+}
+
+/** 按入口聚合；alias 只有 GATEWAY_V1 行有值。 */
+export interface AiUsageByModel {
+  entryId: number | null
+  alias: string | null
+  calls: number
+  promptTokens: number
+  completionTokens: number
+}
+
+export interface AiUsageRecent {
+  id: number
+  createdAt: string
+  source: AiUsageSource
+  agentId: number | null
+  entryId: number | null
+  alias: string | null
+  mode: string | null
+  /** 上游未回 usage 时为 null（未知），不得按 0 呈现。 */
+  promptTokens: number | null
+  completionTokens: number | null
+  latencyMs: number | null
+  status: AiUsageStatus
+  gatewayAccessKeyId: number | null
+}
+
 /** 网关访问 Key。列表/详情不含明文与哈希。 */
 export interface GatewayAccessKey {
   id: number

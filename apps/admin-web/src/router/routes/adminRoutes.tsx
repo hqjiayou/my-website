@@ -73,6 +73,7 @@ const OperationFilesPage = lazyNamed(
 )
 
 const AiSettingsPage = lazyNamed(() => import('@/pages/ai/settingsPage'), 'AiSettingsPage')
+const AiUsagePage = lazyNamed(() => import('@/pages/ai/usagePage'), 'AiUsagePage')
 const ProxyServicesPage = lazyNamed(
   () => import('@/pages/ai/proxyServicesPage'),
   'ProxyServicesPage',
@@ -142,6 +143,7 @@ export const adminRoutes = (
     <Route path={ROUTES.operation.files} element={<OperationFilesPage />} />
 
     <Route path={ROUTES.ai.settings} element={<AiSettingsPage />} />
+    <Route path={ROUTES.ai.usage} element={<AiUsagePage />} />
     <Route path={ROUTES.ai.prompts} element={<AiPromptsPage />} />
     <Route path={ROUTES.ai.knowledgeBases} element={<AiKnowledgeBasesPage />} />
     <Route path={ROUTES.ai.conversations} element={<AiConversationsPage />} />

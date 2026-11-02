@@ -44,6 +44,7 @@ export const ROUTES = {
   },
   ai: {
     settings: '/ai/settings',
+    usage: '/ai/usage',
     prompts: '/ai/prompts',
     knowledgeBases: '/ai/knowledge-bases',
     conversations: '/ai/conversations',
