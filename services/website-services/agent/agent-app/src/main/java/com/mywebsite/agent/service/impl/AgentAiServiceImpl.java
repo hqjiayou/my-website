@@ -42,6 +42,7 @@ import com.mywebsite.agent.service.AgentAiConversationService;
 import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
 import com.mywebsite.agent.service.AgentAiRateLimitService;
 import com.mywebsite.agent.service.AgentAiService;
+import com.mywebsite.agent.service.AgentEmbeddingClassService;
 import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
 import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
@@ -191,6 +192,7 @@ public class AgentAiServiceImpl implements AgentAiService {
     private final ExecutorService agentAiStreamExecutor;
     private final ObjectMapper objectMapper;
     private final AgentUsageService usageService;
+    private final AgentEmbeddingClassService embeddingClassService;
 
     public AgentAiServiceImpl(
             AgentClient agentClient,
@@ -204,7 +206,8 @@ public class AgentAiServiceImpl implements AgentAiService {
             LocalizedMessageService localizedMessageService,
             ExecutorService agentAiStreamExecutor,
             ObjectMapper objectMapper,
-            AgentUsageService usageService) {
+            AgentUsageService usageService,
+            AgentEmbeddingClassService embeddingClassService) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.modelEntryCipher = modelEntryCipher;
@@ -217,6 +220,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         this.agentAiStreamExecutor = agentAiStreamExecutor;
         this.objectMapper = objectMapper;
         this.usageService = usageService;
+        this.embeddingClassService = embeddingClassService;
     }
 
     @Override
@@ -675,14 +679,13 @@ public class AgentAiServiceImpl implements AgentAiService {
     }
 
     /**
-     * 已登记的嵌入类，与当前对话模式无关。规则在 agent-core 的 {@code ModelChainResolver}
-     * （Issue #132，与 admin 共用同一份实现）；这里只做实体→快照映射。
-     * 都没有时返回空列表，检索改用进程嵌入模型。CLI 入口不参与。
+     * 已登记的嵌入类，与当前对话模式无关。来源是登记表，委托 agent-core 的
+     * {@code AgentEmbeddingClassService}（Issue #126 登记制，与 admin 共用同一份
+     * 实现，含首次读物化）；原先扫入口 {@code embeddingSpec} 的推算已退役。
+     * 都没有时返回空列表，检索改用进程嵌入模型。
      */
     private List<AgentModelSelection> embeddingClasses(long agentId) {
-        return ModelChainResolver.resolveEmbeddingClasses(
-                snapshots(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId)),
-                snapshots(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null)));
+        return embeddingClassService.embeddingClasses(agentId);
     }
 
     /**

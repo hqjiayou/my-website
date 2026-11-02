@@ -11,6 +11,7 @@ import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.service.AgentEmbeddingClassService;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.infra.crypto.ModelEntryCipher;
 import java.util.List;
@@ -33,11 +34,14 @@ class AdminAiModelEntryServiceImplTest {
     @Mock
     private ModelEntryCipher cipher;
 
+    @Mock
+    private AgentEmbeddingClassService embeddingClassService;
+
     private AdminAiModelEntryServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminAiModelEntryServiceImpl(modelEntryMapper, adminAgentMapper, cipher);
+        service = new AdminAiModelEntryServiceImpl(modelEntryMapper, adminAgentMapper, cipher, embeddingClassService);
         // 无默认入口的用例走不到解密，stub 放宽避免 strict stub 误报
         lenient().when(cipher.decrypt(any())).thenAnswer(invocation -> {
             String raw = invocation.getArgument(0);
@@ -76,67 +80,42 @@ class AdminAiModelEntryServiceImplTest {
         org.mockito.Mockito.verify(modelEntryMapper).deleteById(2L);
     }
 
+    // 嵌入类自 Issue #126 UoW-2 起改读登记：本类只委托 agent-core 共享服务，
+    // 类的选择/合并/dedupe/物化语义由 AgentEmbeddingClassServiceImplTest 钉死；
+    // 这里只钉委托本身与 embeddingSelection 的首元语义。
     @Test
-    void embeddingSelectionUsesKeyEntryAndSkipsCli() {
-        AdminAiModelEntryEntity cli = entry(2L, 10L, "openai:gpt", true);
-        cli.setMode("CLI");
-        cli.setEmbeddingSpec("google:gemini-embedding-001");
-        AdminAiModelEntryEntity key = entry(5L, 10L, "google:gemini-3-flash-preview", false);
-        key.setMode("KEY");
-        key.setEmbeddingSpec("google:gemini-embedding-001");
-        when(modelEntryMapper.selectList(any())).thenReturn(List.of(cli, key), List.of());
+    void embeddingClassesDelegateToRegistrationService() {
+        List<AgentModelSelection> registered =
+                List.of(
+                        new AgentModelSelection(
+                                "google:gemini-3-flash-preview", "key-5", null, "google:gemini-embedding-001"),
+                        new AgentModelSelection("openai:chat", "key-9", null, "openai:text-embedding-3-small"));
+        when(embeddingClassService.embeddingClasses(10L)).thenReturn(registered);
+
+        assertThat(service.embeddingClasses(10L)).isSameAs(registered);
+    }
+
+    @Test
+    void embeddingSelectionIsFirstRegisteredClass() {
+        AgentModelSelection first =
+                new AgentModelSelection("google:gemini-3-flash-preview", "key-5", null, "google:gemini-embedding-001");
+        AgentModelSelection second =
+                new AgentModelSelection("openai:chat", "key-9", null, "openai:text-embedding-3-small");
+        when(embeddingClassService.embeddingClasses(10L)).thenReturn(List.of(first, second));
 
         AgentModelSelection selection = service.embeddingSelection(10L);
 
-        assertThat(selection.spec()).isEqualTo("google:gemini-3-flash-preview");
+        assertThat(selection).isSameAs(first);
         assertThat(selection.embeddingSpec()).isEqualTo("google:gemini-embedding-001");
         assertThat(selection.apiKey()).isEqualTo("key-5");
     }
 
     @Test
-    void embeddingSelectionIsNullWhenNoKeyHasEmbeddingSpec() {
-        AdminAiModelEntryEntity cli = entry(2L, 10L, "openai:gpt", true);
-        cli.setMode("CLI");
-        when(modelEntryMapper.selectList(any())).thenReturn(List.of(cli), List.of());
+    void embeddingSelectionIsNullWhenNoRegisteredClasses() {
+        when(embeddingClassService.embeddingClasses(10L)).thenReturn(List.of());
 
         assertThat(service.embeddingSelection(10L)).isNull();
         assertThat(service.embeddingClasses(10L)).isEmpty();
-    }
-
-    @Test
-    void embeddingClassesKeepsDistinctModelsAndCollapsesGoogleAliases() {
-        AdminAiModelEntryEntity first = entry(1L, 10L, "openai:chat-a", true);
-        first.setMode("KEY");
-        first.setEmbeddingSpec("google-gla:gemini-embedding-001");
-        AdminAiModelEntryEntity alias = entry(2L, 10L, "openai:chat-b", false);
-        alias.setMode("KEY");
-        alias.setEmbeddingSpec("google:gemini-embedding-001");
-        AdminAiModelEntryEntity second = entry(3L, 10L, "openai:chat-c", false);
-        second.setMode("KEY");
-        second.setEmbeddingSpec("openai:text-embedding-3-small");
-        AdminAiModelEntryEntity third = entry(4L, 10L, "openai:chat-d", false);
-        third.setMode("KEY");
-        third.setEmbeddingSpec("openai:text-embedding-3-large");
-        AdminAiModelEntryEntity fourth = entry(5L, 10L, "openai:chat-e", false);
-        fourth.setMode("KEY");
-        fourth.setEmbeddingSpec("openai:embed-extra");
-        AdminAiModelEntryEntity dropped = entry(6L, 10L, "openai:chat-f", false);
-        dropped.setMode("KEY");
-        dropped.setEmbeddingSpec("openai:embed-dropped");
-        AdminAiModelEntryEntity cli = entry(7L, 10L, "openai:cli", false);
-        cli.setMode("CLI");
-        cli.setEmbeddingSpec("openai:cli-embed");
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(List.of(cli, first, alias, second, third, fourth, dropped), List.of());
-
-        List<AgentModelSelection> classes = service.embeddingClasses(10L);
-
-        assertThat(classes).extracting(AgentModelSelection::embeddingSpec)
-                .containsExactly(
-                        "google-gla:gemini-embedding-001",
-                        "openai:text-embedding-3-small",
-                        "openai:text-embedding-3-large",
-                        "openai:embed-extra");
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiModelEntryService.ChainCandidate;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.service.AgentEmbeddingClassService;
 import com.mywebsite.agent.utils.ModelChainResolver;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -28,14 +29,17 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
     private final AdminAiModelEntryMapper modelEntryMapper;
     private final AdminAgentMapper adminAgentMapper;
     private final ModelEntryCipher cipher;
+    private final AgentEmbeddingClassService embeddingClassService;
 
     public AdminAiModelEntryServiceImpl(
             AdminAiModelEntryMapper modelEntryMapper,
             AdminAgentMapper adminAgentMapper,
-            ModelEntryCipher cipher) {
+            ModelEntryCipher cipher,
+            AgentEmbeddingClassService embeddingClassService) {
         this.modelEntryMapper = modelEntryMapper;
         this.adminAgentMapper = adminAgentMapper;
         this.cipher = cipher;
+        this.embeddingClassService = embeddingClassService;
     }
 
     @Override
@@ -181,9 +185,13 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
                 .toList();
     }
 
+    /**
+     * 嵌入类改读登记（Issue #126 UoW-2）：委托 agent-core 的共享服务（含首次
+     * 读物化），与 agent-app 同一份实现，不再在本侧扫入口推算。
+     */
     @Override
     public List<AgentModelSelection> embeddingClasses(long agentId) {
-        return ModelChainResolver.resolveEmbeddingClasses(snapshots(enabledEntries(agentId)), snapshots(enabledEntries(null)));
+        return embeddingClassService.embeddingClasses(agentId);
     }
 
     @Override
