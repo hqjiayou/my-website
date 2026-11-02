@@ -41,6 +41,7 @@ from agent_services.retrieval.embeddings import (
     create_embedding_client_for,
     embedding_class_name,
 )
+from agent_services.retrieval.runtime_config import apply_runtime_config
 from agent_services.retrieval.service import (
     DimensionChangeRequired,
     EmbeddingClass,
@@ -82,6 +83,10 @@ from agent_services.schemas.retrieval import (
     RetrievalSearchRequest,
     RetrievalSearchResponse,
     RetrievalUpsertRequest,
+)
+from agent_services.schemas.runtime_config import (
+    RuntimeConfigPushRequest,
+    RuntimeConfigPushResponse,
 )
 from agent_services.schemas.skills import SkillCatalogItem, SkillCatalogResponse
 
@@ -349,7 +354,14 @@ async def internal_health(request: Request) -> HealthResponse:
     usage_limits = budget.usage_limits
     retrieval_service = _retrieval_service_or_none(request)
     retrieval_reason = getattr(request.app.state, "retrieval_blocked_reason", None)
-    retrieval_ready = retrieval_service is not None and retrieval_service.has_process_embedder
+    # blocked_reason 非空即不算就绪：启动期它只在嵌入未就绪时出现（行为不变），
+    # 运行期它还承载 #146 热替换的「维度待重嵌」状态——不加这一条，维度变更后
+    # health 会在 reembed 完成前谎报 LIVE。
+    retrieval_ready = (
+        retrieval_service is not None
+        and retrieval_service.has_process_embedder
+        and retrieval_reason is None
+    )
     return HealthResponse(
         limits=RuntimeLimits(
             maxRequests=usage_limits.request_limit if usage_limits else None,
@@ -396,6 +408,25 @@ async def mcp_ready(request: Request) -> JSONResponse:
     )
     body = payload.model_dump(by_alias=True, exclude_none=True)
     return JSONResponse(status_code=200 if report.ok else 503, content=body)
+
+
+@router.put("/config/retrieval")
+async def put_runtime_config(
+    request: Request, body: RuntimeConfigPushRequest
+) -> dict[str, object]:
+    """运行配置热替换（#146 UoW-2）：Java 保存页面配置后推送，四项缺席＝未配置。
+
+    一律回 200＋{applied, appliedVersion, blockedReason?}：Java 侧据 applied
+    区分 APPLIED / BLOCKED 落状态列。入参含 DSN / key 明文，只进内存，
+    不写日志、不回显（响应与原因均不带正文）。
+    """
+    result = await apply_runtime_config(request.app, body.to_values())
+    payload = RuntimeConfigPushResponse(
+        applied=result.applied,
+        applied_version=result.applied_version,
+        blocked_reason=result.blocked_reason,
+    )
+    return payload.model_dump(by_alias=True, exclude_none=True)
 
 
 @router.post("/chat")

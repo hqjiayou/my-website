@@ -22,6 +22,9 @@ from agent_services.config import (
 )
 from agent_services.observability.otel import setup_otel
 from agent_services.observability.request_id import install_request_id_middleware
+from agent_services.retrieval.runtime_config import (
+    sync_runtime_config_from_business_api,
+)
 from agent_services.retrieval.service import RetrievalService, create_retrieval_service
 
 logger = logging.getLogger(__name__)
@@ -29,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    # 启动反向收敛（#146）：向 Java 拉页面配置盖过 env 基线；拉取失败只记
+    # warning 按 env 继续，绝不阻断启动（Python 先于 Java 起是常态）。
+    await sync_runtime_config_from_business_api(app)
     yield
     if app.state.retrieval_service is not None:
         await app.state.retrieval_service.close()
@@ -56,6 +62,8 @@ def create_app(
 
     app = FastAPI(title="agent-services", version=__version__, lifespan=_lifespan)
     app.state.settings = resolved
+    # 已生效的页面配置版本（#146）；env 基线为 0，推送/启动拉取换入后递增。
+    app.state.runtime_config_version = 0
     app.state.model_handle = model_handle if model_handle is not None else create_model(resolved)
 
     if retrieval_service is not None:
