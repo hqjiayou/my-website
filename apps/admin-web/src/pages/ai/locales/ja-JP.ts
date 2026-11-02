@@ -85,6 +85,44 @@ export default {
         'このキーは今回のみ表示されます。今すぐコピーして保存してください。閉じると平文は二度と表示できません。',
       close: '閉じる',
     },
+    runtimeConfig: {
+      title: '実行時設定',
+      description:
+        'agent-services の検索データベースと埋め込み設定です。保存すると即座にプッシュされ、再起動なしでホットリプレースされます。ここで一度も保存していない間は、起動時の env 値がフォールバックとして使われます。プッシュ状態はサーバー側の記録が正です。保存成功＝適用済みとは限りません。',
+      dsn: '検索データベース DSN',
+      dsnHintMasked:
+        '現在設定済み：{{masked}}（マスク表示、平文は表示されません）。入力欄を空欄にすると現在の DSN を保持し、新しい値を入力した場合のみ置き換えます。',
+      dsnHintConfigured:
+        '現在設定済みです（アドレスは非表示）。入力欄を空欄にすると現在の DSN を保持し、新しい値を入力した場合のみ置き換えます。',
+      dsnHintEmpty: '未設定です。完全なデータベース接続文字列を入力して保存してください。',
+      embeddingModel: '埋め込みモデル',
+      embeddingModelHint: '空欄にするとこの項目をクリアします。',
+      dimensions: '埋め込み次元',
+      dimensionsHint: '空欄にするとクリアします。保存済みの値と異なる場合は、保存前に確認します。',
+      dimensionsInvalid: '次元は 1〜10000 の整数で入力してください。',
+      dimensionsUnset: '未設定',
+      geminiKey: 'Gemini API key',
+      geminiKeyHint:
+        '設定済み（末尾 4 桁 {{hint}}）。入力欄を空欄にすると現在の key を保持し、新しい値を入力した場合のみ置き換えます。',
+      geminiKeyConfigured:
+        '設定済みです。入力欄を空欄にすると現在の key を保持し、新しい値を入力した場合のみ置き換えます。',
+      geminiKeyEmpty: '未設定です。',
+      pushTitle: 'プッシュ状態',
+      pushNone: 'ページ設定はまだ保存されていません。agent-services は起動時の env 値で動作しています。',
+      pushApplied: '適用済み v{{version}}',
+      pushBlocked: '未適用：agent-services が拒否',
+      pushFailed: 'プッシュ失敗',
+      lastPushAtTag: '最終プッシュ',
+      retryPush: '再プッシュ',
+      retrying: 'プッシュ中…',
+      retryDone: '再プッシュしました',
+      dimensionConfirmTitle: '埋め込み次元を変更しますか',
+      dimensionConfirmBody:
+        '埋め込み次元を {{from}} から {{to}} に変更します。変更後は既存インデックスの全量再インデックス（reembed）が必要です。再埋め込みが完了するまで、検索は正直に BLOCKED と表示され利用できません。保存しますか？',
+      confirmSave: '保存する',
+      cancel: 'キャンセル',
+      close: '閉じる',
+    },
   },
   prompts: {
     title: 'Prompt 設定',

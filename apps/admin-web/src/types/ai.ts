@@ -122,6 +122,35 @@ export interface AiModelEntryWriteInput {
   alias?: string | null
 }
 
+export type AiRuntimeConfigPushStatus = 'APPLIED' | 'BLOCKED' | 'FAILED'
+
+/**
+ * agent-services 运行配置视图（Issue #146）：DSN 只回脱敏形、Gemini key 只回
+ * configured＋末 4 位 hint，任何情况下不含明文。字段与后端 AdminAiRuntimeConfigDto 逐项对齐。
+ */
+export interface AiRuntimeConfig {
+  retrievalDatabaseUrlConfigured: boolean
+  retrievalDatabaseUrlMasked: string | null
+  aiEmbeddingModel: string | null
+  aiEmbeddingDimensions: number | null
+  geminiApiKeyConfigured: boolean
+  geminiApiKeyHint: string | null
+  configVersion: number
+  lastPushStatus: AiRuntimeConfigPushStatus | null
+  lastPushMessage: string | null
+  lastPushedAt: string | null
+  version: number | null
+  updatedAt: string | null
+}
+
+/** 保存运行配置：密钥字段缺省/留空＝保留原值；aiEmbeddingModel 空＝清空、aiEmbeddingDimensions 为 null＝清空。 */
+export interface AiRuntimeConfigUpdateInput {
+  retrievalDatabaseUrl?: string | null
+  aiEmbeddingModel?: string | null
+  aiEmbeddingDimensions?: number | null
+  geminiApiKey?: string | null
+}
+
 /** 网关访问 Key。列表/详情不含明文与哈希。 */
 export interface GatewayAccessKey {
   id: number

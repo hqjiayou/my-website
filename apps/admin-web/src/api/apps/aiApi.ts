@@ -21,6 +21,8 @@ import type {
   AiPreviewSkill,
   AiModelEntry,
   AiModelEntryWriteInput,
+  AiRuntimeConfig,
+  AiRuntimeConfigUpdateInput,
   ProxyLoginProvider,
   ProxyServicesApiKeyCreated,
   ProxyServicesApiKeys,
@@ -135,6 +137,22 @@ export const aiApi = {
     return httpClient
       .delete<HttpMessageBody<null | void>>(`/admin/ai/model-entries/${id}`)
       .then(unwrapVoid)
+  },
+
+  getRuntimeConfig(): Promise<AiRuntimeConfig> {
+    return httpClient.get<HttpMessageBody<AiRuntimeConfig>>('/admin/ai/runtime-config').then(unwrapData)
+  },
+
+  updateRuntimeConfig(input: AiRuntimeConfigUpdateInput): Promise<AiRuntimeConfig> {
+    return httpClient
+      .put<HttpMessageBody<AiRuntimeConfig>, AiRuntimeConfigUpdateInput>('/admin/ai/runtime-config', input)
+      .then(unwrapData)
+  },
+
+  retryRuntimeConfigPush(): Promise<AiRuntimeConfig> {
+    return httpClient
+      .post<HttpMessageBody<AiRuntimeConfig>, Record<string, never>>('/admin/ai/runtime-config/retry-push', {})
+      .then(unwrapData)
   },
 
   listGatewayAccessKeys(): Promise<GatewayAccessKey[]> {

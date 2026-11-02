@@ -85,6 +85,44 @@ export default {
         'This key is shown only this once — copy and save it now. It cannot be viewed again after closing.',
       close: 'Close',
     },
+    runtimeConfig: {
+      title: 'Runtime configuration',
+      description:
+        'Retrieval database and embedding settings for agent-services. Saving pushes the config for hot replacement — no restart needed; until something is saved here, the service runs on its startup env values. Push status comes from the server record: a successful save does not by itself mean the config is live.',
+      dsn: 'Retrieval database DSN',
+      dsnHintMasked:
+        'Currently configured: {{masked}} (masked; the plaintext is never shown). Leave the field empty to keep the current DSN — enter a new value only to replace it.',
+      dsnHintConfigured:
+        'Currently configured (address not visible). Leave the field empty to keep the current DSN — enter a new value only to replace it.',
+      dsnHintEmpty: 'Not configured yet. Enter the full database connection string and save.',
+      embeddingModel: 'Embedding model',
+      embeddingModelHint: 'Leave blank to clear this setting.',
+      dimensions: 'Embedding dimensions',
+      dimensionsHint: 'Leave blank to clear. If it differs from the saved value, you will be asked to confirm before saving.',
+      dimensionsInvalid: 'Dimensions must be an integer between 1 and 10000.',
+      dimensionsUnset: 'not set',
+      geminiKey: 'Gemini API key',
+      geminiKeyHint:
+        'Configured (last 4: {{hint}}). Leave the field empty to keep the current key — enter a new value only to replace it.',
+      geminiKeyConfigured:
+        'Configured. Leave the field empty to keep the current key — enter a new value only to replace it.',
+      geminiKeyEmpty: 'Not configured yet.',
+      pushTitle: 'Push status',
+      pushNone: 'Nothing has been saved here yet; agent-services is still running on its startup env values.',
+      pushApplied: 'Live, v{{version}}',
+      pushBlocked: 'Not applied: rejected by agent-services',
+      pushFailed: 'Push failed',
+      lastPushAtTag: 'Last push',
+      retryPush: 'Retry push',
+      retrying: 'Pushing…',
+      retryDone: 'Push retried',
+      dimensionConfirmTitle: 'Change embedding dimensions?',
+      dimensionConfirmBody:
+        'Embedding dimensions will change from {{from}} to {{to}}. Existing indexes then need a full re-index (reembed); until re-embedding completes, retrieval honestly reports BLOCKED and is unavailable. Save anyway?',
+      confirmSave: 'Save',
+      cancel: 'Cancel',
+      close: 'Close',
+    },
   },
   prompts: {
     title: 'Prompt Settings',
