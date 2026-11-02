@@ -242,3 +242,9 @@ CREATE TABLE IF NOT EXISTS agent_embedding_class (
     deleted_at  TIMESTAMP WITH TIME ZONE,
     version     INTEGER NOT NULL DEFAULT 0
 );
+
+-- H2 测试夹具：对齐 Flyway V49 agent_embedding_class_materialization（物化标记，无审计列）。
+CREATE TABLE IF NOT EXISTS agent_embedding_class_materialization (
+    scope_key       VARCHAR(64) PRIMARY KEY,
+    materialized_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);

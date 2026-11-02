@@ -2,15 +2,15 @@ package com.mywebsite.agent.utils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.utils.ModelChainResolver.EntrySnapshot;
 import com.mywebsite.agent.utils.ModelChainResolver.ResolvedLink;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * 组链/嵌入类规则的唯一守卫（Issue #132）：admin 与 agent-app 两侧共用
+ * 组链规则的唯一守卫（Issue #132）：admin 与 agent-app 两侧共用
  * {@link ModelChainResolver} 后，语义由这组纯单测钉死，不再靠两处实现互保。
+ * 嵌入类已随 Issue #126 登记制迁出本类，守卫在 AgentEmbeddingClassServiceImplTest。
  */
 class ModelChainResolverTest {
 
@@ -104,27 +104,5 @@ class ModelChainResolverTest {
         List<ResolvedLink> chain = ModelChainResolver.resolveChain(List.of(unnamed), List.of(), null);
 
         assertThat(chain.get(0).displayName()).isEqualTo("google:a");
-    }
-
-    @Test
-    void embeddingClassesTakeKeyEntriesWithSpecSiteFirstAndIgnoreChainState() {
-        List<AgentModelSelection> classes = ModelChainResolver.resolveEmbeddingClasses(
-                List.of(
-                        entry(1, "google:a", "k1", false, "KEY", "google:embed-1"),
-                        entry(2, "cli:b", "k2", false, "CLI", "google:embed-2"),
-                        entry(3, "google:c", "k3", false, "KEY", null)),
-                List.of(entry(9, "openai:z", "k9", false, "KEY", "openai:embed-3")));
-
-        // 没有默认入口也照常算（与组链独立）；CLI 与无 spec 的不进；站点优先。
-        assertThat(classes).extracting(AgentModelSelection::embeddingSpec)
-                .containsExactly("google:embed-1", "openai:embed-3");
-    }
-
-    @Test
-    void embeddingClassesSkipEntriesWhoseKeyIsMissing() {
-        List<AgentModelSelection> classes = ModelChainResolver.resolveEmbeddingClasses(
-                List.of(entry(1, "google:a", null, false, "KEY", "google:embed-1")), List.of());
-
-        assertThat(classes).isEmpty();
     }
 }

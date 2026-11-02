@@ -7,11 +7,16 @@ import java.util.Locale;
 import org.springframework.util.StringUtils;
 
 /**
- * 模型入口组链与嵌入类选择的唯一实现（Issue #132）。此前 admin 的
+ * 模型入口组链的唯一实现（Issue #132）。此前 admin 的
  * {@code AdminAiModelEntryServiceImpl.selectionChain} 与 agent-app 的
  * {@code AgentAiServiceImpl.loadModelChain} 两处手写同规则、靠注释互保一致；
  * 现在规则只在这里，两侧把各自实体映射成 {@link EntrySnapshot} 后调用，
  * 实体与 Mapper 仍归各模块（同表双映射不在本单范围）。
+ *
+ * <p>嵌入类不在这里：原先扫入口 {@code embeddingSpec} 的推算已随 Issue #126
+ * 登记制退役，唯一读取入口是 {@code AgentEmbeddingClassService}（agent-core
+ * service 层）。链上每条 selection 仍带入口自己的 embeddingSpec 字段
+ * （CLI 清空），那是入口属性、不是嵌入类来源。
  *
  * <p>纯静态、无状态：解密由调用方完成并把明文 key 放进快照（解不出放 null）。
  * 输入列表的顺序即组链顺序，调用方须按「默认在前、id 升序」查好再传入。
@@ -71,34 +76,6 @@ public final class ModelChainResolver {
         appendLinks(chain, agentEntries, primary.id());
         appendLinks(chain, globalEntries, primary.id());
         return List.copyOf(chain);
-    }
-
-    /**
-     * 已登记的嵌入类：只取 KEY 模式、带 embedding spec 且凭证可组装的入口，
-     * 站点在前、全站在后，最后经 {@link AgentEmbeddingClassUtils#dedupe} 按
-     * 规范化 spec 去重并截到上限。与组链相互独立：没有默认入口也能算嵌入类。
-     */
-    public static List<AgentModelSelection> resolveEmbeddingClasses(
-            List<EntrySnapshot> agentScope, List<EntrySnapshot> globalScope) {
-        List<AgentModelSelection> raw = new ArrayList<>();
-        appendEmbeddings(raw, agentScope);
-        appendEmbeddings(raw, globalScope);
-        return AgentEmbeddingClassUtils.dedupe(raw);
-    }
-
-    private static void appendEmbeddings(List<AgentModelSelection> raw, List<EntrySnapshot> entries) {
-        if (entries == null) {
-            return;
-        }
-        for (EntrySnapshot entry : entries) {
-            if (!"KEY".equals(entryMode(entry.mode())) || !StringUtils.hasText(entry.embeddingSpec())) {
-                continue;
-            }
-            AgentModelSelection selection = toSelection(entry);
-            if (selection != null && StringUtils.hasText(selection.embeddingSpec())) {
-                raw.add(selection);
-            }
-        }
     }
 
     private static List<EntrySnapshot> filterMode(List<EntrySnapshot> entries, String mode) {
