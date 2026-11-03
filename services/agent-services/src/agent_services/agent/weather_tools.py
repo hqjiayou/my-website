@@ -12,6 +12,12 @@ from typing import Any
 import httpx
 from pydantic_ai.toolsets import FunctionToolset
 
+from agent_services.agent.visualization import (
+    CARD_KIND_WEATHER,
+    VisualizationCollector,
+    card_envelope,
+)
+
 logger = logging.getLogger(__name__)
 
 WEATHER_TOOL_NAME = "get_weather"
@@ -201,7 +207,10 @@ def _daily_lines(daily: object) -> list[str]:
     return ["Daily forecast:", *rows]
 
 
-async def _lookup(client: httpx.AsyncClient | None, latitude: float, longitude: float) -> str:
+async def _fetch_payload(
+    client: httpx.AsyncClient | None, latitude: float, longitude: float
+) -> dict[str, Any] | str:
+    """取 Open-Meteo payload：成功回 dict，失败回错误文本（与原 _lookup 的失败形态一致）。"""
     params: dict[str, str] = {
         "latitude": f"{latitude:g}",
         "longitude": f"{longitude:g}",
@@ -227,7 +236,147 @@ async def _lookup(client: httpx.AsyncClient | None, latitude: float, longitude: 
         return f"{UNAVAILABLE_TEXT} (unexpected response shape)"
     if not isinstance(payload, dict):
         return f"{UNAVAILABLE_TEXT} (unexpected response shape)"
-    return _format_summary(payload, latitude, longitude)
+    return payload
+
+
+def _num_or_none(value: object) -> float | int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return value
+
+
+def _code_or_none(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def build_weather_card(
+    payload: dict[str, Any], latitude: float, longitude: float
+) -> dict[str, Any] | None:
+    """从同一份 Open-Meteo payload 切天气卡数据（Issue #179 UoW-2）。
+
+    字段口径：current 实况、hourly 未来 24 小时（自当前小时起）、daily 3 日。
+    数值直供不经模型；缺失或非数值的字段不写出。payload 形状不对时返回 None
+    （与 _format_summary 的 UNAVAILABLE 分支同条件），不产卡。
+    """
+    current = payload.get("current")
+    if not isinstance(current, dict) or not isinstance(current.get("time"), str):
+        return None
+    current_time = current["time"]
+    current_card: dict[str, Any] = {"time": current_time}
+    for wire_key, source_key in (
+        ("temperatureC", "temperature_2m"),
+        ("apparentTemperatureC", "apparent_temperature"),
+        ("humidityPercent", "relative_humidity_2m"),
+        ("windSpeedKmh", "wind_speed_10m"),
+        ("precipitationMm", "precipitation"),
+    ):
+        number = _num_or_none(current.get(source_key))
+        if number is not None:
+            current_card[wire_key] = number
+    code = _code_or_none(current.get("weather_code"))
+    if code is not None:
+        current_card["weatherCode"] = code
+        current_card["weatherText"] = _weather_text(code)
+
+    card: dict[str, Any] = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": current_card,
+        "hourly": _hourly_card(payload.get("hourly"), current_time),
+        "daily": _daily_card(payload.get("daily")),
+    }
+    timezone = payload.get("timezone")
+    if isinstance(timezone, str) and timezone:
+        card["timezone"] = timezone
+    return card
+
+
+def _hourly_card(hourly: object, current_time: str) -> list[dict[str, Any]]:
+    """未来 24 小时：自当前小时（含）起逐小时切温度与降水概率。"""
+    if not isinstance(hourly, dict):
+        return []
+    times = hourly.get("time")
+    temperatures = hourly.get("temperature_2m")
+    probabilities = hourly.get("precipitation_probability")
+    codes = hourly.get("weather_code")
+    if not isinstance(times, list) or not isinstance(temperatures, list):
+        return []
+    current_hour = current_time[:13]
+    start = next(
+        (
+            index
+            for index, moment in enumerate(times)
+            if isinstance(moment, str) and moment[:13] >= current_hour
+        ),
+        None,
+    )
+    if start is None:
+        return []
+    rows: list[dict[str, Any]] = []
+    for index in range(start, min(start + 24, len(times))):
+        moment = times[index]
+        temperature = temperatures[index] if index < len(temperatures) else None
+        if not isinstance(moment, str) or _num_or_none(temperature) is None:
+            continue
+        row: dict[str, Any] = {"time": moment, "temperatureC": temperature}
+        probability = (
+            probabilities[index]
+            if isinstance(probabilities, list) and index < len(probabilities)
+            else None
+        )
+        if _num_or_none(probability) is not None:
+            row["precipitationProbabilityPercent"] = probability
+        code = (
+            _code_or_none(codes[index])
+            if isinstance(codes, list) and index < len(codes)
+            else None
+        )
+        if code is not None:
+            row["weatherCode"] = code
+        rows.append(row)
+    return rows
+
+
+def _daily_card(daily: object) -> list[dict[str, Any]]:
+    if not isinstance(daily, dict):
+        return []
+    days = daily.get("time")
+    highs = daily.get("temperature_2m_max")
+    lows = daily.get("temperature_2m_min")
+    probabilities = daily.get("precipitation_probability_max")
+    codes = daily.get("weather_code")
+    if not isinstance(days, list) or not isinstance(highs, list) or not isinstance(lows, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for index, day in enumerate(days[:3]):
+        if not isinstance(day, str) or index >= len(highs) or index >= len(lows):
+            continue
+        if _num_or_none(highs[index]) is None or _num_or_none(lows[index]) is None:
+            continue
+        row: dict[str, Any] = {
+            "date": day,
+            "temperatureMaxC": highs[index],
+            "temperatureMinC": lows[index],
+        }
+        probability = (
+            probabilities[index]
+            if isinstance(probabilities, list) and index < len(probabilities)
+            else None
+        )
+        if _num_or_none(probability) is not None:
+            row["precipitationProbabilityMaxPercent"] = probability
+        code = (
+            _code_or_none(codes[index])
+            if isinstance(codes, list) and index < len(codes)
+            else None
+        )
+        if code is not None:
+            row["weatherCode"] = code
+            row["weatherText"] = _weather_text(code)
+        rows.append(row)
+    return rows
 
 
 def build_weather_toolset(
@@ -235,6 +384,7 @@ def build_weather_toolset(
     default_longitude: float | None = None,
     *,
     client: httpx.AsyncClient | None = None,
+    card_collector: VisualizationCollector | None = None,
 ) -> FunctionToolset:
     toolset = FunctionToolset()
 
@@ -259,6 +409,15 @@ def build_weather_toolset(
         if isinstance(picked, str):
             return picked
         lat, lon = picked
-        return await _lookup(client, lat, lon)
+        result = await _fetch_payload(client, lat, lon)
+        if isinstance(result, str):
+            return result
+        # 天气卡只在调用方给了收集器时发（preview 流式，Issue #179）；
+        # 文本产出与无卡时逐字一致，卡数据从同一份 payload 切、不经模型。
+        if card_collector is not None:
+            card = build_weather_card(result, lat, lon)
+            if card is not None:
+                card_collector.record(card_envelope(CARD_KIND_WEATHER, card))
+        return _format_summary(result, lat, lon)
 
     return toolset

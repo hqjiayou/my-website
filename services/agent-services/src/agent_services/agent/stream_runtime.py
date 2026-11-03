@@ -43,6 +43,7 @@ from agent_services.agent.runtime import (
 )
 from agent_services.agent.todo_tools import TodoStore
 from agent_services.agent.toolset_factory import execution_needs_agent_context
+from agent_services.agent.visualization import VisualizationCollector
 from agent_services.api.errors import external_failure_message
 from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.chat import (
@@ -103,6 +104,7 @@ async def stream_chat_events(
     memory_enabled: bool = False,
     memory_extraction_enabled: bool = True,
     knowledge_collector: KnowledgeSearchCollector | None = None,
+    visualization_collector: VisualizationCollector | None = None,
 ) -> AsyncIterator[AgentStreamEvent]:
     resolved_budget = budget or RunBudget()
     history_summary = await prepare_history_summary(
@@ -156,7 +158,11 @@ async def stream_chat_events(
                 async with agent:
                     entered = True
                     async for event in _emit_agent_stream(
-                        agent, user_prompt, run_kwargs, knowledge_collector
+                        agent,
+                        user_prompt,
+                        run_kwargs,
+                        knowledge_collector,
+                        visualization_collector,
                     ):
                         if isinstance(event, AgentStreamEvent):
                             yield event
@@ -175,7 +181,9 @@ async def stream_chat_events(
                 )
                 return
         else:
-            async for event in _emit_agent_stream(agent, user_prompt, run_kwargs, knowledge_collector):
+            async for event in _emit_agent_stream(
+                agent, user_prompt, run_kwargs, knowledge_collector, visualization_collector
+            ):
                 if isinstance(event, AgentStreamEvent):
                     yield event
                 else:
@@ -214,6 +222,12 @@ async def stream_chat_events(
         history=list(harness.memory),
         needs_mcp_context=execution_needs_agent_context(toolsets or []),
     )
+
+    # grounding 复跑在收尾阶段也可能产卡（同一批 toolsets）：DONE 前把残余卡片
+    # 按序补发，不让已记录的卡片丢失。主 run 的卡片已在 TOOL_RESULT 后逐个发出。
+    if visualization_collector is not None:
+        for card in visualization_collector.drain():
+            yield AgentStreamEvent(type=AgentStreamEventType.VISUALIZATION, data=card)
 
     # 与同步 chat 一样恒带 retrievalDegraded：预取降级或知识搜索工具降级任一成立即为真
     tool_degraded = knowledge_collector.degraded if knowledge_collector is not None else False
@@ -264,12 +278,15 @@ async def _emit_agent_stream(
     user_prompt: UserPrompt,
     run_kwargs: dict[str, object],
     knowledge_collector: KnowledgeSearchCollector | None,
+    visualization_collector: VisualizationCollector | None = None,
 ) -> AsyncIterator[AgentStreamEvent | _StreamOutput]:
     """把 Pydantic AI 的 run 事件流映射为应用层事件（单一通道、真实时序）。
 
     文本增量 → TEXT_DELTA；思考增量 → THINKING（provider 不产出思考片段时
     自然缺席，不伪造）；工具调用/结果 → TOOL_START / TOOL_RESULT，结果只带
-    执行标记与知识搜索的安全摘要，不带工具返回正文（§21.4）。
+    执行标记与知识搜索的安全摘要，不带工具返回正文（§21.4）；工具在本轮
+    产出的卡片在该工具的 TOOL_RESULT 之后紧接 VISUALIZATION 发出（卡片是
+    给用户看的呈现，不算工具返回正文）。
     """
     text_parts: list[str] = []
     tool_trace: list[dict[str, object]] = []
@@ -323,6 +340,11 @@ async def _emit_agent_stream(
                     if summary is not None:
                         data["summary"] = summary
                 yield AgentStreamEvent(type=AgentStreamEventType.TOOL_RESULT, data=data)
+                if visualization_collector is not None:
+                    for card in visualization_collector.drain():
+                        yield AgentStreamEvent(
+                            type=AgentStreamEventType.VISUALIZATION, data=card
+                        )
             elif isinstance(event, AgentRunResultEvent):
                 result = event.result
                 final_output = str(result.output).strip() if result.output is not None else ""

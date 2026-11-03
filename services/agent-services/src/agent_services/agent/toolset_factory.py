@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic_ai.models import Model
 
 from agent_services.agent.business_tools import build_business_toolset
+from agent_services.agent.chart_tools import build_chart_toolset
 from agent_services.agent.knowledge_tools import (
     KnowledgeSearchCollector,
     build_knowledge_toolset,
@@ -13,6 +14,7 @@ from agent_services.agent.mcp_tools import build_mcp_toolsets, has_mcp_toolsets
 from agent_services.agent.subagent import build_delegate_tool
 from agent_services.agent.table_tools import build_table_toolset
 from agent_services.agent.todo_tools import TodoStore, build_todo_toolset
+from agent_services.agent.visualization import VisualizationCollector
 from agent_services.agent.weather_tools import build_weather_toolset
 from agent_services.config import Settings
 from agent_services.retrieval.embeddings import EmbeddingClient
@@ -37,6 +39,8 @@ def build_execution_toolsets(
     tables_available: bool = False,
     default_latitude: float | None = None,
     default_longitude: float | None = None,
+    preview: bool = False,
+    visualization_collector: VisualizationCollector | None = None,
 ) -> list[object]:
     toolsets: list[object] = []
     business = build_business_toolset(settings, agent_id, client=client)
@@ -59,9 +63,18 @@ def build_execution_toolsets(
         if tables_available:
             toolsets.append(build_table_toolset(agent_id, retrieval, collector=knowledge_collector))
     # 天气工具无条件注册：无定位时工具自身回错误文本，不靠注册与否表达可用性。
+    # 天气卡与 render_chart 只在 preview 且调用方给了卡片收集器时启用（Issue #179）：
+    # 正式对话的工具集与改动前逐字一致。
+    cards_active = preview and visualization_collector is not None
     toolsets.append(
-        build_weather_toolset(default_latitude=default_latitude, default_longitude=default_longitude)
+        build_weather_toolset(
+            default_latitude=default_latitude,
+            default_longitude=default_longitude,
+            card_collector=visualization_collector if cards_active else None,
+        )
     )
+    if cards_active:
+        toolsets.append(build_chart_toolset(visualization_collector))  # type: ignore[arg-type]
     if settings.agent_enable_todo_tools:
         toolsets.append(build_todo_toolset(todo_store))
     toolsets.extend(build_mcp_toolsets(settings))

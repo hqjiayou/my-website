@@ -171,6 +171,9 @@ class ChatRequest(BaseModel):
     knowledge_context: list[str] | None = Field(default=None, alias="knowledgeContext", max_length=4)
     memories: list[str] | None = Field(default=None, max_length=MAX_MEMORIES)
     memory_enabled: bool = Field(default=False, alias="memoryEnabled")
+    # 后台试聊标记：只有 admin preview 下发 true，正式对话不带此字段。
+    # 执行层据此启用回复内卡片（Issue #179）：天气卡发出与 render_chart 工具注册。
+    preview: bool = False
     # 向量索引凭证，与回答模型分开。两种对话模式共用；都空时用进程嵌入模型。
     embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
     embedding_api_key: str | None = Field(default=None, alias="embeddingApiKey", max_length=4096)
