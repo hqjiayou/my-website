@@ -167,8 +167,8 @@ class HttpAgentClientPythonContractIT {
     void runtimeStatusReportsLimitsAgainstRealPythonService() {
         AgentRuntimeStatus status = client.runtimeStatus();
         assertThat(status.providerStatus()).isEqualTo("LIVE");
-        assertThat(status.limits().maxRequests()).isEqualTo(10);
-        assertThat(status.limits().maxToolCalls()).isEqualTo(20);
+        assertThat(status.limits().maxRequests()).isEqualTo(20);
+        assertThat(status.limits().maxToolCalls()).isEqualTo(50);
         assertThat(status.limits().toolTimeoutSeconds()).isEqualTo(30.0);
         assertThat(status.limits().historyMaxChars()).isEqualTo(24000);
         assertThat(status.mcpStatus()).isEqualTo("DISABLED");
@@ -237,7 +237,7 @@ class HttpAgentClientPythonContractIT {
 
     @Test
     void budgetExceededMapsToAgentBudgetExceededAgainstRealPythonService() throws Exception {
-        // 独立进程：默认 maxRequests=10 不会触发；request_limit=1 + TestModel 调工具 → 第二轮 model 请求超限
+        // 独立进程：默认 maxRequests=20 不会触发；request_limit=1 + TestModel 调工具 → 第二轮 model 请求超限
         try (EphemeralAgentProcess proc = EphemeralAgentProcess.start(Map.of("AGENT_MAX_REQUESTS", "1"))) {
             assertThatThrownBy(() -> proc.client().chat(new AgentChatRequest("42", "hello")))
                     .isInstanceOf(BusinessException.class)
