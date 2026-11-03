@@ -21,6 +21,12 @@ import type {
   AiPreviewSkill,
   AiEmbeddingClass,
   AiEmbeddingClassSaveItem,
+  AiExperienceExtractionResult,
+  AiExperienceLesson,
+  AiExperienceLessonApproveInput,
+  AiExperienceLessonCreateInput,
+  AiExperienceLessonListItem,
+  AiExperienceLessonStatus,
   AiModelEntry,
   AiModelEntryWriteInput,
   AiRuntimeConfig,
@@ -161,6 +167,70 @@ export const aiApi = {
       .put<HttpMessageBody<AiEmbeddingClass[]>, { items: AiEmbeddingClassSaveItem[] }>(
         `/admin/ai/embedding-classes${qs}`,
         { items },
+      )
+      .then(unwrapData)
+  },
+
+  /** 经验沉淀人审（Issue #184 UoW-3）：按状态列条目，默认查 PENDING 待审队列。 */
+  listExperienceLessons(status: AiExperienceLessonStatus): Promise<AiExperienceLessonListItem[]> {
+    return httpClient
+      .get<HttpMessageBody<AiExperienceLessonListItem[]>>(
+        `/admin/ai/experience-lessons${toQueryString({ status })}`,
+      )
+      .then(unwrapData)
+  },
+
+  getExperienceLesson(id: number): Promise<AiExperienceLesson> {
+    return httpClient
+      .get<HttpMessageBody<AiExperienceLesson>>(`/admin/ai/experience-lessons/${id}`)
+      .then(unwrapData)
+  },
+
+  createExperienceLesson(input: AiExperienceLessonCreateInput): Promise<AiExperienceLesson> {
+    return httpClient
+      .post<HttpMessageBody<AiExperienceLesson>, AiExperienceLessonCreateInput>(
+        '/admin/ai/experience-lessons',
+        input,
+      )
+      .then(unwrapData)
+  },
+
+  approveExperienceLesson(id: number, input: AiExperienceLessonApproveInput): Promise<AiExperienceLesson> {
+    return httpClient
+      .post<HttpMessageBody<AiExperienceLesson>, AiExperienceLessonApproveInput>(
+        `/admin/ai/experience-lessons/${id}/approve`,
+        input,
+      )
+      .then(unwrapData)
+  },
+
+  rejectExperienceLesson(id: number): Promise<AiExperienceLesson> {
+    return httpClient
+      .post<HttpMessageBody<AiExperienceLesson>, Record<string, never>>(
+        `/admin/ai/experience-lessons/${id}/reject`,
+        {},
+      )
+      .then(unwrapData)
+  },
+
+  disableExperienceLesson(id: number): Promise<AiExperienceLesson> {
+    return httpClient
+      .post<HttpMessageBody<AiExperienceLesson>, Record<string, never>>(
+        `/admin/ai/experience-lessons/${id}/disable`,
+        {},
+      )
+      .then(unwrapData)
+  },
+
+  /** 手动批量提炼：两项可缺省（服务端默认 14 天 / 40 轮），回汇总五数。 */
+  extractExperienceLessons(input: {
+    windowDays?: number | null
+    maxTurns?: number | null
+  }): Promise<AiExperienceExtractionResult> {
+    return httpClient
+      .post<HttpMessageBody<AiExperienceExtractionResult>, typeof input>(
+        '/admin/ai/experience-lessons/extract',
+        input,
       )
       .then(unwrapData)
   },

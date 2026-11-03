@@ -22,11 +22,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentChatHistoryMessage;
 import com.mywebsite.agent.dto.AgentChatRequest;
+import com.mywebsite.agent.dto.AgentExperienceLessonItem;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentUsageRecord;
+import com.mywebsite.agent.service.AgentExperienceLessonService;
 import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
+import com.mywebsite.agent.utils.AgentExperienceLessonUtils;
 import com.mywebsite.agent.dto.AgentPromptProfile;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
 import com.mywebsite.agent.dto.AgentTodoItem;
@@ -68,6 +71,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     private final ExecutorService adminAiStreamExecutor;
     private final AgentUsageService usageService;
     private final ObjectMapper objectMapper;
+    private final AgentExperienceLessonService experienceLessonService;
 
     public AdminAiPreviewServiceImpl(
             AgentClient agentClient,
@@ -79,7 +83,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             LocalizedMessageService localizedMessageService,
             ExecutorService adminAiStreamExecutor,
             AgentUsageService usageService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            AgentExperienceLessonService experienceLessonService) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.adminAgentMapper = adminAgentMapper;
@@ -90,6 +95,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         this.adminAiStreamExecutor = adminAiStreamExecutor;
         this.usageService = usageService;
         this.objectMapper = objectMapper;
+        this.experienceLessonService = experienceLessonService;
     }
 
     @Override
@@ -120,6 +126,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 ? null
                 : embeddingClasses.get(0);
         String timezone = StringUtils.hasText(request.timezone()) ? request.timezone().trim() : null;
+        List<AgentExperienceLessonItem> experienceLessons = approvedExperienceLessons();
         AgentChatRequest agentRequest = new AgentChatRequest(
                 String.valueOf(agentId),
                 request.message().trim(),
@@ -146,7 +153,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 request.longitude(),
                 request.accuracyMeters(),
                 // 试聊标记（Issue #179）：执行层据此启用回复内卡片（VISUALIZATION）。
-                Boolean.TRUE);
+                Boolean.TRUE,
+                experienceLessons.isEmpty() ? null : experienceLessons);
         // 用量记账归属（Issue #140）：试聊只打单入口——点名时就是点名 id，未点名时
         // 是该模式链首（与 previewModel 回填同一口径：chainCandidates 的首元）。
         Long usageEntryId = request.modelEntryId();
@@ -188,6 +196,21 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 return null;
             }
             throw ex;
+        }
+    }
+
+    /**
+     * 已批准经验条目的下发（Issue #184 UoW-4）：经验是平台全局的，试聊与正式
+     * 对话同口径每请求现查，批准后在试聊里立刻能看到效果（UoW-5 全链实走的
+     * 验证面）。查库失败只记日志、按无条目继续，不拖垮试聊主流程（口径与
+     * agent-app 正式链一致）。
+     */
+    private List<AgentExperienceLessonItem> approvedExperienceLessons() {
+        try {
+            return AgentExperienceLessonUtils.wire(experienceLessonService.listApproved());
+        } catch (RuntimeException ex) {
+            log.warn("approved experience lessons lookup failed; continuing without lessons", ex);
+            return List.of();
         }
     }
 

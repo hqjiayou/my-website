@@ -2,6 +2,8 @@ package com.mywebsite.agent.client;
 
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
+import com.mywebsite.agent.dto.AgentExperienceExtractRequest;
+import com.mywebsite.agent.dto.AgentExperienceExtractResult;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentOcrImageRequest;
@@ -67,6 +69,13 @@ public interface AgentClient {
      * 复用 AgentOcrPdfResult 承载。失败语义同 ocrPdf。
      */
     AgentOcrPdfResult ocrImage(AgentOcrImageRequest request);
+
+    /**
+     * 经验提炼（Issue #184 UoW-2）：对预筛出的信号轮跑一次独立提炼，返回结构化候选
+     * 与用量。模型链未配置或提炼失败时抛 BusinessException（EXTERNAL_DEPENDENCY_BLOCKED），
+     * 调用方按批次失败计；无可提炼时返回空候选列表，不是错误。
+     */
+    AgentExperienceExtractResult extractExperience(AgentExperienceExtractRequest request);
 
     /**
      * 推送运行配置四项到 agent-services 热替换（Issue #146 UoW-1）。

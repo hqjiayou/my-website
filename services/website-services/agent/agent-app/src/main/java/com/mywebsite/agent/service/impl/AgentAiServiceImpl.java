@@ -11,6 +11,7 @@ import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentDocumentContext;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
+import com.mywebsite.agent.dto.AgentExperienceLessonItem;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
 import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
 import com.mywebsite.agent.dto.AgentRunMeta;
@@ -43,9 +44,11 @@ import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
 import com.mywebsite.agent.service.AgentAiRateLimitService;
 import com.mywebsite.agent.service.AgentAiService;
 import com.mywebsite.agent.service.AgentEmbeddingClassService;
+import com.mywebsite.agent.service.AgentExperienceLessonService;
 import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
 import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
+import com.mywebsite.agent.utils.AgentExperienceLessonUtils;
 import com.mywebsite.agent.utils.AgentModelChainUtils;
 import com.mywebsite.agent.utils.ModelChainResolver;
 import java.io.IOException;
@@ -193,6 +196,7 @@ public class AgentAiServiceImpl implements AgentAiService {
     private final ObjectMapper objectMapper;
     private final AgentUsageService usageService;
     private final AgentEmbeddingClassService embeddingClassService;
+    private final AgentExperienceLessonService experienceLessonService;
 
     public AgentAiServiceImpl(
             AgentClient agentClient,
@@ -207,7 +211,8 @@ public class AgentAiServiceImpl implements AgentAiService {
             ExecutorService agentAiStreamExecutor,
             ObjectMapper objectMapper,
             AgentUsageService usageService,
-            AgentEmbeddingClassService embeddingClassService) {
+            AgentEmbeddingClassService embeddingClassService,
+            AgentExperienceLessonService experienceLessonService) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.modelEntryCipher = modelEntryCipher;
@@ -221,6 +226,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         this.objectMapper = objectMapper;
         this.usageService = usageService;
         this.embeddingClassService = embeddingClassService;
+        this.experienceLessonService = experienceLessonService;
     }
 
     @Override
@@ -235,6 +241,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         ChatPreparation preparation =
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
+        List<AgentExperienceLessonItem> experienceLessons = approvedExperienceLessons();
         BuiltChatRequest built = buildAgentRequest(
                 agentId,
                 message,
@@ -242,6 +249,7 @@ public class AgentAiServiceImpl implements AgentAiService {
                 validated.documents(),
                 preparation,
                 memories,
+                experienceLessons,
                 mode,
                 request.modelEntryId(),
                 request.timezone(),
@@ -387,6 +395,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         ChatPreparation preparation =
                 conversationService.prepare(agentId, agentUserId, request.conversationId());
         List<String> memories = memoryService.recentContents(agentId, agentUserId);
+        List<AgentExperienceLessonItem> experienceLessons = approvedExperienceLessons();
         BuiltChatRequest built =
                 buildAgentRequest(
                         agentId,
@@ -395,6 +404,7 @@ public class AgentAiServiceImpl implements AgentAiService {
                         validated.documents(),
                         preparation,
                         memories,
+                        experienceLessons,
                         mode,
                         request.modelEntryId(),
                         request.timezone(),
@@ -436,6 +446,7 @@ public class AgentAiServiceImpl implements AgentAiService {
             List<AgentDocumentContext> documents,
             ChatPreparation preparation,
             List<String> memories,
+            List<AgentExperienceLessonItem> experienceLessons,
             String mode,
             Long modelEntryId,
             String timezone,
@@ -479,8 +490,24 @@ public class AgentAiServiceImpl implements AgentAiService {
                 longitude,
                 accuracyMeters,
                 // 正式对话不带试聊标记：preview=null，执行的卡片通道保持关闭。
-                null);
+                null,
+                experienceLessons == null || experienceLessons.isEmpty() ? null : experienceLessons);
         return new BuiltChatRequest(request, links);
+    }
+
+    /**
+     * 已批准经验条目的下发（Issue #184 UoW-4）：平台全局、与 memories 的 per-user
+     * 口径无关，每请求现查（批准即下轮生效、停用即消失）。失败口径与 memories
+     * 不同：memories 读取无隔离、异常直接上抛；经验是新增的增益通道，查库失败
+     * 只记日志、按无条目继续，绝不拖垮对话主流程（同 #140 记账的失败隔离先例）。
+     */
+    private List<AgentExperienceLessonItem> approvedExperienceLessons() {
+        try {
+            return AgentExperienceLessonUtils.wire(experienceLessonService.listApproved());
+        } catch (RuntimeException ex) {
+            log.warn("approved experience lessons lookup failed; continuing without lessons", ex);
+            return List.of();
+        }
     }
 
     /** 组装好的执行层请求与本轮链（链带入口 id，供用量记账归属，见 recordPortalUsage）。 */

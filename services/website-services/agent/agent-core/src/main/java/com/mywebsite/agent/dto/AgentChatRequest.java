@@ -37,7 +37,11 @@ public record AgentChatRequest(
         Double accuracyMeters,
         // 后台试聊标记：只有 admin preview 传 TRUE。执行层据此启用回复内卡片
         // （Issue #179）；正式对话传 null，NON_NULL 序列化下报文与旧版逐字一致。
-        Boolean preview) {
+        Boolean preview,
+        // 已批准经验条目（Issue #184 UoW-4）：平台全局，正式对话与试聊每请求
+        // 现查现带，执行层组装为 # Experience lessons 段。无条目时传 null，
+        // NON_NULL 序列化下报文与旧版逐字一致。
+        List<AgentExperienceLessonItem> experienceLessons) {
 
     /** 兼容不带 timezone 的构造点。缺省时执行层回退 UTC。 */
     public AgentChatRequest(
@@ -82,6 +86,7 @@ public record AgentChatRequest(
                 embeddingApiKey,
                 embeddingBaseUrl,
                 embeddingClasses,
+                null,
                 null,
                 null,
                 null,

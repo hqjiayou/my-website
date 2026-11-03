@@ -121,6 +121,7 @@ last_verified: 2026-10-30
 | `AGENT_SUBAGENT_TIMEOUT_SECONDS` | 否 | `60` | |
 | `AGENT_SUBAGENT_MAX_REQUESTS` | 否 | `6` | |
 | `AGENT_MEMORY_EXTRACTION_ENABLED` | 否 | `true` | |
+| `AGENT_EXPERIENCE_LESSONS_ENABLED` | 否 | `true` | 已批准经验条目（Issue #184）的组装开关；关闭后请求带 `experienceLessons` 也不注入，系统提示与未启用时逐字一致，供 lessons 关/开对照 |
 | `MCP_SERVERS_JSON` | 否 | 空 | MCP 客户端配置 JSON 数组；缺失 → `mcpStatus=DISABLED`。字段：`enabled`/`headers`/`toolPrefix`/`initTimeoutSeconds`/`transport`（`http` 默认，`sse` 或 url 以 `/sse` 结尾；`stdio` 及其它值跳过并告警）。非法 JSON → `INVALID_CONFIG`（进程可起）。已配置但连接失败 → chat `503 MCP_UNAVAILABLE`。深检 `GET /internal/v1/mcp/ready` |
 | `AGENT_MAX_REQUESTS` | 否 | `20` | 单轮最大模型请求数；`<=0` 不限。超限 → chat `422`，`errorCode=AGENT_BUDGET_EXCEEDED` |
 | `AGENT_MAX_TOOL_CALLS` | 否 | `50` | 单轮最大成功工具调用数；`<=0` 不限 |

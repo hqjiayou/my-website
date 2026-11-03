@@ -33,6 +33,7 @@ import com.mywebsite.admin.testsupport.AdminTestJwtSigner;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.client.AgentStreamListener;
 import com.mywebsite.agent.dto.AgentChatRequest;
+import com.mywebsite.agent.dto.AgentExperienceLessonItem;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
 import com.mywebsite.agent.dto.AgentSkillSummary;
@@ -51,6 +52,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -80,6 +82,9 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
 
     @Autowired
     private AdminAiModelEntryMapper modelEntryMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @MockBean
     private AgentClient agentClient;
@@ -304,6 +309,74 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString(cardJson)));
         // 试聊标记随请求下发执行层（Issue #179 卡片门控）。
         assertThat(captor.getValue().preview()).isTrue();
+    }
+
+    @Test
+    void previewInjectsApprovedExperienceLessons() throws Exception {
+        String token = tokenFor(500L);
+        long agentId = createSite(token);
+        // 自备站点 CLI 默认入口，保证链非空（同 previewStreamForwardsAgentEvents）。
+        ObjectNode cliEntry = MAPPER.createObjectNode();
+        cliEntry.put("displayName", "CLI default");
+        cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
+        cliEntry.put("apiKey", "client-key");
+        cliEntry.put("agentId", agentId);
+        cliEntry.put("mode", "CLI");
+        cliEntry.put("enabled", true);
+        cliEntry.put("defaultEntry", true);
+        mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(cliEntry)))
+                .andExpect(status().isOk());
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        doAnswer(invocation -> {
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent("START", "{}");
+                    listener.onEvent("DONE", "{\"reply\":\"hi\"}");
+                    return null;
+                })
+                .when(agentClient)
+                .chatStream(captor.capture(), any());
+
+        // 无已批准条目时不带字段（Issue #184 UoW-4）：先清空条目表保确定性。
+        jdbcTemplate.execute("DELETE FROM agent_experience_lesson");
+        ObjectNode body = MAPPER.createObjectNode();
+        body.put("message", "hello");
+        MvcResult first = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(body)))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(first)).andExpect(status().isOk());
+        assertThat(captor.getValue().experienceLessons()).isNull();
+
+        // 经人审端点新建并批准一条（L6），试聊下一轮即带上（请求注入、批准即生效）。
+        MvcResult created = mockMvc.perform(post("/api/admin/ai/experience-lessons")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"集合问题先枚举\",\"symptom\":\"症状\","
+                                + "\"lesson\":\"先枚举再逐份抽取\",\"evidence\":\"证据\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        long lessonId = MAPPER.readTree(created.getResponse().getContentAsString())
+                .path("data").path("id").asLong();
+        mockMvc.perform(post("/api/admin/ai/experience-lessons/" + lessonId + "/approve")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk());
+
+        MvcResult second = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(body)))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        mockMvc.perform(asyncDispatch(second)).andExpect(status().isOk());
+        assertThat(captor.getValue().experienceLessons())
+                .containsExactly(new AgentExperienceLessonItem(6, "先枚举再逐份抽取"));
     }
 
     @Test

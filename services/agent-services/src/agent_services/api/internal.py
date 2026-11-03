@@ -8,6 +8,10 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic_ai.models import Model
 
+from agent_services.agent.experience import (
+    ExperienceExtractionUnavailable,
+    extract_experience_lessons,
+)
 from agent_services.agent.harness import harness_component_flags
 from agent_services.agent.knowledge_tools import KnowledgeSearchCollector
 from agent_services.agent.mcp_tools import mcp_config_snapshot, probe_mcp_ready
@@ -61,6 +65,11 @@ from agent_services.schemas.chat import (
     EmbeddingClassCredentials,
     SearchSummaryItem,
     ToolTraceItem,
+)
+from agent_services.schemas.experience import (
+    ExperienceCandidate,
+    ExperienceExtractRequest,
+    ExperienceExtractResponse,
 )
 from agent_services.schemas.health import (
     HarnessFiles,
@@ -497,6 +506,8 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         memories=body.memories,
         memory_enabled=body.memory_enabled,
         memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
+        experience_lessons=body.experience_lessons,
+        experience_lessons_enabled=request.app.state.settings.agent_experience_lessons_enabled,
         knowledge_collector=collector,
     )
 
@@ -633,6 +644,53 @@ async def internal_ocr_image(request: Request, body: OcrImageRequest) -> dict[st
     return {"ok": True, "data": payload.model_dump(by_alias=True)}
 
 
+@router.post("/experience/extract")
+async def internal_experience_extract(
+    request: Request, body: ExperienceExtractRequest
+) -> dict[str, object]:
+    """经验提炼（#184 UoW-2）：对 Java 预筛出的信号轮跑一次独立提炼。
+
+    模型入口链与 ocr 同形状（_execution_handle 只读 model/fallback 两字段）。
+    与记忆抽取不同，失败诚实回 BLOCKED——调用方按批次失败计，不许空数组冒充无可提炼。
+    """
+    handle = _execution_handle(request, body)  # type: ignore[arg-type]
+    if not handle.live:
+        raise InternalApiError(
+            status_code=503,
+            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
+            message=handle.blocked_reason or "AI provider is not configured.",
+            provider_status="BLOCKED",
+        )
+    try:
+        extraction = await extract_experience_lessons(
+            handle.model,  # type: ignore[arg-type]  # live 已保证非 None
+            turns=body.turns,
+            existing_titles=body.existing_titles,
+        )
+    except ExperienceExtractionUnavailable as exc:
+        raise InternalApiError(
+            status_code=503,
+            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
+            message=str(exc),
+            provider_status="BLOCKED",
+        ) from exc
+    payload = ExperienceExtractResponse(
+        candidates=[
+            ExperienceCandidate(
+                source_turn_id=item.source_turn_id,
+                title=item.title,
+                symptom=item.symptom,
+                lesson=item.lesson,
+                evidence=item.evidence,
+            )
+            for item in extraction.candidates
+        ],
+        usage=ChatUsage.model_validate(extraction.usage),
+        model_spec=handle.spec,
+    )
+    return {"ok": True, "data": payload.model_dump(by_alias=True)}
+
+
 @router.post("/chat/stream")
 async def internal_chat_stream(request: Request, body: ChatRequest) -> StreamingResponse:
     agent_id = body.agent_id.strip()
@@ -691,6 +749,8 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             memories=body.memories,
             memory_enabled=body.memory_enabled,
             memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
+            experience_lessons=body.experience_lessons,
+            experience_lessons_enabled=request.app.state.settings.agent_experience_lessons_enabled,
             knowledge_collector=collector,
             visualization_collector=viz_collector,
         ):

@@ -16,6 +16,8 @@ public interface AgentUsageService {
     String SOURCE_PORTAL = "PORTAL";
     String SOURCE_ADMIN_PREVIEW = "ADMIN_PREVIEW";
     String SOURCE_GATEWAY_V1 = "GATEWAY_V1";
+    /** 经验提炼的模型调用（Issue #184 UoW-2，P3 定案）；source 的 DB CHECK 由 Flyway V51 放宽纳入。 */
+    String SOURCE_EXPERIENCE = "EXPERIENCE";
 
     String STATUS_SUCCESS = "SUCCESS";
     String STATUS_UPSTREAM_ERROR = "UPSTREAM_ERROR";

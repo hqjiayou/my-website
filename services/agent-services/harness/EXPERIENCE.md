@@ -7,6 +7,11 @@ the prompt builder, run limits, or retrieval settings) and verified.
 This file is NOT injected into prompts — `harness.py` reads only
 `background.md`, `guardrails.md`, and `tool_guidance.md`.
 
+> Issue #184 起新条目不再写进本文件：L6 起的经验条目以 DB
+> （`agent_experience_lesson` 表）为唯一真相源，经 admin AI 设置页
+> 「经验沉淀」节审核管理，批准后随请求注入、组装为 `# Experience lessons`
+> 段生效。本文件仅保留 L1–L5 历史存档，正文不再增补。
+
 ## The loop
 
 1. **Propose** — change one harness component (or one knob) per change.
