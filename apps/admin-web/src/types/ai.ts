@@ -584,6 +584,13 @@ export type AiPreviewAgentEvent =
   | { type: 'thinking'; delta: string }
   | { type: 'toolStart'; toolCallId: string; toolName: string }
   | { type: 'toolResult'; toolCallId: string; toolName: string; ok: boolean; summary?: AiSearchSummary }
-  | { type: 'done'; todos: AiPreviewTodoItem[]; usage: AiRunUsage | null; model: string | null }
+  | {
+      type: 'done'
+      todos: AiPreviewTodoItem[]
+      usage: AiRunUsage | null
+      model: string | null
+      /** 本轮引用（DONE 才有）：正文 [cN] 标记按 cite 对应，呈现层据此挂角标。 */
+      citations: AiCitation[]
+    }
   /** message：Java 推流前失败时为本地化文案；推流中为 agent-services 原始诊断（仅后台可见） */
   | { type: 'error'; errorCode: string; message?: string }

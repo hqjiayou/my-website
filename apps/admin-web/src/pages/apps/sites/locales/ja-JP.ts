@@ -644,6 +644,13 @@ export default {
           CANCELLED: 'キャンセル',
         },
       },
+      citations: {
+        source: '出典 {{n}}',
+        close: '出典を閉じる',
+        page: '{{page}} ページ',
+        rows: '{{start}}–{{end}} 行',
+        score: '類似度 {{percent}}%',
+      },
     },
   },
 } as const

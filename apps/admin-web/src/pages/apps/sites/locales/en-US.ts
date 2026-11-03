@@ -644,6 +644,13 @@ export default {
           CANCELLED: 'Cancelled',
         },
       },
+      citations: {
+        source: 'Source {{n}}',
+        close: 'Collapse source',
+        page: 'Page {{page}}',
+        rows: 'Rows {{start}}–{{end}}',
+        score: 'Similarity {{percent}}%',
+      },
     },
   },
 } as const

@@ -2,6 +2,8 @@ import type { ChatModelAdapter } from '@assistant-ui/react'
 
 import { streamPreviewChat } from '@/api/apps/aiApi'
 import type {
+  AiCitation,
+  AiCitationLocation,
   AiPreviewAgentEvent,
   AiPreviewHistoryMessage,
   AiPreviewTodoItem,
@@ -104,6 +106,41 @@ function toSearchSummary(value: unknown): AiSearchSummary | undefined {
   }
 }
 
+function toCitationLocation(value: unknown): AiCitationLocation | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const location: AiCitationLocation = {
+    page: typeof raw.page === 'number' ? raw.page : null,
+    sheet: typeof raw.sheet === 'string' && raw.sheet ? raw.sheet : null,
+    rowStart: typeof raw.rowStart === 'number' ? raw.rowStart : null,
+    rowEnd: typeof raw.rowEnd === 'number' ? raw.rowEnd : null,
+  }
+  return location.page != null || location.sheet != null || location.rowStart != null || location.rowEnd != null
+    ? location
+    : null
+}
+
+/** DONE 的 citations（cite/sourceId/chunkIndex/score，title/location 可选）：坏条目整条丢弃，不让脏数据进呈现层。 */
+function toCitations(value: unknown): AiCitation[] {
+  if (!Array.isArray(value)) return []
+  const citations: AiCitation[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const raw = item as Record<string, unknown>
+    if (typeof raw.sourceId !== 'string' || !raw.sourceId) continue
+    if (typeof raw.chunkIndex !== 'number' || typeof raw.score !== 'number' || !Number.isFinite(raw.score)) continue
+    citations.push({
+      sourceId: raw.sourceId,
+      chunkIndex: raw.chunkIndex,
+      score: raw.score,
+      title: typeof raw.title === 'string' && raw.title ? raw.title : null,
+      location: toCitationLocation(raw.location),
+      cite: typeof raw.cite === 'number' ? raw.cite : null,
+    })
+  }
+  return citations
+}
+
 function toAgentEvent(event: string, payload: Record<string, unknown>): AiPreviewAgentEvent | null {
   switch (event) {
     case 'START':
@@ -133,6 +170,7 @@ function toAgentEvent(event: string, payload: Record<string, unknown>): AiPrevie
         todos: Array.isArray(payload.todos) ? (payload.todos as AiPreviewTodoItem[]) : [],
         usage: toUsage(payload.usage),
         model: typeof payload.model === 'string' && payload.model.trim() ? payload.model.trim() : null,
+        citations: toCitations(payload.citations),
       }
     default:
       return null
@@ -149,10 +187,17 @@ export interface PreviewAdapterOptions {
   onAgentEvent: (event: AiPreviewAgentEvent) => void
 }
 
-function labeled(text: string, requestedModel: string) {
+function labeled(text: string, requestedModel: string, citations?: AiCitation[]) {
   return {
     content: [{ type: 'text' as const, text }],
-    metadata: { custom: { requestedModel } },
+    metadata: {
+      custom: {
+        requestedModel,
+        // citations 只在 DONE 后随最终帧挂上：正文里的 [cN] 标记编号由执行层
+        // 分配且恒定，呈现层按 cite 对应角标，不存在流式中途重排。
+        ...(citations?.length ? { citations } : {}),
+      },
+    },
   }
 }
 
@@ -219,6 +264,7 @@ export function createJavaPreviewAdapter(
       const decoder = new TextDecoder()
       let buffer = ''
       let text = ''
+      let citations: AiCitation[] = []
 
       while (true) {
         const { done, value } = await reader.read()
@@ -251,12 +297,15 @@ export function createJavaPreviewAdapter(
             return
           } else if (payload) {
             const agentEvent = toAgentEvent(parsed.event, payload)
-            if (agentEvent) options.onAgentEvent(agentEvent)
+            if (agentEvent) {
+              if (agentEvent.type === 'done') citations = agentEvent.citations
+              options.onAgentEvent(agentEvent)
+            }
           }
         }
       }
 
-      yield labeled(text, requestedModel)
+      yield labeled(text, requestedModel, citations)
     },
   }
 }

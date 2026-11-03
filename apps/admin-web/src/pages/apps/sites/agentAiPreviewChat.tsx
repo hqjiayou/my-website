@@ -5,14 +5,16 @@ import {
   ThreadPrimitive,
   useAuiState,
   useLocalRuntime,
+  type TextMessagePartProps,
 } from '@assistant-ui/react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { aiApi } from '@/api/apps/aiApi'
 import type {
+  AiCitation,
   AiPreviewAgentEvent,
   AiPreviewTodoItem,
   AiPreviewTodoStatus,
@@ -48,6 +50,127 @@ function PreviewAssistantLabel() {
   })
   if (!spec) return null
   return <p className="mb-1 font-mono text-[11px] text-muted-foreground">{spec}</p>
+}
+
+const EMPTY_CITATIONS: AiCitation[] = []
+
+/** 角标号与会话记录列表（agentAiRunMeta）同口径：优先执行层分配的 cite，缺省用数组序。 */
+function citationNumber(citation: AiCitation, index: number): number {
+  return citation.cite ?? index + 1
+}
+
+/** 检索分数是 0–1 的相似度，收成百分比并夹到 0–100（与 Portal 同口径）。 */
+function similarityPercent(score: number): number {
+  if (!Number.isFinite(score)) return 0
+  return Math.min(100, Math.max(0, Math.round(score * 100)))
+}
+
+function CitationSourceCard({
+  citation,
+  n,
+  onClose,
+}: {
+  citation: AiCitation
+  n: number
+  onClose: () => void
+}) {
+  const { t } = useTranslation('sites')
+  const location = citation.location
+  const locationParts: string[] = []
+  if (location?.page != null && location.page > 0) {
+    locationParts.push(t('aiWorkspace.preview.citations.page', { page: location.page }))
+  }
+  if (location?.sheet) locationParts.push(location.sheet)
+  if (location?.rowStart != null) {
+    locationParts.push(
+      t('aiWorkspace.preview.citations.rows', { start: location.rowStart, end: location.rowEnd ?? location.rowStart }),
+    )
+  }
+  return (
+    <div className="mt-2 rounded-lg border border-border bg-card px-3 py-2 text-xs">
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-medium text-foreground">{t('aiWorkspace.preview.citations.source', { n })}</p>
+        <button
+          type="button"
+          aria-label={t('aiWorkspace.preview.citations.close')}
+          className="rounded p-0.5 text-muted-foreground transition hover:text-foreground"
+          onClick={onClose}
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+      <p className="mt-1 break-words text-foreground">{citation.title || citation.sourceId}</p>
+      {locationParts.length ? <p className="mt-0.5 text-muted-foreground">{locationParts.join(' · ')}</p> : null}
+      <p className="mt-0.5 text-muted-foreground">
+        {t('aiWorkspace.preview.citations.score', { percent: similarityPercent(citation.score) })}
+      </p>
+    </div>
+  )
+}
+
+/**
+ * 文本呈现：与默认 Text 同为 pre-line 纯文本，只把正文里的 [cN] 标记换成角标。
+ * citations 由 adapter 在 DONE 后挂到 message metadata.custom——流式期间没有
+ * 角标（标记按原文显示），DONE 后一次性补挂，编号由执行层分配、不会重排；
+ * 对不上任何引用的标记保持原文，不吞信息。
+ */
+function PreviewTextPart({ text, status }: TextMessagePartProps) {
+  const citations = useAuiState((state) => {
+    if (state.message.role !== 'assistant') return EMPTY_CITATIONS
+    const value = state.message.metadata?.custom?.citations
+    return Array.isArray(value) ? (value as AiCitation[]) : EMPTY_CITATIONS
+  })
+  const [openCite, setOpenCite] = useState<number | null>(null)
+  const byNumber = new Map(citations.map((citation, index) => [citationNumber(citation, index), citation]))
+  const open = openCite != null ? byNumber.get(openCite) : undefined
+  return (
+    <>
+      <p style={{ whiteSpace: 'pre-line' }}>
+        {text.split(/(\[c\d+\])/g).map((segment, index) => {
+          const matched = /^\[c(\d+)\]$/.exec(segment)
+          const n = matched ? Number(matched[1]) : null
+          const citation = n != null ? byNumber.get(n) : undefined
+          if (n == null || !citation) return <span key={index}>{segment}</span>
+          return (
+            <button
+              key={index}
+              type="button"
+              aria-expanded={openCite === n}
+              title={citation.title || citation.sourceId}
+              className="mx-0.5 rounded bg-info-muted px-1 align-baseline font-mono text-[10px] font-medium leading-4 text-info-emphasis transition hover:underline"
+              onClick={() => setOpenCite(openCite === n ? null : n)}
+            >
+              [{n}]
+            </button>
+          )
+        })}
+        {status.type === 'running' ? <span style={{ fontFamily: 'revert' }}> ●</span> : null}
+      </p>
+      {open && openCite != null ? (
+        <CitationSourceCard citation={open} n={openCite} onClose={() => setOpenCite(null)} />
+      ) : null}
+    </>
+  )
+}
+
+const PREVIEW_PART_COMPONENTS = { Text: PreviewTextPart }
+
+/** Foundry 式排布：用户消息右对齐浅气泡，助手消息近全宽纯文本（只留模型标注行）。 */
+function PreviewMessage() {
+  const role = useAuiState((state) => state.message.role)
+  if (role === 'user') {
+    return (
+      <MessagePrimitive.Root className="mb-3 ml-auto w-fit max-w-[85%] rounded-2xl border border-border bg-card px-3 py-2 text-sm text-foreground">
+        <MessagePrimitive.Content components={PREVIEW_PART_COMPONENTS} />
+      </MessagePrimitive.Root>
+    )
+  }
+  return (
+    <MessagePrimitive.Root className="mb-3 px-1 py-1 text-sm leading-6 text-foreground">
+      <PreviewAssistantLabel />
+      <MessagePrimitive.Content components={PREVIEW_PART_COMPONENTS} />
+    </MessagePrimitive.Root>
+  )
 }
 
 const EMPTY_TRACE: RunTrace = {
@@ -472,14 +595,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             <ThreadPrimitive.Empty>
               <p className="px-2 text-sm text-muted-foreground">{t('aiWorkspace.preview.empty')}</p>
             </ThreadPrimitive.Empty>
-            <ThreadPrimitive.Messages>
-              {() => (
-                <MessagePrimitive.Root className="mb-3 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
-                  <PreviewAssistantLabel />
-                  <MessagePrimitive.Content />
-                </MessagePrimitive.Root>
-              )}
-            </ThreadPrimitive.Messages>
+            <ThreadPrimitive.Messages>{() => <PreviewMessage />}</ThreadPrimitive.Messages>
           </ThreadPrimitive.Viewport>
           {runError ? (
             <div role="alert" className="border-t border-danger/35 bg-danger-muted px-3 py-2 text-xs text-danger-emphasis">

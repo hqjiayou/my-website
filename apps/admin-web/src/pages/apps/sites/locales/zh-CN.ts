@@ -639,6 +639,13 @@ export default {
           CANCELLED: '已取消',
         },
       },
+      citations: {
+        source: '来源 {{n}}',
+        close: '收起来源',
+        page: '第 {{page}} 页',
+        rows: '第 {{start}}–{{end}} 行',
+        score: '相似度 {{percent}}%',
+      },
     },
   },
 } as const
