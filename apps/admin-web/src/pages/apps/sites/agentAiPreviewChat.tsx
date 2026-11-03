@@ -5,7 +5,6 @@ import {
   ThreadPrimitive,
   useAuiState,
   useLocalRuntime,
-  type DataMessagePartComponent,
   type TextMessagePartProps,
 } from '@assistant-ui/react'
 import { useQuery } from '@tanstack/react-query'
@@ -25,6 +24,7 @@ import type {
 
 import { modelIdFromSpec } from '@/utils/modelSpec'
 import { createJavaPreviewAdapter } from './agentAiPreviewAdapter'
+import { PreviewVisualizationPart } from './agentAiPreviewCards'
 import { AiRunUsageLine } from './agentAiRunMeta'
 
 interface ToolCallTrace {
@@ -155,13 +155,10 @@ function PreviewTextPart({ text, status }: TextMessagePartProps) {
 }
 
 /**
- * 图表扩展点（#178 UoW-3 预留，渲染归图表单）：未来的 VISUALIZATION 事件由
- * adapter 以 data part（name="visualization"）产出后从这里进入消息流，按 part
- * 在内容中的顺序与文本同级排布（引用角标来源卡同级）；届时把这个占位换成
- * 真正的图表组件，chart spec 数据契约以图表单为准。本步只占位、不渲染，
- * 现行 adapter 只产出 text part，注册它对现有消息零影响。
+ * 回复内卡片（#178 预留接入点，#179 落地）：VISUALIZATION 事件由 adapter 以
+ * data part（name="visualization"）产出后从这里进入消息流，按 part 在内容中
+ * 的顺序与文本同级排布。真组件在 agentAiPreviewCards（kind 分发天气卡/图表卡）。
  */
-const PreviewVisualizationPart: DataMessagePartComponent = () => null
 
 const PREVIEW_PART_COMPONENTS = {
   Text: PreviewTextPart,

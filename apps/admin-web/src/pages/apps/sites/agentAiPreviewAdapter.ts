@@ -2,6 +2,10 @@ import type { ChatModelAdapter } from '@assistant-ui/react'
 
 import { streamPreviewChat } from '@/api/apps/aiApi'
 import type {
+  AiChartCardPayload,
+  AiChartPoint,
+  AiChartSeries,
+  AiChartType,
   AiCitation,
   AiCitationLocation,
   AiPreviewAgentEvent,
@@ -9,6 +13,11 @@ import type {
   AiPreviewTodoItem,
   AiRunUsage,
   AiSearchSummary,
+  AiVisualizationEnvelope,
+  AiWeatherCardPayload,
+  AiWeatherCurrent,
+  AiWeatherDailyPoint,
+  AiWeatherHourlyPoint,
 } from '@/types/ai'
 
 function sessionTimeZone(): string | undefined {
@@ -141,6 +150,123 @@ function toCitations(value: unknown): AiCitation[] {
   return citations
 }
 
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+/** 天气卡清洗（Issue #179）：current.time 是关键字段，缺失整卡丢弃；数值字段缺失/非数即不写出，逐时/逐日坏行整行丢弃。 */
+function toWeatherPayload(raw: Record<string, unknown>): AiWeatherCardPayload | null {
+  const currentRaw = raw.current
+  if (!currentRaw || typeof currentRaw !== 'object') return null
+  const current = currentRaw as Record<string, unknown>
+  if (typeof current.time !== 'string' || !current.time) return null
+  const currentCard: AiWeatherCurrent = { time: current.time }
+  const temperatureC = finiteNumber(current.temperatureC)
+  if (temperatureC !== undefined) currentCard.temperatureC = temperatureC
+  const apparentTemperatureC = finiteNumber(current.apparentTemperatureC)
+  if (apparentTemperatureC !== undefined) currentCard.apparentTemperatureC = apparentTemperatureC
+  const humidityPercent = finiteNumber(current.humidityPercent)
+  if (humidityPercent !== undefined) currentCard.humidityPercent = humidityPercent
+  const windSpeedKmh = finiteNumber(current.windSpeedKmh)
+  if (windSpeedKmh !== undefined) currentCard.windSpeedKmh = windSpeedKmh
+  const precipitationMm = finiteNumber(current.precipitationMm)
+  if (precipitationMm !== undefined) currentCard.precipitationMm = precipitationMm
+  const weatherCode = finiteNumber(current.weatherCode)
+  if (weatherCode !== undefined) currentCard.weatherCode = weatherCode
+  if (typeof current.weatherText === 'string' && current.weatherText) {
+    currentCard.weatherText = current.weatherText
+  }
+
+  const hourly: AiWeatherHourlyPoint[] = []
+  if (Array.isArray(raw.hourly)) {
+    for (const item of raw.hourly) {
+      if (!item || typeof item !== 'object') continue
+      const row = item as Record<string, unknown>
+      const rowTemperature = finiteNumber(row.temperatureC)
+      if (typeof row.time !== 'string' || !row.time || rowTemperature === undefined) continue
+      const point: AiWeatherHourlyPoint = { time: row.time, temperatureC: rowTemperature }
+      const probability = finiteNumber(row.precipitationProbabilityPercent)
+      if (probability !== undefined) point.precipitationProbabilityPercent = probability
+      const code = finiteNumber(row.weatherCode)
+      if (code !== undefined) point.weatherCode = code
+      hourly.push(point)
+    }
+  }
+
+  const daily: AiWeatherDailyPoint[] = []
+  if (Array.isArray(raw.daily)) {
+    for (const item of raw.daily) {
+      if (!item || typeof item !== 'object') continue
+      const row = item as Record<string, unknown>
+      const max = finiteNumber(row.temperatureMaxC)
+      const min = finiteNumber(row.temperatureMinC)
+      if (typeof row.date !== 'string' || !row.date || max === undefined || min === undefined) continue
+      const point: AiWeatherDailyPoint = { date: row.date, temperatureMaxC: max, temperatureMinC: min }
+      const probability = finiteNumber(row.precipitationProbabilityMaxPercent)
+      if (probability !== undefined) point.precipitationProbabilityMaxPercent = probability
+      const code = finiteNumber(row.weatherCode)
+      if (code !== undefined) point.weatherCode = code
+      if (typeof row.weatherText === 'string' && row.weatherText) point.weatherText = row.weatherText
+      daily.push(point)
+    }
+  }
+
+  const payload: AiWeatherCardPayload = { current: currentCard, hourly, daily }
+  const latitude = finiteNumber(raw.latitude)
+  if (latitude !== undefined) payload.latitude = latitude
+  const longitude = finiteNumber(raw.longitude)
+  if (longitude !== undefined) payload.longitude = longitude
+  if (typeof raw.timezone === 'string' && raw.timezone) payload.timezone = raw.timezone
+  return payload
+}
+
+const CHART_TYPES: ReadonlySet<string> = new Set(['line', 'bar', 'area', 'pie'])
+
+/** 图表卡清洗（Issue #179）：type 枚举外整卡丢弃；坏点丢点、空系列丢系列、无系列整卡丢弃。 */
+function toChartPayload(raw: Record<string, unknown>): AiChartCardPayload | null {
+  if (typeof raw.type !== 'string' || !CHART_TYPES.has(raw.type)) return null
+  if (!Array.isArray(raw.series)) return null
+  const series: AiChartSeries[] = []
+  for (const item of raw.series) {
+    if (!item || typeof item !== 'object') continue
+    const entry = item as Record<string, unknown>
+    if (typeof entry.name !== 'string' || !entry.name) continue
+    if (!Array.isArray(entry.points)) continue
+    const points: AiChartPoint[] = []
+    for (const rawPoint of entry.points) {
+      if (!rawPoint || typeof rawPoint !== 'object') continue
+      const point = rawPoint as Record<string, unknown>
+      const value = finiteNumber(point.value)
+      if (typeof point.label !== 'string' || value === undefined) continue
+      points.push({ label: point.label, value })
+    }
+    if (points.length) series.push({ name: entry.name, points })
+  }
+  if (!series.length) return null
+  return { type: raw.type as AiChartType, series }
+}
+
+/**
+ * VISUALIZATION 信封校验：kind 未知或关键字段缺失 → null（丢弃不渲染）。
+ * 执行层已校验过一轮，这里是呈现层防线，顺带把字段清洗成类型口径。
+ */
+function toVisualization(value: unknown): AiVisualizationEnvelope | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  if (!raw.payload || typeof raw.payload !== 'object') return null
+  const payload = raw.payload as Record<string, unknown>
+  const title = typeof raw.title === 'string' && raw.title.trim() ? raw.title : undefined
+  if (raw.kind === 'weather') {
+    const weather = toWeatherPayload(payload)
+    return weather ? { kind: 'weather', ...(title ? { title } : {}), payload: weather } : null
+  }
+  if (raw.kind === 'chart') {
+    const chart = toChartPayload(payload)
+    return chart ? { kind: 'chart', ...(title ? { title } : {}), payload: chart } : null
+  }
+  return null
+}
+
 function toAgentEvent(event: string, payload: Record<string, unknown>): AiPreviewAgentEvent | null {
   switch (event) {
     case 'START':
@@ -187,9 +313,26 @@ export interface PreviewAdapterOptions {
   onAgentEvent: (event: AiPreviewAgentEvent) => void
 }
 
-function labeled(text: string, requestedModel: string, citations?: AiCitation[]) {
+/** 本轮助手消息的内容块：文本累积进尾部文本块，卡片按到达序独立成块（Issue #179）。 */
+type PreviewContentBlock =
+  | { kind: 'text'; text: string }
+  | { kind: 'card'; envelope: AiVisualizationEnvelope }
+
+/** 内容块 → assistant-ui parts 快照：卡片产出 data part（name=visualization），与文本同级按序排布。 */
+function snapshotContent(
+  blocks: PreviewContentBlock[],
+  requestedModel: string,
+  citations?: AiCitation[],
+) {
+  const content = blocks.length
+    ? blocks.map((block) =>
+        block.kind === 'text'
+          ? { type: 'text' as const, text: block.text }
+          : { type: 'data' as const, name: 'visualization', data: block.envelope },
+      )
+    : [{ type: 'text' as const, text: '' }]
   return {
-    content: [{ type: 'text' as const, text }],
+    content,
     metadata: {
       custom: {
         requestedModel,
@@ -263,8 +406,15 @@ export function createJavaPreviewAdapter(
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
-      let text = ''
+      const blocks: PreviewContentBlock[] = []
       let citations: AiCitation[] = []
+
+      const appendText = (delta: string) => {
+        if (!delta) return
+        const last = blocks[blocks.length - 1]
+        if (last?.kind === 'text') last.text += delta
+        else blocks.push({ kind: 'text', text: delta })
+      }
 
       while (true) {
         const { done, value } = await reader.read()
@@ -279,8 +429,15 @@ export function createJavaPreviewAdapter(
           if (parsed.event === 'TEXT_DELTA') {
             const delta = payload?.delta
             if (typeof delta === 'string') {
-              text += delta
-              yield labeled(text, requestedModel)
+              appendText(delta)
+              yield snapshotContent(blocks, requestedModel)
+            }
+          } else if (parsed.event === 'VISUALIZATION') {
+            // 卡片在工具结果后到达：校验通过才成块插入，坏信封静默丢弃（不打断文本流）。
+            const envelope = toVisualization(payload)
+            if (envelope) {
+              blocks.push({ kind: 'card', envelope })
+              yield snapshotContent(blocks, requestedModel)
             }
           } else if (parsed.event === 'THINKING') {
             const delta = payload?.delta
@@ -292,8 +449,9 @@ export function createJavaPreviewAdapter(
             const message = typeof payload?.message === 'string' ? payload.message : undefined
             options.onAgentEvent({ type: 'error', errorCode: code, message })
             const shown = message || code
-            text = text ? `${text}\n${shown}` : shown
-            yield labeled(text, requestedModel)
+            const last = blocks[blocks.length - 1]
+            appendText(last?.kind === 'text' && last.text ? `\n${shown}` : shown)
+            yield snapshotContent(blocks, requestedModel)
             return
           } else if (payload) {
             const agentEvent = toAgentEvent(parsed.event, payload)
@@ -305,7 +463,7 @@ export function createJavaPreviewAdapter(
         }
       }
 
-      yield labeled(text, requestedModel, citations)
+      yield snapshotContent(blocks, requestedModel, citations)
     },
   }
 }

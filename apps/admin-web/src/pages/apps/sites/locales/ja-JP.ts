@@ -652,6 +652,16 @@ export default {
         rows: '{{start}}–{{end}} 行',
         score: '類似度 {{percent}}%',
       },
+      cards: {
+        weather: {
+          feelsLike: '体感',
+          humidity: '湿度',
+          wind: '風速',
+          precipitation: '降水量',
+          precipitationChance: '降水確率',
+          hourly: '時間ごとの気温',
+        },
+      },
     },
   },
 } as const

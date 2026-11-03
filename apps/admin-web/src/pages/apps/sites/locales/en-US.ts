@@ -652,6 +652,16 @@ export default {
         rows: 'Rows {{start}}–{{end}}',
         score: 'Similarity {{percent}}%',
       },
+      cards: {
+        weather: {
+          feelsLike: 'Feels like',
+          humidity: 'Humidity',
+          wind: 'Wind',
+          precipitation: 'Precipitation',
+          precipitationChance: 'Rain chance',
+          hourly: 'Hourly temperature',
+        },
+      },
     },
   },
 } as const

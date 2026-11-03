@@ -647,6 +647,16 @@ export default {
         rows: '第 {{start}}–{{end}} 行',
         score: '相似度 {{percent}}%',
       },
+      cards: {
+        weather: {
+          feelsLike: '体感',
+          humidity: '湿度',
+          wind: '风速',
+          precipitation: '降水量',
+          precipitationChance: '降水概率',
+          hourly: '逐小时温度',
+        },
+      },
     },
   },
 } as const
