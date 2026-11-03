@@ -11,7 +11,13 @@ import pytest
 from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.mcp import MCPToolset
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+)
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets import FunctionToolset
@@ -400,9 +406,19 @@ async def test_mcp_tool_call_emits_tool_sse_events() -> None:
 
     toolset = build_echo_mcp_toolset(prefix="echo")
 
+    def has_tool_result(messages: list[ModelMessage]) -> bool:
+        # 只认结构化的工具返回 part 并按工具名精确匹配（#185）：不对整串
+        # 消息做子串判断——系统提示（harness 组装，含 tool_guidance 全文）
+        # 出现含 ping 的普通词（如 bookkeeping）时，子串判断会在第一轮
+        # 误判「已有工具结果」，假模型根本不发出工具调用。
+        return any(
+            isinstance(part, ToolReturnPart) and part.tool_name == "echo_echo"
+            for message in messages
+            for part in message.parts
+        )
+
     async def stream_fn(messages: list[ModelMessage], _info: AgentInfo):
-        has_tool_result = any("ping" in repr(m) and "echo" in repr(m).lower() for m in messages)
-        if not has_tool_result:
+        if not has_tool_result(messages):
             yield {0: DeltaToolCall(name="echo_echo", json_args='{"text":"ping"}')}
             return
         yield "mcp-stream-ok"
