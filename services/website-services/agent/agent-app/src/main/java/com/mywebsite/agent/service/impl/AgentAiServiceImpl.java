@@ -477,7 +477,9 @@ public class AgentAiServiceImpl implements AgentAiService {
                 timezone,
                 latitude,
                 longitude,
-                accuracyMeters);
+                accuracyMeters,
+                // 正式对话不带试聊标记：preview=null，执行的卡片通道保持关闭。
+                null);
         return new BuiltChatRequest(request, links);
     }
 

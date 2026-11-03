@@ -259,6 +259,54 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     }
 
     @Test
+    void previewStreamForwardsVisualizationEventAndMarksPreview() throws Exception {
+        String token = tokenFor(500L);
+        long agentId = createSite(token);
+        // 同 previewStreamForwardsAgentEvents：自备站点 CLI 默认入口，保证链非空。
+        ObjectNode cliEntry = MAPPER.createObjectNode();
+        cliEntry.put("displayName", "CLI default");
+        cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
+        cliEntry.put("apiKey", "client-key");
+        cliEntry.put("agentId", agentId);
+        cliEntry.put("mode", "CLI");
+        cliEntry.put("enabled", true);
+        cliEntry.put("defaultEntry", true);
+        mockMvc.perform(post("/api/admin/ai/model-entries")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(cliEntry)))
+                .andExpect(status().isOk());
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        String cardJson = "{\"kind\":\"weather\",\"payload\":{\"current\":{\"temperatureC\":12.3}}}";
+        doAnswer(invocation -> {
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent("START", "{}");
+                    listener.onEvent("VISUALIZATION", cardJson);
+                    listener.onEvent("DONE", "{\"reply\":\"hi\"}");
+                    return null;
+                })
+                .when(agentClient)
+                .chatStream(captor.capture(), any());
+
+        ObjectNode body = MAPPER.createObjectNode();
+        body.put("message", "weather?");
+        MvcResult mvcResult = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(body)))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        // VISUALIZATION 与 DONE 的 dataJson 透传口径一致：事件名与信封原文到达前端 SSE。
+        mockMvc.perform(asyncDispatch(mvcResult))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("event:VISUALIZATION")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(cardJson)));
+        // 试聊标记随请求下发执行层（Issue #179 卡片门控）。
+        assertThat(captor.getValue().preview()).isTrue();
+    }
+
+    @Test
     void previewForwardsSkillsAndTodosToAgent() throws Exception {
         String token = tokenFor(500L);
         long agentId = createSite(token);

@@ -144,7 +144,9 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 timezone,
                 request.latitude(),
                 request.longitude(),
-                request.accuracyMeters());
+                request.accuracyMeters(),
+                // 试聊标记（Issue #179）：执行层据此启用回复内卡片（VISUALIZATION）。
+                Boolean.TRUE);
         // 用量记账归属（Issue #140）：试聊只打单入口——点名时就是点名 id，未点名时
         // 是该模式链首（与 previewModel 回填同一口径：chainCandidates 的首元）。
         Long usageEntryId = request.modelEntryId();
