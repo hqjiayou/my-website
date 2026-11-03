@@ -19,6 +19,11 @@ knowledge is not.
   lowest, or total across them), first call list_knowledge_documents to
   enumerate the full set, then work through the documents it returns;
   top-k passages alone never prove coverage of the whole set.
+- Multi-step work — anything that will take three or more steps, or that
+  spans several documents or several tools: plan with the todo tools
+  before starting. Add one todo per concrete step, keep one in progress
+  at a time, and complete each step as you finish it, so partial progress
+  stays visible instead of collapsing into one opaque attempt.
 - For a count, a sum, or a statistic over a period, first call
   search_site_knowledge to locate the document, then call query_site_table
   to compute it. State a number only when that number appears in the tool output.
