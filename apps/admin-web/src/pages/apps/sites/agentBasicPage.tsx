@@ -5,7 +5,7 @@ import { useOutletContext } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { agentApi, SITE_TAG_PATTERN, SITE_TYPE_PRESETS, type Site } from '@/api'
-import { StatusTag } from '@/components/admin'
+import { AdminPageHeader, StatusTag } from '@/components/admin'
 import { adminFieldClass, adminPrimaryButtonClass } from '@/components/admin/controls'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -93,12 +93,10 @@ function AgentBasicForm({ site }: { site: Site }) {
   }
 
   return (
-    <section className="admin-content-form space-y-4">
+    <section className="admin-content-form">
+      <AdminPageHeader title={t('detail.nav.basic')} description={t('basic.description')} />
       <article className="rounded-xl border border-admin bg-admin-surface p-5">
-        <h2 className="text-base font-semibold text-admin">{t('detail.nav.basic')}</h2>
-        <p className="mt-1 text-sm text-admin-muted">{t('basic.description')}</p>
-
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-1.5 text-sm text-admin">
             <span className="font-medium">{t('list.columns.agentName')}</span>
             <input
@@ -182,7 +180,7 @@ function AgentBasicForm({ site }: { site: Site }) {
         </div>
       </article>
 
-      <article className="rounded-xl border border-admin bg-admin-surface p-5">
+      <article className="mt-4 rounded-xl border border-admin bg-admin-surface p-5">
         <h2 className="text-base font-semibold text-admin">{t('basic.info.title')}</h2>
         <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
           <div>

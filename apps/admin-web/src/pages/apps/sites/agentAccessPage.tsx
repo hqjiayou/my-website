@@ -5,6 +5,7 @@ import { Link, useOutletContext } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api'
+import { AdminPageHeader } from '@/components/admin'
 import { adminFieldClass, adminGhostButtonClass, adminPrimaryButtonClass } from '@/components/admin/controls'
 import { EmbeddingRegistrationCard } from '@/pages/ai/embeddingRegistrationCard'
 import { ROUTES } from '@/router/config/routePaths'
@@ -91,28 +92,27 @@ export function AgentAccessPage() {
   const clientKeys = keysQuery.data?.apiKeys ?? []
 
   return (
-    <section className="admin-content-form space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-admin">{t('access.title')}</h2>
-        <p className="mt-1 text-sm text-admin-muted">{t('access.description')}</p>
+    <section className="admin-content-form">
+      <AdminPageHeader title={t('access.title')} description={t('access.description')} />
+      <div className="space-y-4">
+        <CliAccessForm
+          key={`cli-${cliEntry?.id ?? 'new'}-${cliEntry?.version ?? 0}`}
+          agentId={site.id}
+          entry={cliEntry}
+          accounts={accounts}
+          apiBaseUrl={apiBaseUrl}
+          clientKeys={clientKeys}
+          canUpdate={canUpdate}
+        />
+        <KeyAccessForm
+          key={`key-${keyEntry?.id ?? 'new'}-${keyEntry?.version ?? 0}-${entries.length}`}
+          agentId={site.id}
+          entry={keyEntry}
+          entries={entries}
+          canUpdate={canUpdate}
+        />
+        <EmbeddingRegistrationCard agentId={site.id} />
       </div>
-      <CliAccessForm
-        key={`cli-${cliEntry?.id ?? 'new'}-${cliEntry?.version ?? 0}`}
-        agentId={site.id}
-        entry={cliEntry}
-        accounts={accounts}
-        apiBaseUrl={apiBaseUrl}
-        clientKeys={clientKeys}
-        canUpdate={canUpdate}
-      />
-      <KeyAccessForm
-        key={`key-${keyEntry?.id ?? 'new'}-${keyEntry?.version ?? 0}-${entries.length}`}
-        agentId={site.id}
-        entry={keyEntry}
-        entries={entries}
-        canUpdate={canUpdate}
-      />
-      <EmbeddingRegistrationCard agentId={site.id} />
     </section>
   )
 }
