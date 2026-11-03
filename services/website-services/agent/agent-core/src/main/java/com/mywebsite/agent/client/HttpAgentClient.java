@@ -8,6 +8,8 @@ import com.mywebsite.agent.AgentHttpHeaders;
 import com.mywebsite.agent.dto.AgentChatRequest;
 import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
+import com.mywebsite.agent.dto.AgentExperienceExtractRequest;
+import com.mywebsite.agent.dto.AgentExperienceExtractResult;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentOcrImageRequest;
@@ -416,6 +418,55 @@ public class HttpAgentClient implements AgentClient {
         }
         JsonNode spec = data.get("modelSpec");
         return new AgentOcrPdfResult(text.asText(), spec != null && spec.isTextual() ? spec.asText() : null);
+    }
+
+    @Override
+    public AgentExperienceExtractResult extractExperience(AgentExperienceExtractRequest request) {
+        ensureTokenConfigured();
+        JsonNode body = exchangeWithRetry("POST", "/internal/v1/experience/extract", request);
+        JsonNode data = body.path("data");
+        JsonNode candidatesNode = data.get("candidates");
+        if (candidatesNode == null || !candidatesNode.isArray()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+        List<AgentExperienceExtractResult.Candidate> candidates = new ArrayList<>();
+        for (JsonNode node : candidatesNode) {
+            String title = textOrNull(node.get("title"));
+            String lesson = textOrNull(node.get("lesson"));
+            String sourceTurnId = textOrNull(node.get("sourceTurnId"));
+            if (title == null || lesson == null || sourceTurnId == null) {
+                // 契约内的候选必须四字段可落库；缺关键字段说明执行层回了坏数据，整批按失败计。
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+            }
+            candidates.add(
+                    new AgentExperienceExtractResult.Candidate(
+                            sourceTurnId,
+                            title,
+                            textOrNull(node.get("symptom")),
+                            lesson,
+                            textOrNull(node.get("evidence"))));
+        }
+        AgentRunMeta.Usage usage = null;
+        JsonNode usageNode = data.get("usage");
+        if (usageNode != null && usageNode.isObject()) {
+            usage =
+                    new AgentRunMeta.Usage(
+                            intOrZero(usageNode.get("requests")),
+                            intOrZero(usageNode.get("toolCalls")),
+                            intOrZero(usageNode.get("inputTokens")),
+                            intOrZero(usageNode.get("outputTokens")));
+        }
+        JsonNode spec = data.get("modelSpec");
+        return new AgentExperienceExtractResult(
+                List.copyOf(candidates), usage, spec != null && spec.isTextual() ? spec.asText() : null);
+    }
+
+    private static String textOrNull(JsonNode node) {
+        return node != null && node.isTextual() && !node.asText().isBlank() ? node.asText() : null;
+    }
+
+    private static int intOrZero(JsonNode node) {
+        return node != null && node.isNumber() ? node.asInt() : 0;
     }
 
     @Override

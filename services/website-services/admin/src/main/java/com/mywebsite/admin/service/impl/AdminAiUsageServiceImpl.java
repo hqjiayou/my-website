@@ -37,7 +37,11 @@ public class AdminAiUsageServiceImpl implements AdminAiUsageService {
     private static final Logger log = LoggerFactory.getLogger(AdminAiUsageServiceImpl.class);
 
     private static final Set<String> SOURCES =
-            Set.of(AgentUsageService.SOURCE_PORTAL, AgentUsageService.SOURCE_ADMIN_PREVIEW, AgentUsageService.SOURCE_GATEWAY_V1);
+            Set.of(
+                    AgentUsageService.SOURCE_PORTAL,
+                    AgentUsageService.SOURCE_ADMIN_PREVIEW,
+                    AgentUsageService.SOURCE_GATEWAY_V1,
+                    AgentUsageService.SOURCE_EXPERIENCE);
     private static final int MAX_WINDOW_ROWS = 20_000;
 
     private final AgentAiUsageMapper usageMapper;
