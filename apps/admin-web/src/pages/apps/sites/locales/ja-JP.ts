@@ -589,6 +589,7 @@ export default {
       },
     },
     preview: {
+      panel: '試行設定',
       modeCli: 'CLI プロキシ',
       modeKey: 'API key 直結',
       nextEntry: '次の一文',

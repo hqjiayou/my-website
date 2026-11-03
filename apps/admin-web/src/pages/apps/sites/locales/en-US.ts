@@ -589,6 +589,7 @@ export default {
       },
     },
     preview: {
+      panel: 'Preview setup',
       modeCli: 'CLI proxy',
       modeKey: 'API key',
       nextEntry: 'Next message',

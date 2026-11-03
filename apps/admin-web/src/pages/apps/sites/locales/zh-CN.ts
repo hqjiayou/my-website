@@ -586,6 +586,7 @@ export default {
       },
     },
     preview: {
+      panel: '试聊设置',
       modeCli: 'CLI 代理',
       modeKey: 'API key 直连',
       nextEntry: '下一条',
