@@ -7,7 +7,7 @@ export default {
   agentLabel: '选择站点',
   settings: {
     title: '模型入口',
-    description: '按模式维护模型 spec 和 API key。试聊只用所选模式的默认入口；用户端对话在同模式内还可以接着试其他入口。',
+    description: '按模式维护模型 spec 和 API key。对话预览只用所选模式的默认入口；用户端对话在同模式内还可以接着试其他入口。',
     empty: '还没有模型入口。未设默认入口时，对话回退到 agent-services 的 AI_MODEL。',
     fallbackHint:
       '运行时面板按模式显示入口链。带了模型入口的对话不再追加进程 AI_FALLBACK_MODELS；没有入口时才回退进程 AI_MODEL。知识库向量按「嵌入类登记」取类，没有登记时才用进程里的 embedding 配置。密钥只保存在服务端，列表里只显示末尾提示。',
@@ -240,7 +240,7 @@ export default {
     statQuota: '额度',
     quotaUnknown: '还没有',
     modelsTitle: '放出的模型',
-    catalogHint: '这里只是目录。接入里选中并保存，试聊才会改用这个账号的模型。',
+    catalogHint: '这里只是目录。接入里选中并保存，对话预览才会改用这个账号的模型。',
     columnModel: '模型',
     columnCopy: '复制',
     providerCodex: 'GPT CLI',
@@ -305,7 +305,7 @@ export default {
     filterDays: '窗口',
     sourceAll: '全部来源',
     sourcePortal: '门户对话',
-    sourceAdminPreview: '后台试聊',
+    sourceAdminPreview: '后台对话预览',
     sourceGatewayV1: '对外网关',
     daysValue: '{{days}} 天',
     totalCalls: '总调用',

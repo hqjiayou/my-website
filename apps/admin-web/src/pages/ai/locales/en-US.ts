@@ -7,7 +7,7 @@ export default {
   agentLabel: 'Site',
   settings: {
     title: 'Model entries',
-    description: 'Keep model specs and API keys per mode. Try chat calls only that mode’s default entry. Portal chat may continue with other entries in the same mode.',
+    description: 'Keep model specs and API keys per mode. Chat preview calls only that mode’s default entry. Portal chat may continue with other entries in the same mode.',
     empty: 'No model entries yet. Without a default entry, chat falls back to the agent-services AI_MODEL variable.',
     fallbackHint:
       'The runtime panel shows the entry chain for one mode. A chat that already has a model entry does not also append AI_FALLBACK_MODELS. With no entry, chat falls back to the process AI_MODEL. Knowledge embeddings use the classes from Embedding class registration, and only fall back to the process embedding settings when nothing is registered. Keys stay on the server; the list shows only a short hint.',
@@ -248,7 +248,7 @@ export default {
     statQuota: 'Quota',
     quotaUnknown: 'None yet',
     modelsTitle: 'Published models',
-    catalogHint: 'This is a catalog. Try chat changes only after Access saves a model from this account.',
+    catalogHint: 'This is a catalog. Chat preview changes only after Access saves a model from this account.',
     columnModel: 'Model',
     columnCopy: 'Copy',
     providerCodex: 'GPT CLI',
@@ -314,7 +314,7 @@ export default {
     filterDays: 'Window',
     sourceAll: 'All sources',
     sourcePortal: 'Portal chat',
-    sourceAdminPreview: 'Admin preview',
+    sourceAdminPreview: 'Admin chat preview',
     sourceGatewayV1: 'Public gateway',
     daysValue: '{{days}} days',
     totalCalls: 'Total calls',

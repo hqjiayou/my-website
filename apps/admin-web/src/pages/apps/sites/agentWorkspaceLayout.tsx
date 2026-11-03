@@ -233,8 +233,8 @@ export function AgentWorkspaceLayout() {
         </div>
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
-        <aside className="rounded-xl border border-admin bg-admin-surface p-2">
+      <div className="grid items-start gap-3 lg:grid-cols-[13.5rem_minmax(0,1fr)]">
+        <aside className="rounded-xl border border-admin bg-admin-surface p-2 lg:sticky lg:top-[calc(4rem+var(--admin-page-padding))] lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
           {navGroups.map((group) => (
             <div key={group.key} className="mb-3 last:mb-0">
               <p className="admin-nav-group-title px-3 pb-1">{t(`workspace.groups.${group.key}`)}</p>

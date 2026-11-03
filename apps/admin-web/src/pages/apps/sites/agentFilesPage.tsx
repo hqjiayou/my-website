@@ -13,7 +13,7 @@ import {
   type MediaListItem,
   type MediaListQuery,
 } from '@/api'
-import { AdminPageHeader, DataTable, type DataTableColumn } from '@/components/admin'
+import { DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -183,42 +183,40 @@ export function AgentFilesPage() {
   )
 
   return (
-    <section className="admin-content-data">
-      <AdminPageHeader
-        title={t('workspace.nav.files')}
-        description={t('filesManagement.description')}
-        action={
-          <PermissionGate code={PERMISSION_CODES.mediaUpload}>
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={MEDIA_ACCEPT}
-                className="hidden"
-                onChange={onPickFile}
-              />
-              <button
-                type="button"
-                disabled={uploadMutation.isPending}
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/92 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Upload className="h-4 w-4" />
-                <span>
-                  {uploadMutation.isPending
-                    ? t('filesManagement.actions.uploading')
-                    : t('filesManagement.actions.upload')}
-                </span>
-              </button>
-            </>
-          </PermissionGate>
-        }
-      />
-
-      <p className="mb-3 text-xs text-muted-foreground">
-        {t('filesManagement.hints.whitelist')}
-        {canUpload ? null : ` ${t('filesManagement.hints.uploadPermission')}`}
-      </p>
+    <section className="w-full">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground">{t('filesManagement.description')}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t('filesManagement.hints.whitelist')}
+            {canUpload ? null : ` ${t('filesManagement.hints.uploadPermission')}`}
+          </p>
+        </div>
+        <PermissionGate code={PERMISSION_CODES.mediaUpload}>
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={MEDIA_ACCEPT}
+              className="hidden"
+              onChange={onPickFile}
+            />
+            <button
+              type="button"
+              disabled={uploadMutation.isPending}
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/92 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Upload className="h-4 w-4" />
+              <span>
+                {uploadMutation.isPending
+                  ? t('filesManagement.actions.uploading')
+                  : t('filesManagement.actions.upload')}
+              </span>
+            </button>
+          </>
+        </PermissionGate>
+      </div>
 
       <DataTable
         columns={columns}

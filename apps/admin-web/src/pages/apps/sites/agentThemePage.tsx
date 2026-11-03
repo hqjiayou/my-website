@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { useOutletContext } from 'react-router-dom'
 
 import { appearanceApi } from '@/api'
-import { AdminPageHeader } from '@/components/admin'
 import { AgentAppearancePreview } from '@/pages/apps/style/agentAppearancePreview'
 
 import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
@@ -20,8 +19,8 @@ export function AgentThemePage() {
   const data = appearanceQuery.data
 
   return (
-    <section className="admin-content-form">
-      <AdminPageHeader title={t('detail.nav.theme')} description={t('detail.theme.description')} />
+    <section className="w-full space-y-3">
+      <div>
       {appearanceQuery.isPending ? (
         <article className="rounded-xl border border-admin bg-admin-surface p-5 text-sm text-admin-muted">
           {t('detail.theme.loading')}
@@ -79,6 +78,7 @@ export function AgentThemePage() {
           </div>
         </article>
       )}
+      </div>
     </section>
   )
 }

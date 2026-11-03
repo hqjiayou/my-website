@@ -536,7 +536,7 @@ export interface AiMcpReady {
 }
 
 /**
- * 试聊回填：与 previewStream 走同一个 previewMode + selectionChain 判定路径。
+ * 对话预览回填：与 previewStream 走同一个 previewMode + selectionChain 判定路径。
  * mode 缺省时服务端按默认判定选出模式；modelSpec 为该模式链首 spec，无链为 null；
  * available 即链是否非空（含默认入口 key 解密失败导致整链为空的场景）。
  */

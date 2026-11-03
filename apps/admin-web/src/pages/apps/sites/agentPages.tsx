@@ -2,7 +2,6 @@ import type { ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useOutletContext } from 'react-router-dom'
 
-import { AdminPageHeader } from '@/components/admin'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
@@ -13,9 +12,12 @@ import { AgentAiPromptPanel } from './agentAiPromptPanel'
 import { AgentAiRuntimePanel } from './agentAiRuntimePanel'
 import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
 
+/** 需要占满视口剩余高度的面板（预览 / 对话记录 / Prompt 编辑）。 */
+const FILL_HEIGHT_PANELS = new Set(['agentPreview', 'agentConversations', 'agentPrompt', 'agentKnowledge'])
+
 /**
  * Agent 一级页：原 AgentAiPage 的五个子页签提升为工作台一级路由后的挂载壳。
- * 面板组件本身不变；这里只负责标题、权限门与卡片容器（与旧 AI 页一致）。
+ * 不再重复侧栏标题；内容贴齐工作台右栏，不套居中限宽。
  */
 function agentPanelPage(
   navKey: string,
@@ -26,12 +28,18 @@ function agentPanelPage(
     const { t } = useTranslation('sites')
     const { site } = useOutletContext<AgentWorkspaceOutletContext>()
     const allowed = useHasPermission(permission)
+    const fillHeight = FILL_HEIGHT_PANELS.has(navKey)
 
     return (
-      <section>
-        <AdminPageHeader title={t(`workspace.nav.${navKey}`)} description={t('aiWorkspace.description')} />
+      <section className={fillHeight ? 'flex h-[calc(100vh-11rem)] min-h-[28rem] flex-col' : 'w-full'}>
         {allowed ? (
-          <article className="rounded-xl border border-border bg-card p-5">
+          <article
+            className={
+              fillHeight
+                ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 sm:p-5'
+                : 'rounded-xl border border-border bg-card p-4 sm:p-5'
+            }
+          >
             <Panel agentId={site.id} />
           </article>
         ) : (

@@ -17,7 +17,7 @@ export default {
     agentPrompt: 'Prompt',
     agentKnowledge: '知识库',
     agentConversations: '对话记录',
-    agentPreview: '试聊',
+    agentPreview: '对话预览',
     agentRuntime: '运行状态',
     agentBasic: '基础信息',
     agentAccess: '接入',

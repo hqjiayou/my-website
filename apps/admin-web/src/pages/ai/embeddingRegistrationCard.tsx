@@ -8,7 +8,6 @@ import { aiApi } from '@/api/apps/aiApi'
 import { StatusTag } from '@/components/admin'
 import {
   adminFieldClass,
-  adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
@@ -143,9 +142,42 @@ export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
   }
 
   return (
-    <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
-      <h3 className="text-sm font-semibold text-admin">{t('settings.embeddingRegistration.title')}</h3>
-      <p className="text-sm text-admin-muted">
+    <article className="rounded-xl border border-border bg-card p-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground">
+            {t('settings.embeddingRegistration.title')}
+          </h3>
+          <span className="rounded-md bg-card-muted px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+            {rows.length}/{MAX_EMBEDDING_CLASSES}
+          </span>
+        </div>
+        {canUpdate && draft != null ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={adminGhostButtonClass}
+              onClick={() => {
+                setDraft(null)
+                setCandidateId('')
+              }}
+            >
+              {t('settings.embeddingRegistration.reset')}
+            </button>
+            <button
+              type="button"
+              className={adminPrimaryButtonClass}
+              disabled={!dirty || saveMutation.isPending}
+              onClick={save}
+            >
+              {saveMutation.isPending
+                ? t('settings.embeddingRegistration.saving')
+                : t('settings.embeddingRegistration.save')}
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <p className="mb-4 max-w-3xl text-xs leading-5 text-muted-foreground">
         {t(
           agentId == null
             ? 'settings.embeddingRegistration.descriptionGlobal'
@@ -154,28 +186,30 @@ export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
       </p>
 
       {registrationQuery.isPending || entriesQuery.isPending ? (
-        <p className="text-sm text-admin-muted">{t('loading')}</p>
+        <p className="text-sm text-muted-foreground">{t('loading')}</p>
       ) : registrationQuery.isError || entriesQuery.isError ? (
         <p className="text-sm text-danger-emphasis">{t('settings.embeddingRegistration.loadError')}</p>
       ) : (
-        <>
+        <div className="space-y-3">
           {rows.length === 0 ? (
-            <p className="text-sm text-admin-muted">{t('settings.embeddingRegistration.empty')}</p>
+            <div className="rounded-lg border border-dashed border-border bg-card-muted/40 px-3 py-4 text-sm text-muted-foreground">
+              {t('settings.embeddingRegistration.empty')}
+            </div>
           ) : (
             <ul className="space-y-2">
               {rows.map((row, index) => (
                 <li
                   key={row.entryId}
-                  className="flex items-center gap-3 rounded-lg border border-admin px-3 py-2.5 text-sm"
+                  className="flex items-center gap-3 rounded-lg border border-border bg-card-muted/30 px-3 py-2.5 text-sm"
                 >
-                  <span className="w-6 shrink-0 text-center font-mono text-xs text-admin-muted">
+                  <span className="w-6 shrink-0 text-center font-mono text-xs text-muted-foreground">
                     {index + 1}
                   </span>
                   <span className="min-w-0 flex-1">
                     {row.className != null ? (
                       <>
                         <span className="flex flex-wrap items-center gap-2">
-                          <span className="truncate font-mono text-[13px] font-medium text-admin">
+                          <span className="truncate font-mono text-[13px] font-medium text-foreground">
                             {row.className}
                           </span>
                           {!row.enabled ? (
@@ -186,7 +220,7 @@ export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
                             />
                           ) : null}
                         </span>
-                        <span className="mt-0.5 block truncate text-xs text-admin-muted">
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                           {row.entryDisplayName} · {row.embeddingSpec}
                         </span>
                       </>
@@ -195,13 +229,13 @@ export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
                         <span className="font-medium text-danger-emphasis">
                           {t('settings.embeddingRegistration.entryMissing')}
                         </span>
-                        <span className="mt-0.5 block text-xs text-admin-muted">
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
                           {t('settings.embeddingRegistration.entryMissingHint', { entryId: row.entryId })}
                         </span>
                       </>
                     )}
                   </span>
-                  <label className="flex shrink-0 items-center gap-2 text-sm text-admin">
+                  <label className="flex shrink-0 items-center gap-2 text-xs text-foreground">
                     <input
                       type="checkbox"
                       className="admin-check"
@@ -259,12 +293,15 @@ export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
           )}
 
           <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="block min-w-56 flex-1 text-sm text-admin">
+            <div className="rounded-lg border border-border bg-card-muted/30 p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
                 {t('settings.embeddingRegistration.addLabel')}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
                 <select
-                  className={`${adminFieldClass} mt-1`}
+                  className={cn(adminFieldClass, 'w-72 max-w-full shrink-0 sm:w-80')}
                   value={candidateId}
+                  disabled={rows.length >= MAX_EMBEDDING_CLASSES}
                   onChange={(event) => setCandidateId(event.target.value)}
                 >
                   <option value="">{t('settings.embeddingRegistration.pickEntry')}</option>
@@ -277,51 +314,26 @@ export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
                     </option>
                   ))}
                 </select>
-                <span className="mt-1 block text-xs text-admin-muted">
-                  {candidates.length === 0
-                    ? t('settings.embeddingRegistration.noCandidates')
-                    : t('settings.embeddingRegistration.addHint', {
-                        count: rows.length,
-                        max: MAX_EMBEDDING_CLASSES,
-                      })}
-                </span>
-              </label>
-              <button
-                type="button"
-                className={adminSecondaryButtonClass}
-                disabled={!candidateId || rows.length >= MAX_EMBEDDING_CLASSES}
-                onClick={addCandidate}
-              >
-                {t('settings.embeddingRegistration.add')}
-              </button>
+                <button
+                  type="button"
+                  className={adminSecondaryButtonClass}
+                  disabled={!candidateId || rows.length >= MAX_EMBEDDING_CLASSES}
+                  onClick={addCandidate}
+                >
+                  {t('settings.embeddingRegistration.add')}
+                </button>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                {candidates.length === 0
+                  ? t('settings.embeddingRegistration.noCandidates')
+                  : t('settings.embeddingRegistration.addHint', {
+                      count: rows.length,
+                      max: MAX_EMBEDDING_CLASSES,
+                    })}
+              </p>
             </div>
           </PermissionGate>
-
-          {canUpdate && draft != null ? (
-            <div className={adminFormActionsClass}>
-              <button
-                type="button"
-                className={adminGhostButtonClass}
-                onClick={() => {
-                  setDraft(null)
-                  setCandidateId('')
-                }}
-              >
-                {t('settings.embeddingRegistration.reset')}
-              </button>
-              <button
-                type="button"
-                className={adminPrimaryButtonClass}
-                disabled={!dirty || saveMutation.isPending}
-                onClick={save}
-              >
-                {saveMutation.isPending
-                  ? t('settings.embeddingRegistration.saving')
-                  : t('settings.embeddingRegistration.save')}
-              </button>
-            </div>
-          ) : null}
-        </>
+        </div>
       )}
     </article>
   )

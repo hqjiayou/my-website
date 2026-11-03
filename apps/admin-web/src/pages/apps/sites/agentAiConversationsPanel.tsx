@@ -46,7 +46,7 @@ export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
-    <div className="grid max-h-[32rem] overflow-hidden rounded-xl border border-admin md:grid-cols-[330px_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 overflow-hidden rounded-xl border border-admin md:grid-cols-[330px_minmax(0,1fr)]">
       {/* 左列：会话列表（分页沿用现有 pageNum / total 状态） */}
       <div className="flex h-full min-h-0 flex-col border-b border-admin md:border-b-0 md:border-r">
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -132,37 +132,46 @@ export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
           <p className="m-auto px-4 text-sm text-admin-muted">{t('aiWorkspace.loading')}</p>
         ) : (
           <ul className="min-h-0 flex-1 space-y-3.5 overflow-y-auto p-4">
-            {(messages ?? []).map((item) => (
-              <li key={item.id} className={cn('max-w-[78%]', item.role === 'USER' ? 'ml-auto' : 'mr-auto')}>
-                <p
+            {(messages ?? []).map((item) => {
+              const isUser = item.role === 'USER'
+              return (
+                <li
+                  key={item.id}
                   className={cn(
-                    'mb-1 flex items-center gap-1.5 text-[11px] font-medium text-admin-muted',
-                    item.role === 'USER' && 'justify-end',
+                    'flex max-w-[min(36rem,78%)] flex-col',
+                    isUser ? 'ml-auto items-end' : 'mr-auto items-start',
                   )}
                 >
-                  <span>{item.role}</span>
-                  <span className="tabular-nums">{formatMessageTime(item.createdAt)}</span>
-                </p>
-                <div
-                  className={cn(
-                    'rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
-                    item.role === 'USER'
-                      ? 'bg-admin-primary text-admin-on-primary'
-                      : 'border border-admin bg-admin-surface',
-                  )}
-                >
-                  <p className="whitespace-pre-wrap">{item.content}</p>
-                </div>
-                {item.role === 'ASSISTANT' && item.agentMeta ? (
-                  <>
-                    {item.agentMeta.model ? (
-                      <p className="mt-1 font-mono text-[11px] text-admin-muted">{item.agentMeta.model}</p>
-                    ) : null}
-                    <AiRunMetaSummary meta={item.agentMeta} />
-                  </>
-                ) : null}
-              </li>
-            ))}
+                  <p
+                    className={cn(
+                      'mb-1 flex items-center gap-1.5 text-[11px] font-medium text-admin-muted',
+                      isUser && 'justify-end',
+                    )}
+                  >
+                    <span>{item.role}</span>
+                    <span className="tabular-nums">{formatMessageTime(item.createdAt)}</span>
+                  </p>
+                  <div
+                    className={cn(
+                      'w-fit max-w-full rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
+                      isUser
+                        ? 'rounded-br-md bg-admin-primary text-admin-on-primary'
+                        : 'rounded-bl-md border border-admin bg-admin-surface',
+                    )}
+                  >
+                    <p className={cn('whitespace-pre-wrap break-words', isUser && 'text-left')}>{item.content}</p>
+                  </div>
+                  {item.role === 'ASSISTANT' && item.agentMeta ? (
+                    <>
+                      {item.agentMeta.model ? (
+                        <p className="mt-1 font-mono text-[11px] text-admin-muted">{item.agentMeta.model}</p>
+                      ) : null}
+                      <AiRunMetaSummary meta={item.agentMeta} />
+                    </>
+                  ) : null}
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>

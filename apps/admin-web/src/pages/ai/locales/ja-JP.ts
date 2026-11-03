@@ -7,7 +7,7 @@ export default {
   agentLabel: 'サイト',
   settings: {
     title: 'モデル入口',
-    description: '方式ごとにモデル spec と API key を管理します。試し会話はその方式のデフォルト入口だけを呼び、ユーザー側の対話は同じ方式の他の入口も続けて試せます。',
+    description: '方式ごとにモデル spec と API key を管理します。対話プレビューはその方式のデフォルト入口だけを呼び、ユーザー側の対話は同じ方式の他の入口も続けて試せます。',
     empty: 'モデル入口はまだありません。デフォルト入口がない場合、対話は agent-services の AI_MODEL に戻ります。',
     fallbackHint:
       'ランタイムパネルは方式ごとの入口チェーンを表示します。モデル入口付きの対話にはプロセスの AI_FALLBACK_MODELS を足しません。入口がないときだけプロセスの AI_MODEL に戻ります。ナレッジの埋め込みは「埋め込みクラス登録」のクラスを使い、登録がないときだけプロセス側の設定に戻ります。キーはサーバーにのみ保存され、一覧には末尾だけ出ます。',
@@ -248,7 +248,7 @@ export default {
     statQuota: '枠',
     quotaUnknown: 'まだありません',
     modelsTitle: '公開モデル',
-    catalogHint: 'ここは一覧です。接続で保存してから、試し会話がそのアカウントのモデルに変わります。',
+    catalogHint: 'ここは一覧です。接続で保存してから、対話プレビューがそのアカウントのモデルに変わります。',
     columnModel: 'モデル',
     columnCopy: 'コピー',
     providerCodex: 'GPT CLI',

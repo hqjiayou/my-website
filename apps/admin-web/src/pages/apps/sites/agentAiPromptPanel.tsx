@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
 import { adminFieldClass, adminPrimaryButtonClass } from '@/components/admin/controls'
+import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
@@ -54,58 +55,59 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
 
   return (
     <form
-      className="space-y-5 pb-16"
+      className="flex h-full min-h-0 flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault()
         if (!canUpdate) return
         saveMutation.mutate()
       }}
     >
-      <label className="block">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-admin">{t('aiWorkspace.prompt.systemPrompt')}</span>
-          <span className="text-xs text-admin-muted">{promptValue.length}</span>
-        </div>
-        <textarea
-          className={`${adminFieldClass} mt-1 bg-card-muted/50 leading-relaxed`}
-          rows={12}
-          value={promptValue}
-          disabled={!canUpdate}
-          onChange={(event) => setSystemPrompt(event.target.value)}
-        />
-      </label>
-      <label className="block max-w-sm">
-        <span className="text-sm font-medium text-admin">{t('aiWorkspace.prompt.temperature')}</span>
-        <div className="mt-1 flex items-center gap-3">
-          <input
-            type="range"
-            min={0}
-            max={2}
-            step={0.1}
-            value={temperatureValue}
-            disabled={!canUpdate}
-            onChange={(event) => setTemperature(event.target.value)}
-            className="h-1.5 flex-1 accent-[rgb(var(--primary))] disabled:opacity-50"
-          />
-          <input
-            className={`${adminFieldClass} w-20`}
-            type="number"
-            min={0}
-            max={2}
-            step={0.1}
-            value={temperatureValue}
-            disabled={!canUpdate}
-            onChange={(event) => setTemperature(event.target.value)}
-          />
-        </div>
-      </label>
-      <div className="sticky bottom-4 flex items-center justify-end rounded-[14px] border border-admin bg-admin-surface p-3 shadow-admin-pop">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <label className="block">
+          <span className="text-xs font-medium text-muted-foreground">{t('aiWorkspace.prompt.temperature')}</span>
+          <div className="mt-1.5 flex w-56 items-center gap-2">
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.1}
+              value={temperatureValue}
+              disabled={!canUpdate}
+              onChange={(event) => setTemperature(event.target.value)}
+              className="h-1.5 min-w-0 flex-1 accent-[rgb(var(--primary))] disabled:opacity-50"
+            />
+            <input
+              className={cn(adminFieldClass, 'w-14 shrink-0 px-2 text-center')}
+              type="number"
+              min={0}
+              max={2}
+              step={0.1}
+              value={temperatureValue}
+              disabled={!canUpdate}
+              onChange={(event) => setTemperature(event.target.value)}
+            />
+          </div>
+        </label>
         <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
           <button type="submit" disabled={saveMutation.isPending} className={adminPrimaryButtonClass}>
             {saveMutation.isPending ? t('aiWorkspace.prompt.saving') : t('aiWorkspace.prompt.save')}
           </button>
         </PermissionGate>
       </div>
+
+      <label className="flex min-h-0 flex-1 flex-col">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-foreground">{t('aiWorkspace.prompt.systemPrompt')}</span>
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">{promptValue.length}</span>
+        </div>
+        <textarea
+          className={`${adminFieldClass} min-h-[20rem] flex-1 resize-y bg-card-muted/40 font-mono text-[13px] leading-6`}
+          value={promptValue}
+          disabled={!canUpdate}
+          onChange={(event) => setSystemPrompt(event.target.value)}
+          spellCheck={false}
+        />
+      </label>
     </form>
   )
 }

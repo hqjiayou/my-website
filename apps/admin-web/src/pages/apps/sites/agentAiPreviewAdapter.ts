@@ -69,6 +69,25 @@ function textOf(message: {
     .join('')
 }
 
+/** assistant-ui 把引用挂在 metadata.custom.quote；发给预览 API 时拼进正文，否则模型看不到。 */
+function outboundText(message: {
+  content?: string | ReadonlyArray<{ type?: string; text?: string }>
+  metadata?: { custom?: Record<string, unknown> }
+}): string {
+  const body = textOf(message).trim()
+  const raw = message.metadata?.custom?.quote
+  const quoted =
+    raw && typeof raw === 'object' && typeof (raw as { text?: unknown }).text === 'string'
+      ? ((raw as { text: string }).text).trim()
+      : ''
+  if (!quoted) return body
+  const block = quoted
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n')
+  return body ? `${block}\n\n${body}` : block
+}
+
 function parseSseBlock(block: string): { event: string; data: string } | null {
   const lines = block.split('\n')
   let event = 'message'
@@ -351,7 +370,7 @@ export function createJavaPreviewAdapter(
   return {
     async *run({ messages, abortSignal }) {
       const last = messages[messages.length - 1]
-      const message = last ? textOf(last).trim() : ''
+      const message = last ? outboundText(last).trim() : ''
       if (!message) {
         yield { content: [{ type: 'text' as const, text: '' }] }
         return
@@ -364,7 +383,7 @@ export function createJavaPreviewAdapter(
           const role: AiPreviewHistoryMessage['role'] | null =
             item.role === 'assistant' ? 'ASSISTANT' : item.role === 'user' ? 'USER' : null
           if (!role) return []
-          const content = textOf(item).trim().slice(0, 8000)
+          const content = outboundText(item).trim().slice(0, 8000)
           return content ? [{ role, content }] : []
         })
         .slice(-20)

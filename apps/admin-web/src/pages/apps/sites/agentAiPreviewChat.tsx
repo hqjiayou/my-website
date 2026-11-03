@@ -1,14 +1,16 @@
 import {
+  ActionBarPrimitive,
   AssistantRuntimeProvider,
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useAui,
   useAuiState,
   useLocalRuntime,
   type TextMessagePartProps,
 } from '@assistant-ui/react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowUp, ChevronDown, ChevronRight, MessageSquare, SlidersHorizontal, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, MessageSquare, Quote, SlidersHorizontal, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -50,7 +52,66 @@ function PreviewAssistantLabel() {
     return typeof value === 'string' ? value : ''
   })
   if (!spec) return null
-  return <p className="mb-1 font-mono text-[11px] text-muted-foreground">{spec}</p>
+  return (
+    <p className="mb-2 inline-flex max-w-full truncate rounded-md bg-card-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+      {spec}
+    </p>
+  )
+}
+
+function RunLivePulse() {
+  const isRunning = useAuiState((state) => state.thread.isRunning)
+  if (!isRunning) return null
+  return <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-info" aria-hidden />
+}
+
+function RunThinkingPlaceholder() {
+  const { t } = useTranslation('sites')
+  const isRunning = useAuiState((state) => state.thread.isRunning)
+  if (!isRunning) return null
+  return (
+    <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="animate-pulse">{t('aiWorkspace.preview.thinking')}</span>
+      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-info" aria-hidden />
+    </p>
+  )
+}
+
+function PreviewMessageActions({ align }: { align: 'start' | 'end' }) {
+  const { t } = useTranslation('sites')
+  const aui = useAui()
+  const messageId = useAuiState((state) => state.message.id)
+  const isCopied = useAuiState((state) => state.message.isCopied)
+
+  return (
+    <ActionBarPrimitive.Root
+      hideWhenRunning
+      className={`mt-1 flex items-center gap-0.5 opacity-80 transition-opacity focus-within:opacity-100 md:opacity-0 md:group-hover:opacity-100 ${
+        align === 'end' ? 'justify-end' : 'justify-start'
+      }`}
+    >
+      <ActionBarPrimitive.Copy
+        aria-label={t('aiWorkspace.preview.copy')}
+        title={isCopied ? t('aiWorkspace.preview.copied') : t('aiWorkspace.preview.copy')}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-card hover:text-foreground"
+      >
+        {isCopied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
+      </ActionBarPrimitive.Copy>
+      <button
+        type="button"
+        aria-label={t('aiWorkspace.preview.quote')}
+        title={t('aiWorkspace.preview.quote')}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-card hover:text-foreground"
+        onClick={() => {
+          const text = aui.message.getCopyText().trim()
+          if (!text) return
+          aui.composer.setQuote({ text, messageId })
+        }}
+      >
+        <Quote className="h-3.5 w-3.5" aria-hidden />
+      </button>
+    </ActionBarPrimitive.Root>
+  )
 }
 
 const EMPTY_CITATIONS: AiCitation[] = []
@@ -116,6 +177,7 @@ function CitationSourceCard({
  * 对不上任何引用的标记保持原文，不吞信息。
  */
 function PreviewTextPart({ text, status }: TextMessagePartProps) {
+  const { t } = useTranslation('sites')
   const citations = useAuiState((state) => {
     if (state.message.role !== 'assistant') return EMPTY_CITATIONS
     const value = state.message.metadata?.custom?.citations
@@ -124,6 +186,10 @@ function PreviewTextPart({ text, status }: TextMessagePartProps) {
   const [openCite, setOpenCite] = useState<number | null>(null)
   const byNumber = new Map(citations.map((citation, index) => [citationNumber(citation, index), citation]))
   const open = openCite != null ? byNumber.get(openCite) : undefined
+  const running = status.type === 'running'
+  if (running && !text) {
+    return <p className="animate-pulse text-sm text-muted-foreground">{t('aiWorkspace.preview.thinking')}</p>
+  }
   return (
     <>
       <p style={{ whiteSpace: 'pre-line' }}>
@@ -145,7 +211,9 @@ function PreviewTextPart({ text, status }: TextMessagePartProps) {
             </button>
           )
         })}
-        {status.type === 'running' ? <span style={{ fontFamily: 'revert' }}> ●</span> : null}
+        {running ? (
+          <span className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-foreground align-middle" aria-hidden />
+        ) : null}
       </p>
       {open && openCite != null ? (
         <CitationSourceCard citation={open} n={openCite} onClose={() => setOpenCite(null)} />
@@ -165,20 +233,33 @@ const PREVIEW_PART_COMPONENTS = {
   data: { by_name: { visualization: PreviewVisualizationPart } },
 }
 
-/** Foundry 式排布：用户消息右对齐浅气泡，助手消息近全宽纯文本（只留模型标注行）。 */
+/** 用户主色气泡右偏中；助手卡片气泡左偏中；操作栏提供复制与引用。 */
 function PreviewMessage() {
   const role = useAuiState((state) => state.message.role)
   if (role === 'user') {
     return (
-      <MessagePrimitive.Root className="mb-3 ml-auto w-fit max-w-[85%] rounded-2xl border border-border bg-card px-3 py-2 text-sm text-foreground">
-        <MessagePrimitive.Content components={PREVIEW_PART_COMPONENTS} />
+      <MessagePrimitive.Root className="group mb-3 ml-auto flex w-fit max-w-[min(36rem,78%)] flex-col items-end">
+        <div className="w-fit max-w-full rounded-2xl bg-primary px-3.5 py-2 text-sm text-primary-foreground">
+          <MessagePrimitive.Quote>
+            {({ text }) => (
+              <div className="mb-1.5 border-l-2 border-primary-foreground/45 pl-2 text-xs leading-5 text-primary-foreground/80">
+                {text}
+              </div>
+            )}
+          </MessagePrimitive.Quote>
+          <MessagePrimitive.Content components={PREVIEW_PART_COMPONENTS} />
+        </div>
+        <PreviewMessageActions align="end" />
       </MessagePrimitive.Root>
     )
   }
   return (
-    <MessagePrimitive.Root className="mb-3 px-1 py-1 text-sm leading-6 text-foreground">
-      <PreviewAssistantLabel />
-      <MessagePrimitive.Content components={PREVIEW_PART_COMPONENTS} />
+    <MessagePrimitive.Root className="group mb-3 mr-auto flex w-fit max-w-[min(40rem,86%)] flex-col items-start">
+      <div className="w-fit max-w-full rounded-2xl border border-border bg-card px-3.5 py-2.5 text-sm leading-6 text-foreground">
+        <PreviewAssistantLabel />
+        <MessagePrimitive.Content components={PREVIEW_PART_COMPONENTS} />
+      </div>
+      <PreviewMessageActions align="start" />
     </MessagePrimitive.Root>
   )
 }
@@ -392,7 +473,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className="flex flex-col gap-4 xl:h-[36rem] xl:flex-row">
+      <div className="flex h-full min-h-0 flex-col gap-4 xl:flex-row">
         <div className="xl:flex xl:h-full xl:w-80 xl:shrink-0 xl:flex-col">
           <button
             type="button"
@@ -533,12 +614,17 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
                   ) : null}
                   {trace.thinking ? (
                     <>
-                      <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.thinking')}</p>
+                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        {t('aiWorkspace.preview.run.thinking')}
+                        <RunLivePulse />
+                      </p>
                       <div className="mb-2 mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-card-muted px-2 py-1.5 text-xs leading-5 text-muted-foreground">
                         {trace.thinking}
                       </div>
                     </>
-                  ) : null}
+                  ) : (
+                    <RunThinkingPlaceholder />
+                  )}
                   <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.tools')}</p>
                   {trace.tools.length === 0 ? (
                     <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.noTools')}</p>
@@ -547,7 +633,12 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
                       {trace.tools.map((tool) => (
                         <li key={tool.toolCallId || tool.toolName} className="text-xs">
                           <div className="flex justify-between gap-2">
-                            <span className="truncate font-mono text-foreground">{tool.toolName}</span>
+                            <span className="flex min-w-0 items-center gap-1.5 truncate font-mono text-foreground">
+                              {tool.state === 'running' ? (
+                                <span className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-info" aria-hidden />
+                              ) : null}
+                              <span className="truncate">{tool.toolName}</span>
+                            </span>
                             <span className={TOOL_STATE_CLASS[tool.state]}>
                               {t(`aiWorkspace.preview.run.toolState.${tool.state}`)}
                             </span>
@@ -600,10 +691,10 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             </section>
           </div>
         </div>
-        <ThreadPrimitive.Root className="flex h-[28rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card-muted xl:h-full">
-          <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-3 py-3">
+        <ThreadPrimitive.Root className="flex min-h-[20rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card-muted">
+          <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-6 py-4 sm:px-10">
             <ThreadPrimitive.Empty>
-              <div className="flex flex-col items-center justify-center gap-2 px-4 py-14 text-center">
+              <div className="flex min-h-full flex-col items-center justify-center gap-2 px-4 py-16 text-center">
                 <span className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-muted-foreground">
                   <MessageSquare className="h-5 w-5" aria-hidden />
                 </span>
@@ -628,7 +719,17 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
               {runError.message ? <p className="mt-0.5 break-all text-danger-emphasis">{runError.message}</p> : null}
             </div>
           ) : null}
-          <ComposerPrimitive.Root className="px-3 pb-3 pt-1">
+          <ComposerPrimitive.Root className="px-3 pb-3 pt-1 sm:px-6">
+            <ComposerPrimitive.Quote className="mb-2 flex items-start gap-2 rounded-xl border border-border bg-card px-2.5 py-2">
+              <ComposerPrimitive.QuoteText className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground line-clamp-3" />
+              <ComposerPrimitive.QuoteDismiss
+                aria-label={t('aiWorkspace.preview.quoteDismiss')}
+                title={t('aiWorkspace.preview.quoteDismiss')}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-card-muted hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" aria-hidden />
+              </ComposerPrimitive.QuoteDismiss>
+            </ComposerPrimitive.Quote>
             <div className="flex items-end gap-2 rounded-2xl border border-border bg-card p-1.5">
               <ComposerPrimitive.Input
                 className="min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground outline-none"

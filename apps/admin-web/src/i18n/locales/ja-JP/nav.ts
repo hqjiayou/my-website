@@ -17,7 +17,7 @@ export default {
     agentPrompt: 'プロンプト',
     agentKnowledge: 'ナレッジベース',
     agentConversations: '会話履歴',
-    agentPreview: 'プレビュー対話',
+    agentPreview: '対話プレビュー',
     agentRuntime: 'ランタイム',
     agentBasic: '基本情報',
     agentAccess: '接続',

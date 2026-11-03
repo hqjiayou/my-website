@@ -1,13 +1,13 @@
 # my-website
 
-[简体中文](README.md) · [繁體中文](README.md) · [日本語](README.ja.md)
+[繁體中文](README.md) · [日本語](README.ja.md)
 
-ウェブサイトを一つの管理画面で中央制御する集合です。総控は `apps/admin-web`、Java サービスは `services/website-services`、AI 実行は Python の `services/agent-services` です。このワークスペースに来訪者向けフロントはありません。
+ウェブサイトを一つの管理画面で中央制御する集合です。総控は `apps/admin-web`、Java サービスは `services/website-services`、AI 実行は Python の `services/agent-services`、サイト利用者向けクライアントは `apps/agent-portal` です。来訪者向け公開フロント（旧 `apps/site-web`）は 2026-10-28 に削除されました。
 
 ## 位置づけ
 
 - 一つの総控が、集合内の各サイトを管理する。
-- サイト利用者向けフロントは `apps/agent-portal`。サイト API は Java の `agent-app`（旧 site-app、2026-10-28 改名）。
+- サイト利用者向けクライアントは `apps/agent-portal`（ログイン + AI チャット）。サイト API は Java の `agent-app`（旧 site-app、2026-10-28 改名統合）。
 - `apps/admin-web` がその総控（プラットフォームと各サイト）。
 - `services/website-services` がこのシステムの Java サービス。**共通ゲートウェイ**、**独立した認証サービス（`auth`）**、管理 API、サイト API、インフラ接続を含む。**JWT は RS256 + JWKS**（Auth が署名し、業務サービスは JWKS で検証する）。
 - `services/agent-services` は **Python 3.13 + FastAPI + Pydantic AI 2.54** の AI Execution Runtime（internal only。gateway には出さない）。業務の正は Java、AI 実行だけが Python（ADR-0005）。`AI_MODEL` がなくてもプロセスは起動し、呼び出しは正直に失敗する（ADR-0004）。
@@ -17,7 +17,8 @@
 ```text
 my-website/
 ├── apps
-│   └── admin-web         # このワークスペースにあるフロントは管理画面だけ
+│   ├── admin-web         # 管理画面
+│   └── agent-portal      # サイト利用者向けクライアント
 ├── docs                  # 三つの棚：いま / 仕様 / 履歴。docs/README.md を見る
 └── services
     ├── agent-services
@@ -28,16 +29,16 @@ my-website/
 
 ## 各プロジェクト
 
-### 来訪者向けサイト
+### apps/agent-portal（サイト利用者向け）
 
-サイト利用者向けフロントは `apps/agent-portal`（ログイン / AI チャット）。来訪者向け公開フロント `apps/site-web/` は 2026-10-28 に削除された。
+サイト利用者向けクライアント（ログイン / AI チャット）。来訪者向け公開フロント `apps/site-web/` は 2026-10-28 に削除された。探さないこと。
 
 サイト API は `website-services/gateway` 経由で呼ぶ。  
 **Agent Auth（旧 Site Auth）のバックエンドは完了**（`/api/auth/agent/**` がログイン / リフレッシュ / ログアウト、`GET /api/agent/auth/me` は agent-app）。**フロントは agent-portal が接続済み**（現状は [`docs/overview/CURRENT_STATE.md`](docs/overview/CURRENT_STATE.md)）。
 
 ### apps/admin-web
 
-管理コンソール。縦割り本流（Agent / User / Appearance / Media / Content / RBAC）※Template / Reservation は 2026-10-27 削除とサイト AI 管理は実 API。`AI_MODEL` がないとき、プレビューは正直に失敗する。Analytics / System などのページはまだプレースホルダ。
+管理コンソール。縦割り本流（Agent / User / Appearance / Media / Content / RBAC）とサイト AI 管理は実 API。（Template / Reservation は 2026-10-27 に削除。）`AI_MODEL` がないとき、プレビューは正直に失敗する。Analytics / System などのページはまだプレースホルダ。
 
 文書:
 
@@ -60,7 +61,7 @@ Java 21 + Spring Boot 3.5.14 の Maven マルチモジュール。
 
 - `common`: 共通レスポンス、エラーコード、例外、ページング。**`common.security`** は JWT / 身分の薄い契約
 - `infra`: PostgreSQL、Redis、MinIO / S3、MyBatis-Plus、Flyway、**システムメッセージの i18n**
-- `agent/agent-core`: サイト共通のエンティティと Mapper（ユーザー、コンテンツ、サイト AI）＋ `HttpAgentClient`（旧 site-core と agent クライアントを 2026-10-28 に統合）
+- `agent/agent-core`: サイト共通のエンティティと Mapper（ユーザー、コンテンツ、サイト AI）＋ `HttpAgentClient` と Java↔Python 契約 DTO（旧 site-core と agent クライアントを 2026-10-28 に統合）
 
 文書:
 
@@ -90,19 +91,19 @@ Python 3.13 + FastAPI + Pydantic AI 2.54 の AI Execution Runtime。既定ポー
 推奨するリクエスト経路:
 
 ```text
-admin-web ──> website-services/gateway:8080 ──> /api/auth/**   → auth:8083
+admin-web ／ agent-portal ──> website-services/gateway:8080 ──> /api/auth/**   → auth:8083
                                               ──> /api/admin/**  → admin:8081（GET /api/admin/auth/me を含む）
                                               └──> /api/agent/**  → agent-app:8082（GET /api/agent/auth/me を含む）
 ```
 
-リクエストは同じ gateway を通る。ログインは auth の `/api/auth/admin/**` と `/api/auth/site/**`。`/me` は auth にはなく、対応する業務サービスにある。
+リクエストは同じ gateway を通る。ログインは auth の `/api/auth/admin/**` と `/api/auth/agent/**`。`/me` は auth にはなく、対応する業務サービスにある。
 
 Maven の内部依存（HTTP トポロジではない）:
 
 ```text
 admin / agent-app / auth
   ├── infra  -> PostgreSQL / Redis / MinIO
-  └── agent（必要なとき） -> services/agent-services
+  └── agent-core（HttpAgentClient） -> services/agent-services
 ```
 
 この段階ではレジストリ、サービスディスカバリ、メッセージキュー、ゲートウェイ側の認可は入れない。`gateway` は単一入口、CORS、request-id、ルーティングを担う。`trusted-proxies` は `(?!)` で、下流へ渡す `X-Forwarded-For` は TCP の接続相手になる。auth のレート制限はこのヘッダの最後のホップを読む。詳細は [`docs/operations/SECURITY.md`](docs/operations/SECURITY.md)。
@@ -111,7 +112,7 @@ admin / agent-app / auth
 
 手順の全体（local-stack のアカウント合わせ、二つの `.env`、JWT のパス、ヘルスチェック）は [`docs/operations/LOCAL_DEVELOPMENT.md`](docs/operations/LOCAL_DEVELOPMENT.md)。
 
-先に local-stack の `local-postgres` と `local-redis` を起動する。`services/website-services/.env` の `POSTGRES_*`、`REDIS_PASSWORD`、`MINIO_*` はコンテナと一致させる。`.env.example` の `mywebsite` / `CHANGE_ME` では今のデータベースに入れない。`services/agent-services/.env` は別ファイル。`AGENT_INTERNAL_SERVICE_TOKEN` は Java 側と同じ値にし、無いとプロセスは起動を拒否する。
+先に local-stack を起動する（現環境のコンテナ名は `local-dev-postgres-1` / `local-dev-redis-1`。LOCAL_DEVELOPMENT §1 を参照）。`services/website-services/.env` の `POSTGRES_*`、`REDIS_PASSWORD`、`MINIO_*` はコンテナと一致させる。`.env.example` の `mywebsite` / `CHANGE_ME` では今のデータベースに入れない。`services/agent-services/.env` は別ファイル。`AGENT_INTERNAL_SERVICE_TOKEN` は Java 側と同じ値にし、無いとプロセスは起動を拒否する。
 
 `website-services` を起動する（ターミナル四つ）:
 
@@ -124,7 +125,7 @@ mvn -pl agent/agent-app -am spring-boot:run
 mvn -pl gateway spring-boot:run
 ```
 
-フロントを起動する:
+フロントを起動する（ターミナル二つ）:
 
 ```bash
 cd apps/admin-web && pnpm install && pnpm dev    # http://localhost:5173
@@ -144,9 +145,9 @@ uv run agent-services
 
 バックエンドのローカル依存は既存の **local-stack** に統一する（`website-services` の中で Postgres / Redis をもう一套立ち上げない）。
 
-- PostgreSQL: `local-postgres` → `localhost:5432`
-- Redis: `local-redis` → `localhost:6379`
-- MinIO / AIStor: `local-aistor` → API `http://localhost:9000`（コンソールのポートはスタック設定に従う）
+- PostgreSQL: `local-dev-postgres-1` → `localhost:5432`
+- Redis: `local-dev-redis-1` → `localhost:6379`
+- MinIO: `local-dev-minio-1` → API `http://localhost:9000`（コンテナ名は現在の local-stack（compose プロジェクト `local-dev`）に従う。詳細は LOCAL_DEVELOPMENT §1）
 
 JDBC / Redis / MinIO は **`services/website-services/.env`**（雛形は `.env.example`）に書く。**local-stack** 配下の `.env` とは分け、**`services/agent-services/.env`** とも分ける。
 

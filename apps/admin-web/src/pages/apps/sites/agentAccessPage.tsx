@@ -5,7 +5,6 @@ import { Link, useOutletContext } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api'
-import { AdminPageHeader } from '@/components/admin'
 import { adminFieldClass, adminGhostButtonClass, adminPrimaryButtonClass } from '@/components/admin/controls'
 import { EmbeddingRegistrationCard } from '@/pages/ai/embeddingRegistrationCard'
 import { ROUTES } from '@/router/config/routePaths'
@@ -92,9 +91,8 @@ export function AgentAccessPage() {
   const clientKeys = keysQuery.data?.apiKeys ?? []
 
   return (
-    <section className="admin-content-form">
-      <AdminPageHeader title={t('access.title')} description={t('access.description')} />
-      <div className="space-y-4">
+    <section className="w-full space-y-3">
+      <div className="grid gap-3 xl:grid-cols-2">
         <CliAccessForm
           key={`cli-${cliEntry?.id ?? 'new'}-${cliEntry?.version ?? 0}`}
           agentId={site.id}
@@ -111,8 +109,8 @@ export function AgentAccessPage() {
           entries={entries}
           canUpdate={canUpdate}
         />
-        <EmbeddingRegistrationCard agentId={site.id} />
       </div>
+      <EmbeddingRegistrationCard agentId={site.id} />
     </section>
   )
 }
@@ -190,10 +188,17 @@ function CliAccessForm({
   }
 
   return (
-    <article className="rounded-xl border border-admin bg-admin-surface p-5">
-      <h3 className="text-sm font-semibold text-admin">{t('access.cliTitle')}</h3>
-      <p className="mt-1 text-sm text-admin-muted">{t('access.cliDescription')}</p>
-      <div className="mt-3">
+    <article className="flex h-full flex-col rounded-xl border border-border bg-card p-5">
+      <div className="mb-3 flex items-start justify-between gap-3 border-b border-border pb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{t('access.cliTitle')}</h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{t('access.cliDescription')}</p>
+        </div>
+        <span className="shrink-0 rounded-md bg-info-muted px-2 py-0.5 text-[11px] font-medium text-info-emphasis">
+          CLI
+        </span>
+      </div>
+      <div className="mb-3">
         <ScopeNote entry={entry} agentId={agentId} />
       </div>
       {ready && account ? (
@@ -339,10 +344,17 @@ function KeyAccessForm({
   }
 
   return (
-    <article className="rounded-xl border border-admin bg-admin-surface p-5">
-      <h3 className="text-sm font-semibold text-admin">{t('access.keyTitle')}</h3>
-      <p className="mt-1 text-sm text-admin-muted">{t('access.keyDescription')}</p>
-      <div className="mt-3">
+    <article className="flex h-full flex-col rounded-xl border border-border bg-card p-5">
+      <div className="mb-3 flex items-start justify-between gap-3 border-b border-border pb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{t('access.keyTitle')}</h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{t('access.keyDescription')}</p>
+        </div>
+        <span className="shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+          KEY
+        </span>
+      </div>
+      <div className="mb-3">
         <ScopeNote entry={entry} agentId={agentId} />
       </div>
       {pool.length > 0 ? (

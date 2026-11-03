@@ -17,7 +17,7 @@ export default {
     agentPrompt: 'Prompt',
     agentKnowledge: 'Knowledge Base',
     agentConversations: 'Conversations',
-    agentPreview: 'Preview Chat',
+    agentPreview: 'Chat Preview',
     agentRuntime: 'Runtime',
     agentBasic: 'Basic Info',
     agentAccess: 'Access',

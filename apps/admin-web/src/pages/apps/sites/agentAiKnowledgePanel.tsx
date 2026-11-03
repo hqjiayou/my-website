@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CheckCircle2, CircleAlert, FileUp, LoaderCircle, X } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { DataTable, type DataTableColumn } from '@/components/admin'
+import { DataTable, FormDialog, type DataTableColumn } from '@/components/admin'
+import { adminFieldClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
+import { cn } from '@/lib/cn'
 import { AI_KB_STATUS, AI_KB_STATUS_VALUES, type AiKnowledgeListItem, type AiKnowledgeStatus } from '@/types/ai'
 import { PermissionGate } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -37,10 +40,15 @@ interface EditorState {
   unevaluatedFormulaCount?: number
 }
 
-interface UploadDialogState {
-  file: File | null
+type UploadItemStatus = 'queued' | 'uploading' | 'success' | 'index_failed' | 'rejected' | 'failed'
+
+interface UploadItem {
+  id: string
+  file: File
   title: string
   fieldError: 'extension' | 'size' | null
+  status: UploadItemStatus
+  detail?: string
 }
 
 function knowledgeFileExtension(filename: string) {
@@ -62,12 +70,26 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function uploadFieldError(file: File): UploadDialogState['fieldError'] {
+function uploadFieldError(file: File): UploadItem['fieldError'] {
   const extension = knowledgeFileExtension(file.name)
   // zip 是批量导入容器，走 upload-archive 端点，不在单文档格式集合内
   if (extension !== 'zip' && !KB_UPLOAD_EXTENSIONS.includes(extension)) return 'extension'
   if (file.size > KB_UPLOAD_MAX_BYTES) return 'size'
   return null
+}
+
+function toUploadItems(files: File[]): UploadItem[] {
+  return files.map((file) => {
+    const fieldError = uploadFieldError(file)
+    return {
+      id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+      title: titleFromFilename(file.name),
+      fieldError,
+      status: fieldError ? 'rejected' : 'queued',
+      detail: fieldError ?? undefined,
+    }
+  })
 }
 
 export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
@@ -79,10 +101,13 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
     status: '',
   })
   const [editor, setEditor] = useState<EditorState | null>(null)
-  const [uploadDialog, setUploadDialog] = useState<UploadDialogState | null>(null)
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploadItems, setUploadItems] = useState<UploadItem[]>([])
+  const [uploadBusy, setUploadBusy] = useState(false)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const [selectedBaseId, setSelectedBaseId] = useState<number | null>(null)
   const [newBaseName, setNewBaseName] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
 
   const basesQuery = useQuery({
     queryKey: ['sites', agentId, 'ai', 'knowledge-bases'],
@@ -155,19 +180,6 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
     },
   })
 
-  const uploadMutation = useMutation({
-    mutationFn: (input: { file: File; title?: string }) =>
-      aiApi.uploadKnowledgeDocument(agentId, input.file, input.title, writableBaseId),
-    onSuccess: (detail) => {
-      if (detail.indexStatus === 'INDEXED') toast.success(t('aiWorkspace.knowledge.uploadedIndexed'))
-      else if (detail.indexStatus === 'FAILED')
-        toast.warning(t('aiWorkspace.knowledge.uploadedIndexFailed'))
-      else toast.success(t('aiWorkspace.knowledge.uploaded'))
-      setUploadDialog(null)
-      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
-    },
-  })
-
   const reindexMutation = useMutation({
     mutationFn: (id: number) => aiApi.reindexKnowledgeDocument(agentId, id),
     onSuccess: (detail) => {
@@ -178,53 +190,6 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  const [batchUploading, setBatchUploading] = useState(false)
-  const [dragging, setDragging] = useState(false)
-
-  /** 多文件（选择多选或拖拽）：逐个直传（标题取文件名），最后汇总已索引/索引失败/被拒数量。 */
-  const uploadFilesBatch = useCallback(
-    async (files: File[]) => {
-      if (batchUploading || files.length === 0 || viewingShared) return
-      setBatchUploading(true)
-      let indexed = 0
-      let indexFailed = 0
-      let rejected = 0
-      try {
-        for (const file of files) {
-          if (uploadFieldError(file)) {
-            rejected++
-            continue
-          }
-          try {
-            if (knowledgeFileExtension(file.name) === 'zip') {
-              const result = await aiApi.uploadKnowledgeArchive(agentId, file, writableBaseId)
-              for (const detail of result.documents) {
-                if (detail.indexStatus === 'FAILED') indexFailed++
-                else indexed++
-              }
-              rejected += result.failures.length
-              if (result.createdCount === 0 && result.failures.length === 0) rejected++
-            } else {
-              const detail = await aiApi.uploadKnowledgeDocument(agentId, file, undefined, writableBaseId)
-              if (detail.indexStatus === 'INDEXED') indexed++
-              else if (detail.indexStatus === 'FAILED') indexFailed++
-              else indexed++
-            }
-          } catch {
-            rejected++
-          }
-        }
-        toast.success(
-          t('aiWorkspace.knowledge.batchResult', { indexed, indexFailed, rejected }),
-        )
-        void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
-      } finally {
-        setBatchUploading(false)
-      }
-    },
-    [batchUploading, queryClient, agentId, t, viewingShared, writableBaseId],
-  )
-
   const deleteMutation = useMutation({
     mutationFn: (id: number) => aiApi.deleteKnowledgeDocument(agentId, id),
     onSuccess: () => {
@@ -233,51 +198,178 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
     },
   })
 
+  const queueUploadFiles = useCallback(
+    (files: File[]) => {
+      if (files.length === 0 || viewingShared || uploadBusy) return
+      setUploadItems((prev) => [...prev, ...toUploadItems(files)])
+      setUploadOpen(true)
+    },
+    [uploadBusy, viewingShared],
+  )
+
   const openUpload = useCallback(() => {
-    setUploadDialog({ file: null, title: '', fieldError: null })
-  }, [])
+    if (viewingShared) return
+    setUploadOpen(true)
+  }, [viewingShared])
 
   const closeUpload = useCallback(() => {
-    if (uploadMutation.isPending) return
-    setUploadDialog(null)
-  }, [uploadMutation.isPending])
+    if (uploadBusy) return
+    setUploadOpen(false)
+    setUploadItems([])
+  }, [uploadBusy])
 
   function onPickUploadFile(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
-    if (files.length === 0) return
-    if (files.length > 1) {
-      setUploadDialog(null)
-      void uploadFilesBatch(files)
-      return
-    }
-    const file = files[0]
-    // zip 不进单文件对话框（无标题可填）：直接走批量导入路径
-    if (knowledgeFileExtension(file.name) === 'zip' && !uploadFieldError(file)) {
-      setUploadDialog(null)
-      void uploadFilesBatch([file])
-      return
-    }
-    setUploadDialog({
-      file,
-      title: titleFromFilename(file.name),
-      fieldError: uploadFieldError(file),
-    })
+    queueUploadFiles(files)
   }
 
-  function onUploadSubmit(event: FormEvent<HTMLFormElement>) {
+  function removeUploadItem(id: string) {
+    if (uploadBusy) return
+    setUploadItems((prev) => prev.filter((item) => item.id !== id))
+  }
+
+  function patchUploadItem(id: string, patch: Partial<UploadItem>) {
+    setUploadItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+  }
+
+  async function onUploadSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!uploadDialog?.file || uploadMutation.isPending) return
-    const fieldError = uploadFieldError(uploadDialog.file)
-    if (fieldError) {
-      setUploadDialog({ ...uploadDialog, fieldError })
-      return
+    if (uploadBusy || viewingShared) return
+    const pending = uploadItems.filter((item) => item.status === 'queued')
+    if (pending.length === 0) return
+
+    setUploadBusy(true)
+    let indexed = 0
+    let indexFailed = 0
+    let rejected = 0
+
+    const paint = () => new Promise<void>((resolve) => window.setTimeout(resolve, 0))
+
+    try {
+      for (const item of pending) {
+        patchUploadItem(item.id, { status: 'uploading', detail: undefined })
+        await paint()
+        const singleTitle =
+          pending.length === 1 && knowledgeFileExtension(item.file.name) !== 'zip'
+            ? item.title.trim() || undefined
+            : undefined
+        try {
+          if (knowledgeFileExtension(item.file.name) === 'zip') {
+            const result = await aiApi.uploadKnowledgeArchive(agentId, item.file, writableBaseId)
+            let zipIndexed = 0
+            let zipFailed = 0
+            for (const detail of result.documents) {
+              if (detail.indexStatus === 'FAILED') zipFailed++
+              else zipIndexed++
+            }
+            const zipRejected = result.failures.length
+            indexed += zipIndexed
+            indexFailed += zipFailed
+            rejected += zipRejected
+            if (result.createdCount === 0 && result.failures.length === 0) {
+              rejected++
+              patchUploadItem(item.id, {
+                status: 'failed',
+                detail: t('aiWorkspace.knowledge.uploadStatus.emptyArchive'),
+              })
+            } else if (zipFailed > 0 || zipRejected > 0) {
+              patchUploadItem(item.id, {
+                status: zipIndexed > 0 ? 'index_failed' : 'failed',
+                detail: t('aiWorkspace.knowledge.uploadStatus.archivePartial', {
+                  indexed: zipIndexed,
+                  indexFailed: zipFailed,
+                  rejected: zipRejected,
+                }),
+              })
+            } else {
+              patchUploadItem(item.id, {
+                status: 'success',
+                detail: t('aiWorkspace.knowledge.uploadStatus.archiveOk', { count: zipIndexed }),
+              })
+            }
+          } else {
+            const detail = await aiApi.uploadKnowledgeDocument(
+              agentId,
+              item.file,
+              singleTitle,
+              writableBaseId,
+            )
+            if (detail.indexStatus === 'FAILED') {
+              indexFailed++
+              patchUploadItem(item.id, {
+                status: 'index_failed',
+                detail: detail.indexError || t('aiWorkspace.knowledge.uploadedIndexFailed'),
+              })
+            } else {
+              indexed++
+              patchUploadItem(item.id, {
+                status: 'success',
+                detail:
+                  detail.indexStatus === 'INDEXED'
+                    ? t('aiWorkspace.knowledge.uploadedIndexed')
+                    : t('aiWorkspace.knowledge.uploaded'),
+              })
+            }
+          }
+        } catch (error) {
+          rejected++
+          patchUploadItem(item.id, {
+            status: 'failed',
+            detail: error instanceof Error ? error.message : t('aiWorkspace.knowledge.uploadStatus.failed'),
+          })
+        }
+        await paint()
+      }
+
+      toast.success(t('aiWorkspace.knowledge.batchResult', { indexed, indexFailed, rejected }))
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
+    } finally {
+      setUploadBusy(false)
     }
-    const trimmed = uploadDialog.title.trim()
-    uploadMutation.mutate({
-      file: uploadDialog.file,
-      title: trimmed || undefined,
-    })
+  }
+
+  const queuedCount = uploadItems.filter((item) => item.status === 'queued').length
+  const singleQueued =
+    uploadItems.length === 1 &&
+    uploadItems[0].status === 'queued' &&
+    uploadItems[0].fieldError == null &&
+    knowledgeFileExtension(uploadItems[0].file.name) !== 'zip'
+      ? uploadItems[0]
+      : null
+
+  function uploadStatusLabel(status: UploadItemStatus) {
+    return t(`aiWorkspace.knowledge.uploadStatus.${status}`)
+  }
+
+  function uploadRowClass(status: UploadItemStatus) {
+    switch (status) {
+      case 'success':
+        return 'border-success/35 bg-success-muted/60'
+      case 'index_failed':
+      case 'rejected':
+      case 'failed':
+        return 'border-danger/35 bg-danger-muted/60'
+      case 'uploading':
+        return 'border-ring/40 bg-card-muted/50'
+      default:
+        return 'border-border bg-card'
+    }
+  }
+
+  function uploadStatusClass(status: UploadItemStatus) {
+    switch (status) {
+      case 'success':
+        return 'text-success-emphasis'
+      case 'index_failed':
+      case 'rejected':
+      case 'failed':
+        return 'text-danger-emphasis'
+      case 'uploading':
+        return 'text-muted-foreground'
+      default:
+        return 'text-muted-foreground'
+    }
   }
 
   const openEditor = useCallback(async (id: number) => {
@@ -425,7 +517,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
 
   return (
     <div
-      className={`space-y-4 ${dragging ? 'rounded-xl outline-2 outline-dashed outline-ring outline-offset-4' : ''}`}
+      className={`flex h-full min-h-0 flex-col gap-3 ${dragging ? 'rounded-xl outline-2 outline-dashed outline-ring outline-offset-4' : ''}`}
       onDragOver={(event) => {
         event.preventDefault()
         setDragging(true)
@@ -434,234 +526,244 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
       onDrop={(event) => {
         event.preventDefault()
         setDragging(false)
-        void uploadFilesBatch(Array.from(event.dataTransfer.files))
+        if (viewingShared) return
+        queueUploadFiles(Array.from(event.dataTransfer.files))
       }}
     >
-      <p className="text-xs text-muted-foreground">
-        {batchUploading ? t('aiWorkspace.knowledge.uploading') : t('aiWorkspace.knowledge.dropHint')}
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">{t('aiWorkspace.knowledge.baseLabel')}</span>
-          <select
-            className="rounded-lg border border-border px-2 py-1.5 text-sm"
-            value={selectedBaseId == null ? '' : String(selectedBaseId)}
-            onChange={(event) => {
-              setSelectedBaseId(event.target.value === '' ? null : Number(event.target.value))
-              setFilters((prev) => ({ ...prev, pageNum: 1 }))
-            }}
-          >
-            <option value="">{t('aiWorkspace.knowledge.baseAll')}</option>
-            {bases.map((base) => (
-              <option key={base.id} value={base.id}>
-                {base.name}
-                {base.isDefault ? ` (${t('aiWorkspace.knowledge.baseDefault')})` : ''}
-                {base.owned
-                  ? ''
-                  : ` · ${t('aiWorkspace.knowledge.sharedBadge')}${
-                      base.ownerAgentName ? ` · ${base.ownerAgentName}` : ''
-                    }`}
-              </option>
-            ))}
-          </select>
-        </label>
-        <PermissionGate code={PERMISSION_CODES.aiKbCreate}>
-          {newBaseName == null ? (
-            <button
-              type="button"
-              className="rounded-lg border border-border px-3 py-1.5 text-sm"
-              onClick={() => setNewBaseName('')}
-            >
-              {t('aiWorkspace.knowledge.baseNew')}
-            </button>
-          ) : (
-            <span className="flex items-center gap-1">
-              <input
-                className="rounded-lg border border-border px-2 py-1.5 text-sm"
-                value={newBaseName}
-                onChange={(event) => setNewBaseName(event.target.value)}
-                placeholder={t('aiWorkspace.knowledge.baseNamePlaceholder')}
-              />
-              <button
-                type="button"
-                className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                disabled={!newBaseName.trim() || createBaseMutation.isPending}
-                onClick={() => createBaseMutation.mutate(newBaseName.trim())}
-              >
-                {t('aiWorkspace.knowledge.baseCreate')}
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-border px-3 py-1.5 text-sm"
-                onClick={() => setNewBaseName(null)}
-              >
-                {t('aiWorkspace.knowledge.baseCancel')}
-              </button>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card-muted/50 px-3 py-2.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-sm">
+            <span className="shrink-0 text-xs font-medium text-muted-foreground">
+              {t('aiWorkspace.knowledge.baseLabel')}
             </span>
-          )}
-        </PermissionGate>
-        {selectedBase?.owned && !selectedBase.isDefault ? (
-          <PermissionGate code={PERMISSION_CODES.aiKbDelete}>
-            <button
-              type="button"
-              className="rounded-lg border border-danger/35 px-3 py-1.5 text-sm text-danger-emphasis disabled:opacity-50"
-              disabled={deleteBaseMutation.isPending}
-              onClick={() => {
-                if (window.confirm(t('aiWorkspace.knowledge.baseDeleteConfirm'))) {
-                  deleteBaseMutation.mutate(selectedBase.id)
-                }
+            <select
+              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm"
+              value={selectedBaseId == null ? '' : String(selectedBaseId)}
+              onChange={(event) => {
+                setSelectedBaseId(event.target.value === '' ? null : Number(event.target.value))
+                setFilters((prev) => ({ ...prev, pageNum: 1 }))
               }}
             >
-              {t('aiWorkspace.knowledge.baseDelete')}
-            </button>
-          </PermissionGate>
-        ) : null}
-        {viewingShared ? (
-          <span className="text-xs text-warning-emphasis">{t('aiWorkspace.knowledge.sharedReadOnly')}</span>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          className="rounded-lg border border-border px-2 py-1.5 text-sm"
-          value={filters.status}
-          onChange={(event) =>
-            setFilters((prev) => ({
-              ...prev,
-              pageNum: 1,
-              status: event.target.value as AiKnowledgeStatus | '',
-            }))
-          }
-        >
-          <option value="">{t('aiWorkspace.knowledge.allStatus')}</option>
-          {AI_KB_STATUS_VALUES.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
-          ))}
-        </select>
-        <PermissionGate code={PERMISSION_CODES.aiKbCreate}>
-          <button
-            type="button"
-            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-            disabled={viewingShared}
-            onClick={() =>
-              setEditor({ mode: 'create', title: '', content: '', status: AI_KB_STATUS.ACTIVE })
-            }
-          >
-            {t('aiWorkspace.knowledge.create')}
-          </button>
-          <button
-            type="button"
-            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-            disabled={uploadMutation.isPending || viewingShared}
-            onClick={openUpload}
-          >
-            {t('aiWorkspace.knowledge.upload')}
-          </button>
-        </PermissionGate>
-      </div>
-
-      <DataTable
-        columns={columns}
-        data={records}
-        rowKey={(item) => item.id}
-        isLoading={isPending}
-        isError={isError}
-        errorMessage={error instanceof Error ? error.message : undefined}
-        emptyMessage={t('aiWorkspace.knowledge.empty')}
-        onRetry={() => void refetch()}
-        pagination={{
-          page: filters.pageNum,
-          pageSize: filters.pageSize,
-          total: data?.total ?? 0,
-          onPageChange: (page) => setFilters((prev) => ({ ...prev, pageNum: page })),
-        }}
-      />
-
-      {editor ? (
-        <form
-          className="space-y-3 rounded-xl border border-border bg-card p-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (editor.mode === 'create') createMutation.mutate()
-            else updateMutation.mutate()
-          }}
-        >
-          {(editor.unevaluatedFormulaCount ?? 0) > 0 ? (
-            <p className="rounded-lg bg-warning/[0.12] px-3 py-2 text-sm text-warning-emphasis">
-              {t('aiWorkspace.knowledge.unevaluatedFormulas')}
-            </p>
-          ) : null}
-          <input
-            className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-            value={editor.title}
-            onChange={(event) => setEditor({ ...editor, title: event.target.value })}
-            placeholder={t('aiWorkspace.knowledge.titlePlaceholder')}
-            required
-          />
-          <textarea
-            className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-            rows={8}
-            value={editor.content}
-            onChange={(event) => setEditor({ ...editor, content: event.target.value })}
-            required
-          />
-          {editor.mode === 'edit' ? (
-            <select
-              className="rounded-lg border border-border px-2 py-1.5 text-sm"
-              value={editor.status}
-              onChange={(event) =>
-                setEditor({
-                  ...editor,
-                  status: event.target.value as EditorState['status'],
-                })
-              }
-            >
-              {AI_KB_STATUS_VALUES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
+              <option value="">{t('aiWorkspace.knowledge.baseAll')}</option>
+              {bases.map((base) => (
+                <option key={base.id} value={base.id}>
+                  {base.name}
+                  {base.isDefault ? ` (${t('aiWorkspace.knowledge.baseDefault')})` : ''}
+                  {base.owned
+                    ? ''
+                    : ` · ${t('aiWorkspace.knowledge.sharedBadge')}${
+                        base.ownerAgentName ? ` · ${base.ownerAgentName}` : ''
+                      }`}
                 </option>
               ))}
             </select>
+          </label>
+          <select
+            className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm"
+            value={filters.status}
+            onChange={(event) =>
+              setFilters((prev) => ({
+                ...prev,
+                pageNum: 1,
+                status: event.target.value as AiKnowledgeStatus | '',
+              }))
+            }
+          >
+            <option value="">{t('aiWorkspace.knowledge.allStatus')}</option>
+            {AI_KB_STATUS_VALUES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+          {viewingShared ? (
+            <span className="text-xs text-warning-emphasis">{t('aiWorkspace.knowledge.sharedReadOnly')}</span>
           ) : null}
-          <div className="flex gap-2">
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <PermissionGate code={PERMISSION_CODES.aiKbCreate}>
+            {newBaseName == null ? (
+              <button type="button" className={adminSecondaryButtonClass} onClick={() => setNewBaseName('')}>
+                {t('aiWorkspace.knowledge.baseNew')}
+              </button>
+            ) : (
+              <span className="flex items-center gap-1">
+                <input
+                  className="w-36 rounded-lg border border-border px-2 py-1.5 text-sm"
+                  value={newBaseName}
+                  onChange={(event) => setNewBaseName(event.target.value)}
+                  placeholder={t('aiWorkspace.knowledge.baseNamePlaceholder')}
+                />
+                <button
+                  type="button"
+                  className={adminPrimaryButtonClass}
+                  disabled={!newBaseName.trim() || createBaseMutation.isPending}
+                  onClick={() => createBaseMutation.mutate(newBaseName.trim())}
+                >
+                  {t('aiWorkspace.knowledge.baseCreate')}
+                </button>
+                <button type="button" className={adminSecondaryButtonClass} onClick={() => setNewBaseName(null)}>
+                  {t('aiWorkspace.knowledge.baseCancel')}
+                </button>
+              </span>
+            )}
             <button
-              type="submit"
-              disabled={createMutation.isPending || updateMutation.isPending}
-              className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+              type="button"
+              className={adminSecondaryButtonClass}
+              disabled={uploadBusy || viewingShared}
+              onClick={openUpload}
             >
-              {t('aiWorkspace.knowledge.save')}
+              {t('aiWorkspace.knowledge.upload')}
             </button>
             <button
               type="button"
-              className="rounded-lg border border-border px-3 py-2 text-sm"
-              onClick={() => setEditor(null)}
+              className={adminPrimaryButtonClass}
+              disabled={viewingShared}
+              onClick={() =>
+                setEditor({ mode: 'create', title: '', content: '', status: AI_KB_STATUS.ACTIVE })
+              }
             >
-              {t('aiWorkspace.knowledge.cancel')}
+              {t('aiWorkspace.knowledge.create')}
             </button>
-          </div>
-        </form>
+          </PermissionGate>
+          {selectedBase?.owned && !selectedBase.isDefault ? (
+            <PermissionGate code={PERMISSION_CODES.aiKbDelete}>
+              <button
+                type="button"
+                className="rounded-lg border border-danger/35 px-3 py-1.5 text-sm text-danger-emphasis disabled:opacity-50"
+                disabled={deleteBaseMutation.isPending}
+                onClick={() => {
+                  if (window.confirm(t('aiWorkspace.knowledge.baseDeleteConfirm'))) {
+                    deleteBaseMutation.mutate(selectedBase.id)
+                  }
+                }}
+              >
+                {t('aiWorkspace.knowledge.baseDelete')}
+              </button>
+            </PermissionGate>
+          ) : null}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        {uploadBusy ? t('aiWorkspace.knowledge.uploading') : t('aiWorkspace.knowledge.dropHint')}
+      </p>
+
+      <div className="min-h-0 flex-1 overflow-auto">
+        <DataTable
+          columns={columns}
+          data={records}
+          rowKey={(item) => item.id}
+          isLoading={isPending}
+          isError={isError}
+          errorMessage={error instanceof Error ? error.message : undefined}
+          emptyMessage={t('aiWorkspace.knowledge.empty')}
+          onRetry={() => void refetch()}
+          pagination={{
+            page: filters.pageNum,
+            pageSize: filters.pageSize,
+            total: data?.total ?? 0,
+            onPageChange: (page) => setFilters((prev) => ({ ...prev, pageNum: page })),
+          }}
+        />
+      </div>
+
+      {editor ? (
+        <FormDialog
+          title={
+            editor.mode === 'create' ? t('aiWorkspace.knowledge.create') : t('aiWorkspace.knowledge.edit')
+          }
+          closeLabel={t('aiWorkspace.knowledge.cancel')}
+          onClose={() => setEditor(null)}
+          placement="end"
+        >
+          <form
+            className="flex min-h-full flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (editor.mode === 'create') createMutation.mutate()
+              else updateMutation.mutate()
+            }}
+          >
+            {(editor.unevaluatedFormulaCount ?? 0) > 0 ? (
+              <p className="rounded-lg bg-warning-muted px-3 py-2 text-sm text-warning-emphasis">
+                {t('aiWorkspace.knowledge.unevaluatedFormulas')}
+              </p>
+            ) : null}
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t('aiWorkspace.knowledge.titleLabel')}
+              </span>
+              <input
+                className={adminFieldClass}
+                value={editor.title}
+                onChange={(event) => setEditor({ ...editor, title: event.target.value })}
+                placeholder={t('aiWorkspace.knowledge.titlePlaceholder')}
+                required
+              />
+            </label>
+            <label className="flex min-h-0 flex-1 flex-col space-y-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t('aiWorkspace.knowledge.contentLabel')}
+              </span>
+              <textarea
+                className={`${adminFieldClass} min-h-[24rem] flex-1 resize-y font-mono text-[13px] leading-6`}
+                value={editor.content}
+                onChange={(event) => setEditor({ ...editor, content: event.target.value })}
+                required
+              />
+            </label>
+            {editor.mode === 'edit' ? (
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {t('aiWorkspace.knowledge.allStatus')}
+                </span>
+                <select
+                  className={adminFieldClass}
+                  value={editor.status}
+                  onChange={(event) =>
+                    setEditor({
+                      ...editor,
+                      status: event.target.value as EditorState['status'],
+                    })
+                  }
+                >
+                  {AI_KB_STATUS_VALUES.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-border bg-admin-surface px-5 py-4">
+              <button type="button" className={adminSecondaryButtonClass} onClick={() => setEditor(null)}>
+                {t('aiWorkspace.knowledge.cancel')}
+              </button>
+              <button
+                type="submit"
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className={adminPrimaryButtonClass}
+              >
+                {t('aiWorkspace.knowledge.save')}
+              </button>
+            </div>
+          </form>
+        </FormDialog>
       ) : null}
 
-      {uploadDialog ? (
-        <>
-          <button
-            type="button"
-            className="admin-overlay fixed inset-0 z-40"
-            aria-label={t('aiWorkspace.knowledge.cancel')}
-            onClick={closeUpload}
-          />
-          <form
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="knowledge-upload-title"
-            className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-3 rounded-xl border border-border bg-card p-4 shadow-admin-overlay"
-            onSubmit={onUploadSubmit}
-          >
-            <h2 id="knowledge-upload-title" className="text-base font-semibold text-foreground">
-              {t('aiWorkspace.knowledge.uploadDialogTitle')}
-            </h2>
-            <p className="text-xs text-muted-foreground">{t('aiWorkspace.knowledge.uploadHint')}</p>
+      {uploadOpen ? (
+        <FormDialog
+          title={t('aiWorkspace.knowledge.uploadDialogTitle')}
+          description={t('aiWorkspace.knowledge.uploadDialogDesc')}
+          closeLabel={t('aiWorkspace.knowledge.cancel')}
+          onClose={closeUpload}
+          size="l"
+        >
+          <form className="flex min-h-0 flex-col gap-4" onSubmit={onUploadSubmit}>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {t('aiWorkspace.knowledge.uploadHint')}
+            </p>
             <input
               ref={uploadInputRef}
               type="file"
@@ -672,62 +774,111 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             />
             <button
               type="button"
-              disabled={uploadMutation.isPending}
-              className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50"
+              disabled={uploadBusy}
+              className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card-muted/40 px-4 py-8 text-sm transition hover:border-ring/50 hover:bg-card-muted disabled:opacity-50"
               onClick={() => uploadInputRef.current?.click()}
             >
-              {t('aiWorkspace.knowledge.chooseFile')}
+              <FileUp className="size-6 text-muted-foreground" aria-hidden />
+              <span className="font-medium text-foreground">{t('aiWorkspace.knowledge.chooseFile')}</span>
+              <span className="text-xs text-muted-foreground">{t('aiWorkspace.knowledge.queueHint')}</span>
             </button>
-            {uploadDialog.file ? (
-              <p className="text-sm text-foreground">
-                {uploadDialog.file.name}
-                <span className="text-muted-foreground"> · {formatFileSize(uploadDialog.file.size)}</span>
+
+            {uploadItems.length > 0 ? (
+              <ul className="max-h-72 space-y-2 overflow-y-auto pr-0.5">
+                {uploadItems.map((item) => (
+                  <li
+                    key={item.id}
+                    className={cn(
+                      'flex items-start gap-3 rounded-lg border px-3 py-2.5 text-sm',
+                      uploadRowClass(item.status),
+                    )}
+                  >
+                    <span className={cn('mt-0.5 shrink-0', uploadStatusClass(item.status))}>
+                      {item.status === 'uploading' ? (
+                        <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                      ) : item.status === 'success' ? (
+                        <CheckCircle2 className="size-4" aria-hidden />
+                      ) : item.status === 'queued' ? (
+                        <FileUp className="size-4" aria-hidden />
+                      ) : (
+                        <CircleAlert className="size-4" aria-hidden />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="truncate font-medium text-foreground">{item.file.name}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {formatFileSize(item.file.size)}
+                        </span>
+                      </div>
+                      <p className={cn('mt-0.5 text-xs', uploadStatusClass(item.status))}>
+                        {item.fieldError === 'extension'
+                          ? t('aiWorkspace.knowledge.invalidExtension')
+                          : item.fieldError === 'size'
+                            ? t('aiWorkspace.knowledge.fileTooLarge')
+                            : item.detail || uploadStatusLabel(item.status)}
+                      </p>
+                    </div>
+                    {item.status === 'queued' || item.status === 'rejected' ? (
+                      <button
+                        type="button"
+                        disabled={uploadBusy}
+                        className="shrink-0 rounded-md p-1 text-muted-foreground transition hover:bg-card-muted hover:text-foreground disabled:opacity-40"
+                        aria-label={t('aiWorkspace.knowledge.removeQueued')}
+                        onClick={() => removeUploadItem(item.id)}
+                      >
+                        <X className="size-4" />
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="rounded-lg border border-border bg-card-muted/30 px-3 py-6 text-center text-sm text-muted-foreground">
+                {t('aiWorkspace.knowledge.queueEmpty')}
               </p>
+            )}
+
+            {singleQueued ? (
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {t('aiWorkspace.knowledge.titleLabel')}
+                </span>
+                <input
+                  className={adminFieldClass}
+                  value={singleQueued.title}
+                  disabled={uploadBusy}
+                  onChange={(event) =>
+                    patchUploadItem(singleQueued.id, { title: event.target.value })
+                  }
+                  placeholder={t('aiWorkspace.knowledge.titlePlaceholder')}
+                />
+              </label>
             ) : null}
-            {uploadDialog.fieldError ? (
-              <p className="text-sm text-danger-emphasis">
-                {uploadDialog.fieldError === 'extension'
-                  ? t('aiWorkspace.knowledge.invalidExtension')
-                  : t('aiWorkspace.knowledge.fileTooLarge')}
-              </p>
-            ) : null}
-            <label className="block">
-              <span className="text-sm font-medium text-foreground">
-                {t('aiWorkspace.knowledge.titleLabel')}
-              </span>
-              <input
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm"
-                value={uploadDialog.title}
-                disabled={uploadMutation.isPending}
-                onChange={(event) =>
-                  setUploadDialog((prev) => (prev ? { ...prev, title: event.target.value } : prev))
-                }
-                placeholder={t('aiWorkspace.knowledge.titlePlaceholder')}
-              />
-            </label>
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={
-                  uploadMutation.isPending || !uploadDialog.file || uploadDialog.fieldError != null
-                }
-                className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-              >
-                {uploadMutation.isPending
-                  ? t('aiWorkspace.knowledge.uploading')
-                  : t('aiWorkspace.knowledge.upload')}
-              </button>
+
+            <div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-border bg-admin-surface px-5 pt-4">
               <button
                 type="button"
-                disabled={uploadMutation.isPending}
-                className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50"
+                disabled={uploadBusy}
+                className={adminSecondaryButtonClass}
                 onClick={closeUpload}
               >
-                {t('aiWorkspace.knowledge.cancel')}
+                {queuedCount > 0 && !uploadBusy
+                  ? t('aiWorkspace.knowledge.cancel')
+                  : t('aiWorkspace.knowledge.close')}
+              </button>
+              <button
+                type="submit"
+                disabled={uploadBusy || queuedCount === 0}
+                className={adminPrimaryButtonClass}
+              >
+                {uploadBusy
+                  ? t('aiWorkspace.knowledge.uploading')
+                  : t('aiWorkspace.knowledge.uploadStart', { count: queuedCount })}
               </button>
             </div>
           </form>
-        </>
+        </FormDialog>
       ) : null}
     </div>
   )

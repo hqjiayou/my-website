@@ -20,7 +20,7 @@ import {
   type MediaListItem,
   type UpdateContentInput,
 } from '@/api'
-import { AdminPageHeader, DataTable, type DataTableColumn } from '@/components/admin'
+import { DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -378,23 +378,20 @@ export function AgentContentsPage() {
   const saving = createMutation.isPending || updateMutation.isPending
 
   return (
-    <section className="admin-content-data">
-      <AdminPageHeader
-        title={t('workspace.nav.contents')}
-        description={t('contentManagement.description')}
-        action={
-          <PermissionGate code={PERMISSION_CODES.contentCreate}>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/92"
-            >
-              <Plus className="h-4 w-4" />
-              {t('contentManagement.actions.create')}
-            </button>
-          </PermissionGate>
-        }
-      />
+    <section className="w-full">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{t('contentManagement.description')}</p>
+        <PermissionGate code={PERMISSION_CODES.contentCreate}>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/92"
+          >
+            <Plus className="h-4 w-4" />
+            {t('contentManagement.actions.create')}
+          </button>
+        </PermissionGate>
+      </div>
 
       <div className="mb-4 rounded-xl border border-border bg-card p-4">
         <div className="grid gap-3 md:grid-cols-4">

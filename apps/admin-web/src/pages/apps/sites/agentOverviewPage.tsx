@@ -221,9 +221,9 @@ export function AgentOverviewPage() {
   ) : undefined
 
   return (
-    <section className="admin-content-data">
-      <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-3">
+    <section className="w-full">
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Fact
             icon={Zap}
             label={t('agentOverview.cards.modelChain')}
