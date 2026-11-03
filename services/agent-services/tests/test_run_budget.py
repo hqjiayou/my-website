@@ -16,11 +16,13 @@ from agent_services.agent.runtime import (
     ChatBlocked,
     ChatReply,
     RunBudget,
+    run_budget_from_settings,
     run_chat,
     trim_history,
 )
 from agent_services.agent.stream_runtime import stream_chat_events
 from agent_services.app import create_app
+from agent_services.config import Settings
 from agent_services.schemas.chat import ChatHistoryMessage
 from agent_services.schemas.stream import AgentStreamEventType
 
@@ -265,6 +267,24 @@ async def test_slow_tool_times_out_and_reports_failed_tool_result() -> None:
     ]
     result = next(e for e in events if e.type == AgentStreamEventType.TOOL_RESULT)
     assert result.data["ok"] is False
+
+
+def test_default_run_budget_matches_calibrated_limits(monkeypatch) -> None:
+    """#183 复测发现 #1：默认预算按集合级任务校准——requests 20 / tool calls 50 / tokens 不限。
+
+    屏蔽进程 env 与 .env 文件，只钉 Field 默认值本身。
+    """
+    for name in ("AGENT_MAX_REQUESTS", "AGENT_MAX_TOOL_CALLS", "AGENT_MAX_TOTAL_TOKENS"):
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert settings.agent_max_requests == 20
+    assert settings.agent_max_tool_calls == 50
+    assert settings.agent_max_total_tokens == 0
+    limits = run_budget_from_settings(settings).usage_limits
+    assert limits is not None
+    assert limits.request_limit == 20
+    assert limits.tool_calls_limit == 50
+    assert limits.total_tokens_limit is None
 
 
 def test_chat_endpoint_maps_budget_to_422_flat_body() -> None:

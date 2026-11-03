@@ -105,6 +105,10 @@ def test_cross_doc_aggregation_wires_todo_and_enumeration() -> None:
     assert "todo" in body.lower()
     assert "`list_knowledge_documents`" in body
     assert "`query_site_table`" in body
+    # #183 预算瘦身口径：todo 至多 3 项、逐份抽取并行批次，不逐项标 in-progress。
+    assert "at most 3 items" in body
+    assert "in one round of parallel calls" in body
+    assert "keep exactly one item in progress" not in body
 
 
 def test_skill_eval_set_structure() -> None:

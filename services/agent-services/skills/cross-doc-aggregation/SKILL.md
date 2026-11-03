@@ -11,10 +11,13 @@ lowest, total, average, count, or ranking across all of them. Passage search
 alone can never prove coverage of the set — a top-k result silently omits
 documents. Work the full set, in this order:
 
-1. **Plan with todos first.** Before any tool call, add one todo per phase:
-   enumerate the set, extract the value from each document, compare and
-   answer. Keep the list small (≤ 8 items), keep exactly one item in
-   progress, and complete each phase as you finish it.
+1. **Plan with todos first — cheaply.** Before any other tool call, add
+   the phase todos in a single round of calls: at most 3 items (enumerate
+   the set, extract the value from each document, compare and answer).
+   Progress is marked by completing each item as its phase finishes —
+   do not spend extra calls marking items in progress. Status tracking
+   must never crowd out the work itself: on a large set, extraction
+   comes first and optional status updates are skipped.
 2. **Enumerate the full set.** Call `list_knowledge_documents` with the
    keyword / format / date filters that match the document kind, paging
    with `offset` until `truncated` is false. The reported `total` is the
@@ -24,12 +27,16 @@ documents. Work the full set, in this order:
    midway. Defaults when the user did not specify: pay means net pay
    (take-home, 实发); an amount means the document's own stated total.
    If the user named a measure (e.g. gross, 税前), use that one instead.
-4. **Extract one value per document.** For each enumerated document, get
-   its value for the chosen measure — `search_site_knowledge` aimed at
-   that document, or `query_site_table` when the document is a structured
-   table (its `sourceId` from the enumeration is the table tool's
-   `source_id`). Record each value with its citation. If a document's
-   value cannot be found, mark that document as missing — never guess it.
+4. **Extract one value per document — in parallel batches.** For each
+   enumerated document, get its value for the chosen measure —
+   `search_site_knowledge` aimed at that document, or `query_site_table`
+   when the document is a structured table (its `sourceId` from the
+   enumeration is the table tool's `source_id`). Issue the extraction
+   calls for several documents together in one round of parallel calls
+   instead of one serial round-trip per document — every round-trip
+   costs a model request against the run limits. Record each value with
+   its citation. If a document's value cannot be found, mark that
+   document as missing — never guess it.
 5. **Compare from the written list.** Write out every document with its
    value first, then take the highest / lowest / total / average / ranking
    from that list only. This is not adding up search fragments: the total

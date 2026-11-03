@@ -122,8 +122,8 @@ last_verified: 2026-10-30
 | `AGENT_SUBAGENT_MAX_REQUESTS` | 否 | `6` | |
 | `AGENT_MEMORY_EXTRACTION_ENABLED` | 否 | `true` | |
 | `MCP_SERVERS_JSON` | 否 | 空 | MCP 客户端配置 JSON 数组；缺失 → `mcpStatus=DISABLED`。字段：`enabled`/`headers`/`toolPrefix`/`initTimeoutSeconds`/`transport`（`http` 默认，`sse` 或 url 以 `/sse` 结尾；`stdio` 及其它值跳过并告警）。非法 JSON → `INVALID_CONFIG`（进程可起）。已配置但连接失败 → chat `503 MCP_UNAVAILABLE`。深检 `GET /internal/v1/mcp/ready` |
-| `AGENT_MAX_REQUESTS` | 否 | `10` | 单轮最大模型请求数；`<=0` 不限。超限 → chat `422`，`errorCode=AGENT_BUDGET_EXCEEDED` |
-| `AGENT_MAX_TOOL_CALLS` | 否 | `20` | 单轮最大成功工具调用数；`<=0` 不限 |
+| `AGENT_MAX_REQUESTS` | 否 | `20` | 单轮最大模型请求数；`<=0` 不限。超限 → chat `422`，`errorCode=AGENT_BUDGET_EXCEEDED` |
+| `AGENT_MAX_TOOL_CALLS` | 否 | `50` | 单轮最大成功工具调用数；`<=0` 不限 |
 | `AGENT_MAX_TOTAL_TOKENS` | 否 | `0`（不限） | |
 | `AGENT_TOOL_TIMEOUT_SECONDS` | 否 | `30` | todo / MCP 均生效；超时 → 模型收到重试提示 |
 | `AGENT_HISTORY_MAX_CHARS` | 否 | `24000` | 送模历史字符预算；超出时把被裁前缀摘要进本轮系统提示，不回写会话 |
