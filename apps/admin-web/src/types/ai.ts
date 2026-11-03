@@ -594,3 +594,72 @@ export type AiPreviewAgentEvent =
     }
   /** message：Java 推流前失败时为本地化文案；推流中为 agent-services 原始诊断（仅后台可见） */
   | { type: 'error'; errorCode: string; message?: string }
+
+/**
+ * 回复内卡片信封（Issue #179）：VISUALIZATION 事件 data 原文，与 agent-services
+ * visualization.card_envelope 对齐——{ kind, payload, title? }（空 title 不写出，
+ * 天气卡恒无 title）。adapter 校验＋清洗后才进消息流，字段口径以 Python
+ * build_weather_card / build_chart_card 的写出为准：数值缺失即字段不写出，
+ * 故可选字段一律 optional；time/date 是 payload 时区下的本地时刻字符串，
+ * 呈现层原样用、不做二次时区换算。
+ */
+export interface AiWeatherCurrent {
+  /** 本地时刻 ISO 字符串（如 2026-11-03T17:00）。 */
+  time: string
+  temperatureC?: number
+  apparentTemperatureC?: number
+  humidityPercent?: number
+  windSpeedKmh?: number
+  precipitationMm?: number
+  weatherCode?: number
+  /** Python 按 WMO 码表给的天气状况文本（英文），呈现层原样显示、不另译。 */
+  weatherText?: string
+}
+
+export interface AiWeatherHourlyPoint {
+  time: string
+  temperatureC: number
+  precipitationProbabilityPercent?: number
+  weatherCode?: number
+}
+
+export interface AiWeatherDailyPoint {
+  /** 本地日期字符串（YYYY-MM-DD）。 */
+  date: string
+  temperatureMaxC: number
+  temperatureMinC: number
+  precipitationProbabilityMaxPercent?: number
+  weatherCode?: number
+  weatherText?: string
+}
+
+export interface AiWeatherCardPayload {
+  latitude?: number
+  longitude?: number
+  timezone?: string
+  current: AiWeatherCurrent
+  hourly: AiWeatherHourlyPoint[]
+  daily: AiWeatherDailyPoint[]
+}
+
+export type AiChartType = 'line' | 'bar' | 'area' | 'pie'
+
+export interface AiChartPoint {
+  label: string
+  value: number
+}
+
+export interface AiChartSeries {
+  name: string
+  points: AiChartPoint[]
+}
+
+/** chart payload 不含 title（在信封层）；上限系列 ≤4、每系列点 ≤50 由执行层校验保证。 */
+export interface AiChartCardPayload {
+  type: AiChartType
+  series: AiChartSeries[]
+}
+
+export type AiVisualizationEnvelope =
+  | { kind: 'weather'; title?: string; payload: AiWeatherCardPayload }
+  | { kind: 'chart'; title?: string; payload: AiChartCardPayload }
