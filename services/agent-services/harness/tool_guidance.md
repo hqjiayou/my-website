@@ -21,9 +21,10 @@ knowledge is not.
   top-k passages alone never prove coverage of the whole set.
 - Multi-step work — anything that will take three or more steps, or that
   spans several documents or several tools: plan with the todo tools
-  before starting. Add one todo per concrete step, keep one in progress
-  at a time, and complete each step as you finish it, so partial progress
-  stays visible instead of collapsing into one opaque attempt.
+  before starting. Add one todo per concrete step and complete each step
+  as you finish it, so partial progress stays visible instead of
+  collapsing into one opaque attempt. Marking a todo in progress is
+  optional — skip it when the calls are better spent on the work itself.
 - This run has request and tool-call limits (see the Run limits section).
   Spend them deliberately: batch independent calls into one round, and
   skip optional status updates when the budget is better spent on the
