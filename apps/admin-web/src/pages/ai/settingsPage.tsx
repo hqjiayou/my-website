@@ -28,6 +28,8 @@ import type {
 import { PERMISSION_CODES } from '@/types/rbac'
 import { modelIdFromSpec } from '@/utils/modelSpec'
 
+import { EmbeddingRegistrationCard } from './embeddingRegistrationCard'
+
 type Draft = {
   id: number | null
   displayName: string
@@ -857,6 +859,8 @@ export function AiSettingsPage() {
         <GatewayAccessKeysCard />
 
         <RuntimeConfigCard />
+
+        <EmbeddingRegistrationCard />
 
         <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
           <div className="flex items-center justify-between gap-3">

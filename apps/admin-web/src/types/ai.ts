@@ -122,6 +122,28 @@ export interface AiModelEntryWriteInput {
   alias?: string | null
 }
 
+/**
+ * 嵌入类登记行（Issue #126 UoW-1/UoW-3）：登记只存入口引用，embeddingSpec 与
+ * className（规范化类键）由服务端读时从被引用入口解析；入口已删时三者为 null，
+ * 页面须如实呈现异常态并允许移除。字段与后端 AdminEmbeddingClassDto 逐项对齐。
+ */
+export interface AiEmbeddingClass {
+  id: number
+  agentId: number | null
+  entryId: number
+  entryDisplayName: string | null
+  embeddingSpec: string | null
+  className: string | null
+  enabled: boolean
+  sortOrder: number
+}
+
+/** 整表保存的单项：数组序即类优先级；enabled 缺省后端视为 true，前端总是显式传。 */
+export interface AiEmbeddingClassSaveItem {
+  entryId: number
+  enabled: boolean
+}
+
 export type AiRuntimeConfigPushStatus = 'APPLIED' | 'BLOCKED' | 'FAILED'
 
 /**
