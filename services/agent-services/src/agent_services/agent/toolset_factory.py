@@ -43,12 +43,21 @@ def build_execution_toolsets(
     visualization_collector: VisualizationCollector | None = None,
 ) -> list[object]:
     toolsets: list[object] = []
-    business = build_business_toolset(settings, agent_id, client=client)
+    # Java internal 通道全 run 共用一个 client：business tools 与知识文档枚举（#181）同源。
+    # 未注入且未配置 BUSINESS_API_BASE_URL 时为 None：business toolset 与枚举工具都不注册，
+    # 不给模型一个注定失败的工具，更不伪造空清单。
+    java_client = client
+    if java_client is None and settings.business_api_base_url.strip():
+        java_client = BusinessApiClient(
+            settings.business_api_base_url, settings.agent_internal_service_token
+        )
+    business = build_business_toolset(settings, agent_id, client=java_client)
     if business is not None:
         toolsets.append(business)
     if retrieval is not None:
         # 知识搜索紧跟业务工具：两者都是「查本站资料」，且不依赖 todo / 子 agent 开关，
         # 主 agent 任何一轮都能直接查知识库，不必先委派。
+        # 文档枚举是只读基础能力，不分正式/试聊（preview 不门控，#181 定案）。
         toolsets.append(
             build_knowledge_toolset(
                 agent_id,
@@ -58,6 +67,7 @@ def build_execution_toolsets(
                 embedding_classes=retrieval_embedding_classes,
                 model_selection=retrieval_model_selection,
                 collector=knowledge_collector,
+                client=java_client,
             )
         )
         if tables_available:

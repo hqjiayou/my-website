@@ -54,6 +54,10 @@ class GoldenCase:
     expected_sources: tuple[str, ...]
     expected_keywords: tuple[str, ...]
     category: str
+    # 集合级用例（#180 UoW-2）的可选标注：期望行为（枚举→逐份同口径抽取→比较）
+    # 与期望答案（含派生数值，如合计）。旧用例无此二字段，默认空串，评分不变。
+    expected_behavior: str = ""
+    expected_answer: str = ""
 
 
 @dataclass(frozen=True)
@@ -115,6 +119,16 @@ def load_corpus(path: Path | None = None) -> list[CorpusDoc]:
     return docs
 
 
+def _opt_text(payload: dict[str, object], key: str, label: str) -> str:
+    """可选文本字段：缺省为空串；出现时必须是非空字符串。"""
+    value = payload.get(key)
+    if value is None:
+        return ""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} field {key} must be a non-empty string when present.")
+    return value.strip()
+
+
 def load_cases(path: Path | None = None) -> list[GoldenCase]:
     cases: list[GoldenCase] = []
     text = (path or evals_root() / "golden_qa.jsonl").read_text(encoding="utf-8")
@@ -132,6 +146,8 @@ def load_cases(path: Path | None = None) -> list[GoldenCase]:
                 expected_sources=_str_list(item, "expected_sources", label),
                 expected_keywords=_str_list(item, "expected_keywords", label),
                 category=_text(item, "category", label),
+                expected_behavior=_opt_text(item, "expected_behavior", label),
+                expected_answer=_opt_text(item, "expected_answer", label),
             )
         )
     return cases
@@ -155,6 +171,8 @@ def validate_golden(corpus: Sequence[CorpusDoc], cases: Sequence[GoldenCase]) ->
             raise ValueError(f"{case.id} is unanswerable and must not list sources or keywords.")
         if not unanswerable and (not case.expected_sources or not case.expected_keywords):
             raise ValueError(f"{case.id} needs expected sources and keywords.")
+        if case.category == "collection" and not case.expected_behavior:
+            raise ValueError(f"{case.id} is a collection case and must state expected_behavior.")
 
 
 class DeterministicEmbedder:
@@ -432,7 +450,7 @@ async def _run_case(
         citation_source_ids=citation_source_ids,
         answer=answer,
     )
-    return {
+    row: dict[str, object] = {
         "id": case.id,
         "category": case.category,
         "question": case.question,
@@ -452,6 +470,12 @@ async def _run_case(
         "citations": citations,
         "scores": scores,
     }
+    # 集合级标注只在用例带了才进报告，旧用例的报告形状不变。
+    if case.expected_behavior:
+        row["expectedBehavior"] = case.expected_behavior
+    if case.expected_answer:
+        row["expectedAnswer"] = case.expected_answer
+    return row
 
 
 def _stamp(when: datetime) -> datetime:

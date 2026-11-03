@@ -227,10 +227,11 @@ def test_golden_set_matches_the_corpus() -> None:
     cases = load_cases()
     validate_golden(corpus, cases)
     by_source = {doc.source_id: doc for doc in corpus}
-    assert len(corpus) == 6
-    assert len(cases) == 12
-    assert sum(case.category == "unanswerable" for case in cases) == 4
-    assert sum(case.category != "unanswerable" for case in cases) == 8
+    assert len(corpus) == 13
+    assert len(cases) == 18
+    assert sum(case.category == "unanswerable" for case in cases) == 5
+    assert sum(case.category != "unanswerable" for case in cases) == 13
+    assert sum(case.category == "collection" for case in cases) == 5
     assert any(len(case.expected_sources) == 2 for case in cases)
     assert any(case.category == "model" and "XJ-900" in case.question for case in cases)
     assert any("の" in case.question for case in cases)
@@ -243,7 +244,91 @@ def test_golden_set_matches_the_corpus() -> None:
             continue
         expected = "\n".join(by_source[source].content for source in case.expected_sources).casefold()
         for keyword in case.expected_keywords:
-            assert keyword.casefold() in expected, (case.id, keyword)
+            # 集合级合计类题的关键词是派生数值（如四个月实发总和），不出现在
+            # 任何单份文档里，改由 expected_answer 承载并在此核对。
+            assert keyword.casefold() in expected or keyword.casefold() in case.expected_answer.casefold(), (
+                case.id,
+                keyword,
+            )
+
+
+def test_collection_family_covers_the_payslip_incident() -> None:
+    """#180 UoW-2：工资单原题与变体、换文档类、不存在文档类各就其位。"""
+    cases = {case.id: case for case in load_cases()}
+    original = cases["coll-payslip-lowest-net"]
+    assert original.question == "现有工资单里哪一个月的工资最低"
+    assert original.category == "collection"
+    assert set(original.expected_sources) == {
+        "payslip-2026-01",
+        "payslip-2026-02",
+        "payslip-2026-03",
+        "payslip-2026-04",
+    }
+    for case_id in (
+        "coll-payslip-lowest-net",
+        "coll-payslip-highest-net",
+        "coll-payslip-total-net",
+        "coll-payslip-lowest-gross",
+        "coll-invoice-highest",
+    ):
+        case = cases[case_id]
+        assert case.category == "collection", case_id
+        assert "枚举" in case.expected_behavior, case_id
+        assert case.expected_answer, case_id
+    # 税前口径题的期望答案必须与实发口径不同月，否则口径变体没有区分度。
+    assert "2026年3月" in cases["coll-payslip-lowest-gross"].expected_answer
+    assert "2026年2月" in cases["coll-payslip-lowest-net"].expected_answer
+    missing_class = cases["coll-rent-unanswerable"]
+    assert missing_class.category == "unanswerable"
+    assert "租赁合同" in missing_class.expected_behavior
+
+
+def test_optional_case_fields_default_empty_and_parse_when_present(tmp_path) -> None:
+    path = tmp_path / "golden.jsonl"
+    path.write_text(
+        json.dumps(
+            {"id": "plain", "question": "q?", "expected_sources": ["s"], "expected_keywords": ["k"], "category": "hours"},
+            ensure_ascii=False,
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "id": "annotated",
+                "question": "q2?",
+                "expected_sources": ["s"],
+                "expected_keywords": ["k"],
+                "category": "collection",
+                "expected_behavior": "枚举全集后比较。",
+                "expected_answer": "派生答案。",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    plain, annotated = load_cases(path)
+    assert plain.expected_behavior == "" and plain.expected_answer == ""
+    assert annotated.expected_behavior == "枚举全集后比较。"
+    assert annotated.expected_answer == "派生答案。"
+
+
+def test_collection_case_without_behavior_is_rejected() -> None:
+    from agent_services.evals.run_answer_eval import CorpusDoc, GoldenCase
+
+    corpus = [CorpusDoc(source_id="s", title="t", content="k")]
+    case = GoldenCase(
+        id="coll-bad",
+        question="q?",
+        expected_sources=("s",),
+        expected_keywords=("k",),
+        category="collection",
+    )
+    try:
+        validate_golden(corpus, [case])
+    except ValueError as exc:
+        assert "expected_behavior" in str(exc)
+    else:
+        raise AssertionError("collection case without expected_behavior must be rejected")
 
 
 async def test_golden_retrieval_hits_expected_sources_only() -> None:

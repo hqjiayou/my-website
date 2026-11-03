@@ -3,6 +3,10 @@
 检索失败只变成工具返回文本，不让本轮 run 因此中断；检索服务缺失或降级时如实说明。
 知识检索由 agent 在 run 内执行（工具调用），runtime 不再预取注入：
 工具命中的片段经 KnowledgeSearchCollector 回流，run 结束时据此生成 citations。
+同集另有 list_knowledge_documents（Issue #181）：经 Java internal API 枚举文档元数据，
+补上片段检索给不了的「全集」；只在注入了 Java 通道（client）时注册（与 business tools
+未配置不注册同口径，研究子 agent 无此通道、只有知识搜索）；取数失败按业务工具既有
+模式回 {"error": ...}，不伪造清单。
 """
 
 from __future__ import annotations
@@ -16,10 +20,12 @@ from agent_services.retrieval.embeddings import EmbeddingClient
 from agent_services.retrieval.service import EmbeddingClass, RetrievalService
 from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.chat import ModelSelection
+from agent_services.tools.business_api import BusinessApiClient, BusinessApiError
 
 logger = logging.getLogger(__name__)
 
 SEARCH_TOOL_NAME = "search_site_knowledge"
+LIST_TOOL_NAME = "list_knowledge_documents"
 
 # 工具原文给模型看，与 harness 一样用英文。用户可见的降级说明另按 locale 追加。
 DEGRADED_TOOL_LINE = (
@@ -133,6 +139,7 @@ def build_knowledge_toolset(
     embedding_classes: list[EmbeddingClass] | None = None,
     model_selection: ModelSelection | None = None,
     collector: KnowledgeSearchCollector | None = None,
+    client: BusinessApiClient | None = None,
 ) -> FunctionToolset:
     toolset = FunctionToolset()
 
@@ -175,5 +182,65 @@ def build_knowledge_toolset(
         else:
             numbered = chunks
         return format_knowledge_chunks(numbered, degraded=bool(retrieval.degraded and chunks))
+
+    # 枚举工具只在有 Java 通道时注册：未配置通道的形态（如研究子 agent）保持只有检索。
+    if client is not None:
+        java_client = client
+
+        @toolset.tool_plain(name=LIST_TOOL_NAME)
+        async def list_knowledge_documents(
+            keyword: str | None = None,
+            source_format: str | None = None,
+            created_from: str | None = None,
+            created_to: str | None = None,
+            limit: int = 100,
+            offset: int = 0,
+        ) -> dict:
+            """List this site's knowledge documents (metadata only, no document text).
+
+            Use this tool to enumerate the full set of documents — for example to
+            count them, or before a set-level question (all documents of a kind,
+            the highest/lowest/total across them). search_site_knowledge returns
+            only top-k similar passages and can never prove full coverage; use it
+            to find content inside documents, and query_site_table for structured
+            extraction from one document. Each item carries a sourceId (kb:<id>)
+            that identifies the document in those other tools.
+
+            The result reports total (documents matching the filters) and
+            truncated. When truncated is true, call again with
+            offset = offset + limit until truncated is false, or the set you
+            reason about is incomplete.
+
+            Args:
+                keyword: optional title substring filter.
+                source_format: optional source format filter, such as pdf, docx, xlsx, or md.
+                created_from: optional inclusive lower bound for document creation
+                    time, as an ISO-8601 datetime string.
+                created_to: optional inclusive upper bound for document creation
+                    time, as an ISO-8601 datetime string.
+                limit: page size (the server clamps it to 1-200; default 100).
+                offset: number of matching documents to skip (default 0).
+            """
+            try:
+                data = await java_client.list_knowledge_documents(
+                    agent_id,
+                    keyword=keyword,
+                    source_format=source_format,
+                    created_from=created_from,
+                    created_to=created_to,
+                    limit=limit,
+                    offset=offset,
+                )
+            except BusinessApiError as exc:
+                return {"error": str(exc)}
+            if not isinstance(data, dict) or not isinstance(data.get("items"), list):
+                return {"error": "Business API returned an unexpected document list."}
+            return {
+                "documents": data["items"],
+                "total": data.get("total"),
+                "limit": data.get("limit"),
+                "offset": data.get("offset"),
+                "truncated": bool(data.get("truncated")),
+            }
 
     return toolset
