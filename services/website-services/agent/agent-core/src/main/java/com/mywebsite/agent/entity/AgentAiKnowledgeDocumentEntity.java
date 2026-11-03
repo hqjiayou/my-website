@@ -16,6 +16,15 @@ public class AgentAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     /** 与 admin {@code AdminAiKnowledgeDocumentEntity} 同表双映射的列：admin 侧写入，本侧只声明、不读写。 */
     private String indexEmbeddingSpec;
 
+    /** 派生索引状态（V27 列，admin 侧写入）；internal 文档枚举只读回给 agent-services。 */
+    private String indexStatus;
+
+    /** 来源格式（V28 列，admin 侧写入，如 pdf/docx/xlsx/md）；枚举的「类型」过滤按此列。 */
+    private String sourceFormat;
+
+    /** 原始文件名（V28 列，admin 侧写入）；枚举元数据回给模型辨认文档。 */
+    private String originalFilename;
+
     public Long getAgentId() {
         return agentId;
     }
@@ -54,5 +63,29 @@ public class AgentAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public void setIndexEmbeddingSpec(String indexEmbeddingSpec) {
         this.indexEmbeddingSpec = indexEmbeddingSpec;
+    }
+
+    public String getIndexStatus() {
+        return indexStatus;
+    }
+
+    public void setIndexStatus(String indexStatus) {
+        this.indexStatus = indexStatus;
+    }
+
+    public String getSourceFormat() {
+        return sourceFormat;
+    }
+
+    public void setSourceFormat(String sourceFormat) {
+        this.sourceFormat = sourceFormat;
+    }
+
+    public String getOriginalFilename() {
+        return originalFilename;
+    }
+
+    public void setOriginalFilename(String originalFilename) {
+        this.originalFilename = originalFilename;
     }
 }
