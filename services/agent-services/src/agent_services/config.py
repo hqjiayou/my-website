@@ -148,8 +148,8 @@ class Settings(BaseSettings):
 
     # ---- §22 运行预算（每轮；<=0 表示该维度不限）----
     # 防工具循环 / 成本失控；超限 → AGENT_BUDGET_EXCEEDED（诚实失败，不截断伪造回复）
-    agent_max_requests: int = Field(default=10, validation_alias="AGENT_MAX_REQUESTS")
-    agent_max_tool_calls: int = Field(default=20, validation_alias="AGENT_MAX_TOOL_CALLS")
+    agent_max_requests: int = Field(default=20, validation_alias="AGENT_MAX_REQUESTS")
+    agent_max_tool_calls: int = Field(default=50, validation_alias="AGENT_MAX_TOOL_CALLS")
     agent_max_total_tokens: int = Field(default=0, validation_alias="AGENT_MAX_TOTAL_TOKENS")
     agent_tool_timeout_seconds: float = Field(default=30.0, validation_alias="AGENT_TOOL_TIMEOUT_SECONDS")
     agent_history_max_chars: int = Field(default=24000, validation_alias="AGENT_HISTORY_MAX_CHARS")

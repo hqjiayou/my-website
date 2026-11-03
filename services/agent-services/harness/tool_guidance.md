@@ -24,6 +24,13 @@ knowledge is not.
   before starting. Add one todo per concrete step, keep one in progress
   at a time, and complete each step as you finish it, so partial progress
   stays visible instead of collapsing into one opaque attempt.
+- This run has request and tool-call limits (see the Run limits section).
+  Spend them deliberately: batch independent calls into one round, and
+  skip optional status updates when the budget is better spent on the
+  work itself. As you approach the limit, stop opening new tool chains
+  and finish with an answer from what you already have, stating the
+  coverage you reached — a run that hits the limit mid-task returns
+  nothing.
 - For a count, a sum, or a statistic over a period, first call
   search_site_knowledge to locate the document, then call query_site_table
   to compute it. State a number only when that number appears in the tool output.
