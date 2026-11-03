@@ -27,6 +27,9 @@ public interface AgentExperienceLessonService {
     /** 新建候选（status=PENDING，不分配 L 编号）；title／lesson 为空时抛 BAD_REQUEST。 */
     AgentExperienceLessonEntity createCandidate(AgentExperienceLessonDraft draft);
 
+    /** 按 id 取单条（人审详情用）；不存在时抛 NOT_FOUND。 */
+    AgentExperienceLessonEntity getById(long id);
+
     /**
      * 批准一条 PENDING 候选：先按 {@code revision} 应用人审修订（null 字段不改），
      * 再分配 L 编号并置 APPROVED。{@code revision} 本身为 null 时按无修订处理。

@@ -29,6 +29,7 @@ import { PERMISSION_CODES } from '@/types/rbac'
 import { modelIdFromSpec } from '@/utils/modelSpec'
 
 import { EmbeddingRegistrationCard } from './embeddingRegistrationCard'
+import { ExperienceLessonsCard } from './experienceLessonsCard'
 
 type Draft = {
   id: number | null
@@ -859,6 +860,8 @@ export function AiSettingsPage() {
         <GatewayAccessKeysCard />
 
         <RuntimeConfigCard />
+
+        <ExperienceLessonsCard />
 
         <EmbeddingRegistrationCard />
 

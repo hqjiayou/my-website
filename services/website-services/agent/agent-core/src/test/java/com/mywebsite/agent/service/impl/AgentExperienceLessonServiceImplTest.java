@@ -233,6 +233,18 @@ class AgentExperienceLessonServiceImplTest {
     }
 
     @Test
+    void getByIdReturnsStoredLessonAndRejectsMissing() {
+        AgentExperienceLessonEntity created =
+                service.createCandidate(new AgentExperienceLessonDraft("标题", "症状", "教训", "证据", 7L, 8L, 9L));
+
+        assertThat(service.getById(created.getId()).getTitle()).isEqualTo("标题");
+        assertThatThrownBy(() -> service.getById(999999L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getCode())
+                .isEqualTo(ErrorCode.NOT_FOUND.getCode());
+    }
+
+    @Test
     void listByStatusRejectsUnknownStatus() {
         assertThatThrownBy(() -> service.listByStatus("WHATEVER"))
                 .isInstanceOf(BusinessException.class)

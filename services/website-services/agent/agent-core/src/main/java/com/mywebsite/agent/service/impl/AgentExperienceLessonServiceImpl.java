@@ -58,6 +58,11 @@ public class AgentExperienceLessonServiceImpl implements AgentExperienceLessonSe
     }
 
     @Override
+    public AgentExperienceLessonEntity getById(long id) {
+        return requireLesson(id);
+    }
+
+    @Override
     @Transactional
     public AgentExperienceLessonEntity approve(long id, AgentExperienceLessonRevision revision) {
         AgentExperienceLessonEntity entity = requireLesson(id);

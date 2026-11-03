@@ -173,6 +173,66 @@ export interface AiRuntimeConfigUpdateInput {
   geminiApiKey?: string | null
 }
 
+/** 经验条目状态（与后端 agent_experience_lesson.status 状态机一致，Issue #184）。 */
+export type AiExperienceLessonStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'DISABLED'
+
+/**
+ * 经验审核列表行（Issue #184 UoW-3）：lesson 只带服务端摘要，全文走详情。
+ * 来源只回表里实存的 sourceAgentId；提炼信号不落条目表，列表不展示信号类型。
+ */
+export interface AiExperienceLessonListItem {
+  id: number
+  title: string
+  lessonSummary: string | null
+  sourceAgentId: number | null
+  status: AiExperienceLessonStatus
+  lessonNo: number | null
+  createdAt: string
+  reviewedAt: string | null
+}
+
+/** 经验条目详情：结构化四字段全文＋来源三 id（手动新建时三 id 皆 null）。 */
+export interface AiExperienceLesson {
+  id: number
+  title: string
+  symptom: string | null
+  lesson: string
+  evidence: string | null
+  sourceAgentId: number | null
+  sourceConversationId: number | null
+  sourceMessageId: number | null
+  status: AiExperienceLessonStatus
+  lessonNo: number | null
+  createdAt: string
+  updatedAt: string | null
+  reviewedAt: string | null
+}
+
+/** 手动新建候选：title/lesson 必填，来源三 id 由后端固定留空。 */
+export interface AiExperienceLessonCreateInput {
+  title: string
+  symptom?: string | null
+  lesson: string
+  evidence?: string | null
+}
+
+/** 批准修订：字段缺省＝不改、沿用候选原文；批准存改写后的版本。 */
+export interface AiExperienceLessonApproveInput {
+  title?: string | null
+  symptom?: string | null
+  lesson?: string | null
+  evidence?: string | null
+}
+
+/** 一批提炼的汇总（与后端 AdminAiExperienceExtractionResultDto 逐项对齐）。 */
+export interface AiExperienceExtractionResult {
+  windowDays: number
+  scannedTurns: number
+  extractionCalls: number
+  producedCandidates: number
+  failedTurns: number
+}
+
 /** AI 用量来源（与后端 AgentUsageService 的 SOURCE_* 常量一致）。 */
 export type AiUsageSource = 'PORTAL' | 'ADMIN_PREVIEW' | 'GATEWAY_V1'
 
