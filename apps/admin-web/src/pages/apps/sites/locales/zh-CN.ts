@@ -596,6 +596,7 @@ export default {
       noEntry: '这个模式还没有保存默认入口。到接入里保存后再试。',
       hint: '预览使用当前站点 Prompt，不写入会话表。前端不会直传 systemPrompt。注意：试聊只测所选模式的主用入口，不走备援；正式对话主用失败时会顺链换备援回答，所以试聊结果不能完全代表正式对话。',
       empty: '输入一条消息开始预览。',
+      emptyHint: '使用当前智能体的 Prompt 试聊，结果不写入会话表。',
       placeholder: '输入预览消息…',
       send: '发送',
       errors: {

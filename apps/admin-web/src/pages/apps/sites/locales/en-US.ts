@@ -599,6 +599,7 @@ export default {
       noEntry: 'This mode has no saved default entry. Save one on Access, then try again.',
       hint: 'Preview uses this site’s prompt and does not write conversations. The browser never sends systemPrompt. Note: preview only exercises the primary entry of the selected mode, with no fallbacks; production chat falls back down the chain when the primary fails, so preview results do not fully represent production behavior.',
       empty: 'Send a message to start the preview.',
+      emptyHint: 'Runs with this agent’s prompt. Nothing is written to the conversation history.',
       placeholder: 'Preview message…',
       send: 'Send',
       errors: {

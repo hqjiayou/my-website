@@ -5,10 +5,11 @@ import {
   ThreadPrimitive,
   useAuiState,
   useLocalRuntime,
+  type DataMessagePartComponent,
   type TextMessagePartProps,
 } from '@assistant-ui/react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, ChevronRight, MessageSquare, SlidersHorizontal, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -153,7 +154,19 @@ function PreviewTextPart({ text, status }: TextMessagePartProps) {
   )
 }
 
-const PREVIEW_PART_COMPONENTS = { Text: PreviewTextPart }
+/**
+ * 图表扩展点（#178 UoW-3 预留，渲染归图表单）：未来的 VISUALIZATION 事件由
+ * adapter 以 data part（name="visualization"）产出后从这里进入消息流，按 part
+ * 在内容中的顺序与文本同级排布（引用角标来源卡同级）；届时把这个占位换成
+ * 真正的图表组件，chart spec 数据契约以图表单为准。本步只占位、不渲染，
+ * 现行 adapter 只产出 text part，注册它对现有消息零影响。
+ */
+const PreviewVisualizationPart: DataMessagePartComponent = () => null
+
+const PREVIEW_PART_COMPONENTS = {
+  Text: PreviewTextPart,
+  data: { by_name: { visualization: PreviewVisualizationPart } },
+}
 
 /** Foundry 式排布：用户消息右对齐浅气泡，助手消息近全宽纯文本（只留模型标注行）。 */
 function PreviewMessage() {
@@ -593,7 +606,15 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
         <ThreadPrimitive.Root className="flex h-[28rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card-muted xl:h-full">
           <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-3 py-3">
             <ThreadPrimitive.Empty>
-              <p className="px-2 text-sm text-muted-foreground">{t('aiWorkspace.preview.empty')}</p>
+              <div className="flex flex-col items-center justify-center gap-2 px-4 py-14 text-center">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-muted-foreground">
+                  <MessageSquare className="h-5 w-5" aria-hidden />
+                </span>
+                <p className="text-sm font-medium text-foreground">{t('aiWorkspace.preview.empty')}</p>
+                <p className="max-w-md text-xs leading-5 text-muted-foreground">
+                  {t('aiWorkspace.preview.emptyHint')}
+                </p>
+              </div>
             </ThreadPrimitive.Empty>
             <ThreadPrimitive.Messages>{() => <PreviewMessage />}</ThreadPrimitive.Messages>
           </ThreadPrimitive.Viewport>
@@ -610,14 +631,20 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
               {runError.message ? <p className="mt-0.5 break-all text-danger-emphasis">{runError.message}</p> : null}
             </div>
           ) : null}
-          <ComposerPrimitive.Root className="flex gap-2 border-t border-border bg-card p-3">
-            <ComposerPrimitive.Input
-              className="min-h-10 flex-1 resize-none rounded-lg border border-border px-3 py-2 text-sm"
-              placeholder={t('aiWorkspace.preview.placeholder')}
-            />
-            <ComposerPrimitive.Send className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">
-              {t('aiWorkspace.preview.send')}
-            </ComposerPrimitive.Send>
+          <ComposerPrimitive.Root className="px-3 pb-3 pt-1">
+            <div className="flex items-end gap-2 rounded-2xl border border-border bg-card p-1.5">
+              <ComposerPrimitive.Input
+                className="min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground outline-none"
+                placeholder={t('aiWorkspace.preview.placeholder')}
+              />
+              <ComposerPrimitive.Send
+                aria-label={t('aiWorkspace.preview.send')}
+                title={t('aiWorkspace.preview.send')}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:opacity-90 disabled:opacity-40"
+              >
+                <ArrowUp className="h-4 w-4" aria-hidden />
+              </ComposerPrimitive.Send>
+            </div>
           </ComposerPrimitive.Root>
         </ThreadPrimitive.Root>
       </div>
