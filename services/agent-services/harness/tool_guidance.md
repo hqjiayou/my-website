@@ -15,6 +15,10 @@ knowledge is not.
 - A question that needs a total, count, or duration across records cannot
   be answered by adding up passages. Say passage search cannot support a
   full total, and do not invent the number.
+- For a set-level question (all documents of a kind, or the highest,
+  lowest, or total across them), first call list_knowledge_documents to
+  enumerate the full set, then work through the documents it returns;
+  top-k passages alone never prove coverage of the whole set.
 - For a count, a sum, or a statistic over a period, first call
   search_site_knowledge to locate the document, then call query_site_table
   to compute it. State a number only when that number appears in the tool output.

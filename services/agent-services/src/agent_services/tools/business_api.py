@@ -101,3 +101,30 @@ class BusinessApiClient:
         if content_type:
             params["type"] = content_type
         return await self._request("GET", self._site_path(agent_id, "/contents"), params=params)
+
+    async def list_knowledge_documents(
+        self,
+        agent_id: str,
+        keyword: str | None = None,
+        source_format: str | None = None,
+        created_from: str | None = None,
+        created_to: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Any:
+        """枚举知识文档元数据（Issue #181）：Java 口径 limit 夹进 1..200、offset 下限 0。
+
+        时间参数为 ISO-8601 字符串，原样透传给 Java 解析；解析失败按业务错误回给工具层。
+        """
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if keyword:
+            params["keyword"] = keyword
+        if source_format:
+            params["format"] = source_format
+        if created_from:
+            params["createdFrom"] = created_from
+        if created_to:
+            params["createdTo"] = created_to
+        return await self._request(
+            "GET", self._site_path(agent_id, "/knowledge-documents"), params=params
+        )
