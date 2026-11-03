@@ -33,6 +33,7 @@ from agent_services.agent.stream_runtime import stream_chat_events
 from agent_services.agent.table_tools import structured_tables_available
 from agent_services.agent.todo_tools import todo_store_from_request
 from agent_services.agent.toolset_factory import build_execution_toolsets
+from agent_services.agent.visualization import VisualizationCollector
 from agent_services.api.errors import InternalApiError, external_failure_message
 from agent_services.auth.internal_token import require_internal_service_token
 from agent_services.config import Settings, retrieval_not_configured_message
@@ -270,7 +271,19 @@ def chat_embedding_credentials(body: ChatRequest) -> tuple[str | None, str | Non
     return selection.embedding_spec, selection.api_key, selection.base_url
 
 
-async def _prepare_execution(request: Request, body: ChatRequest, agent_id: str, model: Model | None):
+async def _prepare_execution(
+    request: Request,
+    body: ChatRequest,
+    agent_id: str,
+    model: Model | None,
+    *,
+    visualizations: bool = False,
+):
+    """组装一轮执行的 skills/todos/toolsets 与收集器。
+
+    visualizations 只给流式端点传 True：卡片靠 VISUALIZATION 事件呈现，
+    同步 chat 没有事件通道，工具侧不产卡（render_chart 不注册、天气不发卡）。
+    """
     settings = request.app.state.settings
     skills_dir = _skills_dir(request)
     resolution = resolve_skills(
@@ -295,6 +308,7 @@ async def _prepare_execution(request: Request, body: ChatRequest, agent_id: str,
         else _request_embedder(request, embedding_spec, embedding_api_key, embedding_base_url)
     )
     collector = KnowledgeSearchCollector()
+    viz_collector = VisualizationCollector()
     retrieval = _retrieval_service_or_none(request)
     tables_available = await structured_tables_available(retrieval, agent_id)
     toolsets = build_execution_toolsets(
@@ -311,8 +325,10 @@ async def _prepare_execution(request: Request, body: ChatRequest, agent_id: str,
         tables_available=tables_available,
         default_latitude=body.latitude,
         default_longitude=body.longitude,
+        preview=body.preview,
+        visualization_collector=viz_collector if visualizations else None,
     )
-    return resolution, todo_store, toolsets, collector
+    return resolution, todo_store, toolsets, collector, viz_collector
 
 
 def _blocked_to_error(outcome: ChatBlocked) -> InternalApiError:
@@ -451,7 +467,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
             provider_status="BLOCKED",
         )
 
-    skill_resolution, todo_store, toolsets, collector = await _prepare_execution(
+    skill_resolution, todo_store, toolsets, collector, _viz = await _prepare_execution(
         request, body, agent_id, handle.model
     )
 
@@ -637,9 +653,13 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             provider_status="BLOCKED",
         )
 
-    skill_resolution, todo_store, toolsets, collector = await _prepare_execution(
-        request, body, agent_id, handle.model
-    )
+    (
+        skill_resolution,
+        todo_store,
+        toolsets,
+        collector,
+        viz_collector,
+    ) = await _prepare_execution(request, body, agent_id, handle.model, visualizations=True)
 
     async def event_generator():
         async for event in stream_chat_events(
@@ -672,6 +692,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             memory_enabled=body.memory_enabled,
             memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
             knowledge_collector=collector,
+            visualization_collector=viz_collector,
         ):
             yield event.to_sse()
 

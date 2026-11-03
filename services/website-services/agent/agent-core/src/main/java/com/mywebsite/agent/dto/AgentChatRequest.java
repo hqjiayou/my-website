@@ -34,7 +34,10 @@ public record AgentChatRequest(
         // 浏览器或手机定位权限授予后的坐标。不成对则执行层忽略，不从时区推断城市。
         Double latitude,
         Double longitude,
-        Double accuracyMeters) {
+        Double accuracyMeters,
+        // 后台试聊标记：只有 admin preview 传 TRUE。执行层据此启用回复内卡片
+        // （Issue #179）；正式对话传 null，NON_NULL 序列化下报文与旧版逐字一致。
+        Boolean preview) {
 
     /** 兼容不带 timezone 的构造点。缺省时执行层回退 UTC。 */
     public AgentChatRequest(
@@ -79,6 +82,7 @@ public record AgentChatRequest(
                 embeddingApiKey,
                 embeddingBaseUrl,
                 embeddingClasses,
+                null,
                 null,
                 null,
                 null,

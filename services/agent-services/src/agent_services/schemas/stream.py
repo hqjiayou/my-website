@@ -15,6 +15,8 @@ class AgentStreamEventType(StrEnum):
     THINKING = "THINKING"
     TOOL_START = "TOOL_START"
     TOOL_RESULT = "TOOL_RESULT"
+    # 回复内卡片（Issue #179）：data 即卡片信封 {kind, title?, payload}，仅 preview 上下文产出。
+    VISUALIZATION = "VISUALIZATION"
     DONE = "DONE"
     ERROR = "ERROR"
 
