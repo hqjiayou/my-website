@@ -23,7 +23,7 @@ class AgentChatRequestPreviewWireTest {
     void previewRequestWritesPreviewTrue() throws Exception {
         AgentChatRequest request = new AgentChatRequest(
                 "10", "hello", null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, Boolean.TRUE);
+                null, null, null, null, null, null, null, null, null, null, null, Boolean.TRUE, null);
         String json = mapper.writeValueAsString(request);
         assertThat(json).contains("\"preview\":true");
     }

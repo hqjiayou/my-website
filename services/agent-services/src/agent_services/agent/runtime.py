@@ -39,6 +39,7 @@ from agent_services.schemas.chat import (
     ChatAttachment,
     ChatDocument,
     ChatHistoryMessage,
+    ExperienceLessonItem,
     PromptProfile,
 )
 from agent_services.schemas.todo import TodoItem
@@ -634,6 +635,8 @@ async def run_chat(
     memories: list[str] | None = None,
     memory_enabled: bool = False,
     memory_extraction_enabled: bool = True,
+    experience_lessons: list[ExperienceLessonItem] | None = None,
+    experience_lessons_enabled: bool = True,
     knowledge_collector: KnowledgeSearchCollector | None = None,
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
@@ -661,6 +664,8 @@ async def run_chat(
         harness_dir=harness_dir,
         history_summary=history_summary,
         memories=memories,
+        experience_lessons=experience_lessons,
+        experience_lessons_enabled=experience_lessons_enabled,
     )
     run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
     user_prompt = build_user_prompt(harness.user_message, attachments, documents)

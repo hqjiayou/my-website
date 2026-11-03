@@ -50,6 +50,7 @@ from agent_services.schemas.chat import (
     ChatAttachment,
     ChatDocument,
     ChatHistoryMessage,
+    ExperienceLessonItem,
     PromptProfile,
 )
 from agent_services.schemas.stream import AgentStreamEvent, AgentStreamEventType
@@ -103,6 +104,8 @@ async def stream_chat_events(
     memories: list[str] | None = None,
     memory_enabled: bool = False,
     memory_extraction_enabled: bool = True,
+    experience_lessons: list[ExperienceLessonItem] | None = None,
+    experience_lessons_enabled: bool = True,
     knowledge_collector: KnowledgeSearchCollector | None = None,
     visualization_collector: VisualizationCollector | None = None,
 ) -> AsyncIterator[AgentStreamEvent]:
@@ -131,6 +134,8 @@ async def stream_chat_events(
         harness_dir=harness_dir,
         history_summary=history_summary,
         memories=memories,
+        experience_lessons=experience_lessons,
+        experience_lessons_enabled=experience_lessons_enabled,
     )
     system_prompt = harness.system_prompt
     user_prompt = build_user_prompt(harness.user_message, attachments, documents)

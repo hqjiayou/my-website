@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_services.agent.prompt_builder import build_prompt_parts
-from agent_services.schemas.chat import ChatHistoryMessage, PromptProfile
+from agent_services.schemas.chat import (
+    ChatHistoryMessage,
+    ExperienceLessonItem,
+    PromptProfile,
+)
 from agent_services.schemas.todo import TodoItem
 
 if TYPE_CHECKING:
@@ -25,6 +29,11 @@ logger = logging.getLogger(__name__)
 _COMPONENT_FILES = ("background.md", "guardrails.md", "tool_guidance.md")
 _COMPONENT_MAX_CHARS = 4_000
 _TRUNCATED = "[... truncated]"
+# 经验段上限（Issue #184 UoW-4 定死）：最多 10 条、正文总量最多 2000 字元。
+# 正文口径 = 各条渲染行（"L<no>. <lesson>"）以换行连接后的总长，不含段标题。
+# 超限时取 lesson_no 最新（最大）的条目至上限内，截断事实记 warning，不静默。
+_EXPERIENCE_MAX_ITEMS = 10
+_EXPERIENCE_MAX_CHARS = 2_000
 _HARNESS_ROOT = Path(__file__).resolve().parents[3] / "harness"
 
 
@@ -90,6 +99,8 @@ def assemble_harness(
     harness_dir: str | None = None,
     history_summary: str | None = None,
     memories: list[str] | None = None,
+    experience_lessons: list[ExperienceLessonItem] | None = None,
+    experience_lessons_enabled: bool = True,
 ) -> RequestHarness:
     from agent_services.agent.runtime import RunBudget, trim_history
 
@@ -133,6 +144,9 @@ def assemble_harness(
         mcp_servers=mcp_servers,
         history_summary=_history_summary_section(history_summary),
         memory_section=_memory_section(memories),
+        experience_section=_experience_section(
+            experience_lessons, enabled=experience_lessons_enabled
+        ),
     )
     return RequestHarness(
         system_prompt=system_prompt,
@@ -189,6 +203,7 @@ def _compose(
     mcp_servers: tuple[str, ...],
     history_summary: str,
     memory_section: str,
+    experience_section: str,
 ) -> str:
     sections = [
         part
@@ -200,6 +215,9 @@ def _compose(
             memory_section,
             site_prompt,
             tool_file,
+            # 经验段紧随 tool_guidance 之后（Issue #184 UoW-4 定案位置）；
+            # 为空串时被过滤，系统提示与未启用时逐字一致。
+            experience_section,
         )
         if part
     ]
@@ -234,6 +252,65 @@ def _history_summary_section(summary: str | None) -> str:
     if summary is None or not summary.strip():
         return ""
     return "# Earlier conversation\n\n" + summary.strip()
+
+
+def _experience_section(
+    lessons: list[ExperienceLessonItem] | None, *, enabled: bool
+) -> str:
+    """已批准经验条目组装段（Issue #184 UoW-4）。
+
+    开关关闭或无有效条目时返回空串，系统提示与未启用时逐字相同。条目按
+    lesson_no 升序渲染为 "L<no>. <lesson>"；超限时从最新（编号最大）往旧取
+    连续一段至条数/正文总量上限内，被丢弃条数与正文截断都记 warning，不静默。
+    单条本身超过正文总量上限时截断该条正文，让最新一条至少以截断形落地。
+    """
+    if not enabled:
+        return ""
+    cleaned = sorted(
+        (
+            (item.lesson_no, item.lesson.strip())
+            for item in (lessons or [])
+            if item is not None and item.lesson and item.lesson.strip()
+        ),
+        key=lambda pair: pair[0],
+    )
+    if not cleaned:
+        return ""
+    kept_newest_first: list[str] = []
+    used = 0
+    dropped = 0
+    text_truncated = False
+    for idx, (lesson_no, text) in enumerate(reversed(cleaned)):
+        if len(kept_newest_first) >= _EXPERIENCE_MAX_ITEMS:
+            dropped = len(cleaned) - idx
+            break
+        line = f"L{lesson_no}. {text}"
+        cost = len(line) + (1 if kept_newest_first else 0)  # 与下一条之间的换行
+        if used + cost <= _EXPERIENCE_MAX_CHARS:
+            kept_newest_first.append(line)
+            used += cost
+            continue
+        if not kept_newest_first:
+            room = _EXPERIENCE_MAX_CHARS - len(f"L{lesson_no}. ") - len(_TRUNCATED)
+            if room > 0:
+                kept_newest_first.append(f"L{lesson_no}. {text[:room]}{_TRUNCATED}")
+                used = _EXPERIENCE_MAX_CHARS
+                text_truncated = True
+                continue
+        dropped = len(cleaned) - idx
+        break
+    if dropped or text_truncated:
+        logger.warning(
+            "experience lessons truncated: kept %d of %d (dropped %d, text_truncated=%s)",
+            len(kept_newest_first),
+            len(cleaned),
+            dropped,
+            text_truncated,
+        )
+    if not kept_newest_first:
+        return ""
+    body = "\n".join(reversed(kept_newest_first))
+    return "# Experience lessons\n\n" + body
 
 
 def _memory_section(memories: list[str] | None) -> str:

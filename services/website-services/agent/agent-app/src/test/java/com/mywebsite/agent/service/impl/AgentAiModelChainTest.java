@@ -30,6 +30,7 @@ import com.mywebsite.agent.service.AgentAiConversationService;
 import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
 import com.mywebsite.agent.service.AgentAiRateLimitService;
 import com.mywebsite.agent.service.AgentEmbeddingClassService;
+import com.mywebsite.agent.service.AgentExperienceLessonService;
 import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
 import java.util.List;
@@ -96,7 +97,8 @@ class AgentAiModelChainTest {
                 agentAiStreamExecutor,
                 new ObjectMapper(),
                 org.mockito.Mockito.mock(AgentUsageService.class),
-                org.mockito.Mockito.mock(AgentEmbeddingClassService.class));
+                org.mockito.Mockito.mock(AgentEmbeddingClassService.class),
+                org.mockito.Mockito.mock(AgentExperienceLessonService.class));
         String subject = SubjectCodes.formatAgentUserSubject(200L);
         AuthContext.set(new AuthenticatedUser(TokenAudience.AGENT, subject, "u", 10L, Set.of()));
         when(rateLimitService.tryAcquire(10L, subject)).thenReturn(true);

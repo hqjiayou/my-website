@@ -24,6 +24,10 @@ MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024
 MAX_ATTACHMENTS_TOTAL_BYTES = 5 * 1024 * 1024
 MAX_MEMORIES = 20
 MAX_MEMORY_CHARS = 500
+# 已批准经验条目（Issue #184）：Java 每请求现查现带，这里只做形状纵深防御；
+# 真正的条数/总量上限在 harness 组装段（见 harness.py 的 _EXPERIENCE_* 常量）。
+MAX_EXPERIENCE_LESSONS = 50
+MAX_EXPERIENCE_LESSON_CHARS = 10_000
 # 本轮文档上下文（Java 站点层已抽取文本后传入；Python 只做纵深防御上限）。
 MAX_DOCUMENTS = 3
 MAX_DOCUMENT_NAME_CHARS = 200
@@ -145,6 +149,19 @@ class ModelSelection(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class ExperienceLessonItem(BaseModel):
+    """Java 下发的已批准经验条目（Issue #184 UoW-4）。
+
+    只带 L 编号与 lesson 规则文本：title/symptom/evidence 是人审材料，不入 prompt，
+    故不在下发形状内（与 Java AgentExperienceLessonItem 镜像）。
+    """
+
+    lesson_no: int = Field(alias="lessonNo", ge=1)
+    lesson: str = Field(max_length=MAX_EXPERIENCE_LESSON_CHARS)
+
+    model_config = {"populate_by_name": True}
+
+
 class ChatRequest(BaseModel):
     agent_id: str = Field(alias="agentId")
     message: str = Field(max_length=MAX_MESSAGE_CHARS)
@@ -171,6 +188,11 @@ class ChatRequest(BaseModel):
     knowledge_context: list[str] | None = Field(default=None, alias="knowledgeContext", max_length=4)
     memories: list[str] | None = Field(default=None, max_length=MAX_MEMORIES)
     memory_enabled: bool = Field(default=False, alias="memoryEnabled")
+    # 已批准经验条目（Issue #184）：平台全局，正式对话与试聊都可带；组装为
+    # # Experience lessons 段。缺席/为空与未启用等价，系统提示逐字不变。
+    experience_lessons: list[ExperienceLessonItem] | None = Field(
+        default=None, alias="experienceLessons", max_length=MAX_EXPERIENCE_LESSONS
+    )
     # 后台试聊标记：只有 admin preview 下发 true，正式对话不带此字段。
     # 执行层据此启用回复内卡片（Issue #179）：天气卡发出与 render_chart 工具注册。
     preview: bool = False
@@ -221,6 +243,22 @@ class ChatRequest(BaseModel):
             text = item.strip()
             if text:
                 kept.append(text[:MAX_MEMORY_CHARS])
+        return kept or None
+
+    @field_validator("experience_lessons")
+    @classmethod
+    def clean_experience_lessons(
+        cls, value: list[ExperienceLessonItem] | None
+    ) -> list[ExperienceLessonItem] | None:
+        # 与 memories 同口径清洗：正文去空白、空白条目丢弃、全空回 None，
+        # 不让一条脏数据把整轮对话打成 400；条数/总量上限在组装段收口。
+        if not value:
+            return None
+        kept: list[ExperienceLessonItem] = []
+        for item in value:
+            text = item.lesson.strip()
+            if text:
+                kept.append(item.model_copy(update={"lesson": text}))
         return kept or None
 
     @field_validator("todos")

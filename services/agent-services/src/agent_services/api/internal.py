@@ -8,6 +8,10 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic_ai.models import Model
 
+from agent_services.agent.experience import (
+    ExperienceExtractionUnavailable,
+    extract_experience_lessons,
+)
 from agent_services.agent.harness import harness_component_flags
 from agent_services.agent.knowledge_tools import KnowledgeSearchCollector
 from agent_services.agent.mcp_tools import mcp_config_snapshot, probe_mcp_ready
@@ -16,10 +20,6 @@ from agent_services.agent.model_factory import (
     ModelHandle,
     create_model_for_entry,
     public_model_spec,
-)
-from agent_services.agent.experience import (
-    ExperienceExtractionUnavailable,
-    extract_experience_lessons,
 )
 from agent_services.agent.ocr import OcrUnavailable, transcribe_image, transcribe_pdf
 from agent_services.agent.runtime import (
@@ -506,6 +506,8 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         memories=body.memories,
         memory_enabled=body.memory_enabled,
         memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
+        experience_lessons=body.experience_lessons,
+        experience_lessons_enabled=request.app.state.settings.agent_experience_lessons_enabled,
         knowledge_collector=collector,
     )
 
@@ -747,6 +749,8 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             memories=body.memories,
             memory_enabled=body.memory_enabled,
             memory_extraction_enabled=request.app.state.settings.agent_memory_extraction_enabled,
+            experience_lessons=body.experience_lessons,
+            experience_lessons_enabled=request.app.state.settings.agent_experience_lessons_enabled,
             knowledge_collector=collector,
             visualization_collector=viz_collector,
         ):

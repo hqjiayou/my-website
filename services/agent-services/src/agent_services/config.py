@@ -143,6 +143,12 @@ class Settings(BaseSettings):
     agent_memory_extraction_enabled: bool = Field(
         default=True, validation_alias="AGENT_MEMORY_EXTRACTION_ENABLED"
     )
+    # 已批准经验条目（Issue #184 UoW-4）的组装开关：请求带 experienceLessons 时
+    # 组装为 # Experience lessons 段。关闭后即使请求带条目也不注入，系统提示与
+    # 未启用时逐字一致，供 UoW-5 做 lessons 关/开两轮对照。
+    agent_experience_lessons_enabled: bool = Field(
+        default=True, validation_alias="AGENT_EXPERIENCE_LESSONS_ENABLED"
+    )
     # JSON 数组：[{"name":"demo","url":"http://host:port/mcp"}]；缺失 → 不注册 MCP
     mcp_servers_json: str = Field(default="", validation_alias="MCP_SERVERS_JSON")
 
