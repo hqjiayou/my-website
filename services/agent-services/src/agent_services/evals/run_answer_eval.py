@@ -4,9 +4,17 @@
 
     uv run python -m agent_services.evals.run_answer_eval
     uv run python -m agent_services.evals.run_answer_eval --out evals/reports
+    uv run python -m agent_services.evals.run_answer_eval --cases evals/skill_qa.jsonl
+    uv run python -m agent_services.evals.run_answer_eval --skills orchestration \
+        --harness-dir /path/to/harness-variant --lessons-file lessons.json
 
 读取进程 Settings 的 AI_MODEL 与凭证。未配置模型时打印 BLOCKED 并以状态码 2 退出，
 不用假模型冒充跑分。核心函数 ``run_answer_eval`` 接受注入的模型，供 CI smoke 使用。
+
+注入接通（#187 UoW-1）：``--cases`` 可跑任意题集（skill_qa 等同风格文件）；
+``--skills`` / ``--harness-dir`` / ``--lessons-file`` 分别把 skill 集、平台文件
+目录、经验条目按生产组装口径注入每一轮 run_chat，缺省时行为与未接通前一致。
+skill 题的触发/完成判分口径见 ``load_skill_cases`` 与 evals/README.md。
 """
 
 from __future__ import annotations
@@ -22,6 +30,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pydantic import ValidationError
 from pydantic_ai.models import Model
 
 from agent_services.agent.knowledge_tools import (
@@ -30,10 +39,16 @@ from agent_services.agent.knowledge_tools import (
 )
 from agent_services.agent.model_factory import create_model
 from agent_services.agent.runtime import ChatBlocked, ChatReply, run_chat
+from agent_services.agent.skills import (
+    SkillResolution,
+    default_skills_directory,
+    resolve_skills,
+)
 from agent_services.config import RETRIEVAL_MIN_SCORE_DEFAULT, Settings
 from agent_services.evals.scoring import METRIC_NAMES, PASS_RULE, aggregate, score_case
 from agent_services.retrieval.service import RetrievalService, query_terms
 from agent_services.retrieval.store import RetrievedChunk
+from agent_services.schemas.chat import ExperienceLessonItem
 
 EVAL_SITE_ID = "eval-golden"
 BLOCKED_EXIT = 2
@@ -58,6 +73,11 @@ class GoldenCase:
     # 与期望答案（含派生数值，如合计）。旧用例无此二字段，默认空串，评分不变。
     expected_behavior: str = ""
     expected_answer: str = ""
+    # skill 题集（skill_qa.jsonl）字段：目标 skill、题型（positive/negative/
+    # quality）与同锚的黄金集用例 id。黄金集用例三者皆空，行为不变。
+    skill: str = ""
+    kind: str = ""
+    golden_ref: str = ""
 
 
 @dataclass(frozen=True)
@@ -151,6 +171,152 @@ def load_cases(path: Path | None = None) -> list[GoldenCase]:
             )
         )
     return cases
+
+
+# skill 题集里既无自身锚点字段、又无 golden_ref 的题面归入此类别：只作报告
+# 分组标签，不触发拒答逻辑，也无机器可判的来源/关键词（行为题，见下）。
+SKILL_FALLBACK_CATEGORY = "skill"
+
+
+def _opt_str_list(
+    payload: dict[str, object], key: str, label: str
+) -> tuple[str, ...] | None:
+    """可选字符串列表字段：字段缺席返回 None（由调用方决定派生来源）。"""
+    if key not in payload:
+        return None
+    return _str_list(payload, key, label)
+
+
+def _blankable_text(payload: dict[str, object], key: str, label: str) -> str:
+    """skill 题面的可选文本：缺席或显式空串都记空串（行为题的 expected_answer 合法为空）。"""
+    value = payload.get(key)
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValueError(f"{label} field {key} must be a string when present.")
+    return value.strip()
+
+
+def load_skill_cases(
+    path: Path | None = None, *, golden_cases: Sequence[GoldenCase] | None = None
+) -> list[GoldenCase]:
+    """加载 skill_qa.jsonl 形状的题集，并把评分锚点派生到 GoldenCase 上。
+
+    skill 题面本身只有 id/skill/kind/question/expected_behavior/expected_answer，
+    评分锚点（category / expected_sources / expected_keywords）按「同锚」派生：
+
+    - 题面自带对应字段时以题面为准（显式空列表即空，不回退）；
+    - 否则取 ``golden_ref`` 指向的黄金集用例的同名字段；
+    - 再否则：category 记 ``SKILL_FALLBACK_CATEGORY``、来源与关键词皆空——
+      这类题是纯行为题，四指标全为 None、passed 恒 False（口径见 scoring
+      与 evals/README.md），触发/完成只看 triggered 与人工核对 expected_behavior。
+
+    判分口径（#187 UoW-1 定死）：triggered＝该题 skill 出现在本轮 run 的
+    skillsApplied（即本轮 resolve_skills 的 applied 集，与生产响应同源）；
+    completed＝triggered 且 score_case 的 passed 为真。
+    """
+    golden_by_id = {
+        case.id: case for case in (golden_cases if golden_cases is not None else load_cases())
+    }
+    cases: list[GoldenCase] = []
+    text = (path or evals_root() / "skill_qa.jsonl").read_text(encoding="utf-8")
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        item = json.loads(line)
+        if not isinstance(item, dict):
+            raise ValueError(f"skill line {line_number} must be an object.")
+        label = f"skill line {line_number}"
+        ref = _blankable_text(item, "golden_ref", label)
+        anchor = golden_by_id.get(ref) if ref else None
+        if ref and anchor is None:
+            raise ValueError(f"{label} references unknown golden case {ref}.")
+        category = _blankable_text(item, "category", label) or (
+            anchor.category if anchor is not None else SKILL_FALLBACK_CATEGORY
+        )
+        sources = _opt_str_list(item, "expected_sources", label)
+        if sources is None:
+            sources = anchor.expected_sources if anchor is not None else ()
+        keywords = _opt_str_list(item, "expected_keywords", label)
+        if keywords is None:
+            keywords = anchor.expected_keywords if anchor is not None else ()
+        cases.append(
+            GoldenCase(
+                id=_text(item, "id", label),
+                question=_text(item, "question", label),
+                expected_sources=sources,
+                expected_keywords=keywords,
+                category=category,
+                expected_behavior=_blankable_text(item, "expected_behavior", label),
+                expected_answer=_blankable_text(item, "expected_answer", label),
+                skill=_text(item, "skill", label),
+                kind=_blankable_text(item, "kind", label),
+                golden_ref=ref,
+            )
+        )
+    return cases
+
+
+def load_any_cases(path: Path) -> list[GoldenCase]:
+    """按内容分派加载任意题集：任一行带 skill 字段即按 skill 题集解析。"""
+    text = path.read_text(encoding="utf-8")
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue  # 坏行留给正式加载器报错，这里只做形状嗅探。
+        if isinstance(item, dict) and "skill" in item:
+            return load_skill_cases(path)
+    return load_cases(path)
+
+
+def validate_eval_cases(corpus: Sequence[CorpusDoc], cases: Sequence[GoldenCase]) -> None:
+    """非黄金题集（如 skill_qa）的宽容校验。
+
+    只守诚实性底线：id 不重复、期望来源必须真实存在于语料、不可答题不得
+    携带来源/关键词锚点。不要求可答题来源与关键词俱全——skill 题集里
+    行为题合法地两样都没有（判分口径见 load_skill_cases）。
+    """
+    known_set = {doc.source_id for doc in corpus}
+    seen: set[str] = set()
+    for case in cases:
+        if case.id in seen:
+            raise ValueError(f"duplicate case id {case.id}.")
+        seen.add(case.id)
+        unknown = [source for source in case.expected_sources if source not in known_set]
+        if unknown:
+            raise ValueError(f"{case.id} references unknown sources {unknown}.")
+        if case.category == "unanswerable" and (case.expected_sources or case.expected_keywords):
+            raise ValueError(f"{case.id} is unanswerable and must not list sources or keywords.")
+
+
+def load_lessons_file(path: Path) -> list[ExperienceLessonItem]:
+    """加载 --lessons-file 的经验条目 JSON（形状与 ChatRequest.experienceLessons 一致）。
+
+    文件缺失、JSON 坏、形状不对一律抛 ValueError 明确报错，绝不静默当无条目；
+    空数组是合法的「关」臂（显式零条目）。
+    """
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"--lessons-file cannot be read: {path} ({exc}).") from exc
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"--lessons-file is not valid JSON: {path} ({exc}).") from exc
+    if not isinstance(raw, list):
+        raise ValueError("--lessons-file must be a JSON array of {lessonNo, lesson} objects.")
+    lessons: list[ExperienceLessonItem] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            raise ValueError(f"--lessons-file item {index} must be an object.")
+        try:
+            lessons.append(ExperienceLessonItem.model_validate(item))
+        except ValidationError as exc:
+            raise ValueError(f"--lessons-file item {index} is invalid: {exc}.") from exc
+    return lessons
 
 
 def validate_golden(corpus: Sequence[CorpusDoc], cases: Sequence[GoldenCase]) -> None:
@@ -408,10 +574,21 @@ def _observed_sources(
 
 
 async def _run_case(
-    service: RetrievalService, model: Model, case: GoldenCase, *, agent_id: str
+    service: RetrievalService,
+    model: Model,
+    case: GoldenCase,
+    *,
+    agent_id: str,
+    skill_resolution: SkillResolution | None = None,
+    skills_max_instruction_chars: int | None = None,
+    harness_dir: str | None = None,
+    experience_lessons: list[ExperienceLessonItem] | None = None,
 ) -> dict[str, object]:
     # 与生产路径一致：知识检索由 agent 经 search_site_knowledge 工具执行，
     # 命中片段经 collector 回流生成 citations；评测量的就是这条链。
+    # skills / harness_dir / experience_lessons 同样按生产口径透传 run_chat：
+    # skill_resolution 由调用方经 agent.skills.resolve_skills 解析（与
+    # api/internal.py 同一函数、同一输入），不在 runner 内另造旁路。
     collector = KnowledgeSearchCollector()
     toolset = build_knowledge_toolset(agent_id, service, collector=collector)
     outcome = await run_chat(
@@ -421,6 +598,12 @@ async def _run_case(
         toolsets=[toolset],
         knowledge_collector=collector,
         memory_extraction_enabled=False,
+        skill_instructions=skill_resolution.instructions if skill_resolution else None,
+        skill_ids=list(skill_resolution.applied_ids) if skill_resolution else None,
+        skills_missing=list(skill_resolution.missing_ids) if skill_resolution else None,
+        skills_max_instruction_chars=skills_max_instruction_chars,
+        harness_dir=harness_dir,
+        experience_lessons=experience_lessons,
     )
     chunks = collector.chunks
     degraded = collector.degraded
@@ -475,6 +658,18 @@ async def _run_case(
         row["expectedBehavior"] = case.expected_behavior
     if case.expected_answer:
         row["expectedAnswer"] = case.expected_answer
+    # skill 题的触发/完成标注只在题面带 skill 字段时出现，黄金题行形状不变。
+    # skillsApplied 即本轮解析的 applied 集，与生产响应 skillsApplied 同源。
+    if case.skill:
+        applied = list(skill_resolution.applied_ids) if skill_resolution else []
+        triggered = case.skill in applied
+        row["skill"] = case.skill
+        row["kind"] = case.kind
+        row["skillsApplied"] = applied
+        if skill_resolution and skill_resolution.missing_ids:
+            row["skillsMissing"] = list(skill_resolution.missing_ids)
+        row["triggered"] = triggered
+        row["completed"] = bool(triggered and scores["passed"])
     return row
 
 
@@ -522,15 +717,27 @@ def render_markdown(report: dict[str, object]) -> str:
         f"- Model: `{report['model']}`",
         f"- Generated: {report['generatedAt']}",
         f"- Pass 判准：{report['passRule']}",
-        "",
-        "没有 citations 的 citation_precision、没有关键词的 keyword_coverage、",
-        "非不可答题的 refusal_correct、没有期望来源的 retrieval_hit 记 n/a，不进均值。",
-        "",
-        "## Overall",
-        "",
-        "| metric | mean |",
-        "| --- | --- |",
     ]
+    # 注入标注与 JSON 同口径：只在实际启用时出现（#187 UoW-1）。
+    skills_value = report.get("skills")
+    if isinstance(skills_value, list) and skills_value:
+        lines.append(f"- Skills: `{', '.join(str(item) for item in skills_value)}`")
+    if report.get("harnessDir"):
+        lines.append(f"- Harness dir: `{report['harnessDir']}`")
+    if report.get("lessonsCount"):
+        lines.append(f"- Experience lessons: {report['lessonsCount']} 条（文件注入）")
+    lines.extend(
+        [
+            "",
+            "没有 citations 的 citation_precision、没有关键词的 keyword_coverage、",
+            "非不可答题的 refusal_correct、没有期望来源的 retrieval_hit 记 n/a，不进均值。",
+            "",
+            "## Overall",
+            "",
+            "| metric | mean |",
+            "| --- | --- |",
+        ]
+    )
     for name in (*METRIC_NAMES, "count"):
         lines.append(f"| {name} | {_cell(overall.get(name))} |")
     lines.extend(
@@ -560,38 +767,59 @@ def render_markdown(report: dict[str, object]) -> str:
             )
             + " |"
         )
-    lines.extend(
-        [
-            "",
-            "## Cases",
-            "",
-            "| id | category | passed | retrieval_hit | citation_precision | keyword_coverage | refusal_correct |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
-        ]
-    )
     cases = report["cases"]
-    if isinstance(cases, list):
-        for case in cases:
-            if not isinstance(case, dict):
-                continue
-            scores = case.get("scores")
-            if not isinstance(scores, dict):
-                scores = {}
-            lines.append(
-                "| "
-                + " | ".join(
-                    [
-                        _cell(case.get("id")),
-                        _cell(case.get("category")),
-                        _cell(scores.get("passed")),
-                        _cell(scores.get("retrieval_hit")),
-                        _cell(scores.get("citation_precision")),
-                        _cell(scores.get("keyword_coverage")),
-                        _cell(scores.get("refusal_correct")),
-                    ]
-                )
-                + " |"
+    case_rows = (
+        [case for case in cases if isinstance(case, dict)] if isinstance(cases, list) else []
+    )
+    # skill 题集才有 triggered/completed 两列；黄金集报告表格形状不变。
+    has_skill_rows = any("triggered" in case for case in case_rows)
+    if has_skill_rows:
+        lines.extend(
+            [
+                "",
+                "## Cases",
+                "",
+                "| id | category | skill | kind | triggered | completed | passed | retrieval_hit | citation_precision | keyword_coverage | refusal_correct |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "",
+                "## Cases",
+                "",
+                "| id | category | passed | retrieval_hit | citation_precision | keyword_coverage | refusal_correct |",
+                "| --- | --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+    for case in case_rows:
+        scores = case.get("scores")
+        if not isinstance(scores, dict):
+            scores = {}
+        cells = [
+            _cell(case.get("id")),
+            _cell(case.get("category")),
+        ]
+        if has_skill_rows:
+            cells.extend(
+                [
+                    _cell(case.get("skill")),
+                    _cell(case.get("kind")),
+                    _cell(case.get("triggered")),
+                    _cell(case.get("completed")),
+                ]
             )
+        cells.extend(
+            [
+                _cell(scores.get("passed")),
+                _cell(scores.get("retrieval_hit")),
+                _cell(scores.get("citation_precision")),
+                _cell(scores.get("keyword_coverage")),
+                _cell(scores.get("refusal_correct")),
+            ]
+        )
+        lines.append("| " + " | ".join(cells) + " |")
     lines.append("")
     return "\n".join(lines)
 
@@ -605,17 +833,70 @@ async def run_answer_eval(
     out: Path | None = None,
     generated_at: datetime | None = None,
     agent_id: str = EVAL_SITE_ID,
+    skills: Sequence[str] | None = None,
+    harness_dir: str | None = None,
+    experience_lessons: Sequence[ExperienceLessonItem] | None = None,
+    skills_dir: str | None = None,
+    skills_max_instruction_chars: int | None = None,
 ) -> AnswerEvalRun:
-    """对黄金集跑检索 + run_chat，评分，并在给出 out 时写下 JSON 与 Markdown。"""
+    """对题集跑检索 + run_chat，评分，并在给出 out 时写下 JSON 与 Markdown。
+
+    注入参数（#187 UoW-1；全部缺省时行为与接通前逐字一致）：
+
+    - ``skills``：本轮基础 skill 集（CLI ``--skills``）。带 skill 字段的题
+      （skill_qa）在此基础上再追加该题自己的 skill——与 #182 人工口径
+      「每题显式带该题 skill」一致；解析走生产同一函数 resolve_skills，
+      未知 id 按生产缺省 ignore 口径记入 missing，不中断整轮。
+    - ``harness_dir``：平台文件目录（CLI ``--harness-dir``），语义等价
+      生产 AGENT_HARNESS_DIR；缺省 None 走源码树默认目录。
+    - ``experience_lessons``：经验条目（CLI ``--lessons-file`` 已解析）；
+      缺省 None 即无条目（对照的「关」臂）。
+    - ``skills_dir`` / ``skills_max_instruction_chars``：CLI 层从进程
+      Settings 传入（与生产同源）；函数层缺省分别取平台默认目录与不设限。
+    """
     loaded_corpus = list(corpus) if corpus is not None else load_corpus()
     loaded_cases = list(cases) if cases is not None else load_cases()
-    validate_golden(loaded_corpus, loaded_cases)
+    if any(case.skill for case in loaded_cases):
+        validate_eval_cases(loaded_corpus, loaded_cases)
+    else:
+        validate_golden(loaded_corpus, loaded_cases)
     when = _stamp(generated_at or datetime.now(UTC))
     service = await build_eval_index(loaded_corpus, agent_id=agent_id)
+    base_skills = [skill_id.strip() for skill_id in skills or [] if skill_id.strip()]
+    resolved_skills_dir = skills_dir or default_skills_directory()
+    resolutions: dict[tuple[str, ...], SkillResolution] = {}
+
+    def resolution_for(case: GoldenCase) -> SkillResolution | None:
+        requested = list(base_skills)
+        if case.skill and case.skill not in requested:
+            requested.append(case.skill)
+        if not requested:
+            return None
+        key = tuple(requested)
+        if key not in resolutions:
+            resolutions[key] = resolve_skills(
+                skills_dir=resolved_skills_dir,
+                requested_skill_ids=requested,
+                default_skill_ids=None,
+            )
+        return resolutions[key]
+
+    lessons = list(experience_lessons) if experience_lessons else None
     rows: list[dict[str, object]] = []
     try:
         for case in loaded_cases:
-            rows.append(await _run_case(service, model, case, agent_id=agent_id))
+            rows.append(
+                await _run_case(
+                    service,
+                    model,
+                    case,
+                    agent_id=agent_id,
+                    skill_resolution=resolution_for(case),
+                    skills_max_instruction_chars=skills_max_instruction_chars,
+                    harness_dir=harness_dir,
+                    experience_lessons=lessons,
+                )
+            )
     finally:
         await service.close()
     summary = aggregate(
@@ -628,6 +909,14 @@ async def run_answer_eval(
         "summary": summary,
         "cases": rows,
     }
+    # 本轮注入标注：只在实际启用了对应注入时出现，缺省报告形状不变。
+    # UoW-2 的配置指纹从这三个键与 model/passRule 取数扩展。
+    if base_skills:
+        report["skills"] = base_skills
+    if harness_dir:
+        report["harnessDir"] = harness_dir
+    if lessons:
+        report["lessonsCount"] = len(lessons)
     json_path = None
     markdown_path = None
     if out is not None:
@@ -682,19 +971,90 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also index evals/distractors.json (adversarial near-miss documents) alongside the golden corpus.",
     )
+    parser.add_argument(
+        "--cases",
+        type=Path,
+        default=None,
+        help="Case file (.jsonl): golden_qa shape or skill_qa shape. Default: evals/golden_qa.jsonl.",
+    )
+    parser.add_argument(
+        "--harness-dir",
+        type=Path,
+        default=None,
+        help="Platform harness files directory (background/guardrails/tool_guidance), "
+        "equivalent to the production AGENT_HARNESS_DIR. Default: the source tree harness/.",
+    )
+    parser.add_argument(
+        "--skills",
+        default=None,
+        help="Comma-separated skill ids injected for every case, resolved exactly like "
+        "production (agent.skills.resolve_skills). Skill cases additionally request their "
+        "own case skill. Default: no skills.",
+    )
+    parser.add_argument(
+        "--lessons-file",
+        type=Path,
+        default=None,
+        help="JSON array of experience lessons ([{lessonNo, lesson}]) injected into every "
+        "run, same shape as the chat request field. A missing or malformed file is an "
+        "error, never silently treated as no lessons.",
+    )
     return parser
+
+
+def _parse_skills_arg(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    return [part.strip() for part in raw.split(",") if part.strip()]
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    model, spec, blocked = configured_model_block(Settings())
+    # 注入类文件先验：坏文件要在跑分前明确报错，不许静默降级成缺省行为。
+    cases: list[GoldenCase] | None = None
+    if args.cases is not None:
+        try:
+            cases = load_any_cases(args.cases)
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: --cases could not be loaded: {exc}", file=sys.stderr, flush=True)
+            return BLOCKED_EXIT
+    lessons: list[ExperienceLessonItem] | None = None
+    if args.lessons_file is not None:
+        try:
+            lessons = load_lessons_file(args.lessons_file)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr, flush=True)
+            return BLOCKED_EXIT
+    harness_dir: str | None = None
+    if args.harness_dir is not None:
+        if not args.harness_dir.is_dir():
+            print(
+                f"ERROR: --harness-dir is not a directory: {args.harness_dir}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return BLOCKED_EXIT
+        harness_dir = str(args.harness_dir)
+    settings = Settings()
+    model, spec, blocked = configured_model_block(settings)
     if blocked or model is None:
         print(blocked or blocked_text("AI model is not configured (missing AI_MODEL)."), flush=True)
         return BLOCKED_EXIT
     destination = args.out if args.out is not None else evals_root() / "reports"
     corpus = load_corpus() + load_distractors() if args.distractors else None
     result = asyncio.run(
-        run_answer_eval(model, model_name=spec, out=destination, corpus=corpus)
+        run_answer_eval(
+            model,
+            model_name=spec,
+            out=destination,
+            corpus=corpus,
+            cases=cases,
+            skills=_parse_skills_arg(args.skills),
+            harness_dir=harness_dir,
+            experience_lessons=lessons,
+            skills_dir=settings.agent_skills_dir.strip() or default_skills_directory(),
+            skills_max_instruction_chars=settings.agent_skills_max_instruction_chars,
+        )
     )
     if result.json_path is not None:
         print(result.json_path, flush=True)
