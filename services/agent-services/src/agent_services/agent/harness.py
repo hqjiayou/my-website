@@ -64,6 +64,10 @@ class RequestHarness:
     tool_guidance: tuple[ToolGuidance, ...]
     mcp_servers: tuple[str, ...]
     guardrails: HarnessGuardrails
+    # 三个平台文件原文（background / guardrails / tool_guidance 顺序），供 runtime
+    # 在最终出口做系统提示泄露检测（Issue #191 R10）。只是本轮实际读入的文本，
+    # 与 system_prompt 的组装同源，不另读文件。
+    platform_texts: tuple[str, ...] = ()
 
 
 def default_harness_directory() -> str:
@@ -158,6 +162,7 @@ def assemble_harness(
         tool_guidance=tool_guidance,
         mcp_servers=mcp_servers,
         guardrails=guardrails,
+        platform_texts=(background, guardrails_text, tool_file),
     )
 
 

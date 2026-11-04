@@ -6,9 +6,11 @@ Python 不保存会话状态（stateless between business requests）；
 """
 
 import base64
+import json
 import logging
 import re
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 
 import anyio
 from pydantic_ai import Agent, BinaryContent
@@ -197,6 +199,36 @@ def tool_trace_from_messages(messages: list[ModelMessage]) -> list[dict[str, obj
     return trace[:MAX_TOOL_TRACE]
 
 
+# 单份工具返回进语料的上限，防异常大返回（如整表导出）撑爆回查。
+_TOOL_TEXT_MAX_CHARS = 100_000
+
+
+def tool_content_text(content: object) -> str:
+    """工具返回内容序列化为语料文本。只在进程内用于 grounding 回查，不落轨迹。"""
+    if isinstance(content, str):
+        text = content
+    else:
+        try:
+            text = json.dumps(content, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            text = str(content)
+    return text.strip()[:_TOOL_TEXT_MAX_CHARS]
+
+
+def tool_result_texts(messages: list[ModelMessage]) -> list[str]:
+    """从一轮 run 的消息里收全部工具返回文本（R3 统一语料的工具面来源）。"""
+    texts: list[str] = []
+    for message in messages:
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if isinstance(part, ToolReturnPart):
+                text = tool_content_text(part.content)
+                if text:
+                    texts.append(text)
+    return texts
+
+
 def grounding_citations(
     retrieval_context: list[str] | None,
     retrieval_chunks: list[RetrievedChunk] | None,
@@ -285,12 +317,24 @@ _DEGRADED_NOTE = {
 }
 _RETRY_RECORD = (
     "You must call search_site_knowledge before stating any identifier, status, date, or number "
-    "from the user's records or site documents. If the search returns nothing, say so and do not invent a value."
+    "from the user's records or site documents. Every identifier, status, and date you state must "
+    "appear in this turn's tool results or the provided context; drop or correct any value they "
+    "do not contain. If the search returns nothing, say so and do not invent a value."
 )
 _RETRY_AGGREGATE = (
     "Passage search cannot support a full count or total. Do not answer with a summed or counted number "
     "unless that exact number appears in the tool result. Say that passage search cannot support a full total."
 )
+_RETRY_ACTION = (
+    "A tool call you made this turn failed, but your draft claims the action succeeded. "
+    "Correct the reply: report honestly what failed and what was not completed. "
+    "Only claim success for actions that a tool result in this turn confirms."
+)
+# R10（Issue #191）：答案整段泄露内部脚手架时的中性固定句，进 _fixed 双语表同口径。
+_LEAK = {
+    "zh": "这部分属于内部配置，不能提供。",
+    "en": "That is internal configuration and cannot be shared.",
+}
 
 
 def fixed_sentence_locale(locale: str | None) -> str:
@@ -305,16 +349,83 @@ def _fixed(table: dict[str, str], locale: str | None) -> str:
     return table[fixed_sentence_locale(locale)]
 
 
-def _tool_corpus(collector: KnowledgeSearchCollector | None) -> str:
-    if collector is None:
-        return ""
+def _tool_corpus(
+    collector: KnowledgeSearchCollector | None,
+    extra_texts: list[str] | tuple[str, ...] = (),
+) -> str:
+    """本轮语料＝知识片段＋非检索 passages＋调用方补入的全部工具返回/预取语境/历史。
+
+    R3 回查（Issue #191）的合法依据不止知识片段：业务工具、表格工具（已经
+    passages 通道）、MCP、委派等工具的返回文本与预取语境都由调用方经
+    extra_texts 并入，不并入必误伤合法答案。
+    """
     parts: list[str] = []
-    for chunk in collector.chunks:
-        parts.append(chunk.content)
-        if chunk.title:
-            parts.append(chunk.title)
-    parts.extend(collector.passages)
+    if collector is not None:
+        for chunk in collector.chunks:
+            parts.append(chunk.content)
+            if chunk.title:
+                parts.append(chunk.title)
+        parts.extend(collector.passages)
+    parts.extend(text for text in extra_texts if text and text.strip())
     return "\n".join(parts)
+
+
+# R3 值回查专用日期模式：比 _DATE_RE（只管「有没有日期」）多捕获日，
+# 否则同月不同日的值查不出差异。
+_VALUE_DATE_RE = re.compile(
+    r"\d{4}\s*[-/.年]\s*\d{1,2}(?:\s*[-/.月]\s*\d{1,2}\s*日?)?|\d{1,2}\s*月\s*\d{1,2}\s*日"
+)
+
+
+def _date_keys(match_text: str) -> set[str]:
+    """一个日期文本的归一键集合：年前置时含 YYYY-MM 与 YYYY-MM-DD 两级与 MM-DD 后缀。"""
+    groups = [int(group) for group in re.findall(r"\d+", match_text)]
+    if len(groups) < 2:
+        return set()
+    first, second = groups[0], groups[1]
+    if first >= 1000:
+        keys = {f"{first:04d}-{second:02d}"}
+        if len(groups) >= 3:
+            keys.add(f"{first:04d}-{second:02d}-{groups[2]:02d}")
+            keys.add(f"{second:02d}-{groups[2]:02d}")
+        return keys
+    return {f"{first:02d}-{second:02d}"}
+
+
+def _most_specific_date_key(match_text: str) -> str | None:
+    """答案侧日期的最具体键：全文日期须以全文键命中语料，只到年月者以年月键命中。"""
+    groups = [int(group) for group in re.findall(r"\d+", match_text)]
+    if len(groups) < 2:
+        return None
+    first, second = groups[0], groups[1]
+    if first >= 1000:
+        if len(groups) >= 3:
+            return f"{first:04d}-{second:02d}-{groups[2]:02d}"
+        return f"{first:04d}-{second:02d}"
+    return f"{first:02d}-{second:02d}"
+
+
+def _unsupported_record_value(reply: str, corpus: str) -> bool:
+    """答案里的日期/ID/状态值是否有一项不在语料中（R3 已搜索场景回查）。
+
+    日期按归一键比对，吸收「2026-02-03」与「2026年2月3日」的写法差异；
+    ID 原样比对；状态按线索词（大小写不敏感）比对。
+    """
+    corpus_date_keys: set[str] = set()
+    for match in _VALUE_DATE_RE.finditer(corpus):
+        corpus_date_keys |= _date_keys(match.group(0))
+    for match in _VALUE_DATE_RE.finditer(reply):
+        key = _most_specific_date_key(match.group(0))
+        if key is not None and key not in corpus_date_keys:
+            return True
+    for match in _ID_RE.finditer(reply):
+        if match.group(0) not in corpus:
+            return True
+    folded = corpus.casefold()
+    reply_folded = reply.casefold()
+    return any(
+        cue.casefold() in reply_folded and cue.casefold() not in folded for cue in _STATUS_CUES
+    )
 
 
 def _is_record_question(message: str) -> bool:
@@ -346,6 +457,210 @@ def _has_degraded_cue(reply: str) -> bool:
     return any(cue.casefold() in folded for cue in _DEGRADED_CUES)
 
 
+# --- R5（Issue #191）：[cN] 越界标签确定性剥离 -------------------------------
+
+_CITE_LABEL_RE = re.compile(r" ?\[c(\d+)\]")
+
+
+def _valid_cite_numbers(
+    collector: KnowledgeSearchCollector | None,
+    retrieval_context: list[str] | None,
+    retrieval_chunks: list[RetrievedChunk] | None,
+) -> set[int] | None:
+    """本轮已分配的引用编号集；本轮根本没有编号来源时返回 None（不动作）。
+
+    编号单一来源与 reply_citations 同口径：collector 累积分配的编号 ∪
+    预取注入（retrieval_context 非空时）的片段编号。
+    """
+    if collector is None and not (retrieval_context and retrieval_chunks):
+        return None
+    valid: set[int] = set()
+    if collector is not None:
+        valid.update(chunk.cite for chunk in collector.chunks if chunk.cite is not None)
+    if retrieval_context and retrieval_chunks:
+        valid.update(chunk.cite for chunk in retrieval_chunks if chunk.cite is not None)
+    return valid
+
+
+def sanitize_citation_labels(
+    reply: str, valid_cites: set[int] | None
+) -> tuple[str, int, bool]:
+    """剥离编号不在已分配集内的 [cN] 标签。返回 (文本, 剥离数, 是否出现合法标签)。
+
+    valid_cites 为 None 表示本轮无编号来源、不判定；合法标签逐字保留，
+    剥离只去掉标签本身（连同至多一个前置空格），不伤正文。
+    """
+    if valid_cites is None:
+        return reply, 0, False
+    stripped = 0
+    has_valid = False
+
+    def _replace(match: re.Match[str]) -> str:
+        nonlocal stripped, has_valid
+        if int(match.group(1)) in valid_cites:
+            has_valid = True
+            return match.group(0)
+        stripped += 1
+        return ""
+
+    return _CITE_LABEL_RE.sub(_replace, reply), stripped, has_valid
+
+
+# --- R10（Issue #191）：系统提示泄露一票否决 --------------------------------
+
+_LEAK_MIN_SUBSTRING = 40
+# 内部特征串：命中任一即视为泄露。都是内部脚手架原文，正常答案不会包含。
+_LEAK_FEATURES = (
+    "# Run limits",
+    BUDGET_EXCEEDED,
+    "EXTERNAL_DEPENDENCY_BLOCKED",
+    "MCP_UNAVAILABLE",
+    "[... truncated]",
+)
+
+
+def _normalize_ws(text: str) -> str:
+    return " ".join(text.split())
+
+
+def detect_prompt_leak(reply: str, platform_texts: tuple[str, ...]) -> str | None:
+    """答案与任一平台文件存在 ≥40 字连续公共子串，或含内部特征串 → 泄露。
+
+    返回命中说明（特征串名或组件序号＋长度），不回显原文；未命中返回 None。
+    空白归一化后比对，吸收换行/缩进差异；改写或短引（<40 字）不误伤。
+    """
+    for feature in _LEAK_FEATURES:
+        if feature in reply:
+            return f"feature:{feature}"
+    normalized = _normalize_ws(reply)
+    if len(normalized) < _LEAK_MIN_SUBSTRING:
+        return None
+    for index, source in enumerate(platform_texts):
+        cleaned = _normalize_ws(source)
+        if len(cleaned) < _LEAK_MIN_SUBSTRING:
+            continue
+        match = SequenceMatcher(None, normalized, cleaned, autojunk=False).find_longest_match()
+        if match.size >= _LEAK_MIN_SUBSTRING:
+            return f"component:{index}:{match.size}"
+    return None
+
+
+# --- R2（Issue #191）：失败的动作类工具＋成功声称 → 定向重试（保守版） -------
+
+# 本仓一方工具全集（与 toolset_factory 的注册面同步维护）：不在此列的工具名
+# 按 MCP 工具对待（MCP 工具名由服务器定义、本仓无法枚举）。新加一方工具时
+# 须同步此表；漏登记的方向是「按动作类多查」，不是漏查。
+_FIRST_PARTY_TOOLS = frozenset(
+    {
+        "search_site_knowledge",
+        "list_knowledge_documents",
+        "get_site_info",
+        "list_site_contents",
+        "query_site_table",
+        "get_weather",
+        "render_chart",
+        "list_todos",
+        "add_todo",
+        "update_todo_status",
+        "complete_todo",
+        "delegate_task",
+        "spawn_background_task",
+        "get_background_task",
+        "list_background_tasks",
+        "cancel_background_task",
+    }
+)
+# 动作类：todo 变更与委派/后台派发。纯读工具失败已有各自诚实口径，不在此列。
+_ACTION_TOOLS = frozenset(
+    {
+        "add_todo",
+        "update_todo_status",
+        "complete_todo",
+        "delegate_task",
+        "spawn_background_task",
+        "cancel_background_task",
+    }
+)
+_SUCCESS_CLAIM_CUES = (
+    "已完成",
+    "已提交",
+    "已创建",
+    "已建立",
+    "已保存",
+    "已发送",
+    "已删除",
+    "已更新",
+    "已取消",
+    "提交成功",
+    "创建成功",
+    "保存成功",
+    "发送成功",
+    "成功创建",
+    "成功提交",
+    "成功保存",
+    "successfully created",
+    "successfully submitted",
+    "successfully saved",
+    "successfully sent",
+    "completed successfully",
+    "has been created",
+    "has been submitted",
+    "have been created",
+    "have been submitted",
+)
+# 失败/否定说明线索：出现任一即视为已如实交代，不触发（转述与否定句靠此排除）。
+_FAILURE_MENTION_CUES = (
+    "失败",
+    "失敗",
+    "未成功",
+    "没有成功",
+    "沒有成功",
+    "并未",
+    "並未",
+    "未完成",
+    "无法",
+    "無法",
+    "没能",
+    "沒能",
+    "未能",
+    "出错",
+    "错误",
+    "錯誤",
+    "error",
+    "failed",
+    "failure",
+    "unable",
+    "could not",
+    "couldn't",
+    "not successful",
+    "was not completed",
+    "did not complete",
+    "didn't complete",
+)
+
+
+def _is_action_tool(name: str) -> bool:
+    return name in _ACTION_TOOLS or name not in _FIRST_PARTY_TOOLS
+
+
+def _unsupported_success_claim(
+    reply: str, tools: list[dict[str, object]] | None
+) -> bool:
+    """本轮有动作类工具失败、答案声称成功、且通篇没有失败/未完成说明。"""
+    if not tools:
+        return False
+    failed_action = any(
+        tool.get("ok") is False and _is_action_tool(str(tool.get("name", "")))
+        for tool in tools
+    )
+    if not failed_action:
+        return False
+    folded = reply.casefold()
+    if not any(cue.casefold() in folded for cue in _SUCCESS_CLAIM_CUES):
+        return False
+    return not any(cue.casefold() in folded for cue in _FAILURE_MENTION_CUES)
+
+
 def plan_search_grounding(
     message: str,
     reply: str,
@@ -353,17 +668,26 @@ def plan_search_grounding(
     locale: str | None,
     *,
     allow_retry: bool,
+    extra_corpus: list[str] | tuple[str, ...] = (),
+    tools: list[dict[str, object]] | None = None,
 ) -> tuple[str, str]:
-    """返回 (action, reply)。action 为 keep / retry_record / retry_aggregate / refuse / aggregate。
+    """返回 (action, reply)。
 
-    allow_retry 为假时不再要求重跑，直接换成固定句。降级说明加在最终回复末尾。
+    action 为 keep / retry_record / retry_aggregate / retry_action / refuse / aggregate。
+    allow_retry 为假时不再要求重跑：记录/汇总类直接换成固定句；R2 动作类
+    再犯保留原文、仅记日志（保守口径，Issue #191）。降级说明加在最终回复末尾。
+    extra_corpus 是本轮全部工具返回文本、预取语境与历史（R3 回查的合法依据）；
+    tools 是本轮工具轨迹（R2 判定用），缺省不查 R2。
     """
-    corpus = _tool_corpus(collector)
+    corpus = _tool_corpus(collector, extra_corpus)
     searched = bool(collector is not None and collector.searches)
     action = "keep"
     text = reply
-    # 零搜索就写出编号/日期/状态，优先于汇总数字：含「多少」的证件题要拒绝句，不是统计句。
-    if _is_record_question(message) and not searched and _has_record_value(reply):
+    # 记录类：零搜索就写出编号/日期/状态，或已搜索但值不在本轮语料（含问题原文）
+    # 中，都不许保留。优先于汇总数字：含「多少」的证件题要拒绝句，不是统计句。
+    if _is_record_question(message) and _has_record_value(reply) and (
+        not searched or _unsupported_record_value(reply, corpus + "\n" + message)
+    ):
         if allow_retry:
             return "retry_record", reply
         action = "refuse"
@@ -373,6 +697,11 @@ def plan_search_grounding(
             return "retry_aggregate", reply
         action = "aggregate"
         text = _fixed(_AGGREGATE, locale)
+    if action == "keep" and _unsupported_success_claim(reply, tools):
+        if allow_retry:
+            logger.info("guardrail_hit rule=R2 action=retry")
+            return "retry_action", reply
+        logger.warning("guardrail_hit rule=R2 action=kept_repeat_offense")
     if collector is not None and collector.degraded and not _has_degraded_cue(text):
         text = text.rstrip() + "\n\n" + _fixed(_DEGRADED_NOTE, locale)
     return action, text
@@ -383,6 +712,8 @@ def retry_instruction(action: str) -> str | None:
         return _RETRY_RECORD
     if action == "retry_aggregate":
         return _RETRY_AGGREGATE
+    if action == "retry_action":
+        return _RETRY_ACTION
     return None
 
 
@@ -512,6 +843,13 @@ def build_user_prompt(
     parts.extend(images)
     parts.extend(sections)
     return parts
+
+
+def _user_prompt_texts(user_prompt: UserPrompt) -> list[str]:
+    """用户提示的纯文本部分（问题原文＋上传文档段），同属「所给上下文」。"""
+    if isinstance(user_prompt, str):
+        return [user_prompt]
+    return [part for part in user_prompt if isinstance(part, str)]
 
 
 MAX_HISTORY_IMAGES = 4
@@ -727,6 +1065,10 @@ async def run_chat(
         prompt_profile=prompt_profile,
         history=list(harness.memory),
         needs_mcp_context=needs_mcp_context,
+        corpus_texts=[*tool_result_texts(result.new_messages()), *_user_prompt_texts(user_prompt)],
+        platform_texts=harness.platform_texts,
+        retrieval_context=retrieval_context,
+        retrieval_chunks=retrieval_chunks,
     )
     # 独立 Agent，不传入本轮 UsageLimits，抽取不计入 run budget。
     extracted: list[str] = []
@@ -771,17 +1113,33 @@ async def _apply_search_grounding(
     prompt_profile: PromptProfile | None,
     history: list[ChatHistoryMessage],
     needs_mcp_context: bool,
+    corpus_texts: list[str] | None = None,
+    platform_texts: tuple[str, ...] = (),
+    retrieval_context: list[str] | None = None,
+    retrieval_chunks: list[RetrievedChunk] | None = None,
 ) -> tuple[str, bool, dict[str, int], list[dict[str, object]]]:
-    """跑完再验。预算不够就不重跑，直接用固定句。返回 (回复, 是否清空 citations, 用量, 工具轨迹)。"""
+    """跑完再验。预算不够就不重跑，直接用固定句。返回 (回复, 是否清空 citations, 用量, 工具轨迹)。
+
+    plan 之后还有最终出口两道确定性处理（Issue #191）：R5 剥离越界 [cN]
+    标签、R10 泄露一票否决——都挂在这里，覆盖第二轮重试产出的答案。
+    流式路径同样经此函数：替换只作用于最终文本（DONE reply 与落库文本），
+    已发出的 delta 不在此处理范围内（brief 明示的边界）。
+    """
+    extra_corpus: list[str] = [
+        *[item.content for item in history if item.content],
+        *(corpus_texts or []),
+    ]
     action, _planned = plan_search_grounding(
-        message, reply, collector, locale, allow_retry=True
+        message, reply, collector, locale,
+        allow_retry=True, extra_corpus=extra_corpus, tools=tools,
     )
-    if action in {"retry_record", "retry_aggregate"}:
+    if action in {"retry_record", "retry_aggregate", "retry_action"}:
         instruction = retry_instruction(action)
         nxt = remaining_run_budget(budget, usage, needs_tool=action == "retry_record")
         if nxt is None or instruction is None:
             action, reply = plan_search_grounding(
-                message, reply, collector, locale, allow_retry=False
+                message, reply, collector, locale,
+                allow_retry=False, extra_corpus=extra_corpus, tools=tools,
             )
         else:
             second = await _run_grounding_retry(
@@ -796,20 +1154,40 @@ async def _apply_search_grounding(
             )
             if second is None:
                 action, reply = plan_search_grounding(
-                    message, reply, collector, locale, allow_retry=False
+                    message, reply, collector, locale,
+                    allow_retry=False, extra_corpus=extra_corpus, tools=tools,
                 )
             else:
-                second_text, second_usage, second_tools = second
+                second_text, second_usage, second_tools, second_texts = second
                 usage = add_usage(usage, second_usage)
                 tools = (tools + second_tools)[:MAX_TOOL_TRACE]
+                extra_corpus = [*extra_corpus, *second_texts]
                 action, reply = plan_search_grounding(
-                    message, second_text, collector, locale, allow_retry=False
+                    message, second_text, collector, locale,
+                    allow_retry=False, extra_corpus=extra_corpus, tools=tools,
                 )
     else:
         action, reply = plan_search_grounding(
-            message, reply, collector, locale, allow_retry=False
+            message, reply, collector, locale,
+            allow_retry=False, extra_corpus=extra_corpus, tools=tools,
         )
-    return reply, action == "refuse", usage, tools
+    # 最终出口一：R5 引用标签校验（collector 此时含重试轮新记录的片段）。
+    valid_cites = _valid_cite_numbers(collector, retrieval_context, retrieval_chunks)
+    reply, stripped, has_valid_label = sanitize_citation_labels(reply, valid_cites)
+    if stripped:
+        logger.warning("guardrail_hit rule=R5 stripped_citations=%d", stripped)
+    elif valid_cites and not has_valid_label:
+        logger.info(
+            "guardrail_hit rule=R5 no_citation_label chunks=%d", len(valid_cites)
+        )
+    # 最终出口二：R10 泄露一票否决（不重试，整答替换并清 citations）。
+    clear_citations = action == "refuse"
+    leak = detect_prompt_leak(reply, platform_texts)
+    if leak is not None:
+        logger.warning("guardrail_hit rule=R10 leak=%s", leak)
+        reply = _fixed(_LEAK, locale)
+        clear_citations = True
+    return reply, clear_citations, usage, tools
 
 
 async def _run_grounding_retry(
@@ -822,8 +1200,12 @@ async def _run_grounding_retry(
     prompt_profile: PromptProfile | None,
     history: list[ChatHistoryMessage],
     needs_mcp_context: bool,
-) -> tuple[str, dict[str, int], list[dict[str, object]]] | None:
-    """第二轮失败或空回复时返回 None，由调用方改走固定句，不把第一轮未接地的草稿留下。"""
+) -> tuple[str, dict[str, int], list[dict[str, object]], list[str]] | None:
+    """第二轮失败或空回复时返回 None，由调用方改走固定句，不把第一轮未接地的草稿留下。
+
+    返回 (文本, 用量, 工具轨迹, 工具返回文本)：第二轮的工具返回同样并入
+    R3 回查语料，模型在重试中查到的值不被误拦。
+    """
     run_kwargs = build_run_kwargs(prompt_profile, history, budget)
     agent = build_agent(model, system_prompt, toolsets, budget)
     try:
@@ -840,4 +1222,10 @@ async def _run_grounding_retry(
     text = str(result.output).strip()
     if not text:
         return None
-    return text, usage_to_api(result.usage), tool_trace_from_messages(result.new_messages())
+    messages = result.new_messages()
+    return (
+        text,
+        usage_to_api(result.usage),
+        tool_trace_from_messages(messages),
+        tool_result_texts(messages),
+    )
