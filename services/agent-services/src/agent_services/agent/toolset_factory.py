@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic_ai.models import Model
 
+from agent_services.agent.background_tasks import build_background_toolset
 from agent_services.agent.business_tools import build_business_toolset
 from agent_services.agent.chart_tools import build_chart_toolset
 from agent_services.agent.knowledge_tools import (
@@ -102,6 +103,24 @@ def build_execution_toolsets(
                 max_requests=settings.agent_subagent_max_requests,
             )
         )
+        if settings.agent_background_tasks_enabled:
+            # 后台委派（Issue #188）：与同步委派同一 gating（子 agent 总开关＋模型），
+            # 再叠自己的总开关；关时不注册，组装逐字回归。注册表是进程级单例，
+            # 任务跨请求存活，本轮派发、后续轮次取回。
+            toolsets.append(
+                build_background_toolset(
+                    model,
+                    agent_id=agent_id,
+                    retrieval=retrieval,
+                    embedder=retrieval_embedder,
+                    embedding_model=retrieval_embedding_model,
+                    embedding_classes=retrieval_embedding_classes,
+                    max_concurrent=settings.agent_background_task_max_concurrent,
+                    timeout_seconds=settings.agent_background_task_timeout_seconds,
+                    max_requests=settings.agent_subagent_max_requests,
+                    ttl_seconds=settings.agent_background_task_ttl_seconds,
+                )
+            )
     return toolsets
 
 
