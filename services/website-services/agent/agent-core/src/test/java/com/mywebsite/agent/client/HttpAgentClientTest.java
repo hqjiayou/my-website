@@ -177,6 +177,36 @@ class HttpAgentClientTest {
     }
 
     @Test
+    void mcpReadyRestrictsNamedServers() throws IOException {
+        java.util.concurrent.atomic.AtomicReference<String> query =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        server.createContext("/internal/v1/mcp/ready", exchange -> {
+            query.set(exchange.getRequestURI().getRawQuery());
+            write(exchange, 200, "{\"ok\":true,\"mcpStatus\":\"DISABLED\",\"servers\":[]}");
+        });
+
+        client.mcpReady(java.util.List.of("beta", "alpha"));
+
+        assertThat(query.get()).contains("restrict=true");
+        assertThat(query.get()).contains("onlyNames=beta");
+        assertThat(query.get()).contains("onlyNames=alpha");
+    }
+
+    @Test
+    void mcpReadyEmptyListSendsRestrictWithoutNames() throws IOException {
+        java.util.concurrent.atomic.AtomicReference<String> query =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        server.createContext("/internal/v1/mcp/ready", exchange -> {
+            query.set(exchange.getRequestURI().getRawQuery());
+            write(exchange, 200, "{\"ok\":true,\"mcpStatus\":\"DISABLED\",\"servers\":[]}");
+        });
+
+        client.mcpReady(java.util.List.of());
+
+        assertThat(query.get()).isEqualTo("restrict=true");
+    }
+
+    @Test
     void chatMapsExternalDependencyBlockedWithoutRetryFlood() {
         assertThatThrownBy(() -> client.chat(new AgentChatRequest("10", "hello")))
                 .isInstanceOf(BusinessException.class)

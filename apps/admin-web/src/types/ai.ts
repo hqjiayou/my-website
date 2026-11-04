@@ -513,10 +513,15 @@ export interface AiKnowledgeReembedConflict {
   dimensions: number
 }
 
+/** PORTAL＝站点用户正式对话；ADMIN_PREVIEW＝后台试聊落库。 */
+export type AiConversationSource = 'PORTAL' | 'ADMIN_PREVIEW'
+
 export interface AiConversationListItem {
   id: number
   agentId: number
-  agentUserId: number
+  /** 预览会话为 null。 */
+  agentUserId: number | null
+  source: AiConversationSource
   title: string | null
   lastMessageAt: string | null
   createdAt: string
@@ -692,6 +697,8 @@ export interface AiPreviewChatInput {
   mode?: 'CLI' | 'KEY'
   /** 这一轮点名的入口。不传则用该模式链首。 */
   modelEntryId?: number
+  /** 续写已有预览会话；空则 DONE 成功后新建，SSE CONVERSATION 回传 id。 */
+  conversationId?: number
   /** 浏览器 IANA 时区。缺省时执行层回退 UTC。只用于钟点。 */
   timezone?: string
   /** 浏览器或手机定位权限授予后的纬度。须与经度一起传。 */
@@ -724,6 +731,8 @@ export type AiPreviewAgentEvent =
     }
   /** message：Java 推流前失败时为本地化文案；推流中为 agent-services 原始诊断（仅后台可见） */
   | { type: 'error'; errorCode: string; message?: string }
+  /** DONE 成功落库后回传；用于续写同一预览会话。 */
+  | { type: 'conversation'; conversationId: number }
 
 /**
  * 回复内卡片信封（Issue #179）：VISUALIZATION 事件 data 原文，与 agent-services

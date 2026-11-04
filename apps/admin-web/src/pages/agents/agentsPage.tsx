@@ -13,7 +13,7 @@ import { PERMISSION_CODES } from '@/types/rbac'
 
 import { AgentCreateDialog } from './agentCreateDialog'
 
-export function SitesPage() {
+export function AgentsPage() {
   const { t } = useTranslation('sites')
   const { t: tCommon } = useTranslation('common')
   const [createOpen, setCreateOpen] = useState(false)

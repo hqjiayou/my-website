@@ -13,7 +13,8 @@ public final class AdminAiPreviewDtos {
     private AdminAiPreviewDtos() {}
 
     /**
-     * 后台预览 chat：不落库。history / todos 仅用于当前预览线程上下文（前端持有上轮 DONE.todos 回传）；
+     * 后台预览 chat：DONE 成功后 user+assistant 写入 {@code agent_ai_conversation}（source=ADMIN_PREVIEW，
+     * 不写 user memory）。history / todos 仍由前端持有并回传，仅用于当前预览线程上下文；
      * {@code promptProfile} 仍由 Java 从站点配置注入，不接受前端直传。
      */
     public record AdminAiPreviewChatRequest(
@@ -37,7 +38,12 @@ public final class AdminAiPreviewDtos {
             /** 浏览器或手机定位权限授予后的经度。 */
             Double longitude,
             /** 定位精度，单位米。可空。 */
-            Double accuracyMeters) {}
+            Double accuracyMeters,
+            /**
+             * 可选：续写已有预览会话。必须是本站点 ADMIN_PREVIEW 会话，否则 404；空则 DONE 成功后新建。
+             * 新建的会话 id 经 SSE {@code CONVERSATION} 事件回传。
+             */
+            Long conversationId) {}
 
     public record AdminAiPreviewHistoryMessage(
             @NotBlank @Size(max = 16) String role, @NotBlank @Size(max = 8000) String content) {}

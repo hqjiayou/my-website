@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import {
   AppWindow,
+  BarChart3,
   Circle,
   Layers,
   LayoutDashboard,
@@ -8,6 +9,7 @@ import {
   Settings2,
   Shield,
   Users,
+  Zap,
 } from 'lucide-react'
 
 import type { MenuNodeDto } from '@/types/rbac'
@@ -29,6 +31,7 @@ export interface SidebarGroup {
 
 export type SidebarEntry = SidebarLink | SidebarGroup
 
+/** 后端 menu.icon → Lucide；未登记键回退 Circle。语义口径见 DESIGN_SYSTEM §12。 */
 const ICON_MAP: Record<string, LucideIcon> = {
   setting: Settings2,
   settings: Settings2,
@@ -41,6 +44,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   layers: Layers,
   appstore: AppWindow,
   apps: AppWindow,
+  zap: Zap,
+  chart: BarChart3,
 }
 
 function mapBackendIcon(icon: string | null | undefined): LucideIcon {

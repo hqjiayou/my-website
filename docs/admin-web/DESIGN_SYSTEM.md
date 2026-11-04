@@ -157,7 +157,7 @@
 
 - 只用 Lucide（SVG，stroke 2、圆头圆尾、currentColor）；**禁止用字符、emoji 或私有字体充当图标**。
 - 尺寸阶梯：14（标签内/行内辅助）、16（按钮内、表单）、18（菜单、卡头）、20（顶栏、工具）、24（空状态、统计）。
-- 语义唯一：同一含义全站同一图标（映射进附录：设置＝SlidersHorizontal、代理＝Zap、知识库＝BookOpen 等，新增先登记）；状态图标才用状态色，其余随文字色。
+- 语义唯一：同一含义全站同一图标（映射进附录：设置＝SlidersHorizontal、智能体＝Layers、API 管理／代理＝Zap、AI 用量＝BarChart3、知识库＝BookOpen 等，新增先登记）；状态图标才用状态色，其余随文字色。后端 `menu.icon` 字符串经 `utils/menu.ts` `ICON_MAP` 映射（`layers`／`zap`／`chart`）。
 
 ## 13. 字阶与动效
 

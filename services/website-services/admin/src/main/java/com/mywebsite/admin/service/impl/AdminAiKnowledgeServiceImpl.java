@@ -63,10 +63,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -90,6 +93,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     private final StorageProperties storageProperties;
     private final AdminAiKnowledgeBaseMapper baseMapper;
     private final AdminAiKnowledgeBaseLinkMapper linkMapper;
+    private final ExecutorService adminAiStreamExecutor;
 
     public AdminAiKnowledgeServiceImpl(
             AdminAiKnowledgeDocumentMapper knowledgeMapper,
@@ -99,7 +103,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             ObjectStorageService objectStorageService,
             StorageProperties storageProperties,
             AdminAiKnowledgeBaseMapper baseMapper,
-            AdminAiKnowledgeBaseLinkMapper linkMapper) {
+            AdminAiKnowledgeBaseLinkMapper linkMapper,
+            ExecutorService adminAiStreamExecutor) {
         this.knowledgeMapper = knowledgeMapper;
         this.adminAgentMapper = adminAgentMapper;
         this.agentClient = agentClient;
@@ -108,6 +113,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         this.storageProperties = storageProperties;
         this.baseMapper = baseMapper;
         this.linkMapper = linkMapper;
+        this.adminAiStreamExecutor = adminAiStreamExecutor;
     }
 
     @Override
@@ -192,6 +198,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         entity.setContent(storedUploadContent(request.content(), meta));
         entity.setUnevaluatedFormulaCount(unevaluatedFormulaCount(meta));
         entity.setStatus(AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        entity.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING);
         entity.setSourceFormat(meta.sourceFormat());
         entity.setOriginalFilename(meta.originalFilename());
         entity.setFileSizeBytes(meta.fileSizeBytes());
@@ -220,8 +227,45 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         knowledgeMapper.insert(entity);
 
         AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(agentId, entity.getId());
-        syncDerivedIndex(saved, false, meta.bytes());
+        // 派生索引（embedding）改事务提交后异步跑，避免大 xlsm 同步卡住上传 HTTP（前端 60s 超时）。
+        // 响应仍为 PENDING；列表可轮询到 INDEXED/FAILED，失败可点「重新索引」。
+        scheduleDerivedIndexAfterCommit(agentId, saved.getId(), meta.bytes());
         return toDetail(saved, isIndexStale(saved, new LinkedHashMap<>()));
+    }
+
+    /**
+     * 上传路径专用：事务提交后再异步 {@link #syncDerivedIndex}。
+     * 任务内重载实体；文档已删／非 ACTIVE／不属于该站则直接退出，避免竞态写脏索引。
+     */
+    private void scheduleDerivedIndexAfterCommit(long agentId, long documentId, byte[] originalBytes) {
+        byte[] bytesCopy = originalBytes == null ? null : originalBytes.clone();
+        Runnable task = () -> {
+            try {
+                AdminAiKnowledgeDocumentEntity current = knowledgeMapper.selectById(documentId);
+                if (current == null
+                        || !Objects.equals(current.getAgentId(), agentId)
+                        || !AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(current.getStatus())) {
+                    return;
+                }
+                syncDerivedIndex(current, false, bytesCopy);
+            } catch (RuntimeException ex) {
+                log.warn(
+                        "async KB derived index failed (agentId={}, documentId={})",
+                        agentId,
+                        documentId,
+                        ex);
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    adminAiStreamExecutor.execute(task);
+                }
+            });
+            return;
+        }
+        adminAiStreamExecutor.execute(task);
     }
 
     @Override

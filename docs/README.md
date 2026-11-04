@@ -9,6 +9,20 @@ last_verified: 2026-10-29
 
 代码、Flyway、测试优先于文档。未完成的工作只记在 GitHub Issues。
 
+## 项目介绍（多语言）
+
+仓库根目录 [`README.md`](../README.md) 只放默认语种（简体中文），供 GitHub 首页展示。各语种正文统一放在 [`README/`](./README/)，在本页声明；**不要**在仓库最外层或 `docs/` 根下再并列 `README.*.md`。
+
+| 语种 | 正文 |
+|------|------|
+| 简体中文（默认） | [`README/zh-CN.md`](./README/zh-CN.md)（根目录 [`../README.md`](../README.md) 同源） |
+| 繁體中文 | [`README/zh-Hant.md`](./README/zh-Hant.md) |
+| English | [`README/en.md`](./README/en.md) |
+| 日本語 | [`README/ja.md`](./README/ja.md) |
+| 한국어 | [`README/ko.md`](./README/ko.md) |
+
+---
+
 文档只有三格。先选格，再打开那一格里的**一篇**正文。不要沿「总览 → 架构说明 → 架构设计 → 现状」往下翻，那些重复入口已经收成跳转。
 
 | 格 | 回答 | 不回答 |

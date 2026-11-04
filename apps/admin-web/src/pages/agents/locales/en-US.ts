@@ -496,7 +496,7 @@ export default {
       uploadHint: 'Dozens of formats (documents, sheets, slides, ebooks, text, code, data), up to 10 MB. Everything is stored as Markdown. Scanned PDFs are transcribed automatically by the site AI model.',
       invalidExtension: 'Unsupported file format.',
       fileTooLarge: 'File must be 10 MB or smaller.',
-      uploaded: 'File uploaded',
+      uploaded: 'File uploaded; indexing in background',
       uploadedIndexed: 'File uploaded and indexed',
       uploadedIndexFailed: 'File uploaded, but indexing failed (retry from the list)',
       reindex: 'Reindex',
@@ -516,7 +516,7 @@ export default {
       baseDeleted: 'Knowledge base deleted',
       reindexed: 'Reindexed',
       reindexFailed: 'Reindexing still failed: {{error}}',
-      batchResult: 'Batch upload done: {{indexed}} indexed, {{indexFailed}} index-failed, {{rejected}} rejected',
+      batchResult: 'Batch upload done: {{indexed}} uploaded, {{indexFailed}} index-failed, {{rejected}} rejected',
       dropHint: 'Drop files here to queue them; upload starts only after you confirm.',
       queueHint: 'Multi-select is supported. Files stay queued until you click Start upload.',
       queueEmpty: 'No files selected yet',
@@ -532,9 +532,9 @@ export default {
         rejected: 'Rejected',
         failed: 'Upload failed',
         emptyArchive: 'Archive contained no importable files',
-        archiveOk: 'Archive imported ({{count}})',
+        archiveOk: 'Archive imported ({{count}}; indexing in background)',
         archivePartial:
-          'Archive partially imported: {{indexed}} indexed, {{indexFailed}} index-failed, {{rejected}} rejected',
+          'Archive partially imported: {{indexed}} uploaded, {{indexFailed}} index-failed, {{rejected}} rejected',
       },
       columns: {
         title: 'Title',
@@ -560,6 +560,8 @@ export default {
       untitled: 'Untitled conversation',
       selectHint: 'Select a conversation to view messages.',
       view: 'View',
+      sourcePortal: 'Portal',
+      sourcePreview: 'Preview',
       columns: {
         title: 'Title',
         agentUserId: 'Site user',
@@ -633,9 +635,13 @@ export default {
       entryUnavailable: 'Unavailable',
       using: 'This preview calls only {{model}}. A failure stays in the thread and does not switch to the other access mode.',
       noEntry: 'This mode has no saved default entry. Save one on Access, then try again.',
-      hint: 'Preview uses this site’s prompt and does not write conversations. The browser never sends systemPrompt. Note: preview only exercises the primary entry of the selected mode, with no fallbacks; production chat falls back down the chain when the primary fails, so preview results do not fully represent production behavior.',
+      hint: 'Preview uses this site’s prompt. The browser never sends systemPrompt. Note: preview only exercises the primary entry of the selected mode, with no fallbacks; production chat falls back down the chain when the primary fails, so preview results do not fully represent production behavior.',
       empty: 'Send a message to start the preview.',
-      emptyHint: 'Runs with this agent’s prompt. Nothing is written to the conversation history.',
+      emptyHint: 'Runs with this agent’s prompt. Successful turns are saved to conversation history (source: preview).',
+      conversation: {
+        resume: 'Continuing preview conversation #{{id}}',
+        new: 'New preview',
+      },
       thinking: 'Thinking…',
       placeholder: 'Preview message…',
       send: 'Send',
@@ -658,6 +664,29 @@ export default {
         hint: 'Leave them unchecked and this turn injects no skill. The portal adds the default orchestration skill only when the request omits skills.',
         empty: 'agent-services provides no skills.',
         error: 'Failed to load skills (is agent-services available?)',
+        expand: 'Show description',
+        collapse: 'Hide description',
+        catalog: {
+          orchestration: 'Multi-step work via todo tools.',
+          'platform-smoke': 'Platform smoke skill — acknowledge active skills only.',
+          'cross-doc-aggregation':
+            'Aggregate across all knowledge documents of one kind (highest, lowest, total, average, count, ranking). Not for a fact in one document or math inside one table.',
+          'doc-qa-cited':
+            'Answer everyday factual questions from this site’s documents with citations. Not for set-level comparisons, table math, or rewriting a whole document.',
+          'summarize-transform':
+            'Summarize, condense, rewrite, or translate material from this site’s knowledge base. Not for one specific fact or cross-document comparisons.',
+          'table-analysis':
+            'Analyse one structured table (filter, count, sum, average, min/max). Not for prose facts or comparisons across many documents.',
+        },
+      },
+      mcp: {
+        title: 'MCP',
+        hint: 'Read-only: assembled by the platform process; not selectable per turn. Connectivity and probes live on the Runtime page.',
+        empty: 'No MCP servers configured',
+        error: 'Failed to load MCP status',
+        openRuntime: 'Open runtime',
+        enabled: 'On',
+        disabled: 'Off',
       },
       run: {
         title: 'This run',

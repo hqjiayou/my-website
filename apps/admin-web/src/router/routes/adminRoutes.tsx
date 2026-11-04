@@ -15,48 +15,48 @@ const RoleListPage = lazyNamed(() => import('@/pages/roles/roleListPage'), 'Role
 
 const MenuTreePage = lazyNamed(() => import('@/pages/menus/menuTreePage'), 'MenuTreePage')
 
-const SitesPage = lazyNamed(() => import('@/pages/apps/sites/sitesPage'), 'SitesPage')
-const AgentCreatePage = lazyNamed(() => import('@/pages/apps/sites/agentCreatePage'), 'AgentCreatePage')
+const AgentsPage = lazyNamed(() => import('@/pages/agents/agentsPage'), 'AgentsPage')
+const AgentCreatePage = lazyNamed(() => import('@/pages/agents/agentCreatePage'), 'AgentCreatePage')
 const AgentWorkspaceLayout = lazyNamed(
-  () => import('@/pages/apps/sites/agentWorkspaceLayout'),
+  () => import('@/pages/agents/agentWorkspaceLayout'),
   'AgentWorkspaceLayout',
 )
 const RedirectToAgent = lazyNamed(
-  () => import('@/pages/apps/sites/agentRedirect'),
+  () => import('@/pages/agents/agentRedirect'),
   'RedirectToAgent',
 )
 const AgentOverviewPage = lazyNamed(
-  () => import('@/pages/apps/sites/agentOverviewPage'),
+  () => import('@/pages/agents/agentOverviewPage'),
   'AgentOverviewPage',
 )
 const AgentPromptPage = lazyNamed(
-  () => import('@/pages/apps/sites/agentPages'),
+  () => import('@/pages/agents/agentPages'),
   'AgentPromptPage',
 )
 const AgentKnowledgePage = lazyNamed(
-  () => import('@/pages/apps/sites/agentPages'),
+  () => import('@/pages/agents/agentPages'),
   'AgentKnowledgePage',
 )
 const AgentConversationsPage = lazyNamed(
-  () => import('@/pages/apps/sites/agentPages'),
+  () => import('@/pages/agents/agentPages'),
   'AgentConversationsPage',
 )
 const AgentPreviewPage = lazyNamed(
-  () => import('@/pages/apps/sites/agentPages'),
+  () => import('@/pages/agents/agentPages'),
   'AgentPreviewPage',
 )
 const AgentRuntimePage = lazyNamed(
-  () => import('@/pages/apps/sites/agentPages'),
+  () => import('@/pages/agents/agentPages'),
   'AgentRuntimePage',
 )
-const AgentBasicPage = lazyNamed(() => import('@/pages/apps/sites/agentBasicPage'), 'AgentBasicPage')
-const AgentAccessPage = lazyNamed(() => import('@/pages/apps/sites/agentAccessPage'), 'AgentAccessPage')
-const AgentThemePage = lazyNamed(() => import('@/pages/apps/sites/agentThemePage'), 'AgentThemePage')
+const AgentBasicPage = lazyNamed(() => import('@/pages/agents/agentBasicPage'), 'AgentBasicPage')
+const AgentAccessPage = lazyNamed(() => import('@/pages/agents/agentAccessPage'), 'AgentAccessPage')
+const AgentThemePage = lazyNamed(() => import('@/pages/agents/agentThemePage'), 'AgentThemePage')
 const AgentContentsPage = lazyNamed(
-  () => import('@/pages/apps/sites/agentContentsPage'),
+  () => import('@/pages/agents/agentContentsPage'),
   'AgentContentsPage',
 )
-const AgentFilesPage = lazyNamed(() => import('@/pages/apps/sites/agentFilesPage'), 'AgentFilesPage')
+const AgentFilesPage = lazyNamed(() => import('@/pages/agents/agentFilesPage'), 'AgentFilesPage')
 
 const StyleSettingsPage = lazyNamed(
   () => import('@/pages/apps/styleSettingsPage'),
@@ -117,7 +117,7 @@ export const adminRoutes = (
     <Route path={ROUTES.system.permissions} element={<Navigate to={ROUTES.system.roles} replace />} />
     <Route path={ROUTES.system.menus} element={<MenuTreePage />} />
 
-    <Route path={ROUTES.apps.sites} element={<SitesPage />} />
+    <Route path={ROUTES.apps.sites} element={<AgentsPage />} />
     <Route path={ROUTES.apps.agentCreate} element={<AgentCreatePage />} />
     <Route path={ROUTES.apps.api} element={<ProxyServicesPage />} />
     <Route path={ROUTES.apps.agentDetailPattern} element={<AgentWorkspaceLayout />}>

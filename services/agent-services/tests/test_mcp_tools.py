@@ -378,6 +378,47 @@ def test_mcp_ready_invalid_config_is_503() -> None:
     assert response.json()["mcpStatus"] == "INVALID_CONFIG"
 
 
+def test_mcp_ready_restrict_passes_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_services.agent.mcp_tools import McpReadyReport
+    from agent_services.agent.model_factory import ModelHandle
+
+    seen: dict[str, object] = {}
+
+    async def fake_probe(settings, *, only_names=None):
+        seen["only_names"] = only_names
+        return McpReadyReport(ok=True, status="DISABLED")
+
+    monkeypatch.setattr("agent_services.api.internal.probe_mcp_ready", fake_probe)
+    app = create_app(
+        settings=make_settings(ai_model="test"),
+        model_handle=ModelHandle(model=TestModel(), spec="test", blocked_reason=None),
+    )
+    client = TestClient(app)
+    open_probe = client.get("/internal/v1/mcp/ready", headers=TOKEN_HEADER)
+    assert open_probe.status_code == 200
+    assert seen["only_names"] is None
+
+    filtered = client.get(
+        "/internal/v1/mcp/ready",
+        params=[("restrict", "true"), ("onlyNames", "beta"), ("onlyNames", "alpha")],
+        headers=TOKEN_HEADER,
+    )
+    assert filtered.status_code == 200
+    assert seen["only_names"] == {"alpha", "beta"}
+
+    off = client.get("/internal/v1/mcp/ready?restrict=true", headers=TOKEN_HEADER)
+    assert off.status_code == 200
+    assert seen["only_names"] == set()
+
+    rejected = client.get(
+        "/internal/v1/mcp/ready",
+        params=[("restrict", "true"), ("onlyNames", "x" * 65)],
+        headers=TOKEN_HEADER,
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["errorCode"] == "BAD_REQUEST"
+
+
 def test_health_reports_disabled_without_mcp() -> None:
     from agent_services.agent.model_factory import ModelHandle
 
@@ -560,6 +601,41 @@ async def test_mcp_ready_total_timeout_marks_unfinished_server(
     assert report.servers[1].ok is False
     assert report.servers[1].error == "probe timed out"
     assert report.message is not None and "slow" in report.message
+
+
+async def test_mcp_ready_only_names_probes_intersection(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+
+    async def fake_probe(config):
+        seen.append(config.name)
+        return McpReadyServer(name=config.name, ok=True, tool_count=1)
+
+    monkeypatch.setattr("agent_services.agent.mcp_tools._probe_one", fake_probe)
+    payload = json.dumps(
+        [
+            {"name": "alpha", "url": "http://127.0.0.1:9/mcp"},
+            {"name": "beta", "url": "http://127.0.0.1:9/mcp"},
+            {"name": "off", "url": "http://127.0.0.1:9/mcp", "enabled": False},
+        ]
+    )
+    report = await probe_mcp_ready(
+        make_settings(mcp_servers_json=payload), only_names={"beta", "off", "ghost"}
+    )
+    assert seen == ["beta"]
+    assert report.ok is True
+    assert [item.name for item in report.servers] == ["beta"]
+
+
+async def test_mcp_ready_empty_only_names_skips_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_probe(config):
+        raise AssertionError(config.name)
+
+    monkeypatch.setattr("agent_services.agent.mcp_tools._probe_one", fake_probe)
+    payload = json.dumps([{"name": "alpha", "url": "http://127.0.0.1:9/mcp"}])
+    report = await probe_mcp_ready(make_settings(mcp_servers_json=payload), only_names=set())
+    assert report.ok is True
+    assert report.status == "DISABLED"
+    assert report.servers == ()
 
 
 def test_health_disabled_when_all_entries_disabled() -> None:

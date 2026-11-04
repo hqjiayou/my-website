@@ -30,6 +30,7 @@ export default {
     files: '文件管理',
     aiSettings: '模型入口',
     proxyServices: 'API 管理',
+    aiUsage: 'AI 用量',
     aiPrompts: 'Prompt 配置',
     aiKnowledgeBases: '知识库',
     aiConversations: '对话记录',

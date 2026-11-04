@@ -16,6 +16,7 @@ import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminAiPromptProfileMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
+import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiModelEntryService.ChainCandidate;
 import com.mywebsite.admin.service.AdminAiPreviewService;
@@ -77,6 +78,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     private final ObjectMapper objectMapper;
     private final AgentExperienceLessonService experienceLessonService;
     private final AgentMcpSelectionService mcpSelectionService;
+    private final AdminAiConversationService conversationService;
 
     public AdminAiPreviewServiceImpl(
             AgentClient agentClient,
@@ -90,7 +92,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             AgentUsageService usageService,
             ObjectMapper objectMapper,
             AgentExperienceLessonService experienceLessonService,
-            AgentMcpSelectionService mcpSelectionService) {
+            AgentMcpSelectionService mcpSelectionService,
+            AdminAiConversationService conversationService) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.adminAgentMapper = adminAgentMapper;
@@ -103,6 +106,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         this.objectMapper = objectMapper;
         this.experienceLessonService = experienceLessonService;
         this.mcpSelectionService = mcpSelectionService;
+        this.conversationService = conversationService;
     }
 
     @Override
@@ -110,6 +114,10 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         requireSite(agentId);
         if (request == null || !StringUtils.hasText(request.message())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        if (request.conversationId() != null) {
+            // 流开始前同步校验：错误 id 走普通 404，而不是流内错误。
+            conversationService.requirePreviewConversation(agentId, request.conversationId());
         }
         String mode = previewMode(agentId, request.mode());
         // 试聊只打这一条。同模式其他入口和进程 AI_FALLBACK_MODELS 不参与。
@@ -173,7 +181,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         }
         Long usageEntryIdFinal = usageEntryId;
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
-        adminAiStreamExecutor.execute(() -> forwardStream(agentRequest, emitter, agentId, usageEntryIdFinal, mode));
+        adminAiStreamExecutor.execute(() -> forwardStream(
+                agentRequest, emitter, agentId, usageEntryIdFinal, mode, request.conversationId()));
         return emitter;
     }
 
@@ -276,7 +285,12 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     public AdminAiMcpReadyDto mcpReady(long agentId) {
         requireSite(agentId);
         try {
-            return new AdminAiMcpReadyDto(true, null, agentClient.mcpReady());
+            // INHERIT（null）探全局启用集；OFF／CUSTOM 把生效名字交给执行层过滤。
+            List<String> onlyNames = mcpWireNames(agentId);
+            return new AdminAiMcpReadyDto(
+                    true,
+                    null,
+                    onlyNames == null ? agentClient.mcpReady() : agentClient.mcpReady(onlyNames));
         } catch (BusinessException ex) {
             return new AdminAiMcpReadyDto(false, toClientErrorCode(ex), null);
         }
@@ -435,14 +449,21 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     }
 
     private void forwardStream(
-            AgentChatRequest agentRequest, SseEmitter emitter, long agentId, Long usageEntryId, String mode) {
+            AgentChatRequest agentRequest,
+            SseEmitter emitter,
+            long agentId,
+            Long usageEntryId,
+            String mode,
+            Long conversationId) {
         long usageStartedNanos = System.nanoTime();
         AtomicReference<AgentRunMeta> doneMeta = new AtomicReference<>();
+        AtomicReference<String> doneReply = new AtomicReference<>("");
         AtomicBoolean usageRecorded = new AtomicBoolean(false);
         try {
             agentClient.chatStream(agentRequest, (event, dataJson) -> {
                 if ("DONE".equals(event)) {
                     doneMeta.set(parseDoneRunMeta(dataJson));
+                    doneReply.set(parseDoneReply(dataJson));
                 }
                 try {
                     emitter.send(SseEmitter.event().name(event).data(dataJson, MediaType.APPLICATION_JSON));
@@ -451,10 +472,25 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 }
             });
             recordPreviewUsage(agentId, usageEntryId, mode, doneMeta.get(), usageStartedNanos, usageRecorded);
+            // 与 agent-app 同口径：只有拿到非空 DONE 回复才落库；失败/无 DONE 不落库、不发 CONVERSATION。
+            if (StringUtils.hasText(doneReply.get())) {
+                // 预览不带附件：落库的用户消息即下发给执行层的已 trim 文本。
+                long persistedId = conversationService.recordPreviewExchange(
+                        agentId, conversationId, agentRequest.message(), doneReply.get(), doneMeta.get());
+                sendEventQuietly(emitter, "CONVERSATION", "{\"conversationId\":\"" + persistedId + "\"}");
+            }
             emitter.complete();
         } catch (ClientDisconnectedException ex) {
-            // DONE 已到但最后一帧没发出去：这一轮真实发生过，照常记账（只记一次）。
+            // DONE 已到但最后一帧没发出去：这一轮真实发生过，照常记账（只记一次）并落库。
             recordPreviewUsage(agentId, usageEntryId, mode, doneMeta.get(), usageStartedNanos, usageRecorded);
+            if (StringUtils.hasText(doneReply.get())) {
+                try {
+                    conversationService.recordPreviewExchange(
+                            agentId, conversationId, agentRequest.message(), doneReply.get(), doneMeta.get());
+                } catch (RuntimeException persistEx) {
+                    log.warn("admin ai preview reply was not stored after client disconnect", persistEx);
+                }
+            }
             emitter.completeWithError(ex.getCause());
         } catch (BusinessException ex) {
             sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"" + toClientErrorCode(ex) + "\"}");
@@ -463,6 +499,16 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             log.warn("admin ai preview stream forwarding failed", ex);
             sendEventQuietly(emitter, "ERROR", "{\"errorCode\":\"SYSTEM_ERROR\"}");
             emitter.complete();
+        }
+    }
+
+    /** DONE 的 reply 文本；缺失或损坏返回空串（视为无有效 DONE，不落库）。 */
+    private String parseDoneReply(String dataJson) {
+        try {
+            return objectMapper.readTree(dataJson).path("reply").asText("");
+        } catch (IOException ex) {
+            log.warn("admin ai preview DONE was not valid JSON, reply skipped", ex);
+            return "";
         }
     }
 

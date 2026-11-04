@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 
 import { AdminPageHeader } from '@/components/admin'
-import { AgentAiConversationsPanel } from '@/pages/apps/sites/agentAiConversationsPanel'
+import { AgentAiConversationsPanel } from '@/pages/agents/agentAiConversationsPanel'
 
 import { AiAgentScope } from './aiAgentScope'
 

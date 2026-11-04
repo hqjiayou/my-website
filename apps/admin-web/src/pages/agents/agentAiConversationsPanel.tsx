@@ -86,9 +86,16 @@ export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
                       selectedId === item.id && 'admin-active-inset bg-[rgb(var(--primary)/.1)]',
                     )}
                   >
-                    <p className="truncate text-sm font-medium text-admin">
-                      {item.title?.trim() || t('aiWorkspace.conversations.untitled')}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-admin">
+                        {item.title?.trim() || t('aiWorkspace.conversations.untitled')}
+                      </p>
+                      <span className="shrink-0 rounded-md bg-admin-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-admin-muted">
+                        {item.source === 'ADMIN_PREVIEW'
+                          ? t('aiWorkspace.conversations.sourcePreview')
+                          : t('aiWorkspace.conversations.sourcePortal')}
+                      </span>
+                    </div>
                     <p className="mt-1 text-xs tabular-nums text-admin-muted">{formatListTime(item.lastMessageAt) ?? '—'}</p>
                   </button>
                 </li>

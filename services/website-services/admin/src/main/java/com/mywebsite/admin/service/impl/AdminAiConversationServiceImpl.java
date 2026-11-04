@@ -36,6 +36,8 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
     private static final int DEFAULT_PAGE_NUM = 1;
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
+    /** 与 agent-app 会话标题上限一致（首条用户消息截断）。 */
+    private static final int PREVIEW_TITLE_MAX_LENGTH = 60;
 
     private final AdminAiConversationMapper conversationMapper;
     private final AdminAiMessageMapper messageMapper;
@@ -114,6 +116,72 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
         }
     }
 
+    @Override
+    public void requirePreviewConversation(long agentId, long conversationId) {
+        loadPreviewConversation(agentId, conversationId);
+    }
+
+    @Override
+    @Transactional
+    public long recordPreviewExchange(
+            long agentId, Long conversationId, String userMessage, String reply, AgentRunMeta runMeta) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        AdminAiConversationEntity conversation;
+        if (conversationId == null) {
+            conversation = new AdminAiConversationEntity();
+            conversation.setAgentId(agentId);
+            conversation.setSource(AdminAiConversationEntity.SOURCE_ADMIN_PREVIEW);
+            conversation.setTitle(truncateTitle(userMessage));
+            conversation.setLastMessageAt(now);
+            conversationMapper.insert(conversation);
+        } else {
+            conversation = loadPreviewConversation(agentId, conversationId);
+            conversation.setLastMessageAt(now);
+            conversationMapper.updateById(conversation);
+        }
+        insertMessage(conversation, AdminAiMessageEntity.ROLE_USER, userMessage, null);
+        insertMessage(conversation, AdminAiMessageEntity.ROLE_ASSISTANT, reply, writeRunMeta(runMeta));
+        return conversation.getId();
+    }
+
+    private AdminAiConversationEntity loadPreviewConversation(long agentId, long conversationId) {
+        AdminAiConversationEntity conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null
+                || !Long.valueOf(agentId).equals(conversation.getAgentId())
+                || !AdminAiConversationEntity.SOURCE_ADMIN_PREVIEW.equals(conversation.getSource())) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        return conversation;
+    }
+
+    private void insertMessage(AdminAiConversationEntity conversation, String role, String content, String agentMeta) {
+        AdminAiMessageEntity message = new AdminAiMessageEntity();
+        message.setConversationId(conversation.getId());
+        message.setAgentId(conversation.getAgentId());
+        message.setRole(role);
+        message.setContent(content);
+        message.setAgentMeta(agentMeta);
+        messageMapper.insert(message);
+    }
+
+    /** 观测数据序列化失败不得让已成功的一轮回滚：记日志后存 NULL（与 agent-app 同口径）。 */
+    private String writeRunMeta(AgentRunMeta runMeta) {
+        if (runMeta == null || runMeta.equals(AgentRunMeta.EMPTY)) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(runMeta);
+        } catch (JsonProcessingException ex) {
+            log.warn("Failed to serialize preview agent run meta, stored as null", ex);
+            return null;
+        }
+    }
+
+    private static String truncateTitle(String message) {
+        String trimmed = message.trim();
+        return trimmed.length() <= PREVIEW_TITLE_MAX_LENGTH ? trimmed : trimmed.substring(0, PREVIEW_TITLE_MAX_LENGTH);
+    }
+
     private void requireSite(long agentId) {
         if (adminAgentMapper.selectById(agentId) == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
@@ -125,6 +193,7 @@ public class AdminAiConversationServiceImpl implements AdminAiConversationServic
                 entity.getId(),
                 entity.getAgentId(),
                 entity.getAgentUserId(),
+                entity.getSource(),
                 entity.getTitle(),
                 entity.getLastMessageAt(),
                 entity.getCreatedAt());

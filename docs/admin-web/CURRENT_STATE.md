@@ -9,7 +9,7 @@ source_of_truth: apps/admin-web/src
 
 ## 总览
 
-管理后台 React 应用。主纵向域走 **REAL API**。侧栏父级叫 agent。打开 `/agent` 进入最近更新的智能体工作区（没有智能体时只留下新建），API 管理在同一菜单下的 `/agent/api`，页签切换两种：CLI 代理（登录 GPT CLI、Claude、Gemini 或 Muse，查看该账号用量和模型，客户端 key 在这一页；Cursor 不能登录）和供应商 API key（模型 spec 与 key，不经过登录账号）。智能体用哪一条在接入里选，这里不改智能体。工作台导航只留对话、接入和基础信息。接入页的 CLI 仍保存代理地址、客户端 key 和已登录账号放出的模型；客户端 key 这一行是进代理的门禁，已保存时默认保留、展开后才从代理上的客户端 key 里更换。API key 那一行是直连默认入口，显示名称、spec 和末四位，只从 API 管理里已有的条目里选一条绑到当前智能体。概览左侧上方是当前模型、Prompt 和知识库，下面是 Harness（三个平台文件是否装上、技能、运行上限、MCP），右侧是对话列表（模型、条数、上下文、输入和输出 token）。
+管理后台 React 应用。主纵向域走 **REAL API**。侧栏父级叫 agent；智能体、API 管理、AI 用量三项同组（图标分别为 layers／zap／chart）。打开 `/agent` 进入最近更新的智能体工作区（没有智能体时只留下新建），API 管理在同一菜单下的 `/agent/api`，页签切换两种：CLI 代理（登录 GPT CLI、Claude、Gemini 或 Muse，查看该账号用量和模型，客户端 key 在这一页；Cursor 不能登录）和供应商 API key（模型 spec 与 key，不经过登录账号）。AI 用量在 `/ai/usage`。智能体用哪一条在接入里选，这里不改智能体。工作台导航只留对话、接入和基础信息。对话预览左栏顺序为本轮执行 → MCP（状态只读，选择在运行状态页）→ Skills（说明可折叠、目录文案走 i18n）→ Todo；成功轮次落库为 `ADMIN_PREVIEW`，对话记录页可标「预览」并续写。接入页的 CLI 仍保存代理地址、客户端 key 和已登录账号放出的模型；客户端 key 这一行是进代理的门禁，已保存时默认保留、展开后才从代理上的客户端 key 里更换。API key 那一行是直连默认入口，显示名称、spec 和末四位，只从 API 管理里已有的条目里选一条绑到当前智能体。概览左侧上方是当前模型、Prompt 和知识库，下面是 Harness（三个平台文件是否装上、技能、运行上限、MCP），右侧是对话列表（模型、条数、上下文、输入和输出 token）。
 
 ## 域 × 数据源
 
@@ -22,7 +22,7 @@ source_of_truth: apps/admin-web/src
 | Appearance | FORCE REAL | `heroLayout` |
 | Media | FORCE REAL | |
 | Content | FORCE REAL | |
-| AI 工作台与全局 Prompt / 知识库 / 会话 | FORCE REAL | 工作台概览、对话预览、Prompt、知识库、对话、运行状态走 `aiApi`。对话预览按 CLI / API key 选择接入，请求带上浏览器 IANA 时区和用户授予的定位坐标，并可在该模式的生效链里指定下一轮入口；不指定则用该模式的默认入口，只调用这一条；不勾选 skill 则本轮不注入。「正在使用 X / 无可用入口」文案、默认模式初始化与 DONE 回传模型的比对基准，均来自 `GET .../ai/preview/model` 回填（`mode` 缺省拿服务端默认判定，切换 CLI/KEY 带 `mode` 重查），与后端 `previewStream` 同一判定路径；本页不再本地拉全平台入口列表算这条规则。对话预览页呈现为左右分栏（左：模式/入口、Skills、本轮执行轨迹、Todo 控制面板，窄宽度时收为会话上方展开区；右：会话流＋贴底输入框），助手回复的引用以正文 `[n]` 角标＋可展开来源卡呈现（引用数据来自 DONE 事件的 citations，Issue #178）。概览读运行状态里的 Harness（平台文件、技能、运行上限、MCP）、Prompt、知识库和会话消息上的用量；会话列表按条展示模型、条数、最近一轮上下文和累计输入输出 token。新的一轮会把请求的模型 spec 记在助手消息上，更早的消息没有这条记录时列表用当前模型名。`pages/ai/settingsPage` 是模型入口。AI 子页页头不再展示共享备注文案。 |
+| AI 工作台与全局 Prompt / 知识库 / 会话 | FORCE REAL | 工作台概览、对话预览、Prompt、知识库（上传成功后索引后台进行，列表先见 PENDING）、对话、运行状态走 `aiApi`。对话预览按 CLI / API key 选择接入，请求带上浏览器 IANA 时区和用户授予的定位坐标，并可在该模式的生效链里指定下一轮入口；不指定则用该模式的默认入口，只调用这一条；不勾选 skill 则本轮不注入。「正在使用 X / 无可用入口」文案、默认模式初始化与 DONE 回传模型的比对基准，均来自 `GET .../ai/preview/model` 回填（`mode` 缺省拿服务端默认判定，切换 CLI/KEY 带 `mode` 重查），与后端 `previewStream` 同一判定路径；本页不再本地拉全平台入口列表算这条规则。对话预览页呈现为左右分栏（左：模式/入口、Skills、本轮执行轨迹、Todo 控制面板，窄宽度时收为会话上方展开区；右：会话流＋贴底输入框），助手回复的引用以正文 `[n]` 角标＋可展开来源卡呈现（引用数据来自 DONE 事件的 citations，Issue #178）。概览读运行状态里的 Harness（平台文件、技能、运行上限、MCP）、Prompt、知识库和会话消息上的用量；会话列表按条展示模型、条数、最近一轮上下文和累计输入输出 token。新的一轮会把请求的模型 spec 记在助手消息上，更早的消息没有这条记录时列表用当前模型名。`pages/ai/settingsPage` 是模型入口，同页有运行配置卡和 MCP 服务器卡；工作台运行状态页可改本智能体的 MCP 选择（继承／关闭／子集），深检按该选择过滤。AI 子页页头不再展示共享备注文案。 |
 | 占位页 | 无后端 | 域名页已从工作台拿掉，`/domain` 回到基础信息。`ParamsConfigPage`、`AnalyticsPage`、`SystemSettingsPage`、`DeveloperPage` 仍是 `EmptyModulePage` |
 | 运营全局 Contents/Files | REAL | `api/operation/*` 客户端跨站聚合，无单独跨站后端 |
 

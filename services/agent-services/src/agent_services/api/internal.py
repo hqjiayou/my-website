@@ -2,9 +2,10 @@ import base64
 import binascii
 import logging
 from datetime import UTC, datetime
+from typing import Annotated
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic_ai.models import Model
 
@@ -58,6 +59,8 @@ from agent_services.retrieval.service import (
     RetrievalService,
 )
 from agent_services.schemas.chat import (
+    MAX_MCP_SERVER_NAME_LENGTH,
+    MAX_MCP_SERVER_NAMES,
     ChatCitation,
     ChatRequest,
     ChatSuccessData,
@@ -415,10 +418,45 @@ async def internal_health(request: Request) -> HealthResponse:
     )
 
 
+def _probe_name_filter(restrict: bool, raw_names: list[str] | None) -> set[str] | None:
+    """None＝不限制。restrict 时返回名字集（可空）。非法名字抛 ValueError。"""
+    if not restrict:
+        return None
+    names = raw_names or []
+    if len(names) > MAX_MCP_SERVER_NAMES:
+        raise ValueError("too many MCP server names")
+    cleaned: set[str] = set()
+    for name in names:
+        text = name.strip()
+        if text == "" or len(text) > MAX_MCP_SERVER_NAME_LENGTH:
+            raise ValueError("invalid MCP server name")
+        cleaned.add(text)
+    return cleaned
+
+
 @router.get("/mcp/ready")
-async def mcp_ready(request: Request) -> JSONResponse:
-    """可选深检：对 enabled MCP 做短超时 list_tools。不替代 /health。"""
-    report = await probe_mcp_ready(request.app.state.settings)
+async def mcp_ready(
+    request: Request,
+    restrict: bool = False,
+    only_names: Annotated[list[str] | None, Query(alias="onlyNames")] = None,
+) -> JSONResponse:
+    """可选深检：对 enabled MCP 做短超时 list_tools。不替代 /health。
+
+    ``restrict=true`` 时只探 ``onlyNames``（与全局启用集取交集）；名字列表空＝不探。
+    缺省 ``restrict`` 时忽略 ``onlyNames``，探全局启用集。
+    """
+    try:
+        selected = _probe_name_filter(restrict, only_names)
+    except ValueError:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "errorCode": "BAD_REQUEST",
+                "message": "Invalid MCP server name filter.",
+            },
+        )
+    report = await probe_mcp_ready(request.app.state.settings, only_names=selected)
     payload = McpReadyResponse(
         ok=report.ok,
         mcpStatus=report.status,

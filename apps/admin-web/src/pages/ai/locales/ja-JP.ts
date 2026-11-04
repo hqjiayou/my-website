@@ -217,6 +217,7 @@ export default {
       disabledBadge: '無効',
       name: '名前',
       nameHint: '英数字・ハイフン・アンダースコア、最大 64 文字、全体で一意。',
+      nameLocked: '保存済みの名前は秘密値の対応に使うため変更できません。名前を変えるには削除して追加してください。',
       transport: 'トランスポート',
       enabled: '有効',
       url: 'サーバー URL',

@@ -12,6 +12,7 @@ import { useHasPermission } from '@/router/permission'
 import type { AiRuntimeLimits, AiRuntimeStatus } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 
+import { SkillCatalogItem } from './agentAiSkillCatalog'
 import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
 
 function familyOf(value: string) {
@@ -327,11 +328,14 @@ function HarnessPanel({
                 <ul className="mt-2">
                   {skills.map((skill) => (
                     <li key={skill.id} className="border-b border-dashed border-admin py-2 first:pt-0 last:border-b-0 last:pb-0">
-                      <p className="text-sm font-medium text-admin">
-                        {skill.id}
-                        {skill.version ? <span className="ml-1.5 text-xs font-normal text-admin-muted">v{skill.version}</span> : null}
-                      </p>
-                      {skill.description ? <p className="text-xs leading-5 text-admin-muted">{skill.description}</p> : null}
+                      <SkillCatalogItem
+                        id={skill.id}
+                        version={skill.version}
+                        description={skill.description}
+                        titleClassName="text-sm font-medium text-admin"
+                        descriptionClassName="mt-1 text-xs leading-5 text-admin-muted"
+                        versionClassName="ml-1.5 text-xs font-normal text-admin-muted"
+                      />
                     </li>
                   ))}
                 </ul>

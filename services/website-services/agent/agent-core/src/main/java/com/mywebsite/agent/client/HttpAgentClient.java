@@ -32,6 +32,7 @@ import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.web.HttpRequestCorrelation;
+import org.springframework.web.util.UriComponentsBuilder;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -134,13 +135,18 @@ public class HttpAgentClient implements AgentClient {
 
     @Override
     public AgentMcpReady mcpReady() {
+        return mcpReady(null);
+    }
+
+    @Override
+    public AgentMcpReady mcpReady(List<String> onlyNames) {
         ensureTokenConfigured();
         // 503 + MCP_UNAVAILABLE 仍是一份完整探测报告，不能走 mapErrorBody（会丢掉 servers）
         String requestId = MDC.get(HttpRequestCorrelation.MDC_REQUEST_ID);
         try {
             RestClient.RequestHeadersSpec<?> spec = restClient
                     .get()
-                    .uri("/internal/v1/mcp/ready")
+                    .uri(mcpReadyUri(onlyNames))
                     .header(AgentHttpHeaders.INTERNAL_SERVICE_TOKEN, properties.getInternalServiceToken());
             if (StringUtils.hasText(requestId)) {
                 spec = spec.header(HttpRequestCorrelation.X_REQUEST_ID, requestId);
@@ -159,6 +165,22 @@ public class HttpAgentClient implements AgentClient {
         } catch (RestClientException ex) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
+    }
+
+    /**
+     * {@code onlyNames == null} 不带过滤（探全局启用集）。非 null 时带
+     * {@code restrict=true}：空列表不探任何 server，非空按名字重复 {@code onlyNames}。
+     */
+    private static String mcpReadyUri(List<String> onlyNames) {
+        if (onlyNames == null) {
+            return "/internal/v1/mcp/ready";
+        }
+        UriComponentsBuilder builder = UriComponentsBuilder.fromPath("/internal/v1/mcp/ready")
+                .queryParam("restrict", "true");
+        for (String name : onlyNames) {
+            builder.queryParam("onlyNames", name);
+        }
+        return builder.build().encode().toUriString();
     }
 
     /**

@@ -217,6 +217,7 @@ export default {
       disabledBadge: 'Disabled',
       name: 'Name',
       nameHint: 'Letters, digits, hyphens and underscores, up to 64 characters, globally unique.',
+      nameLocked: 'A saved name is the key used to keep secrets. Delete the entry and add a new one to rename it.',
       transport: 'Transport',
       enabled: 'Enabled',
       url: 'Server URL',

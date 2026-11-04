@@ -9,8 +9,14 @@ import java.time.OffsetDateTime;
 @TableName("agent_ai_conversation")
 public class AgentAiConversationEntity extends AbstractAuditableEntity {
 
+    public static final String SOURCE_PORTAL = "PORTAL";
+    public static final String SOURCE_ADMIN_PREVIEW = "ADMIN_PREVIEW";
+
     private Long agentId;
+    /** PORTAL 非空（应用层保证）；ADMIN_PREVIEW 为 NULL（V55）。 */
     private Long agentUserId;
+    /** 会话来源（V55）；新建不设则取库默认 PORTAL，与 admin 的 AdminAiConversationEntity 双映射。 */
+    private String source;
     private String title;
     private OffsetDateTime lastMessageAt;
 
@@ -32,6 +38,14 @@ public class AgentAiConversationEntity extends AbstractAuditableEntity {
 
     public void setAgentUserId(Long agentUserId) {
         this.agentUserId = agentUserId;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
     }
 
     public String getTitle() {

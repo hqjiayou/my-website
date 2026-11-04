@@ -28,9 +28,15 @@ public interface AgentClient {
     AgentRuntimeStatus runtimeStatus();
 
     /**
-     * MCP 深检。进程可达时返回探测明细（含 503 的 servers）；连不上 agent-services 才抛 BusinessException。
+     * MCP 深检（全局启用集）。进程可达时返回探测明细（含 503 的 servers）；连不上 agent-services 才抛 BusinessException。
      */
     AgentMcpReady mcpReady();
+
+    /**
+     * 按名字限制的 MCP 深检。{@code onlyNames} 为空列表时不探任何 server；
+     * 非空时只探这些名字与全局启用集的交集。
+     */
+    AgentMcpReady mcpReady(List<String> onlyNames);
 
     AgentChatResponse chat(AgentChatRequest request);
 

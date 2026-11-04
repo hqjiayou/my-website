@@ -401,8 +401,16 @@ def _probe_timeout(config: McpServerConfig) -> float:
     return MCP_READY_DEFAULT_TIMEOUT_SECONDS
 
 
-async def probe_mcp_ready(settings: Settings) -> McpReadyReport:
-    """对每个 enabled server 短超时 list_tools。不写入 /health。"""
+async def probe_mcp_ready(
+    settings: Settings, *, only_names: set[str] | None = None
+) -> McpReadyReport:
+    """对 enabled server 短超时 list_tools。不写入 /health。
+
+    ``only_names`` 与 ``build_mcp_toolsets`` 同口径：None＝全局启用集；
+    空集＝不探（本 agent 不用 MCP）；非空＝只探名字在集合内且 enabled 的条目。
+    """
+    if only_names is not None and not only_names:
+        return McpReadyReport(ok=True, status="DISABLED")
     raw = settings.mcp_servers_json
     snapshot = mcp_config_snapshot(settings)
     if snapshot.status == "INVALID_CONFIG":
@@ -416,6 +424,8 @@ async def probe_mcp_ready(settings: Settings) -> McpReadyReport:
 
     try:
         configs = [item for item in parse_mcp_server_configs(raw) if item.enabled]
+        if only_names is not None:
+            configs = [item for item in configs if item.name in only_names]
     except (json.JSONDecodeError, ValueError):
         return McpReadyReport(
             ok=False,

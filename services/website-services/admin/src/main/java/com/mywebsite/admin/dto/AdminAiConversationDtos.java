@@ -7,10 +7,12 @@ public final class AdminAiConversationDtos {
 
     private AdminAiConversationDtos() {}
 
+    /** {@code source}：PORTAL | ADMIN_PREVIEW；预览会话的 {@code agentUserId} 为 null。 */
     public record AdminAiConversationListItemDto(
             Long id,
             Long agentId,
             Long agentUserId,
+            String source,
             String title,
             OffsetDateTime lastMessageAt,
             OffsetDateTime createdAt) {}

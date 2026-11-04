@@ -570,12 +570,12 @@ export function McpServersCard() {
                       <input
                         className={`${adminFieldClass} mt-1 font-mono`}
                         value={draft.name}
-                        disabled={!canUpdate}
+                        disabled={!canUpdate || !draft.isNew}
                         placeholder="my-server"
                         onChange={(event) => updateDraft(draft.localId, { name: event.target.value })}
                       />
                       <span className="mt-1 block text-xs text-admin-muted">
-                        {t('settings.mcp.nameHint')}
+                        {draft.isNew ? t('settings.mcp.nameHint') : t('settings.mcp.nameLocked')}
                       </span>
                     </label>
                     <label className="block text-sm text-admin">

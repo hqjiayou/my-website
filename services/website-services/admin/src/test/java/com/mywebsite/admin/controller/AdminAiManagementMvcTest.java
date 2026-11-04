@@ -44,6 +44,9 @@ import com.nimbusds.jose.jwk.RSAKey;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -904,6 +907,161 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         mockMvc.perform(asyncDispatch(rejected))
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("MODEL_ENTRY_UNAVAILABLE")));
+    }
+
+    @Test
+    void previewDonePersistsAdminPreviewConversationWithoutMemory() throws Exception {
+        String token = tokenFor(500L);
+        long agentId = createSite(token);
+        clearConversationRows(agentId);
+        createPreviewEntry(token, agentId, "preview-persist", "openai:muse-wonder-1.0", true);
+        stubPreviewDone("hello back");
+        Integer memoryBefore = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM agent_user_memory", Integer.class);
+
+        String first = streamPreview(token, agentId, "{\"message\":\"hello\"}");
+        long conversationId = conversationIdFrom(first);
+
+        AdminAiConversationEntity conversation = conversationMapper.selectById(conversationId);
+        assertThat(conversation.getSource()).isEqualTo(AdminAiConversationEntity.SOURCE_ADMIN_PREVIEW);
+        assertThat(conversation.getAgentUserId()).isNull();
+        assertThat(conversation.getAgentId()).isEqualTo(agentId);
+        assertThat(conversation.getTitle()).isEqualTo("hello");
+        List<AdminAiMessageEntity> messages = messageMapper.selectList(new LambdaQueryWrapper<AdminAiMessageEntity>()
+                .eq(AdminAiMessageEntity::getConversationId, conversationId)
+                .orderByAsc(AdminAiMessageEntity::getId));
+        assertThat(messages).extracting(AdminAiMessageEntity::getRole).containsExactly("USER", "ASSISTANT");
+        assertThat(messages).extracting(AdminAiMessageEntity::getContent).containsExactly("hello", "hello back");
+        // 预览不写 user memory。
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM agent_user_memory", Integer.class))
+                .isEqualTo(memoryBefore);
+
+        // 带 conversationId 续写同一会话：不新建会话，追加两条消息，且不再回传新的会话。
+        String second = streamPreview(token, agentId, "{\"message\":\"again\",\"conversationId\":" + conversationId + "}");
+        assertThat(conversationIdFrom(second)).isEqualTo(conversationId);
+        assertThat(conversationMapper.selectCount(new LambdaQueryWrapper<AdminAiConversationEntity>()
+                        .eq(AdminAiConversationEntity::getAgentId, agentId)))
+                .isEqualTo(1L);
+        assertThat(messageMapper.selectCount(new LambdaQueryWrapper<AdminAiMessageEntity>()
+                        .eq(AdminAiMessageEntity::getConversationId, conversationId)))
+                .isEqualTo(4L);
+
+        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/conversations")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].source").value("ADMIN_PREVIEW"))
+                .andExpect(jsonPath("$.data.records[0].agentUserId").doesNotExist());
+    }
+
+    @Test
+    void previewWithoutDoneDoesNotPersist() throws Exception {
+        String token = tokenFor(500L);
+        long agentId = createSite(token);
+        clearConversationRows(agentId);
+        createPreviewEntry(token, agentId, "preview-nodone", "openai:muse-wonder-1.0", true);
+        doAnswer(invocation -> {
+                    awaitPreviewGate();
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent("START", "{}");
+                    throw new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED);
+                })
+                .when(agentClient)
+                .chatStream(any(), any());
+
+        String sse = streamPreview(token, agentId, "{\"message\":\"hello\"}");
+
+        assertThat(sse).contains("EXTERNAL_DEPENDENCY_BLOCKED").doesNotContain("CONVERSATION");
+        assertThat(conversationMapper.selectCount(new LambdaQueryWrapper<AdminAiConversationEntity>()
+                        .eq(AdminAiConversationEntity::getAgentId, agentId)))
+                .isZero();
+        assertThat(messageMapper.selectCount(
+                        new LambdaQueryWrapper<AdminAiMessageEntity>().eq(AdminAiMessageEntity::getAgentId, agentId)))
+                .isZero();
+    }
+
+    @Test
+    void previewRejectsPortalOrForeignConversationId() throws Exception {
+        String token = tokenFor(500L);
+        long agentId = createSite(token);
+        long otherAgentId = createSite(token);
+        clearConversationRows(agentId);
+        clearConversationRows(otherAgentId);
+        long portalConversationId = insertConversation(agentId, "portal chat");
+        stubPreviewDone("x");
+        long foreignPreviewId = conversationIdFrom(streamPreviewOnNewEntry(token, otherAgentId));
+
+        for (long id : new long[] {portalConversationId, foreignPreviewId, 999_999_999L}) {
+            mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"message\":\"hello\",\"conversationId\":" + id + "}"))
+                    .andExpect(status().isNotFound());
+        }
+        // PORTAL 会话未被污染。
+        assertThat(messageMapper.selectCount(new LambdaQueryWrapper<AdminAiMessageEntity>()
+                        .eq(AdminAiMessageEntity::getConversationId, portalConversationId)))
+                .isEqualTo(2L);
+    }
+
+    /**
+     * 会话/消息表不在 rbac-h2-data.sql 的清理范围，agentId 在方法间会复用（IDENTITY 重置），
+     * 按 agentId 对比计数的用例须先清掉前一个方法残留的行。
+     */
+    private void clearConversationRows(long agentId) {
+        jdbcTemplate.update("DELETE FROM agent_ai_message WHERE agent_id = ?", agentId);
+        jdbcTemplate.update("DELETE FROM agent_ai_conversation WHERE agent_id = ?", agentId);
+    }
+
+    /**
+     * 流在 perform 返回（MockMvc 打印响应）之后才开始写：否则异步写线程与打印并发改响应头，
+     * 会抛 ConcurrentModificationException（同 Issue #163 的竞态）。stub 先等闸门，streamPreview 放行。
+     */
+    private final AtomicReference<CountDownLatch> previewGate = new AtomicReference<>(new CountDownLatch(0));
+
+    private void awaitPreviewGate() throws InterruptedException {
+        previewGate.get().await(5, TimeUnit.SECONDS);
+    }
+
+    private void stubPreviewDone(String reply) {
+        doAnswer(invocation -> {
+                    awaitPreviewGate();
+                    AgentStreamListener listener = invocation.getArgument(1);
+                    listener.onEvent("START", "{}");
+                    listener.onEvent("DONE", "{\"reply\":\"" + reply + "\"}");
+                    return null;
+                })
+                .when(agentClient)
+                .chatStream(any(), any());
+    }
+
+    private String streamPreview(String token, long agentId, String body) throws Exception {
+        CountDownLatch gate = new CountDownLatch(1);
+        previewGate.set(gate);
+        MvcResult mvcResult = mockMvc.perform(post("/api/admin/agents/" + agentId + "/ai/preview/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        gate.countDown();
+        return mockMvc.perform(asyncDispatch(mvcResult))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+    }
+
+    private String streamPreviewOnNewEntry(String token, long agentId) throws Exception {
+        createPreviewEntry(token, agentId, "preview-other", "openai:muse-wonder-1.0", true);
+        return streamPreview(token, agentId, "{\"message\":\"hello\"}");
+    }
+
+    /** 从 SSE 文本里取 CONVERSATION 事件的 conversationId。 */
+    private static long conversationIdFrom(String sse) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
+                        "event:CONVERSATION\\s*\\r?\\ndata:\\{\"conversationId\":\"(\\d+)\"\\}")
+                .matcher(sse);
+        assertThat(matcher.find()).as("CONVERSATION event in: %s", sse).isTrue();
+        return Long.parseLong(matcher.group(1));
     }
 
     private long createPreviewEntry(String token, long agentId, String name, String spec, boolean defaultEntry)

@@ -208,6 +208,7 @@ export default {
       disabledBadge: '已停用',
       name: '名称',
       nameHint: '字母、数字、连字符、下划线，最长 64 个字符，全局唯一。',
+      nameLocked: '已保存的名称用来对齐密钥，不能修改。要换名字请删除后新建。',
       transport: '传输方式',
       enabled: '启用',
       url: '服务器 URL',

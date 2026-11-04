@@ -3,7 +3,6 @@ import {
   BarChart3,
   BookOpen,
   Bot,
-  Server,
   Braces,
   FileText,
   FolderKanban,
@@ -11,6 +10,7 @@ import {
   Layers3,
   MessageSquare,
   Palette,
+  Zap,
 } from 'lucide-react'
 
 import { ROUTES } from '../config/routePaths'
@@ -54,7 +54,8 @@ export const NAV_SECTIONS: NavSection[] = [
         labelKey: 'groups.myApp',
         children: [
           { labelKey: 'items.sites', path: ROUTES.apps.sites, icon: Layers3 },
-          { labelKey: 'items.proxyServices', path: ROUTES.apps.api, icon: Server },
+          { labelKey: 'items.proxyServices', path: ROUTES.apps.api, icon: Zap },
+          { labelKey: 'items.aiUsage', path: ROUTES.ai.usage, icon: BarChart3 },
           { labelKey: 'items.styleSettings', path: ROUTES.apps.style, icon: Palette },
         ],
       },

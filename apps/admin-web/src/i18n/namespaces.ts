@@ -1,6 +1,6 @@
 import { AI_ADMIN_LOCALES } from '@/pages/ai/locales'
 import { ANALYTICS_LOCALES } from '@/pages/analytics/locales'
-import { SITES_LOCALES } from '@/pages/apps/sites/locales'
+import { SITES_LOCALES } from '@/pages/agents/locales'
 import { STYLE_SETTINGS_LOCALES } from '@/pages/apps/locales'
 import { PARAMS_CONFIG_LOCALES } from '@/pages/config/locales'
 import { DASHBOARD_LOCALES } from '@/pages/dashboard/locales'

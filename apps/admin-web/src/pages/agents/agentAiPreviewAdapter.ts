@@ -329,6 +329,9 @@ export interface PreviewAdapterOptions {
   getMode: () => 'CLI' | 'KEY'
   getModelEntryId: () => number | null
   getRequestedSpec: () => string
+  getConversationId: () => number | null
+  /** 本地线程为空时（例如刷新后）用库内消息拼 history。 */
+  getPersistedHistory: () => AiPreviewHistoryMessage[]
   onAgentEvent: (event: AiPreviewAgentEvent) => void
 }
 
@@ -377,7 +380,7 @@ export function createJavaPreviewAdapter(
       }
 
       // AdminAiPreviewChatRequest：history ≤ 20，单条 content ≤ 8000。只带最近一轮窗口，避免长线程 400。
-      const history: AiPreviewHistoryMessage[] = messages
+      const liveHistory: AiPreviewHistoryMessage[] = messages
         .slice(0, -1)
         .flatMap((item) => {
           const role: AiPreviewHistoryMessage['role'] | null =
@@ -386,10 +389,12 @@ export function createJavaPreviewAdapter(
           const content = outboundText(item).trim().slice(0, 8000)
           return content ? [{ role, content }] : []
         })
-        .slice(-20)
+      // 刷新后本地线程为空：用已恢复的库内消息；有本地线程时以本地为准。
+      const history = (liveHistory.length ? liveHistory : options.getPersistedHistory()).slice(-20)
       const skills = options.getSkills()
       const todos = options.getTodos()
       const modelEntryId = options.getModelEntryId()
+      const conversationId = options.getConversationId()
       const requestedModel = options.getRequestedSpec()
       const timezone = sessionTimeZone()
       const location = await sessionLocation()
@@ -403,6 +408,7 @@ export function createJavaPreviewAdapter(
           todos: todos.length ? todos : undefined,
           mode: options.getMode(),
           ...(modelEntryId != null ? { modelEntryId } : {}),
+          ...(conversationId != null ? { conversationId } : {}),
           ...(timezone ? { timezone } : {}),
           ...(location ?? {}),
         },
@@ -472,6 +478,12 @@ export function createJavaPreviewAdapter(
             appendText(last?.kind === 'text' && last.text ? `\n${shown}` : shown)
             yield snapshotContent(blocks, requestedModel)
             return
+          } else if (parsed.event === 'CONVERSATION') {
+            const rawId = payload?.conversationId
+            const id = typeof rawId === 'number' ? rawId : typeof rawId === 'string' ? Number(rawId) : NaN
+            if (Number.isFinite(id) && id > 0) {
+              options.onAgentEvent({ type: 'conversation', conversationId: id })
+            }
           } else if (payload) {
             const agentEvent = toAgentEvent(parsed.event, payload)
             if (agentEvent) {

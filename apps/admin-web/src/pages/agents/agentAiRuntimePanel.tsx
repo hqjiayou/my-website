@@ -12,6 +12,8 @@ import { PERMISSION_CODES } from '@/types/rbac'
 
 import { modelIdFromSpec } from '@/utils/modelSpec'
 
+import { SkillCatalogItem } from './agentAiSkillCatalog'
+
 const LIMIT_KEYS: Array<keyof AiRuntimeLimits> = [
   'maxRequests',
   'maxToolCalls',
@@ -165,6 +167,7 @@ function McpSelectionSection({
     onSuccess: () => {
       toast.success(t('aiWorkspace.runtime.mcpSelection.saved'))
       void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'mcp-selection'] })
+      queryClient.removeQueries({ queryKey: ['sites', agentId, 'ai', 'mcp-ready'] })
     },
     onError: (saveError: Error) => toast.error(saveError.message),
   })
@@ -484,13 +487,7 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
             <ul className="space-y-2">
               {skillsQuery.data.map((skill) => (
                 <li key={skill.id} className="rounded-lg border border-border bg-card px-3 py-2">
-                  <p className="font-mono text-xs font-medium text-foreground">
-                    {skill.id}
-                    {skill.version ? <span className="ml-1.5 text-muted-foreground">v{skill.version}</span> : null}
-                  </p>
-                  {skill.description ? (
-                    <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{skill.description}</p>
-                  ) : null}
+                  <SkillCatalogItem id={skill.id} version={skill.version} description={skill.description} />
                 </li>
               ))}
             </ul>

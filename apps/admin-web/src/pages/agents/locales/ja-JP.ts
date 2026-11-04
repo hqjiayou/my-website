@@ -496,7 +496,7 @@ export default {
       uploadHint: 'ドキュメント/表計算/スライド/電子書籍/テキスト/コード/データなど数十形式対応、最大 10 MB。取り込み時に Markdown へ統一します。スキャン版 PDF はサイトの AI モデルが自動で文字起こしします。',
       invalidExtension: '対応していないファイル形式です。',
       fileTooLarge: 'ファイルサイズは 10 MB 以下にしてください。',
-      uploaded: 'ファイルをアップロードしました',
+      uploaded: 'アップロード完了。インデックスはバックグラウンドで進行中',
       uploadedIndexed: 'アップロードとインデックスが完了しました',
       uploadedIndexFailed: 'アップロードは完了しましたが、インデックスに失敗しました（一覧から再試行できます）',
       reindex: '再インデックス',
@@ -516,7 +516,7 @@ export default {
       baseDeleted: 'ナレッジベースを削除しました',
       reindexed: '再インデックス完了',
       reindexFailed: '再インデックスも失敗しました：{{error}}',
-      batchResult: '一括アップロード完了：インデックス済み {{indexed}} 件、インデックス失敗 {{indexFailed}} 件、却下 {{rejected}} 件',
+      batchResult: '一括アップロード完了：アップロード {{indexed}} 件、インデックス失敗 {{indexFailed}} 件、却下 {{rejected}} 件',
       dropHint: 'ここにドロップするとキューに追加されます。確認後にアップロードします。',
       queueHint: '複数選択可。キューに入れたあと「アップロード開始」で送信します。',
       queueEmpty: 'まだファイルがありません',
@@ -532,9 +532,9 @@ export default {
         rejected: '却下',
         failed: '失敗',
         emptyArchive: 'アーカイブに取り込み可能なファイルがありません',
-        archiveOk: 'アーカイブ取り込み成功（{{count}} 件）',
+        archiveOk: 'アーカイブ取り込み成功（{{count}} 件、インデックスはバックグラウンド）',
         archivePartial:
-          'アーカイブ一部成功：インデックス {{indexed}}、失敗 {{indexFailed}}、却下 {{rejected}}',
+          'アーカイブ一部成功：アップロード {{indexed}}、インデックス失敗 {{indexFailed}}、却下 {{rejected}}',
       },
       columns: {
         title: 'タイトル',
@@ -560,6 +560,8 @@ export default {
       untitled: '無題の会話',
       selectHint: '会話を選ぶとメッセージを表示します。',
       view: '表示',
+      sourcePortal: 'ユーザー端',
+      sourcePreview: 'プレビュー',
       columns: {
         title: 'タイトル',
         agentUserId: 'サイトユーザー',
@@ -633,9 +635,13 @@ export default {
       entryUnavailable: '利用できません',
       using: 'このプレビューは {{model}} だけを呼びます。失敗はそのまま表示され、別の接続方式には切り替わりません。',
       noEntry: 'この方式には保存されたデフォルト入口がありません。接続で保存してから試してください。',
-      hint: 'プレビューはこのサイトの Prompt を使い、会話テーブルには書き込みません。ブラウザから systemPrompt は送りません。注意：試聊は選択中モードの主用入口だけを試し、フォールバックは使いません。本番対話は主用失敗時にチェーン順に切り替わるため、試聊結果は本番の挙動を完全には表しません。',
+      hint: 'プレビューはこのサイトの Prompt を使います。ブラウザから systemPrompt は送りません。注意：試聊は選択中モードの主用入口だけを試し、フォールバックは使いません。本番対話は主用失敗時にチェーン順に切り替わるため、試聊結果は本番の挙動を完全には表しません。',
       empty: 'メッセージを入力してプレビューを開始します。',
-      emptyHint: 'このエージェントの Prompt で試行します。会話履歴には保存されません。',
+      emptyHint: 'このエージェントの Prompt で試行します。成功したターンは会話履歴に保存されます（出典：プレビュー）。',
+      conversation: {
+        resume: 'プレビュー会話 #{{id}} を続行中',
+        new: '新しいプレビュー',
+      },
       thinking: '考えています…',
       placeholder: 'プレビューメッセージ…',
       send: '送信',
@@ -658,6 +664,29 @@ export default {
         hint: 'チェックしないと、このターンには skill を入れません。ユーザー側が skills を省略したときだけ、既定の orchestration が付きます。',
         empty: 'agent-services に skill がありません。',
         error: 'skill 一覧の取得に失敗しました（agent-services が利用できない可能性があります）',
+        expand: '説明を開く',
+        collapse: '説明を閉じる',
+        catalog: {
+          orchestration: 'Todo ツールで多段階タスクを編成します。',
+          'platform-smoke': 'プラットフォームのスモーク用。注入済み skill の確認だけをします。',
+          'cross-doc-aggregation':
+            '同類の知識ドキュメント全体で最高／最低／合計／平均／件数／順位を求めます。単一文書の事実や単一表の計算には使いません。',
+          'doc-qa-cited':
+            'サイト文書から日常の事実質問に引用付きで答えます。横断集計・表計算・全文の書き換えには使いません。',
+          'summarize-transform':
+            'ナレッジの文書や段落を要約・圧縮・言い換え・翻訳します。一点の事実や横断比較には使いません。',
+          'table-analysis':
+            '構造化テーブル1枚を対象に絞り込み／件数／合計／平均／最値を計算します。散文の事実や多数文書の比較には使いません。',
+        },
+      },
+      mcp: {
+        title: 'MCP',
+        hint: '読み取り専用：プラットフォームプロセスが組み立て、ターン単位では選べません。疎通とプローブはランタイムページです。',
+        empty: 'MCP server は未設定です',
+        error: 'MCP 状態の取得に失敗しました',
+        openRuntime: 'ランタイムを開く',
+        enabled: '有効',
+        disabled: '無効',
       },
       run: {
         title: '今回の実行',

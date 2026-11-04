@@ -10,14 +10,18 @@ import {
   type TextMessagePartProps,
 } from '@assistant-ui/react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, MessageSquare, Quote, SlidersHorizontal, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, Copy, MessageSquare, Quote, SlidersHorizontal, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 
 import { aiApi } from '@/api/apps/aiApi'
+import { ROUTES } from '@/router/config/routePaths'
 import type {
   AiCitation,
+  AiMessage,
   AiPreviewAgentEvent,
+  AiPreviewHistoryMessage,
   AiPreviewTodoItem,
   AiPreviewTodoStatus,
   AiRunUsage,
@@ -28,6 +32,7 @@ import { modelIdFromSpec } from '@/utils/modelSpec'
 import { createJavaPreviewAdapter } from './agentAiPreviewAdapter'
 import { PreviewVisualizationPart } from './agentAiPreviewCards'
 import { AiRunUsageLine } from './agentAiRunMeta'
+import { skillCatalogDescription } from './agentAiSkillCatalog'
 
 interface ToolCallTrace {
   toolCallId: string
@@ -273,6 +278,120 @@ const EMPTY_TRACE: RunTrace = {
   model: null,
 }
 
+/** 预览勾选行：checkbox + 共用 catalog 说明折叠。 */
+function PreviewSkillRow({
+  id,
+  description,
+  checked,
+  onToggle,
+}: {
+  id: string
+  description: string | null | undefined
+  checked: boolean
+  onToggle: () => void
+}) {
+  const { t } = useTranslation('sites')
+  const [expanded, setExpanded] = useState(false)
+  const text = skillCatalogDescription(id, description, t)
+
+  return (
+    <li>
+      <div className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          className="admin-check mt-1"
+          checked={checked}
+          onChange={onToggle}
+          aria-label={id}
+        />
+        <div className="min-w-0 flex-1">
+          {text ? (
+            <button
+              type="button"
+              className="flex w-full items-center gap-1 text-left"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((value) => !value)}
+            >
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">{id}</span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ${
+                  expanded ? 'rotate-180' : ''
+                }`}
+                aria-hidden
+              />
+            </button>
+          ) : (
+            <span className="block truncate font-mono text-xs text-foreground">{id}</span>
+          )}
+          {text && expanded ? (
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p>
+          ) : null}
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function PreviewMcpSection({ agentId }: { agentId: number }) {
+  const { t } = useTranslation('sites')
+  const [open, setOpen] = useState(false)
+  const runtimeQuery = useQuery({
+    queryKey: ['sites', agentId, 'ai', 'runtime'],
+    queryFn: () => aiApi.getRuntime(agentId),
+  })
+  const servers = runtimeQuery.data?.status?.mcpServers ?? []
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-3">
+      <div className="mb-0 flex items-center gap-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+          onClick={() => setOpen((value) => !value)}
+        >
+          <h4 className="font-medium text-foreground">{t('aiWorkspace.preview.mcp.title')}</h4>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 ${
+              open ? 'rotate-180' : ''
+            }`}
+            aria-hidden
+          />
+        </button>
+        <Link
+          to={ROUTES.apps.agentRuntime(agentId)}
+          className="shrink-0 text-[11px] text-primary underline-offset-2 hover:underline"
+        >
+          {t('aiWorkspace.preview.mcp.openRuntime')}
+        </Link>
+      </div>
+      {open ? (
+        <>
+          <p className="mt-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.mcp.hint')}</p>
+          {runtimeQuery.isPending ? (
+            <p className="mt-2 text-xs text-muted-foreground">{t('aiWorkspace.loading')}</p>
+          ) : runtimeQuery.isError || runtimeQuery.data?.reachable === false ? (
+            <p className="mt-2 text-xs text-danger-emphasis">{t('aiWorkspace.preview.mcp.error')}</p>
+          ) : servers.length === 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.mcp.empty')}</p>
+          ) : (
+            <ul className="mt-2 space-y-1">
+              {servers.map((server) => (
+                <li key={server.name} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate font-mono text-foreground">{server.name}</span>
+                  <span className="shrink-0 text-muted-foreground">
+                    {t(server.enabled ? 'aiWorkspace.preview.mcp.enabled' : 'aiWorkspace.preview.mcp.disabled')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : null}
+    </section>
+  )
+}
+
 type RunError = { errorCode: string; message?: string }
 
 const KNOWN_ERROR_CODES = new Set([
@@ -298,12 +417,45 @@ const TOOL_STATE_CLASS: Record<ToolCallTrace['state'], string> = {
 }
 
 /** adapter 每轮读取的最新选择；闭包持有，避免选择变化时重建 runtime（会丢失预览线程）。 */
-function createPreviewSelection() {
+function previewConversationStorageKey(agentId: number) {
+  return `admin-preview-conversation:${agentId}`
+}
+
+function readStoredConversationId(agentId: number): number | null {
+  try {
+    const raw = sessionStorage.getItem(previewConversationStorageKey(agentId))
+    const id = raw ? Number(raw) : NaN
+    return Number.isFinite(id) && id > 0 ? id : null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredConversationId(agentId: number, conversationId: number | null) {
+  try {
+    const key = previewConversationStorageKey(agentId)
+    if (conversationId == null) sessionStorage.removeItem(key)
+    else sessionStorage.setItem(key, String(conversationId))
+  } catch {
+    // sessionStorage 不可用时仍用内存态续写本页。
+  }
+}
+
+function toPreviewHistory(messages: AiMessage[]): AiPreviewHistoryMessage[] {
+  return messages
+    .filter((item) => item.role === 'USER' || item.role === 'ASSISTANT')
+    .map((item) => ({ role: item.role, content: item.content.trim().slice(0, 8000) }))
+    .filter((item) => item.content)
+}
+
+function createPreviewSelection(initialConversationId: number | null) {
   let skills: string[] = []
   let todos: AiPreviewTodoItem[] = []
   let mode: 'CLI' | 'KEY' = 'CLI'
   const entryByMode: Record<'CLI' | 'KEY', number | null> = { CLI: null, KEY: null }
   let requestedSpec = ''
+  let conversationId: number | null = initialConversationId
+  let persistedHistory: AiPreviewHistoryMessage[] = []
   return {
     getSkills: () => skills,
     setSkills: (next: string[]) => {
@@ -326,6 +478,14 @@ function createPreviewSelection() {
       requestedSpec = spec
     },
     getRequestedSpec: () => requestedSpec,
+    getConversationId: () => conversationId,
+    setConversationId: (id: number | null) => {
+      conversationId = id
+    },
+    getPersistedHistory: () => persistedHistory,
+    setPersistedHistory: (next: AiPreviewHistoryMessage[]) => {
+      persistedHistory = next
+    },
   }
 }
 
@@ -377,11 +537,14 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   const [todos, setTodos] = useState<AiPreviewTodoItem[]>([])
   const [trace, setTrace] = useState<RunTrace>(EMPTY_TRACE)
   const [runError, setRunError] = useState<RunError | null>(null)
-  const [selection] = useState(createPreviewSelection)
+  const [selection] = useState(() => createPreviewSelection(readStoredConversationId(agentId)))
+  const [conversationId, setConversationId] = useState<number | null>(() => readStoredConversationId(agentId))
+  const [restoredMessages, setRestoredMessages] = useState<AiMessage[]>([])
   const [mode, setMode] = useState<'CLI' | 'KEY'>('CLI')
   const [modeChosen, setModeChosen] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [traceOpen, setTraceOpen] = useState(true)
+  const [skillsOpen, setSkillsOpen] = useState(true)
   const [modelEntryId, setModelEntryId] = useState<number | null>(null)
   // 首次挂载不带 mode，拿服务端默认判定；用户切换 CLI/KEY 后带 mode 重查，与 previewStream 同一路径回填。
   const modelQuery = useQuery({
@@ -398,6 +561,38 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   useEffect(() => {
     selection.setRequestedSpec(activeSpec)
   }, [activeSpec, selection])
+
+  useEffect(() => {
+    const storedId = readStoredConversationId(agentId)
+    selection.setConversationId(storedId)
+    setConversationId(storedId)
+    if (storedId == null) {
+      selection.setPersistedHistory([])
+      setRestoredMessages([])
+      return
+    }
+    let cancelled = false
+    void aiApi
+      .listConversationMessages(agentId, storedId)
+      .then((messages) => {
+        if (cancelled) return
+        setRestoredMessages(messages)
+        selection.setPersistedHistory(toPreviewHistory(messages))
+      })
+      .catch(() => {
+        if (cancelled) return
+        // 会话已删或不属于预览：清掉本地续写标记，避免后续请求 404。
+        writeStoredConversationId(agentId, null)
+        selection.setConversationId(null)
+        selection.setPersistedHistory([])
+        setConversationId(null)
+        setRestoredMessages([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [agentId, selection])
+
   const servedModel = trace.model ? modelIdFromSpec(trace.model) : ''
 
   // 服务端默认模式只采纳一次（用户未手动选时）：按 React 官方推荐的渲染期调整，
@@ -440,6 +635,14 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
     setSelectedSkills(next)
   }
 
+  const beginNewConversation = () => {
+    writeStoredConversationId(agentId, null)
+    selection.setConversationId(null)
+    selection.setPersistedHistory([])
+    setConversationId(null)
+    setRestoredMessages([])
+  }
+
   const adapter = useMemo(
     () =>
       createJavaPreviewAdapter(agentId, {
@@ -448,6 +651,8 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
         getMode: selection.getMode,
         getModelEntryId: selection.getModelEntryId,
         getRequestedSpec: selection.getRequestedSpec,
+        getConversationId: selection.getConversationId,
+        getPersistedHistory: selection.getPersistedHistory,
         onAgentEvent: (event) => {
           if (event.type === 'error') {
             if (event.errorCode === 'MODEL_ENTRY_UNAVAILABLE') {
@@ -455,6 +660,12 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
               setModelEntryId(null)
             }
             setRunError({ errorCode: event.errorCode, message: event.message })
+            return
+          }
+          if (event.type === 'conversation') {
+            selection.setConversationId(event.conversationId)
+            writeStoredConversationId(agentId, event.conversationId)
+            setConversationId(event.conversationId)
             return
           }
           if (event.type === 'start') setRunError(null)
@@ -542,60 +753,20 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             </section>
 
             <section className="rounded-xl border border-border bg-card p-3">
-              <h4 className="mb-2 font-medium text-foreground">{t('aiWorkspace.preview.skills.title')}</h4>
-              <p className="mb-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.skills.hint')}</p>
-              {skillsQuery.isPending ? (
-                <p className="text-muted-foreground">{t('aiWorkspace.loading')}</p>
-              ) : skillsQuery.isError ? (
-                <div className="text-danger-emphasis">
-                  <p>{t('aiWorkspace.preview.skills.error')}</p>
-                  <button type="button" className="mt-1 underline" onClick={() => void skillsQuery.refetch()}>
-                    {t('aiWorkspace.retry')}
-                  </button>
-                </div>
-              ) : skillsQuery.data.length === 0 ? (
-                <p className="text-muted-foreground">{t('aiWorkspace.preview.skills.empty')}</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {skillsQuery.data.map((skill) => (
-                    <li key={skill.id}>
-                      <label className="flex cursor-pointer items-start gap-2">
-                        <input
-                          type="checkbox"
-                          className="admin-check mt-1"
-                          checked={selectedSkills.includes(skill.id)}
-                          onChange={() => toggleSkill(skill.id)}
-                        />
-                        <span>
-                          <span className="font-mono text-xs text-foreground">{skill.id}</span>
-                          {skill.description ? (
-                            <span className="block text-xs text-muted-foreground">{skill.description}</span>
-                          ) : null}
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="rounded-xl border border-border bg-card p-3">
-              <div className="mb-2 flex items-center justify-between">
+              <button
+                type="button"
+                aria-expanded={traceOpen}
+                className="mb-2 flex w-full items-center justify-between gap-2 text-left"
+                onClick={() => setTraceOpen((value) => !value)}
+              >
                 <h4 className="font-medium text-foreground">{t('aiWorkspace.preview.run.title')}</h4>
-                <button
-                  type="button"
-                  aria-expanded={traceOpen}
-                  aria-label={t('aiWorkspace.preview.run.title')}
-                  className="rounded p-0.5 text-muted-foreground transition hover:text-foreground"
-                  onClick={() => setTraceOpen((value) => !value)}
-                >
-                  {traceOpen ? (
-                    <ChevronDown className="h-4 w-4" aria-hidden />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" aria-hidden />
-                  )}
-                </button>
-              </div>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 ${
+                    traceOpen ? 'rotate-180' : ''
+                  }`}
+                  aria-hidden
+                />
+              </button>
               {traceOpen ? (
                 <>
                   {servedModel && activeModel && servedModel !== activeModel ? (
@@ -664,6 +835,54 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
               ) : null}
             </section>
 
+            <PreviewMcpSection agentId={agentId} />
+
+            <section className="rounded-xl border border-border bg-card p-3">
+              <button
+                type="button"
+                aria-expanded={skillsOpen}
+                className="mb-2 flex w-full items-center justify-between gap-2 text-left"
+                onClick={() => setSkillsOpen((value) => !value)}
+              >
+                <h4 className="font-medium text-foreground">{t('aiWorkspace.preview.skills.title')}</h4>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 ${
+                    skillsOpen ? 'rotate-180' : ''
+                  }`}
+                  aria-hidden
+                />
+              </button>
+              {skillsOpen ? (
+                <>
+                  <p className="mb-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.skills.hint')}</p>
+                  {skillsQuery.isPending ? (
+                    <p className="text-muted-foreground">{t('aiWorkspace.loading')}</p>
+                  ) : skillsQuery.isError ? (
+                    <div className="text-danger-emphasis">
+                      <p>{t('aiWorkspace.preview.skills.error')}</p>
+                      <button type="button" className="mt-1 underline" onClick={() => void skillsQuery.refetch()}>
+                        {t('aiWorkspace.retry')}
+                      </button>
+                    </div>
+                  ) : skillsQuery.data.length === 0 ? (
+                    <p className="text-muted-foreground">{t('aiWorkspace.preview.skills.empty')}</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {skillsQuery.data.map((skill) => (
+                        <PreviewSkillRow
+                          key={skill.id}
+                          id={skill.id}
+                          description={skill.description}
+                          checked={selectedSkills.includes(skill.id)}
+                          onToggle={() => toggleSkill(skill.id)}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : null}
+            </section>
+
             <section className="rounded-xl border border-border bg-card p-3">
               <div className="mb-2 flex items-center justify-between">
                 <h4 className="font-medium text-foreground">{t('aiWorkspace.preview.todos.title')}</h4>
@@ -692,17 +911,50 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
           </div>
         </div>
         <ThreadPrimitive.Root className="flex min-h-[20rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card-muted">
+          {conversationId != null ? (
+            <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground sm:px-6">
+              <span>{t('aiWorkspace.preview.conversation.resume', { id: conversationId })}</span>
+              <button type="button" className="shrink-0 underline" onClick={beginNewConversation}>
+                {t('aiWorkspace.preview.conversation.new')}
+              </button>
+            </div>
+          ) : null}
           <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-6 py-4 sm:px-10">
+            {restoredMessages.length > 0 ? (
+              <ul className="mb-4 space-y-3 border-b border-border pb-4">
+                {restoredMessages.map((item) => {
+                  const isUser = item.role === 'USER'
+                  return (
+                    <li
+                      key={item.id}
+                      className={`flex max-w-[min(40rem,86%)] flex-col ${isUser ? 'ml-auto items-end' : 'mr-auto items-start'}`}
+                    >
+                      <div
+                        className={
+                          isUser
+                            ? 'w-fit max-w-full rounded-2xl bg-primary px-3.5 py-2.5 text-sm leading-6 text-primary-foreground'
+                            : 'w-fit max-w-full rounded-2xl border border-border bg-card px-3.5 py-2.5 text-sm leading-6 text-foreground'
+                        }
+                      >
+                        <p className="whitespace-pre-wrap break-words">{item.content}</p>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
             <ThreadPrimitive.Empty>
-              <div className="flex min-h-full flex-col items-center justify-center gap-2 px-4 py-16 text-center">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-muted-foreground">
-                  <MessageSquare className="h-5 w-5" aria-hidden />
-                </span>
-                <p className="text-sm font-medium text-foreground">{t('aiWorkspace.preview.empty')}</p>
-                <p className="max-w-md text-xs leading-5 text-muted-foreground">
-                  {t('aiWorkspace.preview.emptyHint')}
-                </p>
-              </div>
+              {restoredMessages.length === 0 ? (
+                <div className="flex min-h-full flex-col items-center justify-center gap-2 px-4 py-16 text-center">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-muted-foreground">
+                    <MessageSquare className="h-5 w-5" aria-hidden />
+                  </span>
+                  <p className="text-sm font-medium text-foreground">{t('aiWorkspace.preview.empty')}</p>
+                  <p className="max-w-md text-xs leading-5 text-muted-foreground">
+                    {t('aiWorkspace.preview.emptyHint')}
+                  </p>
+                </div>
+              ) : null}
             </ThreadPrimitive.Empty>
             <ThreadPrimitive.Messages>{() => <PreviewMessage />}</ThreadPrimitive.Messages>
           </ThreadPrimitive.Viewport>

@@ -34,6 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,6 +76,9 @@ class AdminAiKnowledgeServiceImplTest {
     @Mock
     private com.mywebsite.infra.service.ObjectStorageService objectStorageService;
 
+    @Mock
+    private ExecutorService adminAiStreamExecutor;
+
     private AdminAiKnowledgeServiceImpl service;
 
     @BeforeEach
@@ -87,7 +91,8 @@ class AdminAiKnowledgeServiceImplTest {
                 objectStorageService,
                 new com.mywebsite.infra.properties.StorageProperties(),
                 baseMapper,
-                linkMapper);
+                linkMapper,
+                adminAiStreamExecutor);
     }
 
     @Test
