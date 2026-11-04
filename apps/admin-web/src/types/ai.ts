@@ -173,6 +173,76 @@ export interface AiRuntimeConfigUpdateInput {
   geminiApiKey?: string | null
 }
 
+/** MCP 条目里密钥型键值对的回显形（Issue #192）：只回 configured＋末 4 位 hint，永不回明文。 */
+export interface AiMcpSecretKv {
+  key: string
+  configured: boolean
+  valueHint: string | null
+}
+
+/**
+ * MCP 服务器条目视图（Issue #192）：url 只回 configured＋hint（可能内嵌凭证，按密钥处理）；
+ * args 不是密钥、原样回。字段与后端 McpServerEntryDto 逐项对齐。
+ */
+export interface AiMcpServerEntry {
+  name: string
+  transport: string | null
+  urlConfigured: boolean
+  urlHint: string | null
+  enabled: boolean
+  toolPrefix: string | null
+  initTimeoutSeconds: number | null
+  command: string | null
+  args: string[]
+  cwd: string | null
+  headers: AiMcpSecretKv[]
+  env: AiMcpSecretKv[]
+}
+
+/** MCP 全局注册表视图：条目列表＋与运行配置同口径的版本/推送状态（共用同一行与推送管线）。 */
+export interface AiMcpConfig {
+  servers: AiMcpServerEntry[]
+  configVersion: number
+  lastPushStatus: AiRuntimeConfigPushStatus | null
+  lastPushMessage: string | null
+  lastPushedAt: string | null
+  version: number | null
+  updatedAt: string | null
+}
+
+/** 密钥型键值对的提交形：value 留空＝保留原值；clear=true＝删除该键（优先于 value）。 */
+export interface AiMcpSecretKvInput {
+  key: string
+  value?: string | null
+  clear?: boolean
+}
+
+/**
+ * MCP 条目提交形：非密钥字段整体替换（null＝清掉）；url 留空＝保留原值；
+ * headers/env 为 null＝保留既有整表，非 null＝列表即最终键集合。
+ */
+export interface AiMcpServerEntryInput {
+  name: string
+  transport: string | null
+  url?: string | null
+  enabled?: boolean | null
+  toolPrefix?: string | null
+  initTimeoutSeconds?: number | null
+  command?: string | null
+  args?: string[] | null
+  cwd?: string | null
+  headers?: AiMcpSecretKvInput[] | null
+  env?: AiMcpSecretKvInput[] | null
+}
+
+/** MCP per-agent 选择三态：INHERIT＝用全局启用集、OFF＝明确不用、CUSTOM＝名字子集（与全局启用集取交集）。 */
+export type AiMcpSelectionMode = 'INHERIT' | 'OFF' | 'CUSTOM'
+
+export interface AiMcpSelection {
+  mode: AiMcpSelectionMode
+  serverNames: string[]
+}
+
 /** 经验条目状态（与后端 agent_experience_lesson.status 状态机一致，Issue #184）。 */
 export type AiExperienceLessonStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'DISABLED'
 
