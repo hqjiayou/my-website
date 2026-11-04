@@ -54,7 +54,8 @@ COVERAGE_PASS_AT = 0.5
 
 PASS_RULE = (
     "可答题 pass：retrieval_hit 且 keyword_coverage ≥ 0.5；"
-    "不可答题 pass：refusal_correct。"
+    "不可答题 pass：refusal_correct；"
+    "skill 题集同规则按可用指标判（缺失指标不计、无可用指标不 pass）。"
 )
 
 METRIC_NAMES: tuple[str, ...] = (
@@ -128,9 +129,18 @@ def case_passed(
 ) -> bool:
     if category == "unanswerable":
         return refusal_correct is True
-    if retrieval_hit is None or keyword_coverage is None:
+    # 按可用指标判：缺失（None）的指标不计，无任何可用指标时不 pass。
+    # 黄金集可答题经 validate_golden 保证来源与关键词俱全，两项指标恒可算，
+    # 结果与旧口径（两项皆须达标）逐题一致；泛化只对 skill 题集这类锚点
+    # 字段不全的题面生效（#187 UoW-1 判分口径）。
+    checks: list[bool] = []
+    if retrieval_hit is not None:
+        checks.append(bool(retrieval_hit))
+    if keyword_coverage is not None:
+        checks.append(keyword_coverage >= COVERAGE_PASS_AT)
+    if not checks:
         return False
-    return bool(retrieval_hit) and keyword_coverage >= COVERAGE_PASS_AT
+    return all(checks)
 
 
 def score_case(
