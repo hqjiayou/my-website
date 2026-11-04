@@ -141,6 +141,64 @@ def test_stdio_entry_skips_missing_command_and_bad_args(caplog: pytest.LogCaptur
     assert any("env must be string-to-string" in record.message for record in caplog.records)
 
 
+@pytest.mark.parametrize(
+    "secret_key",
+    [
+        "AGENT_INTERNAL_SERVICE_TOKEN",
+        "AI_PROVIDER_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "RETRIEVAL_DATABASE_URL",
+        # 内部令牌命名空间的同族名与大小写变体同样拒绝（Settings 别名不区分大小写）
+        "AGENT_INTERNAL_FUTURE_TOKEN",
+        "gemini_api_key",
+    ],
+)
+def test_stdio_entry_rejected_when_env_names_internal_credential(
+    caplog: pytest.LogCaptureFixture, secret_key: str
+) -> None:
+    # Issue #189：stdio 条目 env 命中内部凭据 denylist → 整条拒绝并记 warning（只记键名），
+    # 同批其它条目不受影响。
+    payload = json.dumps(
+        [
+            {
+                "name": "leaky",
+                "transport": "stdio",
+                "command": "python",
+                "env": {secret_key: "x", "FOO": "bar"},
+            },
+            {"name": "ok", "transport": "stdio", "command": "python", "env": {"FOO": "bar"}},
+            {"name": "http", "url": "http://127.0.0.1:3999/mcp"},
+        ]
+    )
+    with caplog.at_level("WARNING"):
+        configs = parse_mcp_server_configs(payload)
+    assert [item.name for item in configs] == ["ok", "http"]
+    warnings = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert any(
+        "internal credential" in message and "leaky" in message and secret_key in message
+        for message in warnings
+    ), warnings
+
+
+def test_stdio_entry_allows_third_party_keys_in_env() -> None:
+    # 边界：denylist 只拒我方内部凭据名，不按 *_API_KEY / *_TOKEN 泛化——运维给 server
+    # 配它自己的第三方 key 是正当用法，整份 env 原样保留。
+    third_party_env = {
+        "OPENAI_API_KEY": "sk-third-party",
+        "ANTHROPIC_API_KEY": "sk-ant-third-party",
+        "GITHUB_TOKEN": "ghp_third_party",
+        "SOME_SERVICE_API_KEY": "whatever",
+        "DATABASE_URL": "postgres://third-party",
+    }
+    payload = json.dumps(
+        [{"name": "ext", "transport": "stdio", "command": "python", "env": third_party_env}]
+    )
+    configs = parse_mcp_server_configs(payload)
+    assert len(configs) == 1
+    assert configs[0].env == third_party_env
+
+
 def test_sse_transport_logs_deprecation_warning(caplog: pytest.LogCaptureFixture) -> None:
     payload = json.dumps(
         [

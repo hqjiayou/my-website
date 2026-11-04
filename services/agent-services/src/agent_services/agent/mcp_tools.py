@@ -6,6 +6,7 @@
 
 stdio 会以本服务进程的权限启动条目里的 ``command``。只配置运维自己信任的 server。
 ``env`` 只把条目里写出的字符串原样交给 FastMCP ``StdioTransport``。本模块不读 ``os.environ``，也不自行合并或裁剪。
+唯一例外：条目 ``env`` 命中内部凭据 denylist（``_INTERNAL_SECRET_ENV_NAMES``，Issue #189）时整条在解析层拒绝，不下传。
 锁里的 MCP SDK 2.3.0（``mcp/client/stdio.py``）不会把父进程环境整份交出去：子进程环境是
 ``get_default_environment()`` 再覆盖条目里的键。非 Windows 默认可继承的只有
 ``HOME``、``LOGNAME``、``PATH``、``SHELL``、``TERM``、``USER``。省略 ``env`` 时只剩这一组；
@@ -36,6 +37,43 @@ logger = logging.getLogger(__name__)
 
 _NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _SUPPORTED_TRANSPORTS = frozenset({"http", "sse", "stdio"})
+# 本进程内部凭据的 env 名（Issue #189，借 Harness² scrub_env 口径）：这些名字在本系统里
+# 就是 agent-services 自己持有的凭据，stdio 条目 env 写同名键等于把内部凭据原样交给
+# 子进程，故整条拒绝。边界：只拒「我方内部凭据名」，不按 *_API_KEY / *_TOKEN 泛化——
+# 运维给某个 MCP server 配它自己的第三方 key（如 OPENAI_API_KEY、GITHUB_TOKEN）是正当用法。
+# 名单来源＝本仓实际存在的内部凭据面（config.py 的 Settings 密钥字段与检索 DSN）：
+# - AGENT_INTERNAL_SERVICE_TOKEN：Java↔Python 内部令牌（Settings SecretStr）
+# - AI_PROVIDER_API_KEY：进程回退模型的直配凭据（Settings SecretStr）
+# - GEMINI_API_KEY / GOOGLE_API_KEY：本进程 Google 凭据（Settings 以 AliasChoices 读取，
+#   在本系统内即本进程凭据名；server 需 Google 能力时应使用自有命名的专用 key）
+# - RETRIEVAL_DATABASE_URL：含库口令的派生索引 DSN（Settings SecretStr）
+_INTERNAL_SECRET_ENV_NAMES = frozenset(
+    {
+        "AGENT_INTERNAL_SERVICE_TOKEN",
+        "AI_PROVIDER_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "RETRIEVAL_DATABASE_URL",
+    }
+)
+# 内部令牌命名空间的同族名一并拒绝（如后续新增的 AGENT_INTERNAL_* 凭据）。
+_INTERNAL_SECRET_ENV_PREFIXES = ("AGENT_INTERNAL_",)
+
+
+def _internal_secret_env_keys(env: dict[str, str]) -> list[str]:
+    """条目 env 里命中内部凭据 denylist 的键名。
+
+    按大写归一比较：Settings 别名匹配不区分大小写、Windows env 亦然，子进程
+    拿到小写同名键同样构成凭据外传。
+    """
+    hits: list[str] = []
+    for key in env:
+        upper = key.upper()
+        if upper in _INTERNAL_SECRET_ENV_NAMES or upper.startswith(
+            _INTERNAL_SECRET_ENV_PREFIXES
+        ):
+            hits.append(key)
+    return hits
 # 深检默认短超时：不进 /health，避免拖慢探活（§19.6）
 MCP_READY_DEFAULT_TIMEOUT_SECONDS = 3.0
 # 全部 enabled server 并行探测的总预算；到点未完成的记为失败，避免慢服务器耗时相加
@@ -240,6 +278,15 @@ def _parse_stdio_entry(name: str, entry: dict[str, Any]) -> McpServerConfig | No
             not isinstance(key, str) or not isinstance(value, str) for key, value in env_raw.items()
         ):
             logger.warning("MCP entry %r env must be string-to-string, skipped", name)
+            return None
+        leaked = _internal_secret_env_keys(env_raw)
+        if leaked:
+            # 只记键名不记值；整条跳过与其它坏字段一致，不拖垮整批解析
+            logger.warning(
+                "MCP entry %r env contains internal credential name(s) %s, skipped",
+                name,
+                ", ".join(sorted(leaked)),
+            )
             return None
         env = dict(env_raw)
 
