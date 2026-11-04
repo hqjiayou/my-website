@@ -236,16 +236,43 @@ def _compose(
 
 
 def _delegation_section(tool_guidance: tuple[ToolGuidance, ...]) -> str:
-    """工具未注册时返回空串，系统提示与未启用委派时逐字相同。"""
-    if not any(item.name == "delegate_task" or item.name.endswith("_delegate_task") for item in tool_guidance):
-        return ""
-    return (
-        "# Delegation\n\n"
-        "Use delegate_task for a self-contained sub-question, or when several independent angles "
-        "can be checked in parallel.\n"
-        "Do not delegate a simple question, or anything that needs a write or other business action.\n"
-        "Each delegated task must stand alone; the sub-agent does not see this conversation."
+    """工具未注册时返回空串，系统提示与未启用委派时逐字相同。
+
+    后台口径只在后台工具（spawn_background_task，Issue #188）注册时才追加；
+    只有同步委派时整段与旧版逐字一致，两个总开关任一关都不会留下后台字样。
+    """
+    names = {item.name for item in tool_guidance}
+    has_delegate = any(
+        name == "delegate_task" or name.endswith("_delegate_task") for name in names
     )
+    has_background = any(
+        name == "spawn_background_task" or name.endswith("_spawn_background_task")
+        for name in names
+    )
+    if not has_delegate and not has_background:
+        return ""
+    blocks: list[str] = []
+    if has_delegate:
+        blocks.append(
+            "Use delegate_task for a self-contained sub-question, or when several independent angles "
+            "can be checked in parallel.\n"
+            "Do not delegate a simple question, or anything that needs a write or other business action.\n"
+            "Each delegated task must stand alone; the sub-agent does not see this conversation."
+        )
+    if has_background:
+        blocks.append(
+            "Use spawn_background_task instead for a sub-question that is slow or independent "
+            "enough that this conversation should not wait for it: it returns a task_id "
+            "immediately and the helper keeps working in the background with the same "
+            "knowledge-only tools.\n"
+            "After spawning a background task, tell the user its task_id and that the result "
+            "can be checked later. When the user later asks about its progress or result, call "
+            "list_background_tasks or get_background_task first and answer from the returned "
+            "state; never guess whether it has finished.\n"
+            "Reach for delegate_task when the result is needed in this reply, and for a "
+            "background task when it is not."
+        )
+    return "# Delegation\n\n" + "\n".join(blocks)
 
 
 def _history_summary_section(summary: str | None) -> str:

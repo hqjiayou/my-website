@@ -138,6 +138,25 @@ class Settings(BaseSettings):
     # 单次子 run 自己的模型请求上限，与 AGENT_MAX_REQUESTS 分开。
     # 真正能跑多少还要看主 run 当时剩余的请求预算。
     agent_subagent_max_requests: int = Field(default=6, validation_alias="AGENT_SUBAGENT_MAX_REQUESTS")
+    # 后台委派总开关（Issue #188）：与 AGENT_SUBAGENT_ENABLED 同时开才注册四个
+    # 后台工具；关时不注册，harness 组装逐字回归到只有同步委派的形态。
+    agent_background_tasks_enabled: bool = Field(
+        default=True, validation_alias="AGENT_BACKGROUND_TASKS_ENABLED"
+    )
+    # 后台任务同时 QUEUED/RUNNING 的上限；超限时 spawn 直接回拒绝信息，不排队。
+    agent_background_task_max_concurrent: int = Field(
+        default=2, validation_alias="AGENT_BACKGROUND_TASK_MAX_CONCURRENT"
+    )
+    # 单个后台子任务的墙钟超时（秒）。子任务请求上限沿用 AGENT_SUBAGENT_MAX_REQUESTS，
+    # 用量记进任务记录、不并入派发它的主 run，也不入 Java 用量表（v1 口径）。
+    agent_background_task_timeout_seconds: float = Field(
+        default=300.0, validation_alias="AGENT_BACKGROUND_TASK_TIMEOUT_SECONDS"
+    )
+    # 已结束后台任务的结果保留时长（秒）；过期后 get/list 不再可见。
+    # 注册表只在进程内存里，进程重启全部丢失（v1 边界，持久化属 v2）。
+    agent_background_task_ttl_seconds: float = Field(
+        default=3600.0, validation_alias="AGENT_BACKGROUND_TASK_TTL_SECONDS"
+    )
     # 对话成功后是否再调一次模型抽取长期记忆。关闭后仍可注入请求里已有的 memories。
     # 抽取走独立 Agent，不占用本轮 UsageLimits。
     agent_memory_extraction_enabled: bool = Field(

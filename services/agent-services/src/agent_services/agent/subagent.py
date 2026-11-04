@@ -5,12 +5,18 @@
 主 run 的 UsageLimits 只检查这份 usage，所以下一步限额和最终上报都含有子 run。
 并行委派在并入之前用「已用请求 + 已预留请求」判断还能不能开跑。
 token 没有可靠的单次预估：已超过总 token 上限就拒绝；否则把当时剩余值设成子 run 的上限。
+
+「跑一个研究子任务」的执行核是 run_research_task：同步委派与后台 runner
+（agent/background_tasks.py，Issue #188）共用同一份子 agent 构造与结局归一化，
+不许在两处各写一份。差别只在结算：同步委派把用量并入主 run 并把失败变成
+ToolFailed；后台 runner 用自己的固定预算、用量记进任务记录、失败落状态。
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Literal
 
 import anyio
 from pydantic_ai import Agent, RunContext
@@ -85,6 +91,48 @@ class _DelegationBudget:
             self._reserved_requests -= reserved_requests
 
 
+@dataclass(frozen=True)
+class ResearchOutcome:
+    """一次研究子任务的归一化结局。执行核不抛业务异常，调用方按 kind 决定
+    是变成工具失败（同步委派）还是落任务状态（后台 runner，Issue #188）。"""
+
+    kind: Literal["ok", "timeout", "usage_limit", "error", "empty"]
+    text: str = ""
+    error: str | None = None
+
+
+async def run_research_task(
+    research: Agent[None, str],
+    task: str,
+    *,
+    timeout_seconds: float,
+    usage_limits: UsageLimits,
+    usage: RunUsage,
+    error_prefix: str = "Delegation failed",
+) -> ResearchOutcome:
+    """同步委派与后台 runner 共用的执行核：跑一次研究子任务并归一化结局。
+
+    墙钟超时、子预算超限、任意异常、空结果都不抛给调用方；只有调用方自身的
+    取消（Cancelled）会穿透——那不是子任务的失败，取消后已发生用量仍在
+    ``usage`` 里，调用方自行结算。``usage`` 由调用方持有并负责结算/留存：
+    同步委派结束时并入主 run，后台任务记进任务记录（不并主 run）。
+    """
+    try:
+        with anyio.fail_after(timeout_seconds):
+            result = await research.run(task, usage=usage, usage_limits=usage_limits)
+    except TimeoutError:
+        return ResearchOutcome(kind="timeout")
+    except UsageLimitExceeded:
+        return ResearchOutcome(kind="usage_limit")
+    except Exception as exc:  # noqa: BLE001 — 子任务失败归一化，不让主流程失败
+        logger.warning("research sub-task failed", exc_info=exc)
+        return ResearchOutcome(kind="error", error=external_failure_message(error_prefix, exc))
+    text = str(result.output).strip()
+    if not text:
+        return ResearchOutcome(kind="empty")
+    return ResearchOutcome(kind="ok", text=text)
+
+
 def build_research_agent(
     model: Model,
     *,
@@ -152,34 +200,30 @@ def build_delegate_tool(
             raise ToolFailed(acquired)
         sub_usage = RunUsage()
         try:
-            try:
-                with anyio.fail_after(timeout_seconds):
-                    result = await research.run(
-                        cleaned,
-                        usage=sub_usage,
-                        usage_limits=UsageLimits(
-                            request_limit=acquired.requests,
-                            total_tokens_limit=acquired.total_tokens_limit,
-                            tool_calls_limit=acquired.tool_calls_limit,
-                        ),
-                    )
-            except TimeoutError:
-                raise ToolFailed(
-                    f"Delegation timed out after {timeout_seconds:g} seconds."
-                ) from None
-            except UsageLimitExceeded:
-                raise ToolFailed("Delegation stopped: the subtask exceeded the run budget.") from None
-            except Exception as exc:  # noqa: BLE001 — 委派失败只回给模型，不让主 run 失败
-                logger.warning("delegation failed", exc_info=exc)
-                raise ToolFailed(external_failure_message("Delegation failed", exc)) from None
+            outcome = await run_research_task(
+                research,
+                cleaned,
+                timeout_seconds=timeout_seconds,
+                usage_limits=UsageLimits(
+                    request_limit=acquired.requests,
+                    total_tokens_limit=acquired.total_tokens_limit,
+                    tool_calls_limit=acquired.tool_calls_limit,
+                ),
+                usage=sub_usage,
+            )
         finally:
             # 超时取消后仍要把已发生的用量并回去，并放开预留。
             with anyio.CancelScope(shield=True):
                 await budget.settle(ctx.usage, sub_usage, acquired.requests)
-        text = str(result.output).strip()
-        if not text:
+        if outcome.kind == "timeout":
+            raise ToolFailed(f"Delegation timed out after {timeout_seconds:g} seconds.")
+        if outcome.kind == "usage_limit":
+            raise ToolFailed("Delegation stopped: the subtask exceeded the run budget.")
+        if outcome.kind == "error":
+            raise ToolFailed(outcome.error or "Delegation failed.")
+        if outcome.kind == "empty":
             raise ToolFailed("Delegation returned an empty result.")
-        return _limit_result(text)
+        return _limit_result(outcome.text)
 
     return toolset
 
