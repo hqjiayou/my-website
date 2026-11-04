@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import UsageLimitExceeded
@@ -30,6 +30,7 @@ from agent_services.agent.runtime import (
     RunBudget,
     UserPrompt,
     _apply_search_grounding,
+    _user_prompt_texts,
     budget_exceeded_message,
     build_agent,
     build_run_kwargs,
@@ -38,6 +39,7 @@ from agent_services.agent.runtime import (
     model_identity_line,
     prepare_history_summary,
     reply_citations,
+    tool_content_text,
     tool_succeeded,
     usage_to_api,
 )
@@ -65,6 +67,8 @@ class _StreamOutput:
     usage: dict[str, int]
     tools: list[dict[str, object]]
     model: str | None = None
+    # 本轮工具返回文本，仅供 grounding 的 R3 统一语料（Issue #191），不进事件流。
+    tool_texts: list[str] = field(default_factory=list)
 
 
 def _error_event(error_code: str, message: str) -> AgentStreamEvent:
@@ -226,6 +230,10 @@ async def stream_chat_events(
         prompt_profile=prompt_profile,
         history=list(harness.memory),
         needs_mcp_context=execution_needs_agent_context(toolsets or []),
+        corpus_texts=[*output.tool_texts, *_user_prompt_texts(user_prompt)],
+        platform_texts=harness.platform_texts,
+        retrieval_context=retrieval_context,
+        retrieval_chunks=retrieval_chunks,
     )
 
     # grounding 复跑在收尾阶段也可能产卡（同一批 toolsets）：DONE 前把残余卡片
@@ -295,6 +303,7 @@ async def _emit_agent_stream(
     """
     text_parts: list[str] = []
     tool_trace: list[dict[str, object]] = []
+    tool_texts: list[str] = []
     search_calls = 0
     final_output: str | None = None
     final_usage: dict[str, int] = {}
@@ -334,6 +343,10 @@ async def _emit_agent_stream(
                 ok = tool_succeeded(event.part)
                 if len(tool_trace) < MAX_TOOL_TRACE:
                     tool_trace.append({"name": event.part.tool_name, "ok": ok})
+                # 返回正文只收进 grounding 语料，不进事件流（§21.4 不变）。
+                content_text = tool_content_text(event.part.content)
+                if content_text:
+                    tool_texts.append(content_text)
                 data: dict[str, object] = {
                     "toolName": event.part.tool_name,
                     "toolCallId": event.tool_call_id,
@@ -358,4 +371,6 @@ async def _emit_agent_stream(
                 if isinstance(served, str) and served.strip():
                     final_model = served.strip()
     reply = final_output if final_output is not None else "".join(text_parts).strip()
-    yield _StreamOutput(reply=reply, usage=final_usage, tools=tool_trace, model=final_model)
+    yield _StreamOutput(
+        reply=reply, usage=final_usage, tools=tool_trace, model=final_model, tool_texts=tool_texts
+    )
