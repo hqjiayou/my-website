@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 
 # 产品 harness 要求不编造站点事实。这里收的是回答里会真的出现的拒答措辞，
@@ -52,10 +53,15 @@ REFUSAL_CUES: tuple[str, ...] = (
 
 COVERAGE_PASS_AT = 0.5
 
+# citation_precision 的警告阈值（#190 UoW-1）：低于此值记 low_citation_precision
+# 警告。警告只提示引用面噪声，不进 pass 判准（口径见 evals/README.md）。
+CITATION_PRECISION_WARNING_BELOW = 0.5
+
 PASS_RULE = (
     "可答题 pass：retrieval_hit 且 keyword_coverage ≥ 0.5；"
     "不可答题 pass：refusal_correct；"
-    "skill 题集同规则按可用指标判（缺失指标不计、无可用指标不 pass）。"
+    "skill 题集同规则按可用指标判（缺失指标不计、无可用指标不 pass）；"
+    "声明 behavior_checks 的题：所声明行为检查须全过（判不出的检查不计）。"
 )
 
 METRIC_NAMES: tuple[str, ...] = (
@@ -120,27 +126,180 @@ def refusal_correct(
     return has_refusal_cue(answer) and not citation_source_ids
 
 
+# ---------------------------------------------------------------------------
+# 行为检查（#190 UoW-1）：题目级 opt-in 的确定性检查，声明了才判、计入 pass。
+# 未声明 behavior_checks 的题完全不受影响。
+# ---------------------------------------------------------------------------
+
+BEHAVIOR_CHECK_NAMES: tuple[str, ...] = (
+    "no_clarifying_question",
+    "all_expected_sources_cited",
+)
+
+# 澄清提问收尾的模式表（定死，中英日）：只看回答的最后一个句段（tail）。
+# 强标记本身即澄清提问/请示口吻，不要求问号结尾；其余标记须与问句形式
+# （？/? 结尾）同时出现才算，避免正常作答里提到相关字眼被误伤。
+_CLARIFYING_STRONG_MARKERS: tuple[str, ...] = (
+    "请问",
+    "請問",
+    "could you clarify",
+    "please clarify",
+    "教えてください",
+    "教えていただけますか",
+    # 日语疑问词尾本身即问句形式，单算成立。
+    "ですか",
+    "でしょうか",
+    "どちら",
+)
+_CLARIFYING_TAIL_MARKERS: tuple[str, ...] = (
+    "您问的",
+    "您問的",
+    "你问的",
+    "指的是",
+    "想问的",
+    "想問的",
+    "需要我",
+    "哪个",
+    "哪個",
+    "哪种",
+    "哪種",
+    "哪一",
+    "do you mean",
+    "would you like",
+    "are you asking",
+    "should i",
+    "shall i",
+    "let me know if",
+)
+_CLARIFYING_EITHER_OR = re.compile(r"是[^。！？?\n]{1,24}(还是|還是)")
+_EN_QUESTION_LEAD = re.compile(
+    r"^(which|what|do|does|would|are|is|should|shall|can|could|may)\b"
+)
+_SENTENCE_SPLIT = re.compile(r"(?<=[。．.!！?？])|\n+")
+
+
+def _tail_fragment(answer: str) -> str:
+    """回答的最后一个句段（含其结尾标点）；空回答返回空串。"""
+    parts = [part.strip() for part in _SENTENCE_SPLIT.split(answer) if part.strip()]
+    return parts[-1] if parts else ""
+
+
+def ends_with_clarifying_question(answer: str) -> bool:
+    """回答是否以反问/澄清提问收尾（模式表见上，定死口径）。
+
+    只判尾句段：正文中间出现问句、最后以陈述收尾的，不算反问收尾。
+    """
+    tail = _tail_fragment(answer)
+    if not tail:
+        return False
+    folded = tail.casefold()
+    if any(
+        marker in tail for marker in _CLARIFYING_STRONG_MARKERS if not marker.isascii()
+    ):
+        return True
+    if any(
+        marker in folded for marker in _CLARIFYING_STRONG_MARKERS if marker.isascii()
+    ):
+        return True
+    if not tail.endswith(("？", "?")):
+        return False
+    if any(
+        marker in tail for marker in _CLARIFYING_TAIL_MARKERS if not marker.isascii()
+    ):
+        return True
+    if any(marker in folded for marker in _CLARIFYING_TAIL_MARKERS if marker.isascii()):
+        return True
+    if _CLARIFYING_EITHER_OR.search(tail):
+        return True
+    return bool(_EN_QUESTION_LEAD.search(folded))
+
+
+def check_no_clarifying_question(answer: str) -> bool | None:
+    """回答不以反问/澄清提问收尾。空回答判不出，记 None（不计）。"""
+    if not answer.strip():
+        return None
+    return not ends_with_clarifying_question(answer)
+
+
+def check_all_expected_sources_cited(
+    expected_sources: Sequence[str], citation_source_ids: Sequence[str] | None
+) -> bool | None:
+    """期望来源是否全部出现在 citations 里。
+
+    与 retrieval_hit 的区别：retrieval_hit 看「检索命中 ∪ citations」的并集，
+    本检查只看 citations 本身——集合级题「枚举全部并逐份抽取」的引用面证据。
+    没有期望来源时不记分（None）；有期望来源但没 citations 记 False。
+    """
+    if not expected_sources:
+        return None
+    if not citation_source_ids:
+        return False
+    cited = set(citation_source_ids)
+    return all(source in cited for source in expected_sources)
+
+
+def evaluate_behavior_checks(
+    checks: Sequence[str],
+    *,
+    answer: str,
+    expected_sources: Sequence[str],
+    citation_source_ids: Sequence[str] | None,
+) -> dict[str, bool | None]:
+    """逐项计算题目声明的行为检查；未知检查名抛 ValueError（题集错误要响）。"""
+    results: dict[str, bool | None] = {}
+    for name in checks:
+        if name == "no_clarifying_question":
+            results[name] = check_no_clarifying_question(answer)
+        elif name == "all_expected_sources_cited":
+            results[name] = check_all_expected_sources_cited(
+                expected_sources, citation_source_ids
+            )
+        else:
+            raise ValueError(f"unknown behavior check: {name}")
+    return results
+
+
+def case_warnings(*, citation_precision: float | None) -> list[str]:
+    """逐题警告（不进 pass）：引用精度过低时记 low_citation_precision。"""
+    warnings: list[str] = []
+    if (
+        citation_precision is not None
+        and citation_precision < CITATION_PRECISION_WARNING_BELOW
+    ):
+        warnings.append("low_citation_precision")
+    return warnings
+
+
 def case_passed(
     category: str,
     *,
     retrieval_hit: bool | None,
     keyword_coverage: float | None,
     refusal_correct: bool | None,
+    behavior_results: Mapping[str, bool | None] | None = None,
 ) -> bool:
     if category == "unanswerable":
-        return refusal_correct is True
-    # 按可用指标判：缺失（None）的指标不计，无任何可用指标时不 pass。
-    # 黄金集可答题经 validate_golden 保证来源与关键词俱全，两项指标恒可算，
-    # 结果与旧口径（两项皆须达标）逐题一致；泛化只对 skill 题集这类锚点
-    # 字段不全的题面生效（#187 UoW-1 判分口径）。
-    checks: list[bool] = []
-    if retrieval_hit is not None:
-        checks.append(bool(retrieval_hit))
-    if keyword_coverage is not None:
-        checks.append(keyword_coverage >= COVERAGE_PASS_AT)
-    if not checks:
+        base = refusal_correct is True
+    else:
+        # 按可用指标判：缺失（None）的指标不计，无任何可用指标时不 pass。
+        # 黄金集可答题经 validate_golden 保证来源与关键词俱全，两项指标恒可算，
+        # 结果与旧口径（两项皆须达标）逐题一致；泛化只对 skill 题集这类锚点
+        # 字段不全的题面生效（#187 UoW-1 判分口径）。
+        checks: list[bool] = []
+        if retrieval_hit is not None:
+            checks.append(bool(retrieval_hit))
+        if keyword_coverage is not None:
+            checks.append(keyword_coverage >= COVERAGE_PASS_AT)
+        base = all(checks) if checks else False
+    if not base:
         return False
-    return all(checks)
+    # behavior_checks 计入 pass（#190 定案）：声明的检查里取非 None 值，
+    # 须全过；全为 None（如空回答判不出）时不阻断，与「缺失指标不计」同口径。
+    if behavior_results:
+        declared = [value for value in behavior_results.values() if value is not None]
+        if declared and not all(declared):
+            return False
+    return True
 
 
 def score_case(
@@ -151,12 +310,25 @@ def score_case(
     observed_sources: Sequence[str],
     citation_source_ids: Sequence[str] | None,
     answer: str,
+    behavior_checks: Sequence[str] = (),
 ) -> dict[str, object]:
     hit = retrieval_hit(expected_sources, observed_sources)
     precision = citation_precision(expected_sources, citation_source_ids)
     coverage = keyword_coverage(expected_keywords, answer)
     refusal = refusal_correct(
         category=category, answer=answer, citation_source_ids=citation_source_ids
+    )
+    # 行为检查的结果不进本 dict（保持五键形状）；逐项结果由 runner 经
+    # evaluate_behavior_checks 另行附到报告行，这里只把结论计入 passed。
+    behavior = (
+        evaluate_behavior_checks(
+            behavior_checks,
+            answer=answer,
+            expected_sources=expected_sources,
+            citation_source_ids=citation_source_ids,
+        )
+        if behavior_checks
+        else {}
     )
     return {
         "retrieval_hit": hit,
@@ -168,6 +340,7 @@ def score_case(
             retrieval_hit=hit,
             keyword_coverage=coverage,
             refusal_correct=refusal,
+            behavior_results=behavior,
         ),
     }
 
