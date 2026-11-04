@@ -4,14 +4,16 @@
 （额度与密钥纪律），真模型读数固定在本机执行；CI 只守确定性层
 （评分器单测、题集结构与管线 smoke，见 `tests/test_answer_eval.py`、
 `tests/test_skill_eval_set.py`、`tests/test_eval_runner_wiring.py`、
-`tests/test_eval_baseline.py`）。
+`tests/test_eval_baseline.py`、`tests/test_eval_behavior_cases.py`）。
 
 ## 资产
 
 | 文件 | 内容 |
 | --- | --- |
-| `golden_qa.jsonl` | 黄金集 18 题：`id/question/expected_sources/expected_keywords/category`，集合级题另带 `expected_behavior/expected_answer` |
+| `golden_qa.jsonl` | 黄金集 23 题：`id/question/expected_sources/expected_keywords/category`，集合级题另带 `expected_behavior/expected_answer`；5 道多轮题（`mt-` 前缀）另带 `history`（先前轮次），6 道集合级题中 5 道另带 `behavior_checks`（见下「行为判分」） |
 | `skill_qa.jsonl` | skill 题集 17 题：`id/skill/kind/question/expected_behavior/expected_answer`，部分带 `expected_keywords` 与 `golden_ref`（与黄金集的同锚引用） |
+| `experience_qa.jsonl` | 经验敏感集 3 题（#190）：形状同黄金集，期望按注入样例 lesson 后的口径写定，须配 `fixtures/lessons_sample.json` 两轮对照读（见下「经验敏感集」） |
+| `fixtures/lessons_sample.json` | 经验敏感集的样例 lessons（lessonNo 6/7/8），经 `--lessons-file` 注入 |
 | `corpus.json` | 评估语料（进程内索引，非业务真相源） |
 | `distractors.json` | 对抗性近失文档层，仅 `--distractors` 时并入索引 |
 | `reports/` | 跑分报告归档（UoW-2 起含基线约定） |
@@ -74,6 +76,94 @@ pass 按可用指标判：缺失（None）的指标不计，两样都缺（纯�
 按 kind 解读：positive/quality 看 triggered 与 completed；negative 题
 按口径同样显式带上题面 skill 发送，关键看 `passed`（挂着 skill 仍按
 锚点答对/正确拒答即未被误导），`triggered` 对这类题恒真、不作信号。
+
+## 行为判分（#190 UoW-1）
+
+题目可声明可选字段 `behavior_checks`（字符串列表），声明的检查逐项
+确定性判定、结果进报告行 `behaviorChecks`（Markdown 报告另有
+`## Behavior checks` 段），且**计入该题 pass**：基础指标全过后，
+声明且判得出（非 None）的检查须全为 True；判不出的检查不计，
+全部判不出不阻断 pass。未声明的题目判分与此前逐字不变。已实现
+两项（名字定死在 `scoring.BEHAVIOR_CHECK_NAMES`，未知名字在
+validate 阶段报错）：
+
+- `no_clarifying_question`：答案**不得以反问/澄清提问收尾**。只看
+  答案最后一个句子片段：命中强标记（中英日定死词表，如「请问」、
+  `please clarify`、「教えてください」、「ですか」）即判反问；
+  命中弱标记（如「您问的/指的是」、`do you mean`、英文疑问词句首）
+  还须片段以问号收尾。是非问句式（「是…还是…」）同样算澄清。
+  问句出现在正文中间、最后以陈述收尾的，不算反问收尾。正反例锚点
+  在 `tests/test_eval_behavior_cases.py`。空答案判不出（None）。
+- `all_expected_sources_cited`：`expected_sources` 须**全部出现在
+  citations** 里。注意与 `retrieval_hit` 的口径区别：后者看检索命中
+  与引用的**并集**（工具回看过也算），本检查只看最终引用面——集合级
+  题「枚举全部、逐份引用」的证据就在 citations。无期望来源时判不出
+  （None）；有期望来源但无引用（None/空）判 False。
+
+golden 集合级题的补声明按各自 `expected_behavior` 原文对应、不扩大：
+5 道可答集合题补 `all_expected_sources_cited`（原文都要求枚举全部、
+逐份抽取并比较）；只有 `coll-payslip-lowest-net` 另补
+`no_clarifying_question`（只有它的原文写了「不得以反问口径收尾」）；
+`coll-rent-unanswerable` 不补——它的原文是「不得编造、不得拿其他
+文档冒充」，两项检查都无对应项。
+
+### citation_precision 警告级（不计 pass）
+
+`citation_precision` 低于阈值常量 `CITATION_PRECISION_WARNING_BELOW
+= 0.5` 的计分题，报告行带 `warnings: ["low_citation_precision"]`，
+汇总单列 `summary.warningCount` / `summary.warningCases`，Markdown
+报告另有 `## Warnings` 段。警告只提示「引用面噪声偏大」，**不影响
+pass**，也不进基线翻转判定。
+
+### 拒答判定：维持词表口径（#190 盘点结论）
+
+`refusal_correct` 维持「拒答词表命中且无 citations」的现行口径，
+不做联合规则强化。盘点 `score_case` 实际可得的信号只有三个：答案
+文本、citations、检索/引用并集（observed）。设想的联合规则两个
+方向都更差：
+
+- 再 AND「本轮零检索命中」：模型先检索到不相关片段、再如实拒答
+  的**正确拒答会被判错**（升漏判）——真实跑里拒答题常伴随低相关
+  命中，这正是历史补丁的场景；
+- 改 OR「零检索命中」：无引用但编造了数值的答案会因零命中被判
+  「正确拒答」（升误判），直接放过编造。
+
+历史两次漏判的根因都是词表覆盖（措辞没收录），不是信号结构问题，
+继续按真实跑补词表即可；更强的语义判定只能上模型判官，那是单独
+的额度与口径决策，不在本包范围。
+
+## 多轮题与 history 字段（#190 UoW-2）
+
+任意题集的题目可带可选 `history`：先前轮次数组，形状与生产
+`run_chat` 的 `history` 入参一致（`ChatHistoryMessage`：
+`{"role": "USER"|"ASSISTANT", "content": "..."}`），runner 原样
+透传、不做改写；缺省（不带字段）时行为与此前逐字不变。validate
+约束：轮次须 USER 起、ASSISTANT 收、严格交替。报告行在带 history
+时回显 `history`（role/content）供人工核对承接关系。golden 的
+5 道 `mt-` 题都是指代/承接型（追问的答案锚点仍在既有语料里）；
+其中 `mt-payslip-range-diff` 的差额 16,034 是派生值（175,400 −
+159,366），复算过程写在该题 `expected_answer` 里、多轮题的复算
+单测在 `tests/test_eval_behavior_cases.py`。
+
+## 经验敏感集（#190 UoW-2）
+
+`experience_qa.jsonl` 的 3 道题按**注入样例 lesson 后的口径**写定
+期望（样例在 `fixtures/lessons_sample.json`：工资口径、营业时间双
+时段、集合级逐份列值），每题都声明了对应的 `behavior_checks`。
+两轮对照读法：
+
+```bash
+# 关臂：不带 lessons 跑——期望多为不 pass（默认口径与题面期望不同），
+# 这是口径差异信号，不是模型答错
+uv run python -m agent_services.evals.run_answer_eval --cases evals/experience_qa.jsonl
+# 开臂：注入样例 lessons 跑——应按 lesson 口径 pass
+uv run python -m agent_services.evals.run_answer_eval --cases evals/experience_qa.jsonl \
+  --lessons-file evals/fixtures/lessons_sample.json
+```
+
+开臂相对关臂的翻转（可用 `--baseline` 指向关臂报告逐题看）就是
+「经验注入是否真的改变行为」的读数；关臂偶有个别题 pass（如模型
+自发按 lesson 口径作答）不奇怪，看整体翻转即可。
 
 ## 对照与评分完整性（#187 UoW-2）
 

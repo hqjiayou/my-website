@@ -22,6 +22,14 @@ skill 题的触发/完成判分口径见 ``load_skill_cases`` 与 evals/README.m
 （不记 0 分、不进均值、整轮全 unscored 时按 BLOCKED 以退出码 2 处理）。
 指纹与 unscored 口径见 ``build_fingerprint`` / ``_unscored_row`` 与
 evals/README.md。
+
+行为判分与题集扩容（#190）：题目级可选 ``behavior_checks`` 由 scoring
+逐项确定性判定、计入 pass，逐项结果附在报告行 ``behaviorChecks``；
+``citation_precision`` 低于阈值记逐题 ``warnings``（不进 pass，汇总单列）；
+题目级可选 ``history``（先前轮次）按 run_chat 的 history 入参形状透传，
+支撑多轮题；经验敏感题集 ``evals/experience_qa.jsonl`` 配合
+``--lessons-file evals/fixtures/lessons_sample.json`` 做关/开两轮对照。
+口径见 scoring 与 evals/README.md。
 """
 
 from __future__ import annotations
@@ -54,10 +62,18 @@ from agent_services.agent.skills import (
     resolve_skills,
 )
 from agent_services.config import RETRIEVAL_MIN_SCORE_DEFAULT, Settings
-from agent_services.evals.scoring import METRIC_NAMES, PASS_RULE, aggregate, score_case
+from agent_services.evals.scoring import (
+    BEHAVIOR_CHECK_NAMES,
+    METRIC_NAMES,
+    PASS_RULE,
+    aggregate,
+    case_warnings,
+    evaluate_behavior_checks,
+    score_case,
+)
 from agent_services.retrieval.service import RetrievalService, query_terms
 from agent_services.retrieval.store import RetrievedChunk
-from agent_services.schemas.chat import ExperienceLessonItem
+from agent_services.schemas.chat import ChatHistoryMessage, ExperienceLessonItem
 
 EVAL_SITE_ID = "eval-golden"
 BLOCKED_EXIT = 2
@@ -94,6 +110,12 @@ class GoldenCase:
     skill: str = ""
     kind: str = ""
     golden_ref: str = ""
+    # 行为判分（#190 UoW-1）：题目级 opt-in 的确定性行为检查名
+    # （scoring.BEHAVIOR_CHECK_NAMES 子集），声明了才判、计入 pass。
+    behavior_checks: tuple[str, ...] = ()
+    # 多轮题（#190 UoW-2）：先前轮次，元素形状即 run_chat 的 history 入参
+    # （ChatHistoryMessage：role/content），缺省无 history、行为不变。
+    history: tuple[ChatHistoryMessage, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -165,6 +187,40 @@ def _opt_text(payload: dict[str, object], key: str, label: str) -> str:
     return value.strip()
 
 
+def _behavior_check_list(payload: dict[str, object], label: str) -> tuple[str, ...]:
+    """可选 behavior_checks 字段：缺席或显式空列表都记空（未声明不判）。"""
+    checks = _opt_str_list(payload, "behavior_checks", label)
+    return checks if checks is not None else ()
+
+
+def _history_items(
+    payload: dict[str, object], label: str
+) -> tuple[ChatHistoryMessage, ...]:
+    """可选 history 字段：先前轮次，逐项按 ChatHistoryMessage 校验。
+
+    形状与 run_chat 的 history 入参一致（{role: USER|ASSISTANT, content}）；
+    字段出现时必须是非空列表，坏形状在加载期报错，不静默丢弃。
+    """
+    if "history" not in payload:
+        return ()
+    value = payload["history"]
+    if not isinstance(value, list) or not value:
+        raise ValueError(
+            f"{label} field history must be a non-empty list when present."
+        )
+    items: list[ChatHistoryMessage] = []
+    for index, entry in enumerate(value):
+        if not isinstance(entry, dict):
+            raise ValueError(f"{label} history item {index} must be an object.")
+        try:
+            items.append(ChatHistoryMessage.model_validate(entry))
+        except ValidationError as exc:
+            raise ValueError(
+                f"{label} history item {index} is invalid: {exc}."
+            ) from exc
+    return tuple(items)
+
+
 def load_cases(path: Path | None = None) -> list[GoldenCase]:
     cases: list[GoldenCase] = []
     text = (path or evals_root() / "golden_qa.jsonl").read_text(encoding="utf-8")
@@ -184,6 +240,8 @@ def load_cases(path: Path | None = None) -> list[GoldenCase]:
                 category=_text(item, "category", label),
                 expected_behavior=_opt_text(item, "expected_behavior", label),
                 expected_answer=_opt_text(item, "expected_answer", label),
+                behavior_checks=_behavior_check_list(item, label),
+                history=_history_items(item, label),
             )
         )
     return cases
@@ -268,6 +326,8 @@ def load_skill_cases(
                 skill=_text(item, "skill", label),
                 kind=_blankable_text(item, "kind", label),
                 golden_ref=ref,
+                behavior_checks=_behavior_check_list(item, label),
+                history=_history_items(item, label),
             )
         )
     return cases
@@ -288,6 +348,29 @@ def load_any_cases(path: Path) -> list[GoldenCase]:
     return load_cases(path)
 
 
+def _validate_case_extras(case: GoldenCase) -> None:
+    """题目级可选字段的校验（#190）：行为检查名须已知；history 须轮次规整。
+
+    history 是「先前轮次」：本轮 question 是接在其后的用户轮，故 history
+    必须以 USER 开头、ASSISTANT 结尾、角色严格交替，否则多轮语义不成立。
+    """
+    unknown = [
+        name for name in case.behavior_checks if name not in BEHAVIOR_CHECK_NAMES
+    ]
+    if unknown:
+        raise ValueError(f"{case.id} declares unknown behavior checks {unknown}.")
+    if case.history:
+        roles = [item.role for item in case.history]
+        alternates = all(
+            roles[index] != roles[index + 1] for index in range(len(roles) - 1)
+        )
+        if roles[0] != "USER" or roles[-1] != "ASSISTANT" or not alternates:
+            raise ValueError(
+                f"{case.id} history must start with USER, end with ASSISTANT, "
+                "and alternate roles."
+            )
+
+
 def validate_eval_cases(corpus: Sequence[CorpusDoc], cases: Sequence[GoldenCase]) -> None:
     """非黄金题集（如 skill_qa）的宽容校验。
 
@@ -306,6 +389,7 @@ def validate_eval_cases(corpus: Sequence[CorpusDoc], cases: Sequence[GoldenCase]
             raise ValueError(f"{case.id} references unknown sources {unknown}.")
         if case.category == "unanswerable" and (case.expected_sources or case.expected_keywords):
             raise ValueError(f"{case.id} is unanswerable and must not list sources or keywords.")
+        _validate_case_extras(case)
 
 
 def load_lessons_file(path: Path) -> list[ExperienceLessonItem]:
@@ -403,6 +487,7 @@ def validate_golden(corpus: Sequence[CorpusDoc], cases: Sequence[GoldenCase]) ->
             raise ValueError(f"{case.id} needs expected sources and keywords.")
         if case.category == "collection" and not case.expected_behavior:
             raise ValueError(f"{case.id} is a collection case and must state expected_behavior.")
+        _validate_case_extras(case)
 
 
 class DeterministicEmbedder:
@@ -653,12 +738,15 @@ async def _run_case(
     # skills / harness_dir / experience_lessons 同样按生产口径透传 run_chat：
     # skill_resolution 由调用方经 agent.skills.resolve_skills 解析（与
     # api/internal.py 同一函数、同一输入），不在 runner 内另造旁路。
+    # 多轮题的 history（#190）同理：题目字段即 ChatHistoryMessage 列表，
+    # 原样作 run_chat 的 history 入参，不做改写。
     collector = KnowledgeSearchCollector()
     toolset = build_knowledge_toolset(agent_id, service, collector=collector)
     outcome = await run_chat(
         model,
         agent_id=agent_id,
         message=case.question,
+        history=list(case.history) if case.history else None,
         toolsets=[toolset],
         knowledge_collector=collector,
         memory_extraction_enabled=False,
@@ -696,6 +784,7 @@ async def _run_case(
         observed_sources=observed,
         citation_source_ids=citation_source_ids,
         answer=answer,
+        behavior_checks=case.behavior_checks,
     )
     row: dict[str, object] = {
         "id": case.id,
@@ -722,6 +811,30 @@ async def _run_case(
         row["expectedBehavior"] = case.expected_behavior
     if case.expected_answer:
         row["expectedAnswer"] = case.expected_answer
+    # 多轮题把先前轮次原样附进报告行，供人工核对承接关系（#190 UoW-2）。
+    if case.history:
+        row["history"] = [
+            {"role": item.role, "content": item.content} for item in case.history
+        ]
+    # 行为检查逐项结果只在题目声明了 behavior_checks 时出现（#190 UoW-1）；
+    # 与 score_case 内部计入 passed 的是同一份计算，口径不会漂移。
+    if case.behavior_checks:
+        row["behaviorChecks"] = evaluate_behavior_checks(
+            case.behavior_checks,
+            answer=answer,
+            expected_sources=case.expected_sources,
+            citation_source_ids=citation_source_ids,
+        )
+    # 警告级（不进 pass）：引用精度过低时附在行上，汇总另行单列。
+    precision_value = scores.get("citation_precision")
+    warnings = case_warnings(
+        citation_precision=precision_value
+        if isinstance(precision_value, (int, float))
+        and not isinstance(precision_value, bool)
+        else None
+    )
+    if warnings:
+        row["warnings"] = warnings
     # skill 题的触发/完成标注只在题面带 skill 字段时出现，黄金题行形状不变。
     # skillsApplied 即本轮解析的 applied 集，与生产响应 skillsApplied 同源。
     if case.skill:
@@ -777,6 +890,10 @@ def _unscored_row(
         row["expectedBehavior"] = case.expected_behavior
     if case.expected_answer:
         row["expectedAnswer"] = case.expected_answer
+    if case.history:
+        row["history"] = [
+            {"role": item.role, "content": item.content} for item in case.history
+        ]
     # skill 题保留题面标注，但 triggered/completed 描述的是运行结果，
     # 本题没有结果，不填（报告读作 n/a），更不能记成未触发。
     if case.skill:
@@ -972,6 +1089,66 @@ def render_markdown(report: dict[str, object]) -> str:
                         _cell(entry.get("id")),
                         _cell(entry.get("category")),
                         _cell(entry.get("reason")),
+                    ]
+                )
+                + " |"
+            )
+    # 行为检查逐项结果（#190 UoW-1）：只列声明了 behavior_checks 的题。
+    behavior_rows = [
+        case for case in case_rows if isinstance(case.get("behaviorChecks"), dict)
+    ]
+    if behavior_rows:
+        lines.extend(
+            [
+                "",
+                "## Behavior checks",
+                "",
+                "声明了 behavior_checks 的题逐项结果（计入 pass；n/a 为判不出、不计）：",
+                "",
+                "| id | check | result |",
+                "| --- | --- | --- |",
+            ]
+        )
+        for case in behavior_rows:
+            checks = case.get("behaviorChecks")
+            if not isinstance(checks, dict):
+                continue
+            for name, value in checks.items():
+                lines.append(
+                    "| "
+                    + " | ".join([_cell(case.get("id")), _cell(name), _cell(value)])
+                    + " |"
+                )
+    # 警告级单列（#190 UoW-1）：不影响 pass，只提示引用面噪声。
+    warning_cases = summary.get("warningCases")
+    if isinstance(warning_cases, list) and warning_cases:
+        lines.extend(
+            [
+                "",
+                "## Warnings",
+                "",
+                "下列题目带警告（不影响 pass，口径见 evals/README.md）：",
+                "",
+                "| id | category | warnings |",
+                "| --- | --- | --- |",
+            ]
+        )
+        for entry in warning_cases:
+            if not isinstance(entry, dict):
+                continue
+            warnings_value = entry.get("warnings")
+            warnings_text = (
+                ", ".join(str(item) for item in warnings_value)
+                if isinstance(warnings_value, list)
+                else ""
+            )
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _cell(entry.get("id")),
+                        _cell(entry.get("category")),
+                        _cell(warnings_text),
                     ]
                 )
                 + " |"
@@ -1486,6 +1663,14 @@ async def run_answer_eval(
     if unscored_entries:
         summary["unscoredCount"] = len(unscored_entries)
         summary["unscoredCases"] = unscored_entries
+    warning_entries = [
+        {"id": row["id"], "category": row["category"], "warnings": row["warnings"]}
+        for row in rows
+        if isinstance(row.get("warnings"), list) and row["warnings"]
+    ]
+    if warning_entries:
+        summary["warningCount"] = len(warning_entries)
+        summary["warningCases"] = warning_entries
     report: dict[str, object] = {
         "model": model_name,
         "generatedAt": when.isoformat(),
