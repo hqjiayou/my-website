@@ -9,3 +9,4 @@ dist/
 *.egg-info/
 evals/reports/*
 !evals/reports/.gitkeep
+!evals/reports/baseline.json

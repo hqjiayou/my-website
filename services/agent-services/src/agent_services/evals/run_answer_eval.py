@@ -15,6 +15,13 @@
 ``--skills`` / ``--harness-dir`` / ``--lessons-file`` 分别把 skill 集、平台文件
 目录、经验条目按生产组装口径注入每一轮 run_chat，缺省时行为与未接通前一致。
 skill 题的触发/完成判分口径见 ``load_skill_cases`` 与 evals/README.md。
+
+对照与评分完整性（#187 UoW-2）：每份报告带配置指纹（``fingerprint``）；
+``--baseline <report.json>`` 逐题 diff（pass 翻转、指标变化、单边题），
+相对基线出现 pass→fail 翻转时退出码 3；单题运行异常/超时记 unscored
+（不记 0 分、不进均值、整轮全 unscored 时按 BLOCKED 以退出码 2 处理）。
+指纹与 unscored 口径见 ``build_fingerprint`` / ``_unscored_row`` 与
+evals/README.md。
 """
 
 from __future__ import annotations
@@ -23,6 +30,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import logging
 import math
 import sys
 from collections.abc import Sequence
@@ -33,6 +41,7 @@ from pathlib import Path
 from pydantic import ValidationError
 from pydantic_ai.models import Model
 
+from agent_services.agent.harness import default_harness_directory
 from agent_services.agent.knowledge_tools import (
     KnowledgeSearchCollector,
     build_knowledge_toolset,
@@ -52,7 +61,14 @@ from agent_services.schemas.chat import ExperienceLessonItem
 
 EVAL_SITE_ID = "eval-golden"
 BLOCKED_EXIT = 2
+REGRESSION_EXIT = 3
 _EMBED_DIM = 2048
+# 单题墙钟上限（秒）：run_chat 内部只有工具级超时，没有整题上限；单题超过
+# 此限记 unscored（见 _unscored_row），不拖垮整轮、也不无限等。真模型单题
+# （检索＋多轮工具）量级在分钟内，300 秒是宽松上限而非目标耗时。
+CASE_TIMEOUT_SECONDS = 300.0
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -317,6 +333,54 @@ def load_lessons_file(path: Path) -> list[ExperienceLessonItem]:
         except ValidationError as exc:
             raise ValueError(f"--lessons-file item {index} is invalid: {exc}.") from exc
     return lessons
+
+
+def corpus_fingerprint(corpus: Sequence[CorpusDoc]) -> dict[str, object]:
+    """语料的内容标识：文档数＋规范化内容哈希（按 source_id 排序拼接三字段）。
+
+    同一份语料（含 --distractors 并入与否）必然得到同一哈希，语料增删改
+    任一字段都会变——这是「分数只与同指纹基线可比」里 corpus 一项的锚点。
+    """
+    digest = hashlib.sha256()
+    for doc in sorted(corpus, key=lambda item: item.source_id):
+        digest.update(doc.source_id.encode("utf-8"))
+        digest.update(b"\n")
+        digest.update(doc.title.encode("utf-8"))
+        digest.update(b"\n")
+        digest.update(doc.content.encode("utf-8"))
+        digest.update(b"\n")
+    return {"documents": len(corpus), "sha256": digest.hexdigest()}
+
+
+def build_fingerprint(
+    *,
+    model_name: str,
+    cases_file: str | None,
+    case_count: int,
+    corpus: Sequence[CorpusDoc],
+    harness_dir: str | None,
+    skills: Sequence[str],
+    lessons_file: str | None,
+    lessons_count: int,
+) -> dict[str, object]:
+    """本轮跑分的配置指纹（#187 UoW-2）：随报告归档，是对照可比性的依据。
+
+    关键项（model / casesFile / corpus）决定两份报告能否直接比分数，
+    ``build_baseline_diff`` 对这三项不一致显式警告；harnessDir / skills /
+    lessons 是对照实验本身要变的臂，只记录不警告。harnessDir 记实际生效
+    值：未显式指定时即组装缺省目录（与 assemble_harness 同一解析）。
+    cases_file / lessons_file 是展示路径：函数注入（测试/编程调用）时为
+    None，表示「未标注」，不冒充某个文件。
+    """
+    return {
+        "model": model_name,
+        "passRule": PASS_RULE,
+        "casesFile": {"path": cases_file, "count": case_count},
+        "corpus": corpus_fingerprint(corpus),
+        "harnessDir": harness_dir or default_harness_directory(),
+        "skills": list(skills),
+        "lessons": {"file": lessons_file, "count": lessons_count},
+    }
 
 
 def validate_golden(corpus: Sequence[CorpusDoc], cases: Sequence[GoldenCase]) -> None:
@@ -673,6 +737,54 @@ async def _run_case(
     return row
 
 
+def _unscored_row(
+    case: GoldenCase, exc: BaseException, *, timeout_seconds: float
+) -> dict[str, object]:
+    """单题运行失败时的报告行：记 unscored，不记 0 分（#187 UoW-2）。
+
+    口径（借 Harness² judge 完整性）：异常/超时的题没有产生可判的回答，
+    scores 四指标与 passed 全为 None——聚合时不进均值分母，也不会被
+    diff 读成 pass→fail 翻转；reason 保留异常类型与信息供人工归因。
+    行的其余字段与正常行同形状，渲染与下游消费不需要特判结构。
+    """
+    if isinstance(exc, TimeoutError):
+        reason = f"timeout after {timeout_seconds:g} seconds (per-case limit)"
+    else:
+        detail = str(exc).strip()
+        reason = f"{type(exc).__name__}: {detail}" if detail else type(exc).__name__
+    row: dict[str, object] = {
+        "id": case.id,
+        "category": case.category,
+        "question": case.question,
+        "expectedSources": list(case.expected_sources),
+        "reply": "",
+        "blockedReason": None,
+        "errorCode": None,
+        "retrievalDegraded": False,
+        "retrieved": [],
+        "citations": None,
+        "unscored": True,
+        "unscoredReason": reason,
+        "scores": {
+            "retrieval_hit": None,
+            "citation_precision": None,
+            "keyword_coverage": None,
+            "refusal_correct": None,
+            "passed": None,
+        },
+    }
+    if case.expected_behavior:
+        row["expectedBehavior"] = case.expected_behavior
+    if case.expected_answer:
+        row["expectedAnswer"] = case.expected_answer
+    # skill 题保留题面标注，但 triggered/completed 描述的是运行结果，
+    # 本题没有结果，不填（报告读作 n/a），更不能记成未触发。
+    if case.skill:
+        row["skill"] = case.skill
+        row["kind"] = case.kind
+    return row
+
+
 def _stamp(when: datetime) -> datetime:
     if when.tzinfo is None:
         return when.replace(tzinfo=UTC)
@@ -726,6 +838,22 @@ def render_markdown(report: dict[str, object]) -> str:
         lines.append(f"- Harness dir: `{report['harnessDir']}`")
     if report.get("lessonsCount"):
         lines.append(f"- Experience lessons: {report['lessonsCount']} 条（文件注入）")
+    # 配置指纹（#187 UoW-2）：旧报告无此块时整段跳过，不影响其渲染。
+    fingerprint = report.get("fingerprint")
+    if isinstance(fingerprint, dict):
+        cases_fp = fingerprint.get("casesFile")
+        if isinstance(cases_fp, dict):
+            cases_path = cases_fp.get("path")
+            if isinstance(cases_path, str) and cases_path:
+                lines.append(f"- Cases file: `{cases_path}`（{cases_fp.get('count')} 题）")
+            else:
+                lines.append(f"- Cases: {cases_fp.get('count')} 题（路径未标注）")
+        corpus_fp = fingerprint.get("corpus")
+        if isinstance(corpus_fp, dict):
+            sha = str(corpus_fp.get("sha256") or "")
+            lines.append(
+                f"- Corpus: {corpus_fp.get('documents')} documents · sha256 `{sha[:12]}…`"
+            )
     lines.extend(
         [
             "",
@@ -820,8 +948,433 @@ def render_markdown(report: dict[str, object]) -> str:
             ]
         )
         lines.append("| " + " | ".join(cells) + " |")
+    # unscored 单列（#187 UoW-2）：这些题没有分数，不混进上表均值。
+    unscored_cases = summary.get("unscoredCases")
+    if isinstance(unscored_cases, list) and unscored_cases:
+        lines.extend(
+            [
+                "",
+                "## Unscored",
+                "",
+                "下列题目运行异常或超时，未计分、不进均值（口径见 evals/README.md）：",
+                "",
+                "| id | category | reason |",
+                "| --- | --- | --- |",
+            ]
+        )
+        for entry in unscored_cases:
+            if not isinstance(entry, dict):
+                continue
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _cell(entry.get("id")),
+                        _cell(entry.get("category")),
+                        _cell(entry.get("reason")),
+                    ]
+                )
+                + " |"
+            )
+    baseline_diff = report.get("baselineDiff")
+    if isinstance(baseline_diff, dict):
+        lines.extend(_render_baseline_diff(baseline_diff))
     lines.append("")
     return "\n".join(lines)
+
+
+def load_baseline_report(path: Path) -> dict[str, object]:
+    """加载 --baseline 的基线报告 JSON；缺失/坏形状一律明确报错，不静默当无基线。"""
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"--baseline cannot be read: {path} ({exc}).") from exc
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"--baseline is not valid JSON: {path} ({exc}).") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("--baseline must be a report JSON object.")
+    if not isinstance(raw.get("cases"), list):
+        raise ValueError("--baseline report has no cases list; not an eval report.")
+    return raw
+
+
+def _num(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _metric_delta(baseline_value: object, current_value: object) -> dict[str, object]:
+    base_num = _num(baseline_value)
+    current_num = _num(current_value)
+    delta = (
+        round(current_num - base_num, 6)
+        if base_num is not None and current_num is not None
+        else None
+    )
+    return {"baseline": baseline_value, "current": current_value, "delta": delta}
+
+
+def _report_fingerprint(report: dict[str, object]) -> dict[str, object]:
+    """取报告指纹；UoW-2 之前的旧报告没有 fingerprint 块，从遗留顶层键派生。
+
+    派生时 casesFile / corpus 记 None（当时没记、无从核），diff 的警告逻辑
+    会把「核不了」显式报出来，而不是假装同配置。
+    """
+    fingerprint = report.get("fingerprint")
+    if isinstance(fingerprint, dict):
+        return fingerprint
+    skills_value = report.get("skills")
+    lessons_count = report.get("lessonsCount")
+    return {
+        "model": report.get("model"),
+        "passRule": report.get("passRule"),
+        "casesFile": None,
+        "corpus": None,
+        "harnessDir": report.get("harnessDir"),
+        "skills": list(skills_value) if isinstance(skills_value, list) else [],
+        "lessons": {
+            "file": None,
+            "count": lessons_count if isinstance(lessons_count, int) else 0,
+        },
+    }
+
+
+def _cases_file_identity(fingerprint: dict[str, object]) -> tuple[str, object] | None:
+    """题集身份＝（路径 basename，题数）；路径未标注时只有题数可比。"""
+    cases_fp = fingerprint.get("casesFile")
+    if not isinstance(cases_fp, dict):
+        return None
+    path = cases_fp.get("path")
+    basename = Path(path).name if isinstance(path, str) and path else None
+    return (basename or "", cases_fp.get("count"))
+
+
+def _corpus_sha(fingerprint: dict[str, object]) -> str | None:
+    corpus_fp = fingerprint.get("corpus")
+    if not isinstance(corpus_fp, dict):
+        return None
+    sha = corpus_fp.get("sha256")
+    return sha if isinstance(sha, str) and sha else None
+
+
+def _fingerprint_warnings(
+    current_fp: dict[str, object],
+    baseline_fp: dict[str, object],
+    *,
+    baseline_has_fingerprint: bool,
+) -> list[str]:
+    """关键项（model / casesFile / corpus）不一致或无从核对时的警告。
+
+    harnessDir / skills / lessons 是对照实验要变的臂，不在此列。警告不
+    阻断 diff 产出，但标注分数不可直接比——是否采信由人结合警告判断。
+    """
+    warnings: list[str] = []
+    if not baseline_has_fingerprint:
+        warnings.append(
+            "baseline report has no fingerprint block (pre-UoW-2 report); "
+            "cases/corpus identity cannot be verified."
+        )
+    current_model = current_fp.get("model")
+    baseline_model = baseline_fp.get("model")
+    if current_model != baseline_model:
+        warnings.append(
+            f"model differs (baseline={baseline_model!r}, current={current_model!r}); "
+            "scores are not directly comparable."
+        )
+    current_cases = _cases_file_identity(current_fp)
+    baseline_cases = _cases_file_identity(baseline_fp)
+    if current_cases is None or baseline_cases is None:
+        if baseline_has_fingerprint:
+            warnings.append("cases file identity is missing on one side; cannot verify.")
+    elif current_cases != baseline_cases:
+        warnings.append(
+            f"cases file differs (baseline={baseline_cases!r}, current={current_cases!r}); "
+            "scores are not directly comparable."
+        )
+    current_sha = _corpus_sha(current_fp)
+    baseline_sha = _corpus_sha(baseline_fp)
+    if current_sha is None or baseline_sha is None:
+        if baseline_has_fingerprint:
+            warnings.append("corpus identity is missing on one side; cannot verify.")
+    elif current_sha != baseline_sha:
+        warnings.append(
+            "corpus content differs (sha256 mismatch); scores are not directly comparable."
+        )
+    return warnings
+
+
+def _rows_by_id(report: dict[str, object]) -> dict[str, dict[str, object]]:
+    cases = report.get("cases")
+    rows: dict[str, dict[str, object]] = {}
+    if isinstance(cases, list):
+        for row in cases:
+            if isinstance(row, dict) and isinstance(row.get("id"), str):
+                rows[str(row["id"])] = row
+    return rows
+
+
+def _row_passed(row: dict[str, object]) -> bool | None:
+    scores = row.get("scores")
+    if not isinstance(scores, dict):
+        return None
+    passed = scores.get("passed")
+    return passed if isinstance(passed, bool) else None
+
+
+def _row_score(row: dict[str, object], name: str) -> object:
+    scores = row.get("scores")
+    if not isinstance(scores, dict):
+        return None
+    return scores.get(name)
+
+
+def _overall_value(report: dict[str, object], name: str) -> object:
+    summary = report.get("summary")
+    if not isinstance(summary, dict):
+        return None
+    overall = summary.get("overall")
+    if not isinstance(overall, dict):
+        return None
+    return overall.get(name)
+
+
+_SCORE_METRICS: tuple[str, ...] = tuple(name for name in METRIC_NAMES if name != "passed")
+
+
+def build_baseline_diff(
+    current: dict[str, object], baseline: dict[str, object]
+) -> dict[str, object]:
+    """逐题 diff 本轮报告与基线报告（#187 UoW-2）。
+
+    翻转只认两边都有真实 pass 状态的题：本轮 unscored 的题单列（不是
+    fail、不算翻转）；基线 unscored 的题同理单列。基线有而本轮缺的题、
+    本轮新增题单列说明，不混入翻转判定。指纹关键项不一致时 warnings
+    非空——diff 照常产出，但分数不可直接比。
+    """
+    current_rows = _rows_by_id(current)
+    baseline_rows = _rows_by_id(baseline)
+    current_fp = _report_fingerprint(current)
+    baseline_fp = _report_fingerprint(baseline)
+    warnings = _fingerprint_warnings(
+        current_fp,
+        baseline_fp,
+        baseline_has_fingerprint=isinstance(baseline.get("fingerprint"), dict),
+    )
+    case_diffs: list[dict[str, object]] = []
+    pass_to_fail: list[str] = []
+    fail_to_pass: list[str] = []
+    added: list[str] = []
+    missing: list[str] = []
+    unscored_now: list[str] = []
+    unscored_base: list[str] = []
+    ordered_ids = list(current_rows) + [
+        case_id for case_id in baseline_rows if case_id not in current_rows
+    ]
+    for case_id in ordered_ids:
+        cur = current_rows.get(case_id)
+        base = baseline_rows.get(case_id)
+        if cur is None:
+            missing.append(case_id)
+            case_diffs.append(
+                {
+                    "id": case_id,
+                    "status": "missing",
+                    "baselinePassed": _row_passed(base) if base else None,
+                    "currentPassed": None,
+                    "metricDeltas": {},
+                }
+            )
+            continue
+        if base is None:
+            added.append(case_id)
+            case_diffs.append(
+                {
+                    "id": case_id,
+                    "status": "added",
+                    "baselinePassed": None,
+                    "currentPassed": _row_passed(cur),
+                    "metricDeltas": {},
+                }
+            )
+            continue
+        base_passed = _row_passed(base)
+        cur_passed = _row_passed(cur)
+        if cur.get("unscored"):
+            status = "unscored"
+            unscored_now.append(case_id)
+        elif base.get("unscored"):
+            status = "baseline_unscored"
+            unscored_base.append(case_id)
+        elif base_passed is True and cur_passed is False:
+            status = "pass_to_fail"
+            pass_to_fail.append(case_id)
+        elif base_passed is False and cur_passed is True:
+            status = "fail_to_pass"
+            fail_to_pass.append(case_id)
+        else:
+            status = "unchanged"
+        case_diffs.append(
+            {
+                "id": case_id,
+                "status": status,
+                "baselinePassed": base_passed,
+                "currentPassed": cur_passed,
+                "metricDeltas": {
+                    name: _metric_delta(_row_score(base, name), _row_score(cur, name))
+                    for name in _SCORE_METRICS
+                },
+            }
+        )
+    return {
+        "baselineModel": baseline.get("model"),
+        "baselineGeneratedAt": baseline.get("generatedAt"),
+        "fingerprint": {"current": current_fp, "baseline": baseline_fp},
+        "fingerprintWarnings": warnings,
+        "overall": {
+            name: _metric_delta(_overall_value(baseline, name), _overall_value(current, name))
+            for name in METRIC_NAMES
+        },
+        "flips": {"passToFail": pass_to_fail, "failToPass": fail_to_pass},
+        "addedCases": added,
+        "missingCases": missing,
+        "unscoredCases": unscored_now,
+        "baselineUnscoredCases": unscored_base,
+        "cases": case_diffs,
+    }
+
+
+def _ids_cell(ids: object) -> str:
+    if not isinstance(ids, list) or not ids:
+        return "无"
+    return "、".join(f"`{item}`" for item in ids)
+
+
+def _render_baseline_diff(diff: dict[str, object]) -> list[str]:
+    lines = [
+        "",
+        "## Baseline diff",
+        "",
+        f"- Baseline model: `{diff.get('baselineModel')}`",
+        f"- Baseline generated: {diff.get('baselineGeneratedAt')}",
+    ]
+    warnings = diff.get("fingerprintWarnings")
+    if isinstance(warnings, list):
+        for warning in warnings:
+            lines.append(f"- ⚠ 指纹警告：{warning}")
+    overall = diff.get("overall")
+    if isinstance(overall, dict):
+        lines.extend(
+            [
+                "",
+                "| metric | baseline | current | delta |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for name in METRIC_NAMES:
+            entry = overall.get(name)
+            if not isinstance(entry, dict):
+                continue
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        name,
+                        _cell(entry.get("baseline")),
+                        _cell(entry.get("current")),
+                        _cell(entry.get("delta")),
+                    ]
+                )
+                + " |"
+            )
+    flips = diff.get("flips")
+    if isinstance(flips, dict):
+        lines.extend(
+            [
+                "",
+                "### Pass 翻转",
+                "",
+                f"- pass → fail：{_ids_cell(flips.get('passToFail'))}",
+                f"- fail → pass：{_ids_cell(flips.get('failToPass'))}",
+            ]
+        )
+    singles: list[tuple[str, str]] = [
+        ("本轮新增（基线无此题）", "addedCases"),
+        ("本轮缺失（基线有此题）", "missingCases"),
+        ("本轮 unscored（不算翻转）", "unscoredCases"),
+        ("基线 unscored（不算翻转）", "baselineUnscoredCases"),
+    ]
+    single_lines = [
+        f"- {label}：{_ids_cell(diff.get(key))}"
+        for label, key in singles
+        if isinstance(diff.get(key), list) and diff.get(key)
+    ]
+    if single_lines:
+        lines.extend(["", "### 单边与未计分", "", *single_lines])
+    case_diffs = diff.get("cases")
+    if isinstance(case_diffs, list):
+        changed = []
+        for entry in case_diffs:
+            if not isinstance(entry, dict):
+                continue
+            deltas = entry.get("metricDeltas")
+            has_delta = isinstance(deltas, dict) and any(
+                isinstance(item, dict) and item.get("delta") not in (None, 0, 0.0)
+                for item in deltas.values()
+            )
+            if entry.get("status") not in ("unchanged",) or has_delta:
+                changed.append(entry)
+        if changed:
+            lines.extend(
+                [
+                    "",
+                    "### 逐题变化（仅翻转、单边或指标有变）",
+                    "",
+                    "| id | status | passed（基线 → 本轮） | Δretrieval_hit | Δcitation_precision | Δkeyword_coverage | Δrefusal_correct |",
+                    "| --- | --- | --- | --- | --- | --- | --- |",
+                ]
+            )
+            for entry in changed:
+                deltas = entry.get("metricDeltas")
+                if not isinstance(deltas, dict):
+                    deltas = {}
+                cells = [
+                    _cell(entry.get("id")),
+                    _cell(entry.get("status")),
+                    f"{_cell(entry.get('baselinePassed'))} → {_cell(entry.get('currentPassed'))}",
+                ]
+                for name in _SCORE_METRICS:
+                    item = deltas.get(name)
+                    cells.append(
+                        _cell(item.get("delta")) if isinstance(item, dict) else "n/a"
+                    )
+                lines.append("| " + " | ".join(cells) + " |")
+    return lines
+
+
+def _run_exit_code(report: dict[str, object]) -> int:
+    """整轮退出码（#187 UoW-2）：全 unscored 视同 BLOCKED(2)；相对基线
+    出现 pass→fail 翻转记 3；其余 0。unscored 不算 fail 翻转。"""
+    cases = report.get("cases")
+    rows = (
+        [row for row in cases if isinstance(row, dict)] if isinstance(cases, list) else []
+    )
+    if rows and all(row.get("unscored") for row in rows):
+        return BLOCKED_EXIT
+    diff = report.get("baselineDiff")
+    if isinstance(diff, dict):
+        flips = diff.get("flips")
+        if isinstance(flips, dict):
+            pass_to_fail = flips.get("passToFail")
+            if isinstance(pass_to_fail, list) and pass_to_fail:
+                return REGRESSION_EXIT
+    return 0
 
 
 async def run_answer_eval(
@@ -838,6 +1391,10 @@ async def run_answer_eval(
     experience_lessons: Sequence[ExperienceLessonItem] | None = None,
     skills_dir: str | None = None,
     skills_max_instruction_chars: int | None = None,
+    cases_file: str | None = None,
+    lessons_file: str | None = None,
+    baseline_report: dict[str, object] | None = None,
+    case_timeout_seconds: float = CASE_TIMEOUT_SECONDS,
 ) -> AnswerEvalRun:
     """对题集跑检索 + run_chat，评分，并在给出 out 时写下 JSON 与 Markdown。
 
@@ -853,6 +1410,15 @@ async def run_answer_eval(
       缺省 None 即无条目（对照的「关」臂）。
     - ``skills_dir`` / ``skills_max_instruction_chars``：CLI 层从进程
       Settings 传入（与生产同源）；函数层缺省分别取平台默认目录与不设限。
+
+    对照参数（#187 UoW-2）：
+
+    - ``cases_file`` / ``lessons_file``：仅作指纹里的展示路径（函数注入
+      时为 None＝未标注），不影响跑分本身。
+    - ``baseline_report``：基线报告 dict（CLI ``--baseline`` 已加载）；
+      给出时报告带 ``baselineDiff`` 逐题对照（见 build_baseline_diff）。
+    - ``case_timeout_seconds``：单题墙钟上限，超限记 unscored。
+      每题独立隔离：单题异常/超时只记该题 unscored，整轮继续。
     """
     loaded_corpus = list(corpus) if corpus is not None else load_corpus()
     loaded_cases = list(cases) if cases is not None else load_cases()
@@ -885,23 +1451,41 @@ async def run_answer_eval(
     rows: list[dict[str, object]] = []
     try:
         for case in loaded_cases:
-            rows.append(
-                await _run_case(
-                    service,
-                    model,
-                    case,
-                    agent_id=agent_id,
-                    skill_resolution=resolution_for(case),
-                    skills_max_instruction_chars=skills_max_instruction_chars,
-                    harness_dir=harness_dir,
-                    experience_lessons=lessons,
+            # 逐题隔离（#187 UoW-2）：单题异常/超时只记该题 unscored，
+            # 不中断整轮、不记 0 分（见 _unscored_row 的口径）。
+            try:
+                resolution = resolution_for(case)
+                row = await asyncio.wait_for(
+                    _run_case(
+                        service,
+                        model,
+                        case,
+                        agent_id=agent_id,
+                        skill_resolution=resolution,
+                        skills_max_instruction_chars=skills_max_instruction_chars,
+                        harness_dir=harness_dir,
+                        experience_lessons=lessons,
+                    ),
+                    timeout=case_timeout_seconds,
                 )
-            )
+            except Exception as exc:  # noqa: BLE001 — 单题失败隔离，整轮继续
+                logger.warning("eval case %s unscored: %s", case.id, exc)
+                row = _unscored_row(case, exc, timeout_seconds=case_timeout_seconds)
+            rows.append(row)
     finally:
         await service.close()
+    scored_rows = [row for row in rows if not row.get("unscored")]
     summary = aggregate(
-        [{"category": row["category"], **row["scores"]} for row in rows if isinstance(row["scores"], dict)]
+        [{"category": row["category"], **row["scores"]} for row in scored_rows if isinstance(row["scores"], dict)]
     )
+    unscored_entries = [
+        {"id": row["id"], "category": row["category"], "reason": row["unscoredReason"]}
+        for row in rows
+        if row.get("unscored")
+    ]
+    if unscored_entries:
+        summary["unscoredCount"] = len(unscored_entries)
+        summary["unscoredCases"] = unscored_entries
     report: dict[str, object] = {
         "model": model_name,
         "generatedAt": when.isoformat(),
@@ -917,6 +1501,19 @@ async def run_answer_eval(
         report["harnessDir"] = harness_dir
     if lessons:
         report["lessonsCount"] = len(lessons)
+    # 配置指纹（#187 UoW-2）：每份报告都带，随报告归档。
+    report["fingerprint"] = build_fingerprint(
+        model_name=model_name,
+        cases_file=cases_file,
+        case_count=len(loaded_cases),
+        corpus=loaded_corpus,
+        harness_dir=harness_dir,
+        skills=base_skills,
+        lessons_file=lessons_file,
+        lessons_count=len(lessons) if lessons else 0,
+    )
+    if baseline_report is not None:
+        report["baselineDiff"] = build_baseline_diff(report, baseline_report)
     json_path = None
     markdown_path = None
     if out is not None:
@@ -999,6 +1596,14 @@ def _parser() -> argparse.ArgumentParser:
         "run, same shape as the chat request field. A missing or malformed file is an "
         "error, never silently treated as no lessons.",
     )
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        help="Baseline report JSON (a previous run's answer-eval-*.json) to diff "
+        "against: per-case metric deltas and pass flips are attached to the new "
+        "report. Exit code 3 when any case flips pass→fail vs the baseline.",
+    )
     return parser
 
 
@@ -1035,6 +1640,13 @@ def main(argv: list[str] | None = None) -> int:
             )
             return BLOCKED_EXIT
         harness_dir = str(args.harness_dir)
+    baseline_report: dict[str, object] | None = None
+    if args.baseline is not None:
+        try:
+            baseline_report = load_baseline_report(args.baseline)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr, flush=True)
+            return BLOCKED_EXIT
     settings = Settings()
     model, spec, blocked = configured_model_block(settings)
     if blocked or model is None:
@@ -1054,13 +1666,44 @@ def main(argv: list[str] | None = None) -> int:
             experience_lessons=lessons,
             skills_dir=settings.agent_skills_dir.strip() or default_skills_directory(),
             skills_max_instruction_chars=settings.agent_skills_max_instruction_chars,
+            cases_file=str(args.cases)
+            if args.cases is not None
+            else str(evals_root() / "golden_qa.jsonl"),
+            lessons_file=str(args.lessons_file) if args.lessons_file is not None else None,
+            baseline_report=baseline_report,
         )
     )
     if result.json_path is not None:
         print(result.json_path, flush=True)
     if result.markdown_path is not None:
         print(result.markdown_path, flush=True)
-    return 0
+    diff = result.report.get("baselineDiff")
+    if isinstance(diff, dict):
+        warnings = diff.get("fingerprintWarnings")
+        if isinstance(warnings, list):
+            for warning in warnings:
+                print(f"WARNING: {warning}", file=sys.stderr, flush=True)
+    code = _run_exit_code(result.report)
+    if code == BLOCKED_EXIT:
+        report_cases = result.report.get("cases")
+        total = len(report_cases) if isinstance(report_cases, list) else 0
+        print(
+            blocked_text(
+                f"all {total} cases were unscored (per-case errors or timeouts); "
+                "see the report's Unscored section for reasons."
+            ),
+            flush=True,
+        )
+    elif code == REGRESSION_EXIT:
+        flips = diff.get("flips") if isinstance(diff, dict) else None
+        flipped = flips.get("passToFail") if isinstance(flips, dict) else None
+        print(
+            "REGRESSION: cases flipped pass→fail vs baseline: "
+            f"{', '.join(str(item) for item in flipped) if isinstance(flipped, list) else '?'}",
+            file=sys.stderr,
+            flush=True,
+        )
+    return code
 
 
 if __name__ == "__main__":
