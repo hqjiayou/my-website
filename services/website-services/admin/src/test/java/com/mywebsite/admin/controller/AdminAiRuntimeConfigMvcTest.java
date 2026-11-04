@@ -15,6 +15,7 @@ import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
 import com.mywebsite.admin.testsupport.AdminTestJwtSigner;
 import com.mywebsite.agent.client.AgentClient;
 import com.mywebsite.agent.dto.AgentRuntimeConfigPushResult;
+import com.jayway.jsonpath.JsonPath;
 import com.nimbusds.jose.jwk.RSAKey;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +51,15 @@ class AdminAiRuntimeConfigMvcTest extends AbstractAdminSpringBootTest {
         return AdminTestJwtSigner.signAdminAccess(pk, "test-issuer", "ADMIN", userId);
     }
 
+    private long currentConfigVersion(String token) throws Exception {
+        String body = mockMvc.perform(get("/api/admin/ai/runtime-config")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        Number version = JsonPath.read(body, "$.data.configVersion");
+        return version.longValue();
+    }
+
     private String updateBody() {
         return "{\"retrievalDatabaseUrl\":\"" + DSN + "\",\"aiEmbeddingModel\":\"google:gemini-embedding-001\","
                 + "\"aiEmbeddingDimensions\":768,\"geminiApiKey\":\"" + GEMINI_KEY + "\"}";
@@ -59,6 +69,7 @@ class AdminAiRuntimeConfigMvcTest extends AbstractAdminSpringBootTest {
     void putThenGetReturnsMaskedDsnAndHintOnly() throws Exception {
         when(agentClient.pushRuntimeConfig(any())).thenReturn(AgentRuntimeConfigPushResult.applied(1L));
         String token = tokenFor(500L);
+        long baseVersion = currentConfigVersion(token);
 
         mockMvc.perform(put("/api/admin/ai/runtime-config")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -76,7 +87,7 @@ class AdminAiRuntimeConfigMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.retrievalDatabaseUrlConfigured").value(true))
                 .andExpect(jsonPath("$.data.retrievalDatabaseUrlMasked").value("postgresql://db.internal:5432/retrieval"))
                 .andExpect(jsonPath("$.data.geminiApiKeyConfigured").value(true))
-                .andExpect(jsonPath("$.data.configVersion").value(1))
+                .andExpect(jsonPath("$.data.configVersion").value((int) (baseVersion + 1)))
                 .andExpect(content().string(not(containsString("secretpw"))))
                 .andExpect(content().string(not(containsString(GEMINI_KEY))));
     }

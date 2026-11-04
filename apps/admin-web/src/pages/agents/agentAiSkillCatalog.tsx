@@ -2,17 +2,7 @@ import { ChevronDown } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-/** 预览／运行状态／概览共用：优先 i18n catalog，缺省回退 API 英文 description。 */
-export function skillCatalogDescription(
-  id: string,
-  fallback: string | null | undefined,
-  t: (key: string, options?: { defaultValue?: string }) => string,
-): string {
-  const key = `aiWorkspace.preview.skills.catalog.${id}`
-  const localized = t(key, { defaultValue: '' }).trim()
-  if (localized) return localized
-  return fallback?.trim() ?? ''
-}
+import { skillCatalogDescription } from './agentAiSkillCatalogText'
 
 /**
  * Skill 只读行：默认折叠说明；ChevronDown + rotate-180（与侧栏／预览面板同交互）。

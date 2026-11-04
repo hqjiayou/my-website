@@ -32,7 +32,7 @@ import { modelIdFromSpec } from '@/utils/modelSpec'
 import { createJavaPreviewAdapter } from './agentAiPreviewAdapter'
 import { PreviewVisualizationPart } from './agentAiPreviewCards'
 import { AiRunUsageLine } from './agentAiRunMeta'
-import { skillCatalogDescription } from './agentAiSkillCatalog'
+import { skillCatalogDescription } from './agentAiSkillCatalogText'
 
 interface ToolCallTrace {
   toolCallId: string
@@ -562,13 +562,23 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
     selection.setRequestedSpec(activeSpec)
   }, [activeSpec, selection])
 
-  useEffect(() => {
+  // 渲染期调整（与下方服务端 mode 采纳同法）：agentId 变化（含首次挂载）时把本地
+  // 续写标记同步落进 state，不在 effect 里同步 setState。
+  const [restoredAgentId, setRestoredAgentId] = useState<number | null>(null)
+  if (restoredAgentId !== agentId) {
+    setRestoredAgentId(agentId)
     const storedId = readStoredConversationId(agentId)
     selection.setConversationId(storedId)
     setConversationId(storedId)
     if (storedId == null) {
       selection.setPersistedHistory([])
       setRestoredMessages([])
+    }
+  }
+
+  useEffect(() => {
+    const storedId = readStoredConversationId(agentId)
+    if (storedId == null) {
       return
     }
     let cancelled = false
