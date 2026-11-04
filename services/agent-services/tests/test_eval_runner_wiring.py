@@ -48,7 +48,7 @@ from agent_services.schemas.chat import ExperienceLessonItem
 def test_load_skill_cases_derives_anchor_fields() -> None:
     golden = {case.id: case for case in load_cases()}
     cases = {case.id: case for case in load_skill_cases()}
-    assert len(cases) == 22
+    assert len(cases) == 25
     assert all(case.skill for case in cases.values())
 
     anchored = cases["agg-pos-lowest-net"]
@@ -96,8 +96,12 @@ def test_load_skill_cases_unknown_ref_is_rejected(tmp_path: Path) -> None:
 
 def test_load_any_cases_dispatches_by_shape(tmp_path: Path) -> None:
     skill_cases = load_any_cases(evals_root() / "skill_qa.jsonl")
-    assert len(skill_cases) == 22
+    assert len(skill_cases) == 25
     assert all(case.skill for case in skill_cases)
+    # 自选题（#195）带 mode 标记且不预选追加题面 skill，解析须原样保留。
+    self_select = [case for case in skill_cases if case.mode == "self-select"]
+    assert len(self_select) == 3
+    assert {case.kind for case in self_select} == {"positive", "negative"}
 
     golden_path = tmp_path / "golden.jsonl"
     golden_path.write_text(

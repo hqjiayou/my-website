@@ -9,6 +9,9 @@ Frontmatter 用 PyYAML ``safe_load`` 解析（顶层键按小写匹配，兼容�
 - 可选：``license``、``compatibility``、``metadata``（字符串映射）、``allowed-tools``（实验性，空格分隔或字符串列表）。
   ``allowed-tools`` 只解析进 catalog。本包不按它做工具门控，也不改工具注册。
 - ``version``：继续解析，供旧 skill 使用。它不是开放标准字段。
+- ``references/`` 子目录（Issue #195）：discover 时只登记文件相对路径清单
+  （相对 ``references/``、排序），正文不预读；内容由 ``skill_tools`` 的
+  ``read_skill_reference`` 在开关开启时按需取用。
 
 请求只传 skill id；内容不接受前端直传。
 """
@@ -17,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +50,9 @@ class SkillDefinition:
     compatibility: str | None = None
     metadata: dict[str, str] = field(default_factory=dict)
     allowed_tools: tuple[str, ...] = ()
+    # references/ 下已登记的文件相对路径（相对 references/，正斜杠，排序）。
+    # 只登记清单不读内容；按需读取在 skill_tools，路径以本清单为准入名单。
+    references: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -232,7 +238,11 @@ def _dir_mtime_ns(root: Path) -> int:
 
 
 def _catalog_stamp(root: Path) -> tuple[tuple[str, int], ...]:
-    """目录 + 各 SKILL.md 的稳定指纹（删除/改名也会变）。"""
+    """目录 + 各 SKILL.md 的稳定指纹（删除/改名也会变）。
+
+    Issue #195 起 references/ 下文件也进指纹：清单是 discover 的登记结果，
+    新增/删除/改名 reference 必须让缓存失效，否则登记与磁盘漂移。
+    """
     items: list[tuple[str, int]] = [("", _dir_mtime_ns(root))]
     try:
         children = sorted(root.iterdir(), key=lambda p: p.name)
@@ -245,6 +255,16 @@ def _catalog_stamp(root: Path) -> tuple[tuple[str, int], ...]:
                 items.append((child.name, skill_file.stat().st_mtime_ns))
             except OSError:
                 continue
+        refs_dir = child / "references"
+        if refs_dir.is_dir():
+            for ref_file in sorted(refs_dir.rglob("*")):
+                if not ref_file.is_file():
+                    continue
+                try:
+                    rel = ref_file.relative_to(child).as_posix()
+                    items.append((f"{child.name}/{rel}", ref_file.stat().st_mtime_ns))
+                except OSError:
+                    continue
     return tuple(items)
 
 
@@ -255,6 +275,28 @@ def _is_within(root: Path, path: Path) -> bool:
     except (OSError, ValueError):
         return False
     return True
+
+
+def _skill_references(root: Path, skill_dir_path: Path) -> tuple[str, ...]:
+    """登记 references/ 下文件的相对路径（相对 references/、正斜杠、排序）。
+
+    只登记文件本身；符号链接解析后仍须落在 skills 根内——这份清单就是
+    read_skill_reference 的准入名单，目录外文件不得借登记混进来。
+    """
+    refs_dir = skill_dir_path / "references"
+    if not refs_dir.is_dir():
+        return ()
+    found: list[str] = []
+    for path in sorted(refs_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        if not _is_within(root, path):
+            logger.warning(
+                "Skill reference %s escapes the skills directory, not registered", path
+            )
+            continue
+        found.append(path.relative_to(refs_dir).as_posix())
+    return tuple(found)
 
 
 def discover_skills(skills_dir: str) -> dict[str, SkillDefinition]:
@@ -288,7 +330,9 @@ def discover_skills(skills_dir: str) -> dict[str, SkillDefinition]:
             continue
         definition = _load_skill_file(child.name, skill_file)
         if definition is not None:
-            discovered[child.name] = definition
+            discovered[child.name] = replace(
+                definition, references=_skill_references(root, child)
+            )
 
     _catalog_cache[skills_dir] = (stamp, discovered)
     return discovered

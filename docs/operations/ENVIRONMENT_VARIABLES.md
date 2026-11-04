@@ -115,6 +115,7 @@ last_verified: 2026-10-30
 | `AGENT_DEFAULT_SKILLS` | 否 | `orchestration` | 逗号分隔默认 skill id |
 | `AGENT_SKILLS_UNKNOWN_POLICY` | 否 | `ignore` | 或 `reject`；未知 skill id 时记 `skillsMissing` 或 400 |
 | `AGENT_SKILLS_MAX_INSTRUCTION_CHARS` | 否 | `12000` | |
+| `AGENT_SKILLS_SELF_SELECT_ENABLED` | 否 | `false` | `true` 时注册 `load_skill` / `read_skill_reference` 并注入 skill catalog 摘要，模型可自选 skill 并按需读 references（Issue #195）；默认关 |
 | `AGENT_ENABLE_TODO_TOOLS` | 否 | `true` | `false` 关闭 todo 编排工具 |
 | `AGENT_SUBAGENT_ENABLED` | 否 | `true` | |
 | `AGENT_SUBAGENT_MAX_PER_RUN` | 否 | `4` | |

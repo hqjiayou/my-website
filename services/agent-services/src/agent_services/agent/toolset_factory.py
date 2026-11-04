@@ -12,6 +12,7 @@ from agent_services.agent.knowledge_tools import (
     build_knowledge_toolset,
 )
 from agent_services.agent.mcp_tools import build_mcp_toolsets, has_mcp_toolsets
+from agent_services.agent.skill_tools import SkillLoadCollector, build_skill_toolset
 from agent_services.agent.subagent import build_delegate_tool
 from agent_services.agent.table_tools import build_table_toolset
 from agent_services.agent.todo_tools import TodoStore, build_todo_toolset
@@ -43,6 +44,9 @@ def build_execution_toolsets(
     preview: bool = False,
     visualization_collector: VisualizationCollector | None = None,
     mcp_server_names: list[str] | None = None,
+    skills_dir: str | None = None,
+    skill_load_collector: SkillLoadCollector | None = None,
+    skill_preselected_ids: list[str] | None = None,
 ) -> list[object]:
     toolsets: list[object] = []
     # Java internal 通道全 run 共用一个 client：business tools 与知识文档枚举（#181）同源。
@@ -89,6 +93,18 @@ def build_execution_toolsets(
         toolsets.append(build_chart_toolset(visualization_collector))  # type: ignore[arg-type]
     if settings.agent_enable_todo_tools:
         toolsets.append(build_todo_toolset(todo_store))
+    if skill_load_collector is not None and skills_dir:
+        # 模型自选 skill（Issue #195）：收集器由调用方按
+        # AGENT_SKILLS_SELF_SELECT_ENABLED 决定是否创建；None 即不注册，
+        # 工具面与未启用时逐字一致。预选集传入工具做重复加载去重。
+        toolsets.append(
+            build_skill_toolset(
+                skills_dir,
+                collector=skill_load_collector,
+                preselected_ids=skill_preselected_ids or (),
+                max_instruction_chars=settings.agent_skills_max_instruction_chars,
+            )
+        )
     # per-agent 名字过滤（Issue #192）：None 不过滤、空集不注册、非空取交集；
     # harness 的 MCP 名单段从实际 toolsets 反推，自动跟随过滤结果。
     toolsets.extend(

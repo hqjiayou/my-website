@@ -126,6 +126,13 @@ class Settings(BaseSettings):
     agent_skills_max_instruction_chars: int = Field(
         default=12000, validation_alias="AGENT_SKILLS_MAX_INSTRUCTION_CHARS"
     )
+    # 模型自选 skill 总开关（Issue #195，渐进披露 B 层）：开时注册 load_skill /
+    # read_skill_reference 两工具并向系统提示注入 skill catalog 摘要（L1）；
+    # 关时两工具不注册、不注入 catalog，组装与未启用时逐字一致。
+    # 默认关：是否改默认由 kou 本机「预选 vs 自选」对照读数决定，不在本单拍板。
+    agent_skills_self_select_enabled: bool = Field(
+        default=False, validation_alias="AGENT_SKILLS_SELF_SELECT_ENABLED"
+    )
     agent_enable_todo_tools: bool = Field(default=True, validation_alias="AGENT_ENABLE_TODO_TOOLS")
     # 主 run 的 delegate_task。关闭后不注册该工具，harness 也不提委派。
     agent_subagent_enabled: bool = Field(default=True, validation_alias="AGENT_SUBAGENT_ENABLED")

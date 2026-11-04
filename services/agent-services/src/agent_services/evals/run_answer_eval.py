@@ -56,9 +56,15 @@ from agent_services.agent.knowledge_tools import (
 )
 from agent_services.agent.model_factory import create_model
 from agent_services.agent.runtime import ChatBlocked, ChatReply, run_chat
+from agent_services.agent.skill_tools import (
+    SkillLoadCollector,
+    build_skill_toolset,
+    merge_skills_applied,
+)
 from agent_services.agent.skills import (
     SkillResolution,
     default_skills_directory,
+    list_skill_catalog,
     resolve_skills,
 )
 from agent_services.config import RETRIEVAL_MIN_SCORE_DEFAULT, Settings
@@ -110,6 +116,9 @@ class GoldenCase:
     skill: str = ""
     kind: str = ""
     golden_ref: str = ""
+    # 自选题（Issue #195）：mode == "self-select" 时 runner 不预选追加该题
+    # skill，run 中是否经 load_skill 加载全看模型自选；缺省空串＝预选题。
+    mode: str = ""
     # 行为判分（#190 UoW-1）：题目级 opt-in 的确定性行为检查名
     # （scoring.BEHAVIOR_CHECK_NAMES 子集），声明了才判、计入 pass。
     behavior_checks: tuple[str, ...] = ()
@@ -288,6 +297,11 @@ def load_skill_cases(
     判分口径（#187 UoW-1 定死）：triggered＝该题 skill 出现在本轮 run 的
     skillsApplied（即本轮 resolve_skills 的 applied 集，与生产响应同源）；
     completed＝triggered 且 score_case 的 passed 为真。
+
+    自选题（#195）：题面带 ``mode: "self-select"`` 时不预选追加题面 skill，
+    skillsApplied 读「预选集＋load_skill 自选集」的合并集（与生产响应同一
+    merge 口径），triggered 即模型是否自选了该 skill；这类题须在进程 env
+    开 AGENT_SKILLS_SELF_SELECT_ENABLED 才跑得出自选行为。
     """
     golden_by_id = {
         case.id: case for case in (golden_cases if golden_cases is not None else load_cases())
@@ -326,6 +340,7 @@ def load_skill_cases(
                 skill=_text(item, "skill", label),
                 kind=_blankable_text(item, "kind", label),
                 golden_ref=ref,
+                mode=_blankable_text(item, "mode", label),
                 behavior_checks=_behavior_check_list(item, label),
                 history=_history_items(item, label),
             )
@@ -732,6 +747,8 @@ async def _run_case(
     skills_max_instruction_chars: int | None = None,
     harness_dir: str | None = None,
     experience_lessons: list[ExperienceLessonItem] | None = None,
+    skills_dir: str | None = None,
+    skills_self_select_enabled: bool = False,
 ) -> dict[str, object]:
     # 与生产路径一致：知识检索由 agent 经 search_site_knowledge 工具执行，
     # 命中片段经 collector 回流生成 citations；评测量的就是这条链。
@@ -742,12 +759,28 @@ async def _run_case(
     # 原样作 run_chat 的 history 入参，不做改写。
     collector = KnowledgeSearchCollector()
     toolset = build_knowledge_toolset(agent_id, service, collector=collector)
+    toolsets: list[object] = [toolset]
+    # 自选场景（Issue #195）：与生产 toolset_factory 同一工具、同一收集器，
+    # 开关来自进程 Settings（main 透传）；关时不注册，run 与接通前一致。
+    skill_collector: SkillLoadCollector | None = None
+    if skills_self_select_enabled and skills_dir:
+        skill_collector = SkillLoadCollector()
+        toolsets.append(
+            build_skill_toolset(
+                skills_dir,
+                collector=skill_collector,
+                preselected_ids=(
+                    list(skill_resolution.applied_ids) if skill_resolution else ()
+                ),
+                max_instruction_chars=skills_max_instruction_chars,
+            )
+        )
     outcome = await run_chat(
         model,
         agent_id=agent_id,
         message=case.question,
         history=list(case.history) if case.history else None,
-        toolsets=[toolset],
+        toolsets=toolsets,
         knowledge_collector=collector,
         memory_extraction_enabled=False,
         skill_instructions=skill_resolution.instructions if skill_resolution else None,
@@ -756,6 +789,12 @@ async def _run_case(
         skills_max_instruction_chars=skills_max_instruction_chars,
         harness_dir=harness_dir,
         experience_lessons=experience_lessons,
+        skill_catalog=(
+            list_skill_catalog(skills_dir)
+            if skill_collector is not None and skills_dir
+            else None
+        ),
+        skills_self_select_enabled=skill_collector is not None,
     )
     chunks = collector.chunks
     degraded = collector.degraded
@@ -836,9 +875,13 @@ async def _run_case(
     if warnings:
         row["warnings"] = warnings
     # skill 题的触发/完成标注只在题面带 skill 字段时出现，黄金题行形状不变。
-    # skillsApplied 即本轮解析的 applied 集，与生产响应 skillsApplied 同源。
+    # skillsApplied 即本轮解析的 applied 集，与生产响应 skillsApplied 同源；
+    # 自选开启时再合并 load_skill 加载集（同一 merge 口径）。
     if case.skill:
-        applied = list(skill_resolution.applied_ids) if skill_resolution else []
+        applied = merge_skills_applied(
+            list(skill_resolution.applied_ids) if skill_resolution else [],
+            skill_collector.loaded_ids if skill_collector is not None else None,
+        )
         triggered = case.skill in applied
         row["skill"] = case.skill
         row["kind"] = case.kind
@@ -1568,6 +1611,7 @@ async def run_answer_eval(
     experience_lessons: Sequence[ExperienceLessonItem] | None = None,
     skills_dir: str | None = None,
     skills_max_instruction_chars: int | None = None,
+    skills_self_select_enabled: bool = False,
     cases_file: str | None = None,
     lessons_file: str | None = None,
     baseline_report: dict[str, object] | None = None,
@@ -1587,6 +1631,10 @@ async def run_answer_eval(
       缺省 None 即无条目（对照的「关」臂）。
     - ``skills_dir`` / ``skills_max_instruction_chars``：CLI 层从进程
       Settings 传入（与生产同源）；函数层缺省分别取平台默认目录与不设限。
+    - ``skills_self_select_enabled``：CLI 层从进程 Settings 的
+      ``AGENT_SKILLS_SELF_SELECT_ENABLED`` 传入（#195）；开时每题 run 注册
+      与生产同一组 skill 工具并注入 catalog，``mode: "self-select"`` 的题
+      不预选追加题面 skill，triggered 读合并后的 skillsApplied。
 
     对照参数（#187 UoW-2）：
 
@@ -1611,7 +1659,8 @@ async def run_answer_eval(
 
     def resolution_for(case: GoldenCase) -> SkillResolution | None:
         requested = list(base_skills)
-        if case.skill and case.skill not in requested:
+        # 自选题（#195）不追加题面 skill：预选了就没有「自选」可测。
+        if case.skill and case.mode != "self-select" and case.skill not in requested:
             requested.append(case.skill)
         if not requested:
             return None
@@ -1642,6 +1691,8 @@ async def run_answer_eval(
                         skills_max_instruction_chars=skills_max_instruction_chars,
                         harness_dir=harness_dir,
                         experience_lessons=lessons,
+                        skills_dir=resolved_skills_dir,
+                        skills_self_select_enabled=skills_self_select_enabled,
                     ),
                     timeout=case_timeout_seconds,
                 )
@@ -1682,6 +1733,8 @@ async def run_answer_eval(
     # UoW-2 的配置指纹从这三个键与 model/passRule 取数扩展。
     if base_skills:
         report["skills"] = base_skills
+    if skills_self_select_enabled:
+        report["skillsSelfSelect"] = True
     if harness_dir:
         report["harnessDir"] = harness_dir
     if lessons:
@@ -1851,6 +1904,7 @@ def main(argv: list[str] | None = None) -> int:
             experience_lessons=lessons,
             skills_dir=settings.agent_skills_dir.strip() or default_skills_directory(),
             skills_max_instruction_chars=settings.agent_skills_max_instruction_chars,
+            skills_self_select_enabled=settings.agent_skills_self_select_enabled,
             cases_file=str(args.cases)
             if args.cases is not None
             else str(evals_root() / "golden_qa.jsonl"),

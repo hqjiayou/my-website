@@ -11,7 +11,7 @@
 | 文件 | 内容 |
 | --- | --- |
 | `golden_qa.jsonl` | 黄金集 23 题：`id/question/expected_sources/expected_keywords/category`，集合级题另带 `expected_behavior/expected_answer`；5 道多轮题（`mt-` 前缀）另带 `history`（先前轮次），6 道集合级题中 5 道另带 `behavior_checks`（见下「行为判分」） |
-| `skill_qa.jsonl` | skill 题集 17 题：`id/skill/kind/question/expected_behavior/expected_answer`，部分带 `expected_keywords` 与 `golden_ref`（与黄金集的同锚引用） |
+| `skill_qa.jsonl` | skill 题集 25 题：`id/skill/kind/question/expected_behavior/expected_answer`，部分带 `expected_keywords` 与 `golden_ref`（与黄金集的同锚引用）；其中 3 题带 `mode: "self-select"`（#195 自选题，见下「自选场景」） |
 | `experience_qa.jsonl` | 经验敏感集 3 题（#190）：形状同黄金集，期望按注入样例 lesson 后的口径写定，须配 `fixtures/lessons_sample.json` 两轮对照读（见下「经验敏感集」） |
 | `fixtures/lessons_sample.json` | 经验敏感集的样例 lessons（lessonNo 6/7/8），经 `--lessons-file` 注入 |
 | `adversarial_grounding.jsonl` | 对抗题集 10 题（#191）：形状同黄金集另带 `mechanism`，诱导四条执行化机制违规，真模型选跑判拦截是否生效（见下「对抗题集」） |
@@ -77,6 +77,23 @@ pass 按可用指标判：缺失（None）的指标不计，两样都缺（纯�
 按 kind 解读：positive/quality 看 triggered 与 completed；negative 题
 按口径同样显式带上题面 skill 发送，关键看 `passed`（挂着 skill 仍按
 锚点答对/正确拒答即未被误导），`triggered` 对这类题恒真、不作信号。
+
+## 自选场景（#195）
+
+题面带 `mode: "self-select"` 的题（`selfsel-` 前缀，共 3 题）测模型自选：
+runner **不预选追加**题面 skill，`skillsApplied` 读「预选集＋本轮经
+`load_skill` 加载集」的合并集（与生产响应同一 merge 口径），正例的
+`triggered` 即模型有没有自选对 skill；负例题面 skill 仅作监视位，
+判读看 `skillsApplied` 是否为空集。
+
+跑自选场景只需进程 env 开 `AGENT_SKILLS_SELF_SELECT_ENABLED=true`
+（核对结论，#195）：runner 与生产同组装——开关经进程 `Settings` 在
+`main` 透传，每题 run 注册与生产 `toolset_factory` 同一組 skill 工具
+（`load_skill` / `read_skill_reference`，经 `agent.skill_tools` 同一
+构造函数）并经 `assemble_harness` 注入同一 catalog 摘要段，不存在
+runner 专用旁路。开关关时自选题照常能跑，但无工具无 catalog，
+`triggered` 恒假、不作信号——自选读数只认开臂报告（报告顶层带
+`skillsSelfSelect: true` 标注）。
 
 ## 行为判分（#190 UoW-1）
 

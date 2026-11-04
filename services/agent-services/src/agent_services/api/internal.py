@@ -29,6 +29,7 @@ from agent_services.agent.runtime import (
     run_budget_from_settings,
     run_chat,
 )
+from agent_services.agent.skill_tools import SkillLoadCollector, merge_skills_applied
 from agent_services.agent.skills import (
     default_skills_directory,
     list_skill_catalog,
@@ -321,6 +322,11 @@ async def _prepare_execution(
     )
     collector = KnowledgeSearchCollector()
     viz_collector = VisualizationCollector()
+    # 模型自选 skill（Issue #195）：开关关时收集器为 None，工厂不注册两工具、
+    # 组装不注入 catalog，整条链与未启用时逐字一致。
+    skill_collector = (
+        SkillLoadCollector() if settings.agent_skills_self_select_enabled else None
+    )
     retrieval = _retrieval_service_or_none(request)
     tables_available = await structured_tables_available(retrieval, agent_id)
     toolsets = build_execution_toolsets(
@@ -340,8 +346,11 @@ async def _prepare_execution(
         preview=body.preview,
         visualization_collector=viz_collector if visualizations else None,
         mcp_server_names=body.mcp_server_names,
+        skills_dir=skills_dir if skill_collector is not None else None,
+        skill_load_collector=skill_collector,
+        skill_preselected_ids=list(resolution.applied_ids),
     )
-    return resolution, todo_store, toolsets, collector, viz_collector
+    return resolution, todo_store, toolsets, collector, viz_collector, skill_collector
 
 
 def _blocked_to_error(outcome: ChatBlocked) -> InternalApiError:
@@ -515,9 +524,14 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
             provider_status="BLOCKED",
         )
 
-    skill_resolution, todo_store, toolsets, collector, _viz = await _prepare_execution(
-        request, body, agent_id, handle.model
-    )
+    (
+        skill_resolution,
+        todo_store,
+        toolsets,
+        collector,
+        _viz,
+        skill_collector,
+    ) = await _prepare_execution(request, body, agent_id, handle.model)
 
     outcome = await run_chat(
         handle.model,  # type: ignore[arg-type]  # live 已保证非 None
@@ -548,6 +562,10 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         experience_lessons=body.experience_lessons,
         experience_lessons_enabled=request.app.state.settings.agent_experience_lessons_enabled,
         knowledge_collector=collector,
+        skill_catalog=(
+            list_skill_catalog(_skills_dir(request)) if skill_collector is not None else None
+        ),
+        skills_self_select_enabled=skill_collector is not None,
     )
 
     if isinstance(outcome, ChatBlocked):
@@ -560,7 +578,11 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
         provider_status="LIVE",
         usage=ChatUsage.model_validate(outcome.usage),
         tools=[ToolTraceItem.model_validate(item) for item in outcome.tools],
-        skills_applied=list(skill_resolution.applied_ids),
+        # 最终 skillsApplied：预选 ＋ run 中经 load_skill 自选加载（Issue #195）。
+        skills_applied=merge_skills_applied(
+            skill_resolution.applied_ids,
+            skill_collector.loaded_ids if skill_collector is not None else None,
+        ),
         skills_missing=list(skill_resolution.missing_ids) or None,
         todos=todo_snapshot.items or None,
         retrieval_degraded=collector.degraded,
@@ -756,6 +778,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
         toolsets,
         collector,
         viz_collector,
+        skill_collector,
     ) = await _prepare_execution(request, body, agent_id, handle.model, visualizations=True)
 
     async def event_generator():
@@ -792,6 +815,13 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
             experience_lessons_enabled=request.app.state.settings.agent_experience_lessons_enabled,
             knowledge_collector=collector,
             visualization_collector=viz_collector,
+            skill_catalog=(
+                list_skill_catalog(_skills_dir(request))
+                if skill_collector is not None
+                else None
+            ),
+            skills_self_select_enabled=skill_collector is not None,
+            skill_load_collector=skill_collector,
         ):
             yield event.to_sse()
 

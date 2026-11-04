@@ -117,17 +117,37 @@ def test_skill_eval_set_structure() -> None:
     cases = _load_skill_cases()
     ids = [case["id"] for case in cases]
     assert len(ids) == len(set(ids)), "duplicate case ids in skill_qa.jsonl"
-    by_skill = Counter(case["skill"] for case in cases)
+    # 自选题（#195，mode == "self-select"）是独立场景族：不预选、看模型自选，
+    # 不占预选题的每 skill 配额与 kind 覆盖口径，单独在下方断言。
+    standard = [case for case in cases if case.get("mode") != "self-select"]
+    by_skill = Counter(case["skill"] for case in standard)
     assert set(by_skill) == set(NEW_SKILL_IDS)
     for skill_id in NEW_SKILL_IDS:
         assert 3 <= by_skill[skill_id] <= 5, f"{skill_id} must carry 3-5 cases"
-        kinds = {case["kind"] for case in cases if case["skill"] == skill_id}
+        kinds = {case["kind"] for case in standard if case["skill"] == skill_id}
         assert kinds == {"positive", "negative", "quality"}, (
             f"{skill_id} must cover positive/negative/quality, got {sorted(kinds)}"
         )
     for case in cases:
         assert isinstance(case["question"], str) and case["question"].strip()
         assert isinstance(case["expected_behavior"], str) and case["expected_behavior"].strip()
+
+
+def test_skill_eval_set_self_select_cases() -> None:
+    cases = [
+        case for case in _load_skill_cases() if case.get("mode") == "self-select"
+    ]
+    assert len(cases) >= 3, "self-select family needs at least 3 cases (#195)"
+    positives = [case for case in cases if case["kind"] == "positive"]
+    negatives = [case for case in cases if case["kind"] == "negative"]
+    assert len(positives) >= 2, "self-select needs at least 2 positive cases"
+    assert len(negatives) >= 1, "self-select needs at least 1 negative case"
+    for case in positives:
+        # 正例目标必须是真实上架的业务 skill，且期望里写明经 load_skill 自选。
+        assert case["skill"] in NEW_SKILL_IDS
+        assert "load_skill" in str(case["expected_behavior"])
+    for case in negatives:
+        assert "load_skill" in str(case["expected_behavior"])
 
 
 def test_skill_eval_set_aligns_with_golden_qa() -> None:

@@ -43,6 +43,8 @@ from agent_services.agent.runtime import (
     tool_succeeded,
     usage_to_api,
 )
+from agent_services.agent.skill_tools import SkillLoadCollector, merge_skills_applied
+from agent_services.agent.skills import SkillDefinition
 from agent_services.agent.todo_tools import TodoStore
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.agent.visualization import VisualizationCollector
@@ -112,6 +114,9 @@ async def stream_chat_events(
     experience_lessons_enabled: bool = True,
     knowledge_collector: KnowledgeSearchCollector | None = None,
     visualization_collector: VisualizationCollector | None = None,
+    skill_catalog: list[SkillDefinition] | None = None,
+    skills_self_select_enabled: bool = False,
+    skill_load_collector: SkillLoadCollector | None = None,
 ) -> AsyncIterator[AgentStreamEvent]:
     resolved_budget = budget or RunBudget()
     history_summary = await prepare_history_summary(
@@ -140,6 +145,8 @@ async def stream_chat_events(
         memories=memories,
         experience_lessons=experience_lessons,
         experience_lessons_enabled=experience_lessons_enabled,
+        skill_catalog=skill_catalog,
+        skills_self_select_enabled=skills_self_select_enabled,
     )
     system_prompt = harness.system_prompt
     user_prompt = build_user_prompt(harness.user_message, attachments, documents)
@@ -253,8 +260,15 @@ async def stream_chat_events(
     }
     if output.model:
         done_data["model"] = output.model
-    if skills_applied:
-        done_data["skillsApplied"] = list(skills_applied)
+    # DONE 的 skillsApplied 是本轮最终集：预选在前，run 中经 load_skill 自选
+    # 加载的随后合并（Issue #195）。START 事件在 run 开始前发出、只能报预选集，
+    # 不回填——两者的时序语义不同，不追求一致。
+    final_skills_applied = merge_skills_applied(
+        skills_applied,
+        skill_load_collector.loaded_ids if skill_load_collector is not None else None,
+    )
+    if final_skills_applied:
+        done_data["skillsApplied"] = final_skills_applied
     if skills_missing:
         done_data["skillsMissing"] = list(skills_missing)
     if todo_store is not None:

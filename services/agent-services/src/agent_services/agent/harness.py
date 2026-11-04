@@ -23,6 +23,7 @@ from agent_services.schemas.todo import TodoItem
 
 if TYPE_CHECKING:
     from agent_services.agent.runtime import RunBudget
+    from agent_services.agent.skills import SkillDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,8 @@ def assemble_harness(
     memories: list[str] | None = None,
     experience_lessons: list[ExperienceLessonItem] | None = None,
     experience_lessons_enabled: bool = True,
+    skill_catalog: list[SkillDefinition] | None = None,
+    skills_self_select_enabled: bool = False,
 ) -> RequestHarness:
     from agent_services.agent.runtime import RunBudget, trim_history
 
@@ -143,6 +146,9 @@ def assemble_harness(
         guardrails_text=guardrails_text,
         limits_text=_limits_text(guardrails),
         site_prompt=site_prompt,
+        catalog_section=_skill_catalog_section(
+            skill_catalog, enabled=skills_self_select_enabled
+        ),
         tool_file=tool_file,
         tool_guidance=tool_guidance,
         mcp_servers=mcp_servers,
@@ -180,6 +186,38 @@ def _clean_ids(values: list[str] | None) -> tuple[str, ...]:
     return tuple(item.strip() for item in (values or []) if item and item.strip())
 
 
+def _skill_catalog_section(
+    catalog: list[SkillDefinition] | None, *, enabled: bool
+) -> str:
+    """skill catalog 摘要段（Issue #195，渐进披露 L1）。
+
+    开关关闭或 catalog 为空时返回空串，系统提示与未启用时逐字相同。
+    每行一个 skill：id — description（空白折平）；登记了 references 的
+    追加数量标注。description 是 frontmatter 原文（≤1024），不另截断——
+    L1 的价值就在匹配质量，截断会把 Do not use 边界切掉。
+    """
+    if not enabled or not catalog:
+        return ""
+    lines: list[str] = []
+    for definition in sorted(catalog, key=lambda item: item.id):
+        description = " ".join(definition.description.split())
+        line = f"- {definition.id} — {description}" if description else f"- {definition.id}"
+        if definition.references:
+            line += f" (references: {len(definition.references)})"
+        lines.append(line)
+    if not lines:
+        return ""
+    return (
+        "# Skill catalog\n\n"
+        "These skills are available but not loaded. When the task matches a "
+        "skill's description, call load_skill with its id to load the full "
+        "instructions before doing the work, and follow them. If the loaded "
+        "instructions point to a reference file, fetch it with "
+        "read_skill_reference. Do not load skills that do not match the task.\n\n"
+        + "\n".join(lines)
+    )
+
+
 def _limits_text(guardrails: HarnessGuardrails) -> str:
     lines: list[str] = []
     if guardrails.max_requests is not None:
@@ -203,6 +241,7 @@ def _compose(
     guardrails_text: str,
     limits_text: str,
     site_prompt: str,
+    catalog_section: str,
     tool_file: str,
     tool_guidance: tuple[ToolGuidance, ...],
     mcp_servers: tuple[str, ...],
@@ -219,6 +258,10 @@ def _compose(
             history_summary,
             memory_section,
             site_prompt,
+            # skill catalog 摘要（L1，Issue #195）紧随站点 Prompt：预选正文
+            # （# Active skills）在 site_prompt 内，catalog 是它的未加载续集；
+            # 开关关或无 catalog 时为空串被过滤，组装逐字回归。
+            catalog_section,
             tool_file,
             # 经验段紧随 tool_guidance 之后（Issue #184 UoW-4 定案位置）；
             # 为空串时被过滤，系统提示与未启用时逐字一致。

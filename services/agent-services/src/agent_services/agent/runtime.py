@@ -32,6 +32,7 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 from agent_services.agent.harness import assemble_harness
 from agent_services.agent.knowledge_tools import KnowledgeSearchCollector
 from agent_services.agent.memory import extract_memories
+from agent_services.agent.skills import SkillDefinition
 from agent_services.agent.toolset_factory import execution_needs_agent_context
 from agent_services.api.errors import external_failure_message
 from agent_services.config import Settings
@@ -976,6 +977,8 @@ async def run_chat(
     experience_lessons: list[ExperienceLessonItem] | None = None,
     experience_lessons_enabled: bool = True,
     knowledge_collector: KnowledgeSearchCollector | None = None,
+    skill_catalog: list[SkillDefinition] | None = None,
+    skills_self_select_enabled: bool = False,
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
     history_summary = await prepare_history_summary(
@@ -1004,6 +1007,8 @@ async def run_chat(
         memories=memories,
         experience_lessons=experience_lessons,
         experience_lessons_enabled=experience_lessons_enabled,
+        skill_catalog=skill_catalog,
+        skills_self_select_enabled=skills_self_select_enabled,
     )
     run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
     user_prompt = build_user_prompt(harness.user_message, attachments, documents)
