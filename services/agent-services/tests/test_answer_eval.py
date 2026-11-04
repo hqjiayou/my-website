@@ -228,10 +228,10 @@ def test_golden_set_matches_the_corpus() -> None:
     validate_golden(corpus, cases)
     by_source = {doc.source_id: doc for doc in corpus}
     assert len(corpus) == 13
-    assert len(cases) == 18
+    assert len(cases) == 23
     assert sum(case.category == "unanswerable" for case in cases) == 5
-    assert sum(case.category != "unanswerable" for case in cases) == 13
-    assert sum(case.category == "collection" for case in cases) == 5
+    assert sum(case.category != "unanswerable" for case in cases) == 18
+    assert sum(case.category == "collection" for case in cases) == 6
     assert any(len(case.expected_sources) == 2 for case in cases)
     assert any(case.category == "model" and "XJ-900" in case.question for case in cases)
     assert any("の" in case.question for case in cases)
