@@ -1,7 +1,7 @@
-"""#182 首批 skills 的确定性验收：目录装配、description 结构与 eval 题集一致性。
+"""#182 / #194 skills 的确定性验收：目录装配、description 结构与 eval 题集一致性。
 
 真模型触发率/完成率不在 CI 内跑（沙箱无 AI_MODEL，与 #180 同口径 BLOCKED）；
-本文件只验确定性部分：4 个新 skill 能被既有机制原样加载/装配、description
+本文件只验确定性部分：业务 skill 能被既有机制原样加载/装配、description
 带明确不适用边界、evals/skill_qa.jsonl 题集结构完整且与 golden_qa 对齐。
 """
 
@@ -25,6 +25,7 @@ NEW_SKILL_IDS = (
     "doc-qa-cited",
     "table-analysis",
     "summarize-transform",
+    "doc-coauthoring",
 )
 
 # skill 正文里允许以反引号引用的工具名（均为平台真实工具）；
@@ -39,6 +40,7 @@ KNOWN_TOOLS = {
     "list_todos",
     "update_todo_status",
     "complete_todo",
+    "delegate_task",
 }
 
 _SNAKE_TOKEN = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")

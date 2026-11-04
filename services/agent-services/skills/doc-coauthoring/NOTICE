@@ -1,0 +1,18 @@
+doc-coauthoring skill for my-website agent-services
+====================================================
+
+This skill is a rewritten adaptation of the "doc-coauthoring" skill from
+Anthropic's agent skills examples:
+
+  https://github.com/anthropics/skills/tree/main/skills/doc-coauthoring
+
+Original work Copyright (c) Anthropic PBC and contributors.
+Licensed under the Apache License, Version 2.0.
+
+This adaptation:
+  - keeps the three-stage co-authoring workflow (context → refinement → reader check)
+  - removes host-specific tool assumptions (artifacts, create_file, str_replace,
+    Claude.ai connectors, Slack/Drive/SharePoint integrations, claude.ai reader testing)
+  - rewrites steps against this platform's knowledge, table, todo, and citation tools
+
+See LICENSE in this directory for the Apache-2.0 terms.

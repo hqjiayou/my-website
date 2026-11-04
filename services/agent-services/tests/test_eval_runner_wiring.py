@@ -48,7 +48,7 @@ from agent_services.schemas.chat import ExperienceLessonItem
 def test_load_skill_cases_derives_anchor_fields() -> None:
     golden = {case.id: case for case in load_cases()}
     cases = {case.id: case for case in load_skill_cases()}
-    assert len(cases) == 17
+    assert len(cases) == 22
     assert all(case.skill for case in cases.values())
 
     anchored = cases["agg-pos-lowest-net"]
@@ -96,7 +96,7 @@ def test_load_skill_cases_unknown_ref_is_rejected(tmp_path: Path) -> None:
 
 def test_load_any_cases_dispatches_by_shape(tmp_path: Path) -> None:
     skill_cases = load_any_cases(evals_root() / "skill_qa.jsonl")
-    assert len(skill_cases) == 17
+    assert len(skill_cases) == 22
     assert all(case.skill for case in skill_cases)
 
     golden_path = tmp_path / "golden.jsonl"
