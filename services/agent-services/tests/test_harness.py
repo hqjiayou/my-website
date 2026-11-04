@@ -1,3 +1,4 @@
+import pytest
 from conftest import TOKEN_HEADER, make_settings
 from fastapi.testclient import TestClient
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
@@ -128,6 +129,29 @@ def test_long_background_truncation_logs_a_warning(tmp_path, caplog) -> None:
         "background.md" in record.getMessage() and "truncated" in record.getMessage()
         for record in caplog.records
     )
+
+
+@pytest.mark.parametrize("filename", ["background.md", "guardrails.md", "tool_guidance.md"])
+def test_any_platform_file_truncation_warns_with_name_length_and_limit(
+    tmp_path, caplog, filename: str
+) -> None:
+    # Issue #189：三平台文件任一超 4000 字元读入上限，warning 须带文件名、原始长度与
+    # 上限值（不再静默截断），且组装结果与既有截断口径逐字一致（截断标记收尾）。
+    raw = "B" * 5_001
+    (tmp_path / filename).write_text(raw, encoding="utf-8")
+    with caplog.at_level("WARNING", logger="agent_services.agent.harness"):
+        harness = assemble_harness(
+            agent_id="1",
+            message="hi",
+            harness_dir=str(tmp_path),
+        )
+    expected = raw[:4_000] + "\n[... truncated]"
+    assert expected in harness.system_prompt
+    assert raw not in harness.system_prompt
+    messages = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert any(
+        filename in message and "5001" in message and "4000" in message for message in messages
+    ), messages
 
 
 def test_health_reports_which_harness_files_exist(tmp_path) -> None:
