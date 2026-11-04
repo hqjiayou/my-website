@@ -353,3 +353,117 @@ def test_lifespan_triggers_startup_pull(monkeypatch) -> None:
     with TestClient(create_app(make_settings())) as client:
         assert client.get("/health").status_code == 200
     assert len(calls) == 1
+
+
+# ---------------------------------------------------------------- MCP 热替换（#192 UoW-2）
+
+MCP_ONE = '[{"name":"docs","url":"http://127.0.0.1:3999/mcp"}]'
+
+
+def test_push_mcp_applies_and_health_follows(monkeypatch) -> None:
+    _install_factory(monkeypatch, {NEW_DSN: FakeRuntimeStore()})
+    app = create_app(make_settings())
+    client = TestClient(app)
+
+    response = client.put(
+        PUSH_URL,
+        headers=TOKEN_HEADER,
+        json={**FULL_PUSH, "mcpServersJson": MCP_ONE},
+    )
+
+    assert response.json() == {"applied": True, "appliedVersion": 1}
+    assert app.state.settings.mcp_servers_json == MCP_ONE
+    health = _health(client)
+    assert health["mcpStatus"] == "CONFIGURED"
+    assert health["mcpServers"] == [{"name": "docs", "enabled": True}]
+
+
+def test_push_invalid_mcp_json_rejected_and_old_config_kept(monkeypatch) -> None:
+    _install_factory(monkeypatch, {NEW_DSN: FakeRuntimeStore()})
+    app = create_app(make_settings(mcp_servers_json=MCP_ONE))
+    client = TestClient(app)
+
+    response = client.put(
+        PUSH_URL,
+        headers=TOKEN_HEADER,
+        json={**FULL_PUSH, "mcpServersJson": "{not json"},
+    )
+
+    body = response.json()
+    assert body["applied"] is False
+    assert "MCP servers JSON is invalid" in body["blockedReason"]
+    # 整次换入被拒：版本与 MCP 配置都不动（四项也不换，避免半套新配置）
+    assert app.state.runtime_config_version == 0
+    assert app.state.settings.mcp_servers_json == MCP_ONE
+
+
+def test_push_without_mcp_field_keeps_env_baseline(monkeypatch) -> None:
+    _install_factory(monkeypatch, {NEW_DSN: FakeRuntimeStore()})
+    app = create_app(make_settings(mcp_servers_json=MCP_ONE))
+    client = TestClient(app)
+
+    response = client.put(PUSH_URL, headers=TOKEN_HEADER, json=FULL_PUSH)
+
+    assert response.json()["applied"] is True
+    # MCP 未经页面保存：一次运行配置保存不许冲掉 env 的 MCP 基线
+    assert app.state.settings.mcp_servers_json == MCP_ONE
+    assert _health(client)["mcpStatus"] == "CONFIGURED"
+
+
+def test_push_empty_mcp_array_clears_registry(monkeypatch) -> None:
+    _install_factory(monkeypatch, {NEW_DSN: FakeRuntimeStore()})
+    app = create_app(make_settings(mcp_servers_json=MCP_ONE))
+    client = TestClient(app)
+
+    response = client.put(
+        PUSH_URL, headers=TOKEN_HEADER, json={**FULL_PUSH, "mcpServersJson": "[]"}
+    )
+
+    assert response.json()["applied"] is True
+    assert app.state.settings.mcp_servers_json == "[]"
+    assert _health(client)["mcpStatus"] == "DISABLED"
+
+
+def test_push_mcp_denylisted_stdio_entry_skipped_not_rejected(monkeypatch) -> None:
+    _install_factory(monkeypatch, {NEW_DSN: FakeRuntimeStore()})
+    app = create_app(make_settings())
+    client = TestClient(app)
+    payload = (
+        '[{"name":"evil","transport":"stdio","command":"python",'
+        '"env":{"GEMINI_API_KEY":"leak"}}]'
+    )
+
+    response = client.put(
+        PUSH_URL, headers=TOKEN_HEADER, json={**FULL_PUSH, "mcpServersJson": payload}
+    )
+
+    # 单条坏项（含 #189 denylist 命中）由解析层跳过，不算整份失败
+    assert response.json()["applied"] is True
+    health = _health(client)
+    assert health["mcpServers"] == []
+    assert health["mcpStatus"] == "DISABLED"
+    assert "leak" not in str(health)
+
+
+async def test_startup_pull_converges_mcp(monkeypatch) -> None:
+    _install_factory(monkeypatch, {NEW_DSN: FakeRuntimeStore()})
+    app = create_app(make_settings(business_api_base_url="http://java.test"))
+    transport = _pull_transport(
+        {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "configured": True,
+                "retrievalDatabaseUrl": NEW_DSN,
+                "aiEmbeddingModel": "google:gemini-embedding-001",
+                "aiEmbeddingDimensions": 3,
+                "geminiApiKey": "pulled-key",
+                "configVersion": 7,
+                "mcpServersJson": MCP_ONE,
+            },
+        }
+    )
+
+    await sync_runtime_config_from_business_api(app, transport=transport)
+
+    assert app.state.settings.mcp_servers_json == MCP_ONE

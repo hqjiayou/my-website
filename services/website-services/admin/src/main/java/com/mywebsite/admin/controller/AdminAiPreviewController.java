@@ -4,6 +4,8 @@ import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewChatRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewModelDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewSkillDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpReadyDto;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionDto;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionUpdateRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
 import com.mywebsite.admin.service.AdminAiPreviewService;
 import com.mywebsite.common.api.HttpMessageBody;
@@ -19,6 +21,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -68,6 +71,23 @@ public class AdminAiPreviewController {
     public ResponseEntity<HttpMessageBody<AdminAiRuntimeDto>> runtime(@PathVariable long agentId) {
         return ResponseEntity.ok(
                 new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAiPreviewService.runtimeStatus(agentId)));
+    }
+
+    @GetMapping("/mcp-selection")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:read')")
+    @Operation(summary = "MCP per-agent 选择（三态 INHERIT/OFF/CUSTOM）；无选择行时回 INHERIT")
+    public ResponseEntity<HttpMessageBody<AdminAiMcpSelectionDto>> mcpSelection(@PathVariable long agentId) {
+        return ResponseEntity.ok(
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAiPreviewService.mcpSelection(agentId)));
+    }
+
+    @PutMapping("/mcp-selection")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-prompt:update')")
+    @Operation(summary = "保存 MCP per-agent 选择；CUSTOM 时 serverNames 为名字子集，与全局启用集取交集生效")
+    public ResponseEntity<HttpMessageBody<AdminAiMcpSelectionDto>> updateMcpSelection(
+            @PathVariable long agentId, @Valid @RequestBody AdminAiMcpSelectionUpdateRequest request) {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiPreviewService.updateMcpSelection(agentId, request)));
     }
 
     @GetMapping("/mcp-ready")

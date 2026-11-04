@@ -27,6 +27,9 @@ import type {
   AiExperienceLessonCreateInput,
   AiExperienceLessonListItem,
   AiExperienceLessonStatus,
+  AiMcpConfig,
+  AiMcpSelection,
+  AiMcpServerEntryInput,
   AiModelEntry,
   AiModelEntryWriteInput,
   AiRuntimeConfig,
@@ -248,6 +251,33 @@ export const aiApi = {
   retryRuntimeConfigPush(): Promise<AiRuntimeConfig> {
     return httpClient
       .post<HttpMessageBody<AiRuntimeConfig>, Record<string, never>>('/admin/ai/runtime-config/retry-push', {})
+      .then(unwrapData)
+  },
+
+  /** MCP 全局注册表（Issue #192）：与运行配置共用同一行与推送管线，密钥只回 hint。 */
+  getMcpConfig(): Promise<AiMcpConfig> {
+    return httpClient.get<HttpMessageBody<AiMcpConfig>>('/admin/ai/mcp-config').then(unwrapData)
+  },
+
+  /** 整表保存注册表：条目顺序即注册顺序，空列表＝清空全部；推送重试复用 runtime-config/retry-push。 */
+  updateMcpConfig(servers: AiMcpServerEntryInput[]): Promise<AiMcpConfig> {
+    return httpClient
+      .put<HttpMessageBody<AiMcpConfig>, { servers: AiMcpServerEntryInput[] }>('/admin/ai/mcp-config', {
+        servers,
+      })
+      .then(unwrapData)
+  },
+
+  /** MCP per-agent 选择（Issue #192）：三态＋CUSTOM 名字子集；无记录时服务端回 INHERIT。 */
+  getMcpSelection(agentId: number): Promise<AiMcpSelection> {
+    return httpClient
+      .get<HttpMessageBody<AiMcpSelection>>(`${aiBase(agentId)}/mcp-selection`)
+      .then(unwrapData)
+  },
+
+  updateMcpSelection(agentId: number, input: AiMcpSelection): Promise<AiMcpSelection> {
+    return httpClient
+      .put<HttpMessageBody<AiMcpSelection>, AiMcpSelection>(`${aiBase(agentId)}/mcp-selection`, input)
       .then(unwrapData)
   },
 

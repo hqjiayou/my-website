@@ -28,6 +28,10 @@ MAX_MEMORY_CHARS = 500
 # 真正的条数/总量上限在 harness 组装段（见 harness.py 的 _EXPERIENCE_* 常量）。
 MAX_EXPERIENCE_LESSONS = 50
 MAX_EXPERIENCE_LESSON_CHARS = 10_000
+# MCP per-agent 名字过滤（Issue #192）：Java 组装时按三态下发名字，这里只做
+# 形状纵深防御（条数/名长），与 Java 侧 AgentMcpSelectionServiceImpl 上限同值。
+MAX_MCP_SERVER_NAMES = 32
+MAX_MCP_SERVER_NAME_LENGTH = 64
 # 本轮文档上下文（Java 站点层已抽取文本后传入；Python 只做纵深防御上限）。
 MAX_DOCUMENTS = 3
 MAX_DOCUMENT_NAME_CHARS = 200
@@ -36,6 +40,7 @@ MAX_DOCUMENT_TEXT_CHARS = 60_000
 ImageMediaType = Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
 
 SkillId = Annotated[str, StringConstraints(max_length=MAX_SKILL_ID_LENGTH)]
+McpServerName = Annotated[str, StringConstraints(max_length=MAX_MCP_SERVER_NAME_LENGTH)]
 
 
 class PromptProfile(BaseModel):
@@ -192,6 +197,12 @@ class ChatRequest(BaseModel):
     # # Experience lessons 段。缺席/为空与未启用等价，系统提示逐字不变。
     experience_lessons: list[ExperienceLessonItem] | None = Field(
         default=None, alias="experienceLessons", max_length=MAX_EXPERIENCE_LESSONS
+    )
+    # MCP per-agent 名字过滤（Issue #192）：三态——缺席/None＝不限制（INHERIT）、
+    # 空列表＝本 agent 不用 MCP（OFF）、非空＝只用这些名字（CUSTOM）。
+    # 只带名字不带条目本体：密钥不随每轮请求过通道。
+    mcp_server_names: list[McpServerName] | None = Field(
+        default=None, alias="mcpServerNames", max_length=MAX_MCP_SERVER_NAMES
     )
     # 后台试聊标记：只有 admin preview 下发 true，正式对话不带此字段。
     # 执行层据此启用回复内卡片（Issue #179）：天气卡发出与 render_chart 工具注册。

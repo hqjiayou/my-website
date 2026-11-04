@@ -84,7 +84,10 @@ public class AdminAiRuntimeConfigServiceImpl implements AdminAiRuntimeConfigServ
                 row.getAiEmbeddingModel(),
                 row.getAiEmbeddingDimensions(),
                 decryptOrNull(row.getGeminiApiKey()),
-                currentVersion(row));
+                currentVersion(row),
+                // MCP 整份 JSON 解密明文（Issue #192）：与四项共用同一版本与推送
+                // 管线；列为 null（从未经页面保存 MCP）时原样传 null，Python 保留现行配置。
+                decryptOrNull(row.getMcpServersJson()));
         AgentRuntimeConfigPushResult result = agentClient.pushRuntimeConfig(payload);
         if (result == null) {
             result = AgentRuntimeConfigPushResult.failed("agent-services push returned no result");
@@ -190,7 +193,8 @@ public class AdminAiRuntimeConfigServiceImpl implements AdminAiRuntimeConfigServ
         }
         String trimmed = message.trim();
         if ((StringUtils.hasText(payload.retrievalDatabaseUrl()) && trimmed.contains(payload.retrievalDatabaseUrl()))
-                || (StringUtils.hasText(payload.geminiApiKey()) && trimmed.contains(payload.geminiApiKey()))) {
+                || (StringUtils.hasText(payload.geminiApiKey()) && trimmed.contains(payload.geminiApiKey()))
+                || (StringUtils.hasText(payload.mcpServersJson()) && trimmed.contains(payload.mcpServersJson()))) {
             return "push rejected (reason withheld: contained secret material)";
         }
         return trimmed.length() > MAX_PUSH_MESSAGE_LENGTH

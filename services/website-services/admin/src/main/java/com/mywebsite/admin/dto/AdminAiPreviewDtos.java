@@ -63,6 +63,17 @@ public final class AdminAiPreviewDtos {
     public record AdminAiMcpReadyDto(boolean reachable, String errorCode, AgentMcpReady probe) {}
 
     /**
+     * MCP per-agent 选择视图（Issue #192 UoW-3）：{@code mode} 三态
+     * INHERIT／OFF／CUSTOM；{@code serverNames} 仅 CUSTOM 时为名字子集，其余态为空列表。
+     */
+    public record AdminAiMcpSelectionDto(String mode, List<String> serverNames) {}
+
+    /** MCP per-agent 选择保存：mode 必填三态之一；CUSTOM 时 serverNames 至少一个名字。 */
+    public record AdminAiMcpSelectionUpdateRequest(
+            @Pattern(regexp = "^(INHERIT|OFF|CUSTOM)$") String mode,
+            @Size(max = 32) List<@Size(max = 64) String> serverNames) {}
+
+    /**
      * 试聊「实际会用哪个模型」回填：{@code mode}/{@code modelSpec}/{@code available} 与
      * {@code previewStream} 走同一个 previewMode + selectionChain 判定路径算出，不是另一份近似规则。
      * {@code mode} 请求缺省时为服务端按默认判定选出的模式；{@code modelSpec} 为该模式链首 spec，

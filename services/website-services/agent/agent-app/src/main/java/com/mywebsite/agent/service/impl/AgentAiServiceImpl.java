@@ -45,6 +45,7 @@ import com.mywebsite.agent.service.AgentAiRateLimitService;
 import com.mywebsite.agent.service.AgentAiService;
 import com.mywebsite.agent.service.AgentEmbeddingClassService;
 import com.mywebsite.agent.service.AgentExperienceLessonService;
+import com.mywebsite.agent.service.AgentMcpSelectionService;
 import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
 import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
@@ -197,6 +198,7 @@ public class AgentAiServiceImpl implements AgentAiService {
     private final AgentUsageService usageService;
     private final AgentEmbeddingClassService embeddingClassService;
     private final AgentExperienceLessonService experienceLessonService;
+    private final AgentMcpSelectionService mcpSelectionService;
 
     public AgentAiServiceImpl(
             AgentClient agentClient,
@@ -212,7 +214,8 @@ public class AgentAiServiceImpl implements AgentAiService {
             ObjectMapper objectMapper,
             AgentUsageService usageService,
             AgentEmbeddingClassService embeddingClassService,
-            AgentExperienceLessonService experienceLessonService) {
+            AgentExperienceLessonService experienceLessonService,
+            AgentMcpSelectionService mcpSelectionService) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.modelEntryCipher = modelEntryCipher;
@@ -227,6 +230,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         this.usageService = usageService;
         this.embeddingClassService = embeddingClassService;
         this.experienceLessonService = experienceLessonService;
+        this.mcpSelectionService = mcpSelectionService;
     }
 
     @Override
@@ -250,6 +254,7 @@ public class AgentAiServiceImpl implements AgentAiService {
                 preparation,
                 memories,
                 experienceLessons,
+                mcpWireNames(agentId),
                 mode,
                 request.modelEntryId(),
                 request.timezone(),
@@ -405,6 +410,7 @@ public class AgentAiServiceImpl implements AgentAiService {
                         preparation,
                         memories,
                         experienceLessons,
+                        mcpWireNames(agentId),
                         mode,
                         request.modelEntryId(),
                         request.timezone(),
@@ -447,6 +453,7 @@ public class AgentAiServiceImpl implements AgentAiService {
             ChatPreparation preparation,
             List<String> memories,
             List<AgentExperienceLessonItem> experienceLessons,
+            List<String> mcpServerNames,
             String mode,
             Long modelEntryId,
             String timezone,
@@ -491,7 +498,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                 accuracyMeters,
                 // 正式对话不带试聊标记：preview=null，执行的卡片通道保持关闭。
                 null,
-                experienceLessons == null || experienceLessons.isEmpty() ? null : experienceLessons);
+                experienceLessons == null || experienceLessons.isEmpty() ? null : experienceLessons,
+                mcpServerNames);
         return new BuiltChatRequest(request, links);
     }
 
@@ -507,6 +515,20 @@ public class AgentAiServiceImpl implements AgentAiService {
         } catch (RuntimeException ex) {
             log.warn("approved experience lessons lookup failed; continuing without lessons", ex);
             return List.of();
+        }
+    }
+
+    /**
+     * MCP per-agent 名字过滤的下发值（Issue #192 UoW-3）：INHERIT → null（字段
+     * 缺席）、OFF → 空列表、CUSTOM → 名字列表。失败隔离同经验条目：查库失败
+     * 只记日志、按 INHERIT 继续，绝不拖垮对话主流程。
+     */
+    private List<String> mcpWireNames(long agentId) {
+        try {
+            return mcpSelectionService.resolveWireNames(agentId);
+        } catch (RuntimeException ex) {
+            log.warn("mcp selection lookup failed; continuing with INHERIT", ex);
+            return null;
         }
     }
 

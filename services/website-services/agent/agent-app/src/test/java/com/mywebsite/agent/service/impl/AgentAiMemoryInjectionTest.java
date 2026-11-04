@@ -30,6 +30,7 @@ import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
 import com.mywebsite.agent.service.AgentAiRateLimitService;
 import com.mywebsite.agent.service.AgentEmbeddingClassService;
 import com.mywebsite.agent.service.AgentExperienceLessonService;
+import com.mywebsite.agent.service.AgentMcpSelectionService;
 import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
 import java.util.ArrayList;
@@ -98,7 +99,8 @@ class AgentAiMemoryInjectionTest {
                 new ObjectMapper(),
                 org.mockito.Mockito.mock(AgentUsageService.class),
                 org.mockito.Mockito.mock(AgentEmbeddingClassService.class),
-                org.mockito.Mockito.mock(AgentExperienceLessonService.class));
+                org.mockito.Mockito.mock(AgentExperienceLessonService.class),
+                org.mockito.Mockito.mock(AgentMcpSelectionService.class));
     }
 
     @AfterEach

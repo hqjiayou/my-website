@@ -1,10 +1,14 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, RefreshCw, Server, Sparkles, Wrench } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import type { AiRuntimeLimits } from '@/types/ai'
 import { cn } from '@/lib/cn'
+import { PermissionGate } from '@/router/permission'
+import type { AiMcpSelectionMode, AiRuntimeLimits } from '@/types/ai'
+import { PERMISSION_CODES } from '@/types/rbac'
 
 import { modelIdFromSpec } from '@/utils/modelSpec'
 
@@ -100,6 +104,211 @@ function LimitBar({ label, value, unlimitedLabel }: { label: string; value: numb
   )
 }
 
+/**
+ * MCP per-agent 选择（Issue #192 UoW-4）：三态（继承全局/不使用/自定义子集）＋生效集预览。
+ * 配置在 Java 侧，与 agent-services 是否可达无关，不可达时也渲染。全局注册表优先读
+ * mcp-config（名字＋启停）；无读权限时退回运行时状态里的服务器名单。
+ * CUSTOM 与全局启用集取交集：全局已删/已禁的名字自动失效，预览与后端组装口径一致。
+ */
+function McpSelectionSection({
+  agentId,
+  fallbackServers,
+}: {
+  agentId: number
+  fallbackServers: Array<{ name: string; enabled: boolean }>
+}) {
+  const { t } = useTranslation('sites')
+  const queryClient = useQueryClient()
+  const [mode, setMode] = useState<AiMcpSelectionMode>('INHERIT')
+  const [selected, setSelected] = useState<string[]>([])
+  const [syncedKey, setSyncedKey] = useState<string | null>(null)
+
+  const selectionQuery = useQuery({
+    queryKey: ['sites', agentId, 'ai', 'mcp-selection'],
+    queryFn: () => aiApi.getMcpSelection(agentId),
+  })
+  const registryQuery = useQuery({
+    queryKey: ['ai', 'mcp-config'],
+    queryFn: () => aiApi.getMcpConfig(),
+    retry: false,
+  })
+
+  const saved = selectionQuery.data
+  if (saved) {
+    const key = `${saved.mode}|${saved.serverNames.join(',')}`
+    if (key !== syncedKey) {
+      setMode(saved.mode)
+      setSelected(saved.serverNames)
+      setSyncedKey(key)
+    }
+  }
+
+  const registry = registryQuery.data
+    ? registryQuery.data.servers.map((server) => ({ name: server.name, enabled: server.enabled }))
+    : fallbackServers
+  const enabledNames = registry.filter((server) => server.enabled).map((server) => server.name)
+  const staleNames = selected.filter((name) => !registry.some((server) => server.name === name))
+  const effective =
+    mode === 'INHERIT'
+      ? enabledNames
+      : mode === 'OFF'
+        ? []
+        : selected.filter((name) => enabledNames.includes(name))
+  const customEmpty = mode === 'CUSTOM' && selected.length === 0
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      aiApi.updateMcpSelection(agentId, {
+        mode,
+        serverNames: mode === 'CUSTOM' ? selected : [],
+      }),
+    onSuccess: () => {
+      toast.success(t('aiWorkspace.runtime.mcpSelection.saved'))
+      void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'mcp-selection'] })
+    },
+    onError: (saveError: Error) => toast.error(saveError.message),
+  })
+
+  const modes: Array<{ value: AiMcpSelectionMode; label: string; hint: string }> = [
+    {
+      value: 'INHERIT',
+      label: t('aiWorkspace.runtime.mcpSelection.modeInherit'),
+      hint: t('aiWorkspace.runtime.mcpSelection.modeInheritHint'),
+    },
+    {
+      value: 'OFF',
+      label: t('aiWorkspace.runtime.mcpSelection.modeOff'),
+      hint: t('aiWorkspace.runtime.mcpSelection.modeOffHint'),
+    },
+    {
+      value: 'CUSTOM',
+      label: t('aiWorkspace.runtime.mcpSelection.modeCustom'),
+      hint: t('aiWorkspace.runtime.mcpSelection.modeCustomHint'),
+    },
+  ]
+
+  return (
+    <section className="mt-3 rounded-xl border border-border bg-card-muted/40 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-info-muted text-info-emphasis">
+          <Wrench className="h-4 w-4" aria-hidden />
+        </span>
+        <h3 className="text-sm font-semibold text-foreground">
+          {t('aiWorkspace.runtime.mcpSelection.title')}
+        </h3>
+      </div>
+
+      {selectionQuery.isPending ? (
+        <p className="text-xs text-muted-foreground">{t('aiWorkspace.loading')}</p>
+      ) : selectionQuery.isError ? (
+        <div className="text-xs text-danger-emphasis">
+          <p>{t('aiWorkspace.runtime.mcpSelection.loadError')}</p>
+          <button type="button" className="mt-1 underline" onClick={() => void selectionQuery.refetch()}>
+            {t('aiWorkspace.retry')}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {modes.map((item) => (
+              <label
+                key={item.value}
+                className={cn(
+                  'flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs',
+                  mode === item.value
+                    ? 'border-primary/50 bg-primary/10 font-medium text-foreground'
+                    : 'border-border bg-card text-muted-foreground',
+                )}
+              >
+                <input
+                  type="radio"
+                  name={`mcp-selection-mode-${agentId}`}
+                  className="accent-primary"
+                  checked={mode === item.value}
+                  onChange={() => setMode(item.value)}
+                />
+                <span>
+                  {item.label}
+                  <span className="block font-normal text-muted-foreground">{item.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          {mode === 'CUSTOM' ? (
+            registry.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {t('aiWorkspace.runtime.mcpSelection.registryEmpty')}
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {registry.map((server) => (
+                  <li key={server.name}>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs">
+                      <input
+                        type="checkbox"
+                        className="accent-primary"
+                        checked={selected.includes(server.name)}
+                        onChange={(event) =>
+                          setSelected((current) =>
+                            event.target.checked
+                              ? [...current, server.name]
+                              : current.filter((name) => name !== server.name),
+                          )
+                        }
+                      />
+                      <span className="min-w-0 flex-1 truncate font-mono text-foreground">{server.name}</span>
+                      {!server.enabled ? (
+                        <span className="text-muted-foreground">
+                          {t('aiWorkspace.runtime.mcpSelection.disabledTag')}
+                        </span>
+                      ) : null}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : null}
+
+          {staleNames.length > 0 ? (
+            <p className="text-xs text-warning-emphasis">
+              {t('aiWorkspace.runtime.mcpSelection.staleNames', { names: staleNames.join(', ') })}
+            </p>
+          ) : null}
+
+          <p className="text-xs text-muted-foreground">
+            {t('aiWorkspace.runtime.mcpSelection.effective')}：
+            {effective.length > 0 ? (
+              <span className="font-mono text-foreground">{effective.join(', ')}</span>
+            ) : (
+              t('aiWorkspace.runtime.mcpSelection.effectiveEmpty')
+            )}
+          </p>
+
+          {customEmpty ? (
+            <p className="text-xs text-warning-emphasis">
+              {t('aiWorkspace.runtime.mcpSelection.customEmpty')}
+            </p>
+          ) : null}
+
+          <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+              disabled={saveMutation.isPending || customEmpty}
+              onClick={() => saveMutation.mutate()}
+            >
+              {saveMutation.isPending
+                ? t('aiWorkspace.runtime.mcpSelection.saving')
+                : t('aiWorkspace.runtime.mcpSelection.save')}
+            </button>
+          </PermissionGate>
+        </div>
+      )}
+    </section>
+  )
+}
+
 /** Agent 运行时只读面板：Provider / Fallback / MCP / Skills / 预算（不含凭证）。 */
 export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
   const { t } = useTranslation('sites')
@@ -150,6 +359,7 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
         <p className="rounded-xl border border-warning/30 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis">
           {t('aiWorkspace.runtime.unreachable', { code: runtime.errorCode ?? 'SYSTEM_ERROR' })}
         </p>
+        <McpSelectionSection agentId={agentId} fallbackServers={[]} />
       </div>
     )
   }
@@ -287,6 +497,7 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
           )}
         </section>
       </div>
+      <McpSelectionSection agentId={agentId} fallbackServers={status.mcpServers} />
     </div>
   )
 }

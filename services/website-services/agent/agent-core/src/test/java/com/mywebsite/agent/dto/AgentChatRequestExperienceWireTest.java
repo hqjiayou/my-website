@@ -25,7 +25,7 @@ class AgentChatRequestExperienceWireTest {
         AgentChatRequest request = new AgentChatRequest(
                 "10", "hello", null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                List.of(new AgentExperienceLessonItem(6, "先枚举再逐份抽取")));
+                List.of(new AgentExperienceLessonItem(6, "先枚举再逐份抽取")), null);
         String json = mapper.writeValueAsString(request);
         assertThat(json).contains("\"experienceLessons\":[{\"lessonNo\":6,\"lesson\":\"先枚举再逐份抽取\"}]");
     }

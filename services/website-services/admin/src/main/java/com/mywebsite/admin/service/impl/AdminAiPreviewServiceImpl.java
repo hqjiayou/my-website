@@ -8,6 +8,8 @@ import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewModelDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewSkillDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewTodoItem;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpReadyDto;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionDto;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionUpdateRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
 import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
 import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
@@ -26,7 +28,9 @@ import com.mywebsite.agent.dto.AgentExperienceLessonItem;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentUsageRecord;
+import com.mywebsite.agent.dto.AgentMcpSelection;
 import com.mywebsite.agent.service.AgentExperienceLessonService;
+import com.mywebsite.agent.service.AgentMcpSelectionService;
 import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
 import com.mywebsite.agent.utils.AgentExperienceLessonUtils;
@@ -72,6 +76,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     private final AgentUsageService usageService;
     private final ObjectMapper objectMapper;
     private final AgentExperienceLessonService experienceLessonService;
+    private final AgentMcpSelectionService mcpSelectionService;
 
     public AdminAiPreviewServiceImpl(
             AgentClient agentClient,
@@ -84,7 +89,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             ExecutorService adminAiStreamExecutor,
             AgentUsageService usageService,
             ObjectMapper objectMapper,
-            AgentExperienceLessonService experienceLessonService) {
+            AgentExperienceLessonService experienceLessonService,
+            AgentMcpSelectionService mcpSelectionService) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.adminAgentMapper = adminAgentMapper;
@@ -96,6 +102,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         this.usageService = usageService;
         this.objectMapper = objectMapper;
         this.experienceLessonService = experienceLessonService;
+        this.mcpSelectionService = mcpSelectionService;
     }
 
     @Override
@@ -154,7 +161,9 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 request.accuracyMeters(),
                 // 试聊标记（Issue #179）：执行层据此启用回复内卡片（VISUALIZATION）。
                 Boolean.TRUE,
-                experienceLessons.isEmpty() ? null : experienceLessons);
+                experienceLessons.isEmpty() ? null : experienceLessons,
+                // MCP per-agent 名字过滤（Issue #192 UoW-3）：与正式对话同口径三态。
+                mcpWireNames(agentId));
         // 用量记账归属（Issue #140）：试聊只打单入口——点名时就是点名 id，未点名时
         // 是该模式链首（与 previewModel 回填同一口径：chainCandidates 的首元）。
         Long usageEntryId = request.modelEntryId();
@@ -212,6 +221,37 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             log.warn("approved experience lessons lookup failed; continuing without lessons", ex);
             return List.of();
         }
+    }
+
+    /**
+     * MCP per-agent 名字过滤的下发值（Issue #192 UoW-3）：INHERIT → null、
+     * OFF → 空列表、CUSTOM → 名字列表。失败隔离同经验条目：查库失败按
+     * INHERIT 继续，不拖垮试聊。
+     */
+    private List<String> mcpWireNames(long agentId) {
+        try {
+            return mcpSelectionService.resolveWireNames(agentId);
+        } catch (RuntimeException ex) {
+            log.warn("mcp selection lookup failed; continuing with INHERIT", ex);
+            return null;
+        }
+    }
+
+    @Override
+    public AdminAiMcpSelectionDto mcpSelection(long agentId) {
+        requireSite(agentId);
+        AgentMcpSelection selection = mcpSelectionService.getSelection(agentId);
+        return new AdminAiMcpSelectionDto(
+                selection.mode(), selection.serverNames());
+    }
+
+    @Override
+    public AdminAiMcpSelectionDto updateMcpSelection(long agentId, AdminAiMcpSelectionUpdateRequest request) {
+        requireSite(agentId);
+        AgentMcpSelection saved = mcpSelectionService.saveSelection(
+                agentId, request.mode(), request.serverNames());
+        return new AdminAiMcpSelectionDto(
+                saved.mode(), saved.serverNames());
     }
 
     @Override

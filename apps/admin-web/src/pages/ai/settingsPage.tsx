@@ -30,6 +30,7 @@ import { modelIdFromSpec } from '@/utils/modelSpec'
 
 import { EmbeddingRegistrationCard } from './embeddingRegistrationCard'
 import { ExperienceLessonsCard } from './experienceLessonsCard'
+import { McpServersCard } from './mcpServersCard'
 
 type Draft = {
   id: number | null
@@ -860,6 +861,8 @@ export function AiSettingsPage() {
         <GatewayAccessKeysCard />
 
         <RuntimeConfigCard />
+
+        <McpServersCard />
 
         <ExperienceLessonsCard />
 

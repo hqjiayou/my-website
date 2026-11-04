@@ -24,6 +24,10 @@ public class AgentRuntimeConfigEntity extends AbstractAuditableEntity {
     private Integer aiEmbeddingDimensions;
     private String geminiApiKey;
 
+    /** MCP server 条目整份 JSON 的密文（Flyway V52，Issue #192）；null＝从未经页面保存 MCP。 */
+    @TableField("mcp_servers_json")
+    private String mcpServersJson;
+
     @TableField("config_version")
     private Long configVersion;
 
@@ -66,6 +70,14 @@ public class AgentRuntimeConfigEntity extends AbstractAuditableEntity {
 
     public void setGeminiApiKey(String geminiApiKey) {
         this.geminiApiKey = geminiApiKey;
+    }
+
+    public String getMcpServersJson() {
+        return mcpServersJson;
+    }
+
+    public void setMcpServersJson(String mcpServersJson) {
+        this.mcpServersJson = mcpServersJson;
     }
 
     public Long getConfigVersion() {
