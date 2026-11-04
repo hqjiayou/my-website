@@ -1,0 +1,25 @@
+internal-comms skill for my-website agent-services
+====================================================
+
+This skill is a rewritten adaptation of the "internal-comms" skill from
+Anthropic's agent skills examples:
+
+  https://github.com/anthropics/skills/tree/main/skills/internal-comms
+
+Original work Copyright (c) Anthropic PBC and contributors.
+Licensed under the Apache License, Version 2.0.
+
+This adaptation:
+  - keeps the communication-type routing (announcements, status and
+    Progress/Plans/Problems updates, FAQ answers, general notices) and
+    the format guidance of the original examples (short, facts first,
+    one-to-three sentences per part, clarify audience/purpose/tone)
+  - removes the original's host assumptions: mining Slack, email,
+    calendars, and Google Drive for source material, company-size and
+    channel conventions of the original author's workplace
+  - rewrites source gathering against this platform's knowledge search
+    and document enumeration tools, and adds this platform's citation
+    and honest-gap constraints (an announced change that no source
+    states must be flagged, never drafted as fact)
+
+See LICENSE in this directory for the Apache-2.0 terms.

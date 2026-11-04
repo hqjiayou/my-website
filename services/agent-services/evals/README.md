@@ -11,7 +11,7 @@
 | 文件 | 内容 |
 | --- | --- |
 | `golden_qa.jsonl` | 黄金集 23 题：`id/question/expected_sources/expected_keywords/category`，集合级题另带 `expected_behavior/expected_answer`；5 道多轮题（`mt-` 前缀）另带 `history`（先前轮次），6 道集合级题中 5 道另带 `behavior_checks`（见下「行为判分」） |
-| `skill_qa.jsonl` | skill 题集 25 题：`id/skill/kind/question/expected_behavior/expected_answer`，部分带 `expected_keywords` 与 `golden_ref`（与黄金集的同锚引用）；其中 3 题带 `mode: "self-select"`（#195 自选题，见下「自选场景」） |
+| `skill_qa.jsonl` | skill 题集 40 题：`id/skill/kind/question/expected_behavior/expected_answer`，部分带 `expected_keywords` 与 `golden_ref`（与黄金集的同锚引用）；其中 3 题带 `mode: "self-select"`（#195 自选题，见下「自选场景」） |
 | `experience_qa.jsonl` | 经验敏感集 3 题（#190）：形状同黄金集，期望按注入样例 lesson 后的口径写定，须配 `fixtures/lessons_sample.json` 两轮对照读（见下「经验敏感集」） |
 | `fixtures/lessons_sample.json` | 经验敏感集的样例 lessons（lessonNo 6/7/8），经 `--lessons-file` 注入 |
 | `adversarial_grounding.jsonl` | 对抗题集 10 题（#191）：形状同黄金集另带 `mechanism`，诱导四条执行化机制违规，真模型选跑判拦截是否生效（见下「对抗题集」） |

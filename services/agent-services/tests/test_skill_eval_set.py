@@ -26,6 +26,11 @@ NEW_SKILL_IDS = (
     "table-analysis",
     "summarize-transform",
     "doc-coauthoring",
+    "multi-source-conflict",
+    "extract-to-table",
+    "internal-comms",
+    "deep-research",
+    "chart-selection",
 )
 
 # skill 正文里允许以反引号引用的工具名（均为平台真实工具）；
