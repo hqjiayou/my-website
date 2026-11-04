@@ -795,6 +795,9 @@ async def _run_case(
             else None
         ),
         skills_self_select_enabled=skill_collector is not None,
+        skill_catalog_exclude_ids=(
+            tuple(skill_resolution.applied_ids) if skill_resolution else ()
+        ),
     )
     chunks = collector.chunks
     degraded = collector.degraded

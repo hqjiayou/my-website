@@ -566,6 +566,7 @@ async def internal_chat(request: Request, body: ChatRequest) -> dict[str, object
             list_skill_catalog(_skills_dir(request)) if skill_collector is not None else None
         ),
         skills_self_select_enabled=skill_collector is not None,
+        skill_catalog_exclude_ids=tuple(skill_resolution.applied_ids),
     )
 
     if isinstance(outcome, ChatBlocked):
@@ -821,6 +822,7 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
                 else None
             ),
             skills_self_select_enabled=skill_collector is not None,
+            skill_catalog_exclude_ids=tuple(skill_resolution.applied_ids),
             skill_load_collector=skill_collector,
         ):
             yield event.to_sse()

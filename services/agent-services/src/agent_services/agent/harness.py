@@ -108,6 +108,7 @@ def assemble_harness(
     experience_lessons_enabled: bool = True,
     skill_catalog: list[SkillDefinition] | None = None,
     skills_self_select_enabled: bool = False,
+    skill_catalog_exclude_ids: tuple[str, ...] = (),
 ) -> RequestHarness:
     from agent_services.agent.runtime import RunBudget, trim_history
 
@@ -147,7 +148,9 @@ def assemble_harness(
         limits_text=_limits_text(guardrails),
         site_prompt=site_prompt,
         catalog_section=_skill_catalog_section(
-            skill_catalog, enabled=skills_self_select_enabled
+            skill_catalog,
+            enabled=skills_self_select_enabled,
+            exclude_ids=skill_catalog_exclude_ids,
         ),
         tool_file=tool_file,
         tool_guidance=tool_guidance,
@@ -187,7 +190,10 @@ def _clean_ids(values: list[str] | None) -> tuple[str, ...]:
 
 
 def _skill_catalog_section(
-    catalog: list[SkillDefinition] | None, *, enabled: bool
+    catalog: list[SkillDefinition] | None,
+    *,
+    enabled: bool,
+    exclude_ids: tuple[str, ...] = (),
 ) -> str:
     """skill catalog 摘要段（Issue #195，渐进披露 L1）。
 
@@ -195,11 +201,17 @@ def _skill_catalog_section(
     每行一个 skill：id — description（空白折平）；登记了 references 的
     追加数量标注。description 是 frontmatter 原文（≤1024），不另截断——
     L1 的价值就在匹配质量，截断会把 Do not use 边界切掉。
+    exclude_ids（本轮已预选生效的 skill）不进 catalog：段首文案是
+    「available but not loaded」，已加载的列进来既是假话，也会诱导模型
+    白跑一趟 load_skill 才被告知已生效。
     """
     if not enabled or not catalog:
         return ""
+    excluded = set(exclude_ids)
     lines: list[str] = []
     for definition in sorted(catalog, key=lambda item: item.id):
+        if definition.id in excluded:
+            continue
         description = " ".join(definition.description.split())
         line = f"- {definition.id} — {description}" if description else f"- {definition.id}"
         if definition.references:

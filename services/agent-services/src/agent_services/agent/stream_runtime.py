@@ -116,6 +116,7 @@ async def stream_chat_events(
     visualization_collector: VisualizationCollector | None = None,
     skill_catalog: list[SkillDefinition] | None = None,
     skills_self_select_enabled: bool = False,
+    skill_catalog_exclude_ids: tuple[str, ...] = (),
     skill_load_collector: SkillLoadCollector | None = None,
 ) -> AsyncIterator[AgentStreamEvent]:
     resolved_budget = budget or RunBudget()
@@ -147,6 +148,7 @@ async def stream_chat_events(
         experience_lessons_enabled=experience_lessons_enabled,
         skill_catalog=skill_catalog,
         skills_self_select_enabled=skills_self_select_enabled,
+        skill_catalog_exclude_ids=skill_catalog_exclude_ids,
     )
     system_prompt = harness.system_prompt
     user_prompt = build_user_prompt(harness.user_message, attachments, documents)

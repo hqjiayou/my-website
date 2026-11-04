@@ -33,13 +33,21 @@ from agent_services.agent.skills import (
 # 模板；再长说明文件本身该拆分，截断并留标记，不静默吞掉后半。
 REFERENCE_MAX_CHARS = 8_000
 _TRUNCATED_MARK = "[... truncated]"
+# 累计预算剩余低于此值时不再截断加载、直接报预算耗尽：截到几十字的
+# skill 正文没有可用信息，只会诱导模型按残篇行事。
+_MIN_TRUNCATED_LOAD_CHARS = 200
 
 
 @dataclass
 class SkillLoadCollector:
-    """本轮经 load_skill 成功加载的 skill id（去重保序）。"""
+    """本轮经 load_skill 成功加载的 skill id（去重保序）与累计字元数。
+
+    loaded_chars 是自选加载的累计预算消耗：本轮全部 load 共享同一上限，
+    不是每次调用各享全额。
+    """
 
     loaded_ids: list[str] = field(default_factory=list)
+    loaded_chars: int = 0
 
     def record(self, skill_id: str) -> None:
         if skill_id not in self.loaded_ids:
@@ -93,10 +101,23 @@ def build_skill_toolset(
                 f"skill '{sid}' is already loaded in this run; follow the "
                 "instructions returned by the earlier load_skill call."
             )
-        collector.record(sid)
         text = f"## Skill: {sid}\n\n{definition.body}"
         if max_instruction_chars is not None:
-            text = limit_skill_instructions(text, max_instruction_chars)
+            # 累计预算：本轮全部自选加载共享同一上限（与预选注入的总量
+            # 口径对齐）；逐个 load 各享全额会让总量随加载个数倍增。
+            remaining = max_instruction_chars - collector.loaded_chars
+            if len(text) > remaining:
+                # 首个 load 不设下限（与预选首段截断口径一致）；已有消耗后
+                # 剩余太少则直接报耗尽——截到几十字的后续 skill 没有可用
+                # 信息，只会诱导模型按残篇行事。
+                if collector.loaded_chars > 0 and remaining < _MIN_TRUNCATED_LOAD_CHARS:
+                    return (
+                        "error: skill instruction budget exhausted for this "
+                        f"run; cannot load '{sid}'."
+                    )
+                text = limit_skill_instructions(text, remaining)
+        collector.record(sid)
+        collector.loaded_chars += len(text)
         return text
 
     @toolset.tool_plain

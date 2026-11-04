@@ -80,6 +80,57 @@ def test_discover_registers_real_doc_coauthoring_reference() -> None:
     assert catalog["cross-doc-aggregation"].references == ()
 
 
+def test_harness_catalog_excludes_preselected(tmp_path: Path) -> None:
+    _write_skill(tmp_path, "alpha", "Alpha body.")
+    _write_skill(tmp_path, "beta", "Beta body.")
+    clear_skills_cache()
+    catalog = list_skill_catalog(str(tmp_path))
+    harness = assemble_harness(
+        agent_id="1",
+        message="hi",
+        harness_dir=str(tmp_path),
+        skill_catalog=catalog,
+        skills_self_select_enabled=True,
+        skill_catalog_exclude_ids=("alpha",),
+    )
+    assert "- beta" in harness.system_prompt
+    assert "- alpha" not in harness.system_prompt
+
+
+def test_harness_catalog_all_preselected_no_section(tmp_path: Path) -> None:
+    _write_skill(tmp_path, "alpha", "Alpha body.")
+    clear_skills_cache()
+    catalog = list_skill_catalog(str(tmp_path))
+    harness = assemble_harness(
+        agent_id="1",
+        message="hi",
+        harness_dir=str(tmp_path),
+        skill_catalog=catalog,
+        skills_self_select_enabled=True,
+        skill_catalog_exclude_ids=("alpha",),
+    )
+    assert "Skill catalog" not in harness.system_prompt
+
+
+def test_load_skill_cumulative_budget_across_loads(tmp_path: Path) -> None:
+    _write_skill(tmp_path, "alpha", "A" * 100)
+    _write_skill(tmp_path, "beta", "B" * 100)
+    clear_skills_cache()
+    collector = SkillLoadCollector()
+    toolset = build_skill_toolset(
+        str(tmp_path), collector=collector, max_instruction_chars=120
+    )
+    first = _tool(toolset, "load_skill")("alpha")
+    assert len(first) <= 120
+    assert collector.loaded_ids == ["alpha"]
+    assert collector.loaded_chars == len(first)
+    # 累计口径：剩余额度不足以截断加载时直接报预算耗尽，不记入 applied
+    second = _tool(toolset, "load_skill")("beta")
+    assert second.startswith("error:")
+    assert "budget exhausted" in second
+    assert collector.loaded_ids == ["alpha"]
+
+
 def test_load_skill_returns_body_and_records_once(tmp_path: Path) -> None:
     _write_skill(tmp_path, "alpha", "Alpha instructions.")
     clear_skills_cache()

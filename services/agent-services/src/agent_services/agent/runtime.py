@@ -979,6 +979,7 @@ async def run_chat(
     knowledge_collector: KnowledgeSearchCollector | None = None,
     skill_catalog: list[SkillDefinition] | None = None,
     skills_self_select_enabled: bool = False,
+    skill_catalog_exclude_ids: tuple[str, ...] = (),
 ) -> ChatOutcome:
     resolved_budget = budget or RunBudget()
     history_summary = await prepare_history_summary(
@@ -1009,6 +1010,7 @@ async def run_chat(
         experience_lessons_enabled=experience_lessons_enabled,
         skill_catalog=skill_catalog,
         skills_self_select_enabled=skills_self_select_enabled,
+        skill_catalog_exclude_ids=skill_catalog_exclude_ids,
     )
     run_kwargs = build_run_kwargs(prompt_profile, list(harness.memory), resolved_budget)
     user_prompt = build_user_prompt(harness.user_message, attachments, documents)
