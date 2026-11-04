@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
 import com.mywebsite.admin.testsupport.AdminTestJwtSigner;
 import com.mywebsite.agent.client.AgentClient;
+import com.jayway.jsonpath.JsonPath;
 import com.mywebsite.agent.dto.AgentRuntimeConfigPushResult;
 import com.nimbusds.jose.jwk.RSAKey;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,21 @@ class AdminAiMcpConfigMvcTest extends AbstractAdminSpringBootTest {
         return AdminTestJwtSigner.signAdminAccess(pk, "test-issuer", "ADMIN", userId);
     }
 
+    /**
+     * configVersion 是与运行配置共用的单行计数器（#146 管线），同一测试 JVM 内
+     * 其他测试类的保存也会推进它——断言只能相对取基线，不能写死绝对值。
+     */
+    private long currentConfigVersion(String token) throws Exception {
+        String body = mockMvc.perform(get("/api/admin/ai/mcp-config")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        Number version = JsonPath.read(body, "$.data.configVersion");
+        return version.longValue();
+    }
+
     private String createBody() {
         return "{\"servers\":[{\"name\":\"docs\",\"transport\":\"sse\",\"url\":\"" + SECRET_URL + "\","
                 + "\"headers\":[{\"key\":\"Authorization\",\"value\":\"" + SECRET_HEADER + "\"}]}]}";
@@ -58,6 +74,7 @@ class AdminAiMcpConfigMvcTest extends AbstractAdminSpringBootTest {
     void putThenGetReturnsHintsOnly() throws Exception {
         when(agentClient.pushRuntimeConfig(any())).thenReturn(AgentRuntimeConfigPushResult.applied(1L));
         String token = tokenFor(500L);
+        long baseVersion = currentConfigVersion(token);
 
         mockMvc.perform(put("/api/admin/ai/mcp-config")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -74,7 +91,7 @@ class AdminAiMcpConfigMvcTest extends AbstractAdminSpringBootTest {
         mockMvc.perform(get("/api/admin/ai/mcp-config").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.servers[0].headers[0].configured").value(true))
-                .andExpect(jsonPath("$.data.configVersion").value(1))
+                .andExpect(jsonPath("$.data.configVersion").value((int) (baseVersion + 1)))
                 .andExpect(content().string(not(containsString("topsecret"))))
                 .andExpect(content().string(not(containsString("secretpw"))));
     }
@@ -83,6 +100,7 @@ class AdminAiMcpConfigMvcTest extends AbstractAdminSpringBootTest {
     void putWithBlankSecretKeepsExistingValue() throws Exception {
         when(agentClient.pushRuntimeConfig(any())).thenReturn(AgentRuntimeConfigPushResult.applied(1L));
         String token = tokenFor(500L);
+        long baseVersion = currentConfigVersion(token);
 
         mockMvc.perform(put("/api/admin/ai/mcp-config")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -99,7 +117,7 @@ class AdminAiMcpConfigMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.servers[0].headers[0].valueHint").value("…9876"))
                 .andExpect(jsonPath("$.data.servers[0].urlHint").value("…/sse"))
-                .andExpect(jsonPath("$.data.configVersion").value(2));
+                .andExpect(jsonPath("$.data.configVersion").value((int) (baseVersion + 2)));
     }
 
     @Test
