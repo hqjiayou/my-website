@@ -42,6 +42,7 @@ def build_execution_toolsets(
     default_longitude: float | None = None,
     preview: bool = False,
     visualization_collector: VisualizationCollector | None = None,
+    mcp_server_names: list[str] | None = None,
 ) -> list[object]:
     toolsets: list[object] = []
     # Java internal 通道全 run 共用一个 client：business tools 与知识文档枚举（#181）同源。
@@ -88,7 +89,14 @@ def build_execution_toolsets(
         toolsets.append(build_chart_toolset(visualization_collector))  # type: ignore[arg-type]
     if settings.agent_enable_todo_tools:
         toolsets.append(build_todo_toolset(todo_store))
-    toolsets.extend(build_mcp_toolsets(settings))
+    # per-agent 名字过滤（Issue #192）：None 不过滤、空集不注册、非空取交集；
+    # harness 的 MCP 名单段从实际 toolsets 反推，自动跟随过滤结果。
+    toolsets.extend(
+        build_mcp_toolsets(
+            settings,
+            only_names=None if mcp_server_names is None else set(mcp_server_names),
+        )
+    )
     if settings.agent_subagent_enabled and model is not None:
         toolsets.append(
             build_delegate_tool(

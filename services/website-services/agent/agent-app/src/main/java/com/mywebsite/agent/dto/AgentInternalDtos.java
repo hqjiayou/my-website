@@ -48,5 +48,18 @@ public final class AgentInternalDtos {
             String aiEmbeddingModel,
             Integer aiEmbeddingDimensions,
             String geminiApiKey,
-            long configVersion) {}
+            long configVersion,
+            String mcpServersJson) {
+
+        /** 兼容不带 MCP 字段的构造点（等价于 mcpServersJson=null：MCP 未经页面保存）。 */
+        public RuntimeConfigDto(
+                boolean configured,
+                String retrievalDatabaseUrl,
+                String aiEmbeddingModel,
+                Integer aiEmbeddingDimensions,
+                String geminiApiKey,
+                long configVersion) {
+            this(configured, retrievalDatabaseUrl, aiEmbeddingModel, aiEmbeddingDimensions, geminiApiKey, configVersion, null);
+        }
+    }
 }

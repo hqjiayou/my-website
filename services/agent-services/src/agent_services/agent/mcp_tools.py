@@ -358,10 +358,19 @@ def build_mcp_client(config: McpServerConfig) -> Client[Any]:
     return Client(StreamableHttpTransport(config.url, headers=headers), **timeout_kwargs)
 
 
-def build_mcp_toolsets(settings: Settings) -> list[Any]:
-    """缺失或空配置 → 不注册 MCP；非法 JSON → 告警并跳过（进程可起）。"""
+def build_mcp_toolsets(
+    settings: Settings, *, only_names: set[str] | None = None
+) -> list[Any]:
+    """缺失或空配置 → 不注册 MCP；非法 JSON → 告警并跳过（进程可起）。
+
+    ``only_names``（Issue #192 per-agent 名字过滤）：None＝不过滤（用全局
+    启用集）；空集＝不注册任何 MCP；非空＝只注册名字在集合内且 enabled 的
+    条目（与全局启用集取交集，全局已删/已禁的名字自动失效）。
+    """
     raw = settings.mcp_servers_json
     if not raw.strip():
+        return []
+    if only_names is not None and not only_names:
         return []
     try:
         configs = parse_mcp_server_configs(raw)
@@ -376,6 +385,8 @@ def build_mcp_toolsets(settings: Settings) -> list[Any]:
     toolsets: list[Any] = []
     for config in configs:
         if not config.enabled:
+            continue
+        if only_names is not None and config.name not in only_names:
             continue
         # headers / transport / init_timeout 在 Client 上（预构建 Client 不能再传给 MCPToolset）
         toolset = MCPToolset(build_mcp_client(config))

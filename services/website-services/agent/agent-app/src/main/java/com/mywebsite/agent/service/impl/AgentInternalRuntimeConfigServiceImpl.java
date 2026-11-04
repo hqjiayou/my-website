@@ -25,7 +25,7 @@ public class AgentInternalRuntimeConfigServiceImpl implements AgentInternalRunti
         AgentRuntimeConfigEntity row = runtimeConfigMapper.selectById(AgentRuntimeConfigEntity.SINGLETON_ID);
         if (row == null || row.getConfigVersion() == null || row.getConfigVersion() <= 0) {
             // 页面从未保存过：明确回未配置，调用方据此沿用 env 基线，而非当作拉取失败。
-            return new RuntimeConfigDto(false, null, null, null, null, 0L);
+            return new RuntimeConfigDto(false, null, null, null, null, 0L, null);
         }
         return new RuntimeConfigDto(
                 true,
@@ -33,7 +33,10 @@ public class AgentInternalRuntimeConfigServiceImpl implements AgentInternalRunti
                 row.getAiEmbeddingModel(),
                 row.getAiEmbeddingDimensions(),
                 decryptOrNull(row.getGeminiApiKey()),
-                row.getConfigVersion());
+                row.getConfigVersion(),
+                // MCP 整份 JSON 解密明文（Issue #192）；从未经页面保存 MCP 时列为
+                // null，Python 据此保留 env 基线，与「页面清空全部条目」严格区分。
+                decryptOrNull(row.getMcpServersJson()));
     }
 
     /** 密文解不开时按未配置该项处理，不把密文当明文发出去（与 ModelEntryCipher 口径一致）。 */

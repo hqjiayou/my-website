@@ -41,9 +41,14 @@ STARTUP_PULL_TIMEOUT_SECONDS = 3.0
 
 @dataclass(frozen=True)
 class RuntimeConfigValues:
-    """页面配置四项的明文值。None ＝该项未配置（推送缺席 / 拉取为 null 同义）。"""
+    """页面配置四项的明文值。None ＝该项未配置（推送缺席 / 拉取为 null 同义）。
+
+    ``mcp_servers_json``（Issue #192）语义不同：None ＝ MCP 从未经页面保存，
+    换入时保留当前生效值；非 None（含 "[]"）＝页面注册表全文，照此收敛。
+    """
 
     config_version: int
+    mcp_servers_json: str | None = None
     retrieval_database_url: str | None = field(default=None, repr=False)
     ai_embedding_model: str | None = None
     ai_embedding_dimensions: int | None = None
@@ -69,6 +74,13 @@ def _candidate_settings(base: Settings, values: RuntimeConfigValues) -> Settings
         dimensions = 0
     return base.model_copy(
         update={
+            # MCP 未经页面保存（None）时保留基底现行值，不打回 env 原值（基底即
+            # 当前生效 settings，其 mcp_servers_json 已是收敛后的值）。
+            "mcp_servers_json": (
+                values.mcp_servers_json
+                if values.mcp_servers_json is not None
+                else base.mcp_servers_json
+            ),
             "retrieval_database_url": values.retrieval_database_url or "",
             "ai_embedding_model": values.ai_embedding_model or "",
             "ai_embedding_dimensions": dimensions,
@@ -128,6 +140,30 @@ async def apply_runtime_config(
                 f"(current {current_version}); keeping the running configuration."
             ),
         )
+
+    if values.mcp_servers_json is not None:
+        # MCP 先验后换（Issue #192）：整份 JSON 坏掉时拒绝整次换入、旧配置不动
+        # （与检索探活失败同口径）；单条坏项由解析器既有口径跳过（含 #189
+        # denylist 拒绝），不算整份失败。原因不带条目正文（内含密钥）。
+        import json as _json
+
+        from agent_services.agent.mcp_tools import parse_mcp_server_configs
+
+        try:
+            parse_mcp_server_configs(values.mcp_servers_json)
+        except (_json.JSONDecodeError, ValueError):
+            logger.warning(
+                "runtime config v%s rejected: mcpServersJson is not valid JSON",
+                values.config_version,
+            )
+            return ApplyResult(
+                applied=False,
+                applied_version=current_version,
+                blocked_reason=(
+                    "MCP servers JSON is invalid; "
+                    "the previous configuration remains active."
+                ),
+            )
 
     candidate = _candidate_settings(state.settings, values)
     missing = missing_retrieval_settings(candidate)
@@ -210,6 +246,7 @@ def _values_from_pull_data(data: dict) -> RuntimeConfigValues | None:
         dimensions = None
     return RuntimeConfigValues(
         config_version=version,
+        mcp_servers_json=_optional_str(data, "mcpServersJson"),
         retrieval_database_url=_optional_str(data, "retrievalDatabaseUrl"),
         ai_embedding_model=_optional_str(data, "aiEmbeddingModel"),
         ai_embedding_dimensions=dimensions,

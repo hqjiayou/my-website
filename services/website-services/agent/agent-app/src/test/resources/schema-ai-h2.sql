@@ -217,6 +217,7 @@ CREATE TABLE IF NOT EXISTS agent_runtime_config (
     ai_embedding_model      VARCHAR(256),
     ai_embedding_dimensions INTEGER,
     gemini_api_key          CLOB,
+    mcp_servers_json        CLOB,
     config_version          BIGINT NOT NULL DEFAULT 0,
     last_push_status        VARCHAR(16),
     last_push_message       VARCHAR(512),
@@ -250,4 +251,18 @@ CREATE TABLE IF NOT EXISTS agent_embedding_class (
 CREATE TABLE IF NOT EXISTS agent_embedding_class_materialization (
     scope_key       VARCHAR(64) PRIMARY KEY,
     materialized_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+-- H2 测试夹具：对齐 Flyway V53 agent_ai_mcp_selection（无 CHECK/触发器；真实约束见 V53）。
+CREATE TABLE IF NOT EXISTS agent_ai_mcp_selection (
+    agent_id     BIGINT PRIMARY KEY,
+    mode         VARCHAR(16) NOT NULL DEFAULT 'INHERIT',
+    server_names CLOB,
+    created_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    created_by   BIGINT,
+    updated_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_by   BIGINT,
+    deleted      BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_at   TIMESTAMP WITH TIME ZONE,
+    version      INTEGER NOT NULL DEFAULT 0
 );

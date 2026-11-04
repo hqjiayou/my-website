@@ -567,3 +567,34 @@ def test_health_disabled_when_all_entries_disabled() -> None:
     snap = mcp_config_snapshot(make_settings(mcp_servers_json=payload))
     assert snap.status == "DISABLED"
     assert [s.name for s in snap.servers] == ["off"]
+
+
+# ------------------------------------------------- per-agent 名字过滤（#192）
+
+_FILTER_PAYLOAD = json.dumps(
+    [
+        {"name": "alpha", "url": "http://127.0.0.1:3999/mcp"},
+        {"name": "beta", "url": "http://127.0.0.1:3998/mcp"},
+        {"name": "off", "url": "http://127.0.0.1:3997/mcp", "enabled": False},
+    ]
+)
+
+
+def test_mcp_filter_none_keeps_all_enabled() -> None:
+    settings = make_settings(mcp_servers_json=_FILTER_PAYLOAD)
+    assert len(build_mcp_toolsets(settings)) == 2
+    assert len(build_mcp_toolsets(settings, only_names=None)) == 2
+
+
+def test_mcp_filter_subset_and_intersection_with_enabled() -> None:
+    settings = make_settings(mcp_servers_json=_FILTER_PAYLOAD)
+    assert len(build_mcp_toolsets(settings, only_names={"beta"})) == 1
+    # 已禁用条目即使被点名也不注册（与全局启用集取交集）
+    assert build_mcp_toolsets(settings, only_names={"off"}) == []
+    # 全局不存在的名字自动失效
+    assert build_mcp_toolsets(settings, only_names={"ghost"}) == []
+
+
+def test_mcp_filter_empty_set_registers_nothing() -> None:
+    settings = make_settings(mcp_servers_json=_FILTER_PAYLOAD)
+    assert build_mcp_toolsets(settings, only_names=set()) == []

@@ -41,7 +41,12 @@ public record AgentChatRequest(
         // 已批准经验条目（Issue #184 UoW-4）：平台全局，正式对话与试聊每请求
         // 现查现带，执行层组装为 # Experience lessons 段。无条目时传 null，
         // NON_NULL 序列化下报文与旧版逐字一致。
-        List<AgentExperienceLessonItem> experienceLessons) {
+        List<AgentExperienceLessonItem> experienceLessons,
+        // MCP per-agent 名字过滤（Issue #192 UoW-3）：三态——null＝不限制
+        // （INHERIT，用全局启用集）、空列表＝本 agent 不用 MCP（OFF）、
+        // 非空＝只用这些 server 名（CUSTOM，与全局启用集取交集）。
+        // 只带名字不带条目本体：密钥不随每轮请求过通道。
+        List<String> mcpServerNames) {
 
     /** 兼容不带 timezone 的构造点。缺省时执行层回退 UTC。 */
     public AgentChatRequest(
@@ -86,6 +91,7 @@ public record AgentChatRequest(
                 embeddingApiKey,
                 embeddingBaseUrl,
                 embeddingClasses,
+                null,
                 null,
                 null,
                 null,

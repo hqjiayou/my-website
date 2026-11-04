@@ -4,6 +4,8 @@ import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewChatRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewModelDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiPreviewSkillDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpReadyDto;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionDto;
+import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionUpdateRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
 import java.util.List;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -26,4 +28,10 @@ public interface AdminAiPreviewService {
 
     /** MCP 深检（手动触发，不并入 /runtime）；agent-services 不可达时 reachable=false。 */
     AdminAiMcpReadyDto mcpReady(long agentId);
+
+    /** MCP per-agent 选择视图（Issue #192 UoW-3）；无选择行时回 INHERIT。 */
+    AdminAiMcpSelectionDto mcpSelection(long agentId);
+
+    /** 保存 MCP per-agent 选择（三态＋CUSTOM 名字子集），返回保存后的视图。 */
+    AdminAiMcpSelectionDto updateMcpSelection(long agentId, AdminAiMcpSelectionUpdateRequest request);
 }

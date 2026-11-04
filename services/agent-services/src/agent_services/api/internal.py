@@ -336,6 +336,7 @@ async def _prepare_execution(
         default_longitude=body.longitude,
         preview=body.preview,
         visualization_collector=viz_collector if visualizations else None,
+        mcp_server_names=body.mcp_server_names,
     )
     return resolution, todo_store, toolsets, collector, viz_collector
 
