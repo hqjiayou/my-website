@@ -120,6 +120,10 @@ last_verified: 2026-10-30
 | `AGENT_SUBAGENT_MAX_PER_RUN` | 否 | `4` | |
 | `AGENT_SUBAGENT_TIMEOUT_SECONDS` | 否 | `60` | |
 | `AGENT_SUBAGENT_MAX_REQUESTS` | 否 | `6` | |
+| `AGENT_BACKGROUND_TASKS_ENABLED` | 否 | `true` | 后台委派总开关（Issue #188）；还需 `AGENT_SUBAGENT_ENABLED` 开才注册 spawn/get/list/cancel 四工具，关时组装逐字回归 |
+| `AGENT_BACKGROUND_TASK_MAX_CONCURRENT` | 否 | `2` | 同时 QUEUED/RUNNING 的后台任务上限；超限时 spawn 直接回拒绝信息，不排队 |
+| `AGENT_BACKGROUND_TASK_TIMEOUT_SECONDS` | 否 | `300` | 单个后台子任务墙钟超时；子任务请求上限沿用 `AGENT_SUBAGENT_MAX_REQUESTS`，用量记任务记录、不并主 run、不入 Java 用量表 |
+| `AGENT_BACKGROUND_TASK_TTL_SECONDS` | 否 | `3600` | 已结束后台任务的结果保留时长，过期后 get/list 不再可见；注册表仅进程内存，进程重启全部丢失（v1，持久化属 v2） |
 | `AGENT_MEMORY_EXTRACTION_ENABLED` | 否 | `true` | |
 | `AGENT_EXPERIENCE_LESSONS_ENABLED` | 否 | `true` | 已批准经验条目（Issue #184）的组装开关；关闭后请求带 `experienceLessons` 也不注入，系统提示与未启用时逐字一致，供 lessons 关/开对照 |
 | `MCP_SERVERS_JSON` | 否 | 空 | MCP 客户端配置 JSON 数组；缺失 → `mcpStatus=DISABLED`。字段：`enabled`/`headers`/`toolPrefix`/`initTimeoutSeconds`/`transport`（`http` 默认，`sse` 或 url 以 `/sse` 结尾；`stdio` 及其它值跳过并告警）。非法 JSON → `INVALID_CONFIG`（进程可起）。已配置但连接失败 → chat `503 MCP_UNAVAILABLE`。深检 `GET /internal/v1/mcp/ready` |
