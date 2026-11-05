@@ -1,5 +1,5 @@
 -- =============================================================================
--- website-services | Flyway V57 | 配置预设（Issue #211 UoW-8）
+-- website-services | Flyway V60 | 配置预设（Issue #211 UoW-8）
 -- agent_ai_prompt_profile 与 agent 1:1、不可共享；本迁移把 Prompt 配置升为
 -- 命名预设实体 agent_ai_config_preset，agent 改以 config_preset_id 引用，
 -- 多个 agent 可共享同一预设。default_skill_ids 先建列（有序 JSON 数组文本），

@@ -20,7 +20,7 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
     private String description;
     /** V8：选用模板；可空。 */
     private Long templateId;
-    /** V57：引用的 AI 配置预设（#211）；可空。 */
+    /** V60：引用的 AI 配置预设（#211）；可空。 */
     private Long configPresetId;
 
     public String getAgentCode() {

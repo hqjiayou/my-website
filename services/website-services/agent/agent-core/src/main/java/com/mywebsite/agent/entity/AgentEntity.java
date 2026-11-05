@@ -14,7 +14,7 @@ public class AgentEntity extends AbstractAuditableEntity {
     private String description;
     /** V8：选用模板；可空。外观真相源在 site_appearance。 */
     private Long templateId;
-    /** V57：引用的 AI 配置预设（#211）；可空，无预设时对话解析回退为无配置。 */
+    /** V60：引用的 AI 配置预设（#211）；可空，无预设时对话解析回退为无配置。 */
     private Long configPresetId;
 
     public String getAgentCode() {
