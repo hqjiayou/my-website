@@ -175,7 +175,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     public AdminAiKnowledgeDetailDto getDocument(long agentId, long documentId) {
         requireSite(agentId);
         AdminAiKnowledgeDocumentEntity entity = requireDocumentVisible(agentId, documentId);
-        return toDetail(entity, isIndexStale(entity, new LinkedHashMap<>()));
+        return toDetail(agentId, entity, isIndexStale(entity, new LinkedHashMap<>()));
     }
 
     @Override
@@ -193,7 +193,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
         AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(agentId, entity.getId());
         syncDerivedIndex(saved);
-        return toDetail(saved, isIndexStale(saved, new LinkedHashMap<>()));
+        return toDetail(agentId, saved, isIndexStale(saved, new LinkedHashMap<>()));
     }
 
     @Override
@@ -253,7 +253,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         // 派生索引（embedding）改事务提交后异步跑，避免大 xlsm 同步卡住上传 HTTP（前端 60s 超时）。
         // 响应仍为 PENDING；列表可轮询到 INDEXED/FAILED，失败可点「重新索引」。
         scheduleDerivedIndexAfterCommit(agentId, saved.getId(), meta.bytes());
-        return toDetail(saved, isIndexStale(saved, new LinkedHashMap<>()));
+        return toDetail(agentId, saved, isIndexStale(saved, new LinkedHashMap<>()));
     }
 
     /**
@@ -839,7 +839,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
         AdminAiKnowledgeDocumentEntity saved = requireDocumentInSite(agentId, documentId);
         syncDerivedIndex(saved, contentUnchanged);
-        return toDetail(saved, isIndexStale(saved, new LinkedHashMap<>()));
+        return toDetail(agentId, saved, isIndexStale(saved, new LinkedHashMap<>()));
     }
 
     @Override
@@ -851,7 +851,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         syncDerivedIndex(entity, true);
-        return toDetail(entity, isIndexStale(entity, new LinkedHashMap<>()));
+        return toDetail(agentId, entity, isIndexStale(entity, new LinkedHashMap<>()));
     }
 
     @Override
@@ -1719,12 +1719,15 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 formulaCount(entity));
     }
 
-    private AdminAiKnowledgeDetailDto toDetail(AdminAiKnowledgeDocumentEntity entity, boolean indexStale) {
+    private AdminAiKnowledgeDetailDto toDetail(
+            long agentId, AdminAiKnowledgeDocumentEntity entity, boolean indexStale) {
+        // owned＝请求方是否为文档所有者（经 base 创建者推导）：详情读路径放行订阅者后
+        // 不能再恒 true（解耦深审 G1 修复 5 的连带修正），写路径请求方恒为所有者。
         return new AdminAiKnowledgeDetailDto(
                 entity.getId(),
                 ownerAgentId(entity),
                 entity.getBaseId(),
-                true,
+                java.util.Objects.equals(ownerAgentId(entity), agentId),
                 entity.getTitle(),
                 entity.getContent(),
                 entity.getStatus(),
