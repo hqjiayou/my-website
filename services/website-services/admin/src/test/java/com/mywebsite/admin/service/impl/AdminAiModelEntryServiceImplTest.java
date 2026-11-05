@@ -23,11 +23,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 平台生效链顺序（Issue #210 UoW-6）：来源标注层预设 → 同层其他启用 → 平台原生预设
- * （或来源层无默认时作主用）→ 平台原生其他启用；坏主用整链不启用。夹具第二参数是
- * 来源标注（平台化前所属 agent，null 为平台原生），mapper 已按「默认在前、id 升序」
- * 分层返回，service 只负责组链。与改造前的逐条等价由
- * {@link AdminAiModelEntryChainEquivalenceTest} 钉死。
+ * 对话生效链（Issue #210 UoW-7）：链由 agent 引用的链预设决定——按预设序取
+ * 启用成员，预设序内第一个默认作主用，其后按预设序备援；坏主用整链不启用。
+ * 夹具以 {@link #givenPresetMembers} 声明预设成员（顺序即预设序，与 V63 按旧链
+ * 生成的预设同形态：原专属入口在前、平台入口在后；entry 的第二参数来源标注
+ * 自 UoW-7 起不再参与组链、仅留痕）。与平台化前旧链的逐条等价由
+ * {@link AdminAiChainPresetEquivalenceTest} 钉死。
  */
 @ExtendWith(MockitoExtension.class)
 class AdminAiModelEntryServiceImplTest {
@@ -41,16 +42,27 @@ class AdminAiModelEntryServiceImplTest {
     @Mock
     private AgentEmbeddingClassService embeddingClassService;
 
+    @Mock
+    private com.mywebsite.admin.service.AdminAiChainPresetService chainPresetService;
+
     private AdminAiModelEntryServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminAiModelEntryServiceImpl(modelEntryMapper, cipher, embeddingClassService);
+        service = new AdminAiModelEntryServiceImpl(
+                modelEntryMapper, cipher, embeddingClassService, chainPresetService);
         // 无默认入口的用例走不到解密，stub 放宽避免 strict stub 误报
         lenient().when(cipher.decrypt(any())).thenAnswer(invocation -> {
             String raw = invocation.getArgument(0);
             return raw != null && raw.startsWith("enc:") ? raw.substring(4) : raw;
         });
+    }
+
+    /** 让 agent 引用一条成员为 {@code members} 的预设（参数顺序即预设序）。 */
+    private void givenPresetMembers(long agentId, List<AdminAiModelEntryEntity> members) {
+        when(chainPresetService.referencedEntryIds(agentId))
+                .thenReturn(members.stream().map(AdminAiModelEntryEntity::getId).toList());
+        lenient().when(modelEntryMapper.selectBatchIds(any())).thenReturn(members);
     }
 
     private static AdminAiModelEntryEntity entry(long id, Long sourceAgentId, String spec, boolean isDefault) {
@@ -96,7 +108,7 @@ class AdminAiModelEntryServiceImplTest {
         AdminAiModelEntryEntity cli = entry(2L, 10L, "openai:gpt", true);
         cli.setMode("CLI");
         cli.setEmbeddingSpec("google:gemini-embedding-001");
-        when(modelEntryMapper.selectList(any())).thenReturn(List.of(cli), List.of());
+        givenPresetMembers(10L, List.of(cli));
 
         List<AgentModelSelection> chain = service.selectionChain(10L);
         assertThat(chain).hasSize(1);
@@ -104,16 +116,15 @@ class AdminAiModelEntryServiceImplTest {
     }
 
     @Test
-    void chainOrdersProvenanceDefaultThenProvenanceOthersThenPlatform() {
-        // mapper 已按「默认在前、id 升序」分层返回，service 只负责组链
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(
-                                entry(3L, 10L, "google:agent-default", true),
-                                entry(4L, 10L, "openai:agent-alt", false)),
-                        List.of(
-                                entry(1L, null, "google:global-default", true),
-                                entry(2L, null, "anthropic:global-alt", false)));
+    void chainFollowsPresetOrderWithPrimaryFirst() {
+        // 预设序即组链序：第一个默认作主用，其后按预设序备援
+        givenPresetMembers(
+                10L,
+                List.of(
+                        entry(3L, 10L, "google:agent-default", true),
+                        entry(4L, 10L, "openai:agent-alt", false),
+                        entry(1L, null, "google:global-default", true),
+                        entry(2L, null, "anthropic:global-alt", false)));
 
         List<AgentModelSelection> chain = service.selectionChain(10L);
 
@@ -125,22 +136,23 @@ class AdminAiModelEntryServiceImplTest {
 
     @Test
     void currentSelectionReturnsChainHead() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(entry(3L, 10L, "google:agent-default", true)),
-                        List.of(entry(1L, null, "google:global-default", true)));
+        givenPresetMembers(
+                10L,
+                List.of(
+                        entry(3L, 10L, "google:agent-default", true),
+                        entry(1L, null, "google:global-default", true)));
 
         assertThat(service.currentSelection(10L).spec()).isEqualTo("google:agent-default");
     }
 
     @Test
-    void chainFallsToPlatformDefaultWhenProvenanceLayerHasNoDefault() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(entry(4L, 10L, "openai:agent-alt", false)),
-                        List.of(
-                                entry(1L, null, "google:global-default", true),
-                                entry(2L, null, "anthropic:global-alt", false)));
+    void chainFallsToLaterDefaultWhenPresetStartsWithNonDefault() {
+        givenPresetMembers(
+                10L,
+                List.of(
+                        entry(4L, 10L, "openai:agent-alt", false),
+                        entry(1L, null, "google:global-default", true),
+                        entry(2L, null, "anthropic:global-alt", false)));
 
         List<AgentModelSelection> chain = service.selectionChain(10L);
 
@@ -150,10 +162,19 @@ class AdminAiModelEntryServiceImplTest {
 
     @Test
     void chainIsEmptyWithoutAnyDefault() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(entry(4L, 10L, "openai:agent-alt", false)),
-                        List.of(entry(2L, null, "anthropic:global-alt", false)));
+        givenPresetMembers(
+                10L,
+                List.of(
+                        entry(4L, 10L, "openai:agent-alt", false),
+                        entry(2L, null, "anthropic:global-alt", false)));
+
+        assertThat(service.selectionChain(10L)).isEmpty();
+        assertThat(service.currentSelection(10L)).isNull();
+    }
+
+    @Test
+    void chainIsEmptyWhenAgentHasNoPreset() {
+        when(chainPresetService.referencedEntryIds(10L)).thenReturn(List.of());
 
         assertThat(service.selectionChain(10L)).isEmpty();
         assertThat(service.currentSelection(10L)).isNull();
@@ -162,12 +183,12 @@ class AdminAiModelEntryServiceImplTest {
     @Test
     void chainIsEmptyWhenPrimaryKeyUndecryptable() {
         when(cipher.decrypt("enc:key-3")).thenReturn("");
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(
-                                entry(3L, 10L, "google:agent-default", true),
-                                entry(4L, 10L, "openai:agent-alt", false)),
-                        List.of(entry(1L, null, "google:global-default", true)));
+        givenPresetMembers(
+                10L,
+                List.of(
+                        entry(3L, 10L, "google:agent-default", true),
+                        entry(4L, 10L, "openai:agent-alt", false),
+                        entry(1L, null, "google:global-default", true)));
 
         // 主用坏掉时备援不得顶上，整链不启用
         assertThat(service.selectionChain(10L)).isEmpty();
@@ -179,8 +200,7 @@ class AdminAiModelEntryServiceImplTest {
         cli.setMode("CLI");
         AdminAiModelEntryEntity key = entry(1L, null, "google:gemini-3-flash-preview", true);
         key.setMode("KEY");
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(List.of(cli), List.of(key), List.of(cli), List.of(key));
+        givenPresetMembers(10L, List.of(cli, key));
 
         assertThat(specs(service.selectionChain(10L, "CLI"))).containsExactly("openai:muse-wonder-1.0");
         assertThat(specs(service.selectionChain(10L, "key"))).containsExactly("google:gemini-3-flash-preview");
@@ -194,12 +214,30 @@ class AdminAiModelEntryServiceImplTest {
     @Test
     void chainSkipsUndecryptableFallbacks() {
         when(cipher.decrypt("enc:key-4")).thenReturn("");
-        when(modelEntryMapper.selectList(any()))
+        givenPresetMembers(
+                10L,
+                List.of(
+                        entry(3L, 10L, "google:agent-default", true),
+                        entry(4L, 10L, "openai:agent-alt", false),
+                        entry(1L, null, "google:global-default", true)));
+
+        assertThat(specs(service.selectionChain(10L)))
+                .containsExactly("google:agent-default", "google:global-default");
+    }
+
+    @Test
+    void chainSkipsDisabledAndMissingMembers() {
+        AdminAiModelEntryEntity disabled = entry(4L, 10L, "openai:agent-alt", false);
+        disabled.setEnabled(false);
+        // 预设含已删除成员 99：批量查询不返回它（@TableLogic），组链按缺失跳过；
+        // 停用成员 4 在结果里但被启用过滤挡下
+        when(chainPresetService.referencedEntryIds(10L)).thenReturn(List.of(3L, 4L, 99L, 1L));
+        when(modelEntryMapper.selectBatchIds(any()))
                 .thenReturn(
                         List.of(
                                 entry(3L, 10L, "google:agent-default", true),
-                                entry(4L, 10L, "openai:agent-alt", false)),
-                        List.of(entry(1L, null, "google:global-default", true)));
+                                disabled,
+                                entry(1L, null, "google:global-default", true)));
 
         assertThat(specs(service.selectionChain(10L)))
                 .containsExactly("google:agent-default", "google:global-default");

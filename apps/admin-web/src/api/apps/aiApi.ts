@@ -27,6 +27,9 @@ import type {
   AiExperienceLessonCreateInput,
   AiExperienceLessonListItem,
   AiExperienceLessonStatus,
+  AiAgentChainPreset,
+  AiChainPreset,
+  AiChainPresetWriteInput,
   AiMcpConfig,
   AiMcpSelection,
   AiMcpServerEntryInput,
@@ -150,6 +153,45 @@ export const aiApi = {
     return httpClient
       .delete<HttpMessageBody<null | void>>(`/admin/ai/model-entries/${id}`)
       .then(unwrapVoid)
+  },
+
+  /** 对话链预设（Issue #210 UoW-7）：平台区 CRUD；被任一 agent 引用的预设删除会被服务端拦截。 */
+  listChainPresets(): Promise<AiChainPreset[]> {
+    return httpClient.get<HttpMessageBody<AiChainPreset[]>>('/admin/ai/chain-presets').then(unwrapData)
+  },
+
+  createChainPreset(input: AiChainPresetWriteInput): Promise<AiChainPreset> {
+    return httpClient
+      .post<HttpMessageBody<AiChainPreset>, AiChainPresetWriteInput>('/admin/ai/chain-presets', input)
+      .then(unwrapData)
+  },
+
+  updateChainPreset(id: number, input: AiChainPresetWriteInput): Promise<AiChainPreset> {
+    return httpClient
+      .put<HttpMessageBody<AiChainPreset>, AiChainPresetWriteInput>(`/admin/ai/chain-presets/${id}`, input)
+      .then(unwrapData)
+  },
+
+  deleteChainPreset(id: number): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null | void>>(`/admin/ai/chain-presets/${id}`)
+      .then(unwrapVoid)
+  },
+
+  /** agent 的链预设引用：保存即换链；chainPresetId 传 null 解除引用。 */
+  getAgentChainPreset(agentId: number): Promise<AiAgentChainPreset> {
+    return httpClient
+      .get<HttpMessageBody<AiAgentChainPreset>>(`${aiBase(agentId)}/chain-preset`)
+      .then(unwrapData)
+  },
+
+  updateAgentChainPreset(agentId: number, chainPresetId: number | null): Promise<AiAgentChainPreset> {
+    return httpClient
+      .put<HttpMessageBody<AiAgentChainPreset>, { chainPresetId: number | null }>(
+        `${aiBase(agentId)}/chain-preset`,
+        { chainPresetId },
+      )
+      .then(unwrapData)
   },
 
   /** 嵌入类登记（Issue #126）：agentId 省略＝全站 scope；行内 spec/类键由服务端从入口解析。 */

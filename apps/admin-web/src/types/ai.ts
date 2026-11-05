@@ -243,6 +243,32 @@ export interface AiMcpSelection {
   serverNames: string[]
 }
 
+/**
+ * 对话链预设（Issue #210 UoW-7）：平台级命名链快照，entryIds 有序＝链的成员与顺序。
+ * agent 引用一条预设即决定其对话链；用途 v1 只有 CHAT。
+ */
+export interface AiChainPreset {
+  id: number
+  name: string
+  purpose: string
+  entryIds: number[]
+  version: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AiChainPresetWriteInput {
+  name: string
+  entryIds: number[]
+  version?: number
+}
+
+/** agent 当前引用的链预设；chainPresetId 为 null＝未引用（对话链为空）。 */
+export interface AiAgentChainPreset {
+  agentId: number
+  chainPresetId: number | null
+}
+
 /** 经验条目状态（与后端 agent_experience_lesson.status 状态机一致，Issue #184）。 */
 export type AiExperienceLessonStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'DISABLED'
 

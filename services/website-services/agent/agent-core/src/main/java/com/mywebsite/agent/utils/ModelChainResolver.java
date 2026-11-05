@@ -19,7 +19,9 @@ import org.springframework.util.StringUtils;
  * （CLI 清空），那是入口属性、不是嵌入类来源。
  *
  * <p>纯静态、无状态：解密由调用方完成并把明文 key 放进快照（解不出放 null）。
- * 输入列表的顺序即组链顺序，调用方须按「默认在前、id 升序」查好再传入。
+ * 输入列表的顺序即组链顺序：两层形态下调用方按「默认在前、id 升序」查好再传入；
+ * 链预设形态（{@link #resolvePresetChain}，Issue #210 UoW-7 起的生产路径）下
+ * 顺序就是预设的成员顺序。
  *
  * <p>网关 {@code /v1} 的 alias 主用链不在这里：它以 alias 点名入口为主用、
  * 规则不同，继续走 {@code GatewayV1ServiceImpl} 自己的组装。
@@ -51,14 +53,14 @@ public final class ModelChainResolver {
     }
 
     /**
-     * 生效链：先按 {@code mode} 过滤（null 表示整链、不过滤）；主用＝优先层
-     * 第一个默认入口，否则平台层第一个默认；主用不存在或其凭证组装不出（无 spec／
-     * 无 key）时整链为空——备援不得越过坏主用顶上（ADR-0004）；其后依次是优先层
-     * 其余、平台层其余（保持输入顺序），凭证组装不出的备援跳过。
+     * 生效链（两层形态，规则本体）：先按 {@code mode} 过滤（null 表示整链、不过滤）；
+     * 主用＝优先层第一个默认入口，否则平台层第一个默认；主用不存在或其凭证组装不出
+     * （无 spec／无 key）时整链为空——备援不得越过坏主用顶上（ADR-0004）；其后依次是
+     * 优先层其余、平台层其余（保持输入顺序），凭证组装不出的备援跳过。
      *
-     * <p>两层的划分自 Issue #210 UoW-6 起按入口来源：优先层＝带来源标注的入口
-     * （平台化前为 agent 专属），平台层＝平台原生入口；与改造前的「专属层 → 全站层」
-     * 一一对应。网关 /v1 不走这里（见类注释）。
+     * <p>两层的划分曾按入口来源（UoW-6 的过渡组链）；自 UoW-7 起生产组链改走
+     * {@link #resolvePresetChain}（链预设快照），来源分层整体退役、本方法只作
+     * 规则引擎与等价基线保留。网关 /v1 不走这里（见类注释）。
      */
     public static List<ResolvedLink> resolveChain(
             List<EntrySnapshot> priorityScope, List<EntrySnapshot> platformScope, String mode) {
@@ -80,6 +82,18 @@ public final class ModelChainResolver {
         appendLinks(chain, agentEntries, primary.id());
         appendLinks(chain, globalEntries, primary.id());
         return List.copyOf(chain);
+    }
+
+    /**
+     * 链预设组链（Issue #210 UoW-7）：{@code members} 是 agent 引用的对话链预设
+     * 成员快照，按预设顺序排列（调用方已按预设 entry ids 取入口并过滤停用/已删）。
+     * 规则与两层形态同一份：按 {@code mode} 过滤后，预设序内第一个默认入口作主用，
+     * 主用不存在或凭证组装不出时整链为空；其后按预设序依次备援，凭证组装不出的跳过。
+     * 等价于把成员整体作优先层、平台层为空调用 {@link #resolveChain}——存量预设按
+     * 「专属层在前、平台层在后」生成时，解析结果与平台化前旧链逐条一致。
+     */
+    public static List<ResolvedLink> resolvePresetChain(List<EntrySnapshot> members, String mode) {
+        return resolveChain(members, List.of(), mode);
     }
 
     private static List<EntrySnapshot> filterMode(List<EntrySnapshot> entries, String mode) {

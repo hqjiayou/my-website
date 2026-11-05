@@ -105,4 +105,46 @@ class ModelChainResolverTest {
 
         assertThat(chain.get(0).displayName()).isEqualTo("google:a");
     }
+
+    // ===== 链预设形态（Issue #210 UoW-7）：成员整体即链，顺序为预设序 =====
+
+    @Test
+    void presetChainUsesFirstDefaultInPresetOrderAsPrimary() {
+        List<ResolvedLink> chain = ModelChainResolver.resolvePresetChain(
+                List.of(
+                        keyEntry(4, "openai:alt", false),
+                        keyEntry(1, "google:default", true),
+                        keyEntry(2, "anthropic:alt", false)),
+                null);
+
+        // 预设序内第一个默认作主用并提到链首，其余保持预设序备援
+        assertThat(chain).extracting(ResolvedLink::id).containsExactly(1L, 4L, 2L);
+    }
+
+    @Test
+    void presetChainFiltersModeAndClosesBackupsInsideIt() {
+        List<ResolvedLink> chain = ModelChainResolver.resolvePresetChain(
+                List.of(
+                        keyEntry(3, "google:key-default", true),
+                        entry(5, "openai:cli-default", "k5", true, "CLI", null),
+                        entry(6, "anthropic:cli-alt", "k6", false, "CLI", null),
+                        keyEntry(1, "google:key-alt", false)),
+                "CLI");
+
+        assertThat(chain).extracting(ResolvedLink::id).containsExactly(5L, 6L);
+    }
+
+    @Test
+    void presetChainIsEmptyWithoutDefaultOrWithBrokenPrimary() {
+        assertThat(ModelChainResolver.resolvePresetChain(
+                        List.of(keyEntry(2, "google:b", false)), null))
+                .isEmpty();
+        assertThat(ModelChainResolver.resolvePresetChain(
+                        List.of(
+                                entry(1, "google:a", null, true, "KEY", null),
+                                keyEntry(2, "google:b", false)),
+                        null))
+                .isEmpty();
+        assertThat(ModelChainResolver.resolvePresetChain(List.of(), null)).isEmpty();
+    }
 }

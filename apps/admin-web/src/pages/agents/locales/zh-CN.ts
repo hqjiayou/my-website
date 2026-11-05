@@ -624,6 +624,16 @@ export default {
         saved: 'MCP 选择已保存',
         loadError: 'MCP 选择加载失败。',
       },
+      chainPreset: {
+        title: '对话链预设',
+        hint: '引用一条平台链预设作为本智能体的对话链，保存即换链；预设的新建与编辑在 AI 设置页。未引用时对话链为空，对话会被拦截。',
+        none: '未引用',
+        save: '保存',
+        saved: '链预设引用已保存',
+        members: '链成员',
+        noMembers: '无成员',
+        loadError: '链预设引用加载失败。',
+      },
     },
     preview: {
       panel: '预览设置',

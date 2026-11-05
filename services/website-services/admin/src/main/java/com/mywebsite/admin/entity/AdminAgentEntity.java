@@ -21,6 +21,9 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
     /** V8：选用模板；可空。 */
     private Long templateId;
 
+    /** V63：引用的对话链预设（Issue #210 UoW-7）；可空，未引用时对话链为空。 */
+    private Long chainPresetId;
+
     public String getAgentCode() {
         return agentCode;
     }
@@ -75,5 +78,13 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
 
     public void setTemplateId(Long templateId) {
         this.templateId = templateId;
+    }
+
+    public Long getChainPresetId() {
+        return chainPresetId;
+    }
+
+    public void setChainPresetId(Long chainPresetId) {
+        this.chainPresetId = chainPresetId;
     }
 }

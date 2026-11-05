@@ -22,10 +22,14 @@ import com.mywebsite.infra.crypto.ModelEntryCipher;
 import com.mywebsite.infra.service.LocalizedMessageService;
 import com.mywebsite.agent.dto.AgentAiChatRequestDto;
 import com.mywebsite.common.exception.BusinessException;
+import com.mywebsite.agent.entity.AgentAiChainPresetEntity;
 import com.mywebsite.agent.entity.AgentAiConversationEntity;
 import com.mywebsite.agent.entity.AgentAiModelEntryEntity;
+import com.mywebsite.agent.entity.AgentEntity;
+import com.mywebsite.agent.mapper.AgentAiChainPresetMapper;
 import com.mywebsite.agent.mapper.AgentAiKnowledgeDocumentMapper;
 import com.mywebsite.agent.mapper.AgentAiModelEntryMapper;
+import com.mywebsite.agent.mapper.AgentMapper;
 import com.mywebsite.agent.service.AgentAiConversationService;
 import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
 import com.mywebsite.agent.service.AgentAiRateLimitService;
@@ -37,6 +41,7 @@ import com.mywebsite.agent.service.AgentUserMemoryService;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,9 +53,11 @@ import org.mockito.quality.Strictness;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 站点对话带入的入口生效链：与 admin selectionChain 同规则。入口平台化后
- * （Issue #210 UoW-6）为平台链：来源标注层主用，其后同层其他、平台原生其余；
- * 夹具的第二参数是来源标注（原所属 agent，null 为平台原生）。
+ * 站点对话带入的入口生效链：与 admin selectionChain 同规则。链预设落地后
+ * （Issue #210 UoW-7）链由 agent 引用的对话链预设决定：按预设的有序成员取
+ * 启用入口，预设序内第一个默认作主用，其后按预设序备援；夹具以
+ * {@link #givenChainPreset} 声明预设成员（顺序即预设序，与 V63 按旧链生成的
+ * 预设同形态：原专属入口在前、平台入口在后）。
  */
 @ExtendWith(MockitoExtension.class)
 class AgentAiModelChainTest {
@@ -85,7 +92,16 @@ class AgentAiModelChainTest {
     @Mock
     private ExecutorService agentAiStreamExecutor;
 
+    @Mock
+    private AgentMapper agentMapper;
+
+    @Mock
+    private AgentAiChainPresetMapper chainPresetMapper;
+
     private AgentAiServiceImpl service;
+
+    /** 当前 agent 10 的夹具实体：换预设用例直接改它的 chainPresetId。 */
+    private AgentEntity agent;
 
     @BeforeEach
     void setUp() {
@@ -104,7 +120,9 @@ class AgentAiModelChainTest {
                 org.mockito.Mockito.mock(AgentUsageService.class),
                 org.mockito.Mockito.mock(AgentEmbeddingClassService.class),
                 org.mockito.Mockito.mock(AgentExperienceLessonService.class),
-                org.mockito.Mockito.mock(AgentMcpSelectionService.class));
+                org.mockito.Mockito.mock(AgentMcpSelectionService.class),
+                agentMapper,
+                chainPresetMapper);
         String subject = SubjectCodes.formatAgentUserSubject(200L);
         AuthContext.set(new AuthenticatedUser(TokenAudience.AGENT, subject, "u", 10L, Set.of()));
         when(rateLimitService.tryAcquire(10L, subject)).thenReturn(true);
@@ -127,6 +145,9 @@ class AgentAiModelChainTest {
         when(agentClient.chat(any()))
                 .thenReturn(new AgentChatResponse(
                         "reply", "77", "LIVE", List.of(), AgentRunMeta.EMPTY, List.of(), List.of()));
+        agent = new AgentEntity();
+        agent.setId(10L);
+        lenient().when(agentMapper.selectById(10L)).thenReturn(agent);
     }
 
     @AfterEach
@@ -134,10 +155,9 @@ class AgentAiModelChainTest {
         AuthContext.clear();
     }
 
-    private static AgentAiModelEntryEntity entry(long id, Long sourceAgentId, String spec, boolean isDefault) {
+    private static AgentAiModelEntryEntity entry(long id, String spec, boolean isDefault) {
         AgentAiModelEntryEntity entry = new AgentAiModelEntryEntity();
         entry.setId(id);
-        entry.setSourceAgentId(sourceAgentId);
         entry.setModelSpec(spec);
         entry.setApiKey("enc:key-" + id);
         entry.setEnabled(true);
@@ -145,11 +165,32 @@ class AgentAiModelChainTest {
         return entry;
     }
 
-    private static AgentAiModelEntryEntity entry(
-            long id, Long sourceAgentId, String spec, boolean isDefault, String mode) {
-        AgentAiModelEntryEntity entry = entry(id, sourceAgentId, spec, isDefault);
+    private static AgentAiModelEntryEntity entry(long id, String spec, boolean isDefault, String mode) {
+        AgentAiModelEntryEntity entry = entry(id, spec, isDefault);
         entry.setMode(mode);
         return entry;
+    }
+
+    /**
+     * 让 agent 10 引用一条成员为 {@code members} 的预设（参数顺序即预设序）；
+     * {@code selectBatchIds} 默认按参数顺序返回，乱序口径另由专门用例覆盖。
+     */
+    private void givenChainPreset(List<AgentAiModelEntryEntity> members) {
+        givenChainPreset(900L, members, members);
+    }
+
+    private void givenChainPreset(
+            long presetId,
+            List<AgentAiModelEntryEntity> members,
+            List<AgentAiModelEntryEntity> batchResult) {
+        agent.setChainPresetId(presetId);
+        AgentAiChainPresetEntity preset = new AgentAiChainPresetEntity();
+        preset.setId(presetId);
+        preset.setEntryIds(members.stream()
+                .map(entry -> String.valueOf(entry.getId()))
+                .collect(Collectors.joining(",", "[", "]")));
+        when(chainPresetMapper.selectById(presetId)).thenReturn(preset);
+        lenient().when(modelEntryMapper.selectBatchIds(any())).thenReturn(batchResult);
     }
 
     private AgentChatRequest capturedRequest(String mode) {
@@ -168,15 +209,12 @@ class AgentAiModelChainTest {
     }
 
     @Test
-    void chatSendsAgentDefaultAsModelAndRestAsFallbacks() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(
-                                entry(3L, 10L, "google:agent-default", true),
-                                entry(4L, 10L, "openai:agent-alt", false)),
-                        List.of(
-                                entry(1L, null, "google:global-default", true),
-                                entry(2L, null, "anthropic:global-alt", false)));
+    void chatSendsPresetDefaultAsModelAndRestAsFallbacks() {
+        givenChainPreset(List.of(
+                entry(3L, "google:agent-default", true),
+                entry(4L, "openai:agent-alt", false),
+                entry(1L, "google:global-default", true),
+                entry(2L, "anthropic:global-alt", false)));
 
         AgentChatRequest request = capturedRequest();
 
@@ -188,13 +226,11 @@ class AgentAiModelChainTest {
     }
 
     @Test
-    void chatFallsToGlobalDefaultWhenAgentHasNoDefault() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(entry(4L, 10L, "openai:agent-alt", false)),
-                        List.of(
-                                entry(1L, null, "google:global-default", true),
-                                entry(2L, null, "anthropic:global-alt", false)));
+    void chatFallsToLaterDefaultWhenPresetStartsWithNonDefault() {
+        givenChainPreset(List.of(
+                entry(4L, "openai:agent-alt", false),
+                entry(1L, "google:global-default", true),
+                entry(2L, "anthropic:global-alt", false)));
 
         AgentChatRequest request = capturedRequest();
 
@@ -205,15 +241,78 @@ class AgentAiModelChainTest {
     }
 
     @Test
+    void chatFollowsPresetOrderNotEntryQueryOrder() {
+        List<AgentAiModelEntryEntity> members = List.of(
+                entry(3L, "google:agent-default", true),
+                entry(4L, "openai:agent-alt", false),
+                entry(1L, "google:global-default", true),
+                entry(2L, "anthropic:global-alt", false));
+        // 入口批量查询的返回序与预设序无关：组链必须按预设序重排
+        givenChainPreset(
+                900L,
+                members,
+                List.of(members.get(3), members.get(1), members.get(2), members.get(0)));
+
+        AgentChatRequest request = capturedRequest();
+
+        assertThat(request.model().spec()).isEqualTo("google:agent-default");
+        assertThat(request.fallbackModels())
+                .extracting(selection -> selection.spec())
+                .containsExactly("openai:agent-alt", "google:global-default", "anthropic:global-alt");
+    }
+
+    @Test
+    void swappingPresetReferenceSwapsTheChain() {
+        AgentAiModelEntryEntity agentDefault = entry(3L, "google:agent-default", true);
+        AgentAiModelEntryEntity agentAlt = entry(4L, "openai:agent-alt", false);
+        AgentAiModelEntryEntity globalDefault = entry(1L, "google:global-default", true);
+        AgentAiModelEntryEntity globalAlt = entry(2L, "anthropic:global-alt", false);
+        givenChainPreset(900L, List.of(agentDefault, agentAlt), List.of(agentDefault, agentAlt));
+        givenChainPreset(901L, List.of(globalDefault, globalAlt), List.of(globalDefault, globalAlt));
+        // 两条预设的成员批量查询都回全集，组链只取当前引用预设的成员并按其序
+        when(modelEntryMapper.selectBatchIds(any()))
+                .thenReturn(List.of(agentDefault, agentAlt, globalDefault, globalAlt));
+
+        agent.setChainPresetId(900L);
+        AgentChatRequest first = capturedRequest();
+        assertThat(first.model().spec()).isEqualTo("google:agent-default");
+        assertThat(first.fallbackModels())
+                .extracting(selection -> selection.spec())
+                .containsExactly("openai:agent-alt");
+
+        agent.setChainPresetId(901L);
+        service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY"));
+        ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
+        verify(agentClient, org.mockito.Mockito.times(2)).chat(captor.capture());
+        AgentChatRequest second = captor.getAllValues().get(1);
+        assertThat(second.model().spec()).isEqualTo("google:global-default");
+        assertThat(second.fallbackModels())
+                .extracting(selection -> selection.spec())
+                .containsExactly("anthropic:global-alt");
+    }
+
+    @Test
+    @MockitoSettings(strictness = Strictness.LENIENT)
+    void chatBlockedWhenAgentHasNoChainPreset() {
+        agent.setChainPresetId(null);
+
+        // 未引用预设＝无链：不许进程模型顶上，直接 BLOCKED（Issue #145 F1 同口径）
+        assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY")))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode())
+                                .isEqualTo(com.mywebsite.common.enums.ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()));
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
     @MockitoSettings(strictness = Strictness.LENIENT)
     void chatBlockedWhenPrimaryKeyUndecryptable() {
         when(modelEntryCipher.decrypt("enc:key-3")).thenReturn("");
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(
-                                entry(3L, 10L, "google:agent-default", true),
-                                entry(4L, 10L, "openai:agent-alt", false)),
-                        List.of(entry(1L, null, "google:global-default", true)));
+        givenChainPreset(List.of(
+                entry(3L, "google:agent-default", true),
+                entry(4L, "openai:agent-alt", false),
+                entry(1L, "google:global-default", true)));
 
         // 主用坏掉时备援不得顶上、进程模型更不得顶上：整链为空直接 BLOCKED（Issue #145 F1）
         assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY")))
@@ -226,19 +325,16 @@ class AgentAiModelChainTest {
 
     @Test
     void chatWithCliModeUsesCliChainOnly() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(
-                                entry(3L, 10L, "google:agent-key-default", true, "KEY"),
-                                entry(5L, 10L, "openai:agent-cli-default", true, "CLI"),
-                                entry(6L, 10L, "anthropic:agent-cli-alt", false, "CLI")),
-                        List.of(
-                                entry(1L, null, "google:global-key-default", true, "KEY"),
-                                entry(7L, null, "openai:global-cli-alt", false, "CLI")));
+        givenChainPreset(List.of(
+                entry(3L, "google:agent-key-default", true, "KEY"),
+                entry(5L, "openai:agent-cli-default", true, "CLI"),
+                entry(6L, "anthropic:agent-cli-alt", false, "CLI"),
+                entry(1L, "google:global-key-default", true, "KEY"),
+                entry(7L, "openai:global-cli-alt", false, "CLI")));
 
         AgentChatRequest request = capturedRequest("CLI");
 
-        // 备援封闭在 CLI 模式内：KEY 入口（含两级默认）一概不入链
+        // 备援封闭在 CLI 模式内：KEY 入口（含预设内 KEY 默认）一概不入链
         assertThat(request.model().spec()).isEqualTo("openai:agent-cli-default");
         assertThat(request.fallbackModels())
                 .extracting(selection -> selection.spec())
@@ -248,10 +344,9 @@ class AgentAiModelChainTest {
     @Test
     @MockitoSettings(strictness = Strictness.LENIENT)
     void chatWithCliModeButNoCliDefaultBlocked() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(entry(3L, 10L, "google:agent-key-default", true, "KEY")),
-                        List.of(entry(1L, null, "google:global-key-default", true, "KEY")));
+        givenChainPreset(List.of(
+                entry(3L, "google:agent-key-default", true, "KEY"),
+                entry(1L, "google:global-key-default", true, "KEY")));
 
         // 模式内无默认：不跨模式顶 KEY 主用，也不许进程模型顶上（Issue #145 F1）
         assertThatThrownBy(() -> capturedRequest("CLI"))
@@ -283,10 +378,7 @@ class AgentAiModelChainTest {
     @Test
     @MockitoSettings(strictness = Strictness.LENIENT)
     void modelModesReportsAvailabilityAndLabelPerMode() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(entry(3L, 10L, "google:gemini-key", true, "KEY")),
-                        List.of());
+        givenChainPreset(List.of(entry(3L, "google:gemini-key", true, "KEY")));
 
         var modes = service.modelModes(10L);
 
@@ -305,12 +397,10 @@ class AgentAiModelChainTest {
 
     @Test
     void chatPinsNamedEntryAsPrimaryAndKeepsTheRestAsFallback() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(
-                        List.of(
-                                entry(3L, 10L, "google:agent-default", true),
-                                entry(4L, 10L, "openai:agent-alt", false)),
-                        List.of(entry(1L, null, "google:global-default", true)));
+        givenChainPreset(List.of(
+                entry(3L, "google:agent-default", true),
+                entry(4L, "openai:agent-alt", false),
+                entry(1L, "google:global-default", true)));
 
         service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY", 4L));
         ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
@@ -326,9 +416,9 @@ class AgentAiModelChainTest {
     @Test
     @MockitoSettings(strictness = Strictness.LENIENT)
     void chatRejectsNamedEntryThatIsNotOnTheChain() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(List.of(entry(3L, 10L, "google:agent-default", true)), List.of());
+        givenChainPreset(List.of(entry(3L, "google:agent-default", true)));
 
+        // 点名范围限预设内：不在该 agent 预设成员里的入口一律拒绝，不改走默认
         assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY", 99L)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getCode())
@@ -339,10 +429,9 @@ class AgentAiModelChainTest {
     @Test
     @MockitoSettings(strictness = Strictness.LENIENT)
     void chatRejectsNamedEntryWhoseKeyCannotBeDecrypted() {
-        AgentAiModelEntryEntity broken = entry(4L, 10L, "openai:agent-alt", false);
+        AgentAiModelEntryEntity broken = entry(4L, "openai:agent-alt", false);
         broken.setApiKey("");
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(List.of(entry(3L, 10L, "google:agent-default", true), broken), List.of());
+        givenChainPreset(List.of(entry(3L, "google:agent-default", true), broken));
 
         assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY", 4L)))
                 .isInstanceOf(BusinessException.class)
@@ -353,9 +442,8 @@ class AgentAiModelChainTest {
 
     @Test
     @MockitoSettings(strictness = Strictness.LENIENT)
-    void modelModesIncludesGlobalDefaultWhenTheAgentHasNone() {
-        when(modelEntryMapper.selectList(any()))
-                .thenReturn(List.of(), List.of(entry(1L, null, "google:global-default", true, "KEY")), List.of(), List.of());
+    void modelModesReportsPresetWithOnlyPlatformDefault() {
+        givenChainPreset(List.of(entry(1L, "google:global-default", true, "KEY")));
 
         var modes = service.modelModes(10L);
 

@@ -16,18 +16,18 @@ public interface AdminAiModelEntryService {
     void deleteEntry(long id);
 
     /**
-     * 平台链的主用入口（链首）。入口平台化后（Issue #210 UoW-6）链与 agent 无关，
-     * {@code agentId} 参数仅为兼容既有调用面保留、不参与组链。都没有时返回 null。
+     * agent 对话链的主用入口（链首）：链由该 agent 引用的对话链预设决定
+     * （Issue #210 UoW-7）。未引用预设、或预设内无可用主用时返回 null。
      */
     AgentModelSelection currentSelection(long agentId);
 
     /**
-     * 平台生效链：与请求方 agent 无关（Issue #210 UoW-6 起入口全平台注册）。
-     * 首元是主用入口，其后依次是带来源标注的其他启用入口、平台原生的其他启用入口
-     * （各层内默认在前、id 升序）——来源层级保证单 agent 形态下与平台化前逐条等价，
-     * 链预设（UoW-7）落地后由预设快照取代。主用不存在（无默认，或默认解密不出 key）
-     * 时返回空列表，备援不得越过坏主用直接顶上。解密不出 key 的备援跳过。不分模式。
-     * {@code agentId} 参数仅为兼容既有调用面保留（UoW-7 收口）。
+     * agent 的对话生效链（Issue #210 UoW-7）：取该 agent 引用的链预设快照
+     * （有序 entry ids），按预设序取启用入口交 {@code ModelChainResolver} 既有
+     * 规则组链——首元是主用（预设序内第一个默认入口），其后按预设序备援；
+     * 主用不存在（预设内无默认，或默认解密不出 key）时返回空列表，备援不得
+     * 越过坏主用直接顶上；解密不出 key 的备援跳过；已删除/停用的成员不入链。
+     * 未引用预设时为空列表。不分模式。
      */
     List<AgentModelSelection> selectionChain(long agentId);
 

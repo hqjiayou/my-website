@@ -5,6 +5,7 @@ import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryDto;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryWriteRequest;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
+import com.mywebsite.admin.service.AdminAiChainPresetService;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiModelEntryService.ChainCandidate;
 import com.mywebsite.agent.dto.AgentModelSelection;
@@ -15,7 +16,10 @@ import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.infra.crypto.ModelEntryCipher;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,14 +31,17 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
     private final AdminAiModelEntryMapper modelEntryMapper;
     private final ModelEntryCipher cipher;
     private final AgentEmbeddingClassService embeddingClassService;
+    private final AdminAiChainPresetService chainPresetService;
 
     public AdminAiModelEntryServiceImpl(
             AdminAiModelEntryMapper modelEntryMapper,
             ModelEntryCipher cipher,
-            AgentEmbeddingClassService embeddingClassService) {
+            AgentEmbeddingClassService embeddingClassService,
+            AdminAiChainPresetService chainPresetService) {
         this.modelEntryMapper = modelEntryMapper;
         this.cipher = cipher;
         this.embeddingClassService = embeddingClassService;
+        this.chainPresetService = chainPresetService;
     }
 
     @Override
@@ -81,7 +88,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         AdminAiModelEntryEntity entry = requireEntry(id);
         boolean asDefault = asDefault(request);
         if (asDefault) {
-            // 默认位在该入口自己的来源 × 模式内互斥（与 V61 的来源唯一索引同口径）。
+            // 默认位在该入口自己的来源 × 模式内互斥（与 V62 的来源唯一索引同口径）。
             clearOtherDefaults(entry.getSourceAgentId(), id, normalizeMode(request.mode()));
         }
         String apiKey = StringUtils.hasText(request.apiKey()) ? request.apiKey().trim() : decryptKey(entry);
@@ -156,18 +163,33 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
 
     /**
      * 组链规则在 agent-core 的 {@code ModelChainResolver}（Issue #132，与 agent-app
-     * 共用同一份实现）；这里只做实体→快照映射与结果回译，规则不在本类重复。
+     * 共用同一份实现）；这里只做预设成员加载、实体→快照映射与结果回译，规则不在
+     * 本类重复。
      *
-     * <p>入口平台化后（Issue #210 UoW-6）链与请求方 agent 无关：{@code agentId} 参数
-     * 仅为兼容试聊/OCR/提炼等既有调用面保留。两层按来源划分——带来源标注的入口
-     * （平台化前为 agent 专属）为优先层、平台原生入口为平台层，与改造前的
-     * 「专属层 → 全站层」一一对应，单 agent 形态下有效链逐条等价。
+     * <p>链预设落地后（Issue #210 UoW-7）链由 agent 引用的对话链预设决定：按预设
+     * 的有序 entry ids 取入口（已删除的自动落选、停用的过滤，成员顺序即预设序），
+     * 交 {@code ModelChainResolver.resolvePresetChain} 按既有规则组链（mode 过滤、
+     * 默认/备援序、坏主用整链空）。UoW-6 的来源分层过渡组链整体退役，
+     * {@code source_agent_id} 只作来源标注、不再参与组链。agent 未引用预设时链为空。
      */
     private List<ChainLink> chainLinks(long agentId, String mode) {
         String normalized = chainMode(mode);
-        return ModelChainResolver.resolveChain(
-                        snapshots(enabledEntries(true)), snapshots(enabledEntries(false)), normalized)
-                .stream()
+        List<Long> entryIds = chainPresetService.referencedEntryIds(agentId);
+        if (entryIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, AdminAiModelEntryEntity> entriesById = new HashMap<>();
+        for (AdminAiModelEntryEntity entry : modelEntryMapper.selectBatchIds(entryIds)) {
+            entriesById.put(entry.getId(), entry);
+        }
+        List<AdminAiModelEntryEntity> members = new ArrayList<>();
+        for (Long entryId : entryIds) {
+            AdminAiModelEntryEntity entry = entriesById.get(entryId);
+            if (entry != null && Boolean.TRUE.equals(entry.getEnabled())) {
+                members.add(entry);
+            }
+        }
+        return ModelChainResolver.resolvePresetChain(snapshots(members), normalized).stream()
                 .map(link -> new ChainLink(link.id(), link.displayName(), link.selection()))
                 .toList();
     }
@@ -199,23 +221,9 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
                 .toList();
     }
 
-    /** 来源层内启用入口：默认在前，其余 id 升序（与 listEntries 的展示序一致）。 */
-    private List<AdminAiModelEntryEntity> enabledEntries(boolean provenanceMarked) {
-        LambdaQueryWrapper<AdminAiModelEntryEntity> query = new LambdaQueryWrapper<AdminAiModelEntryEntity>()
-                .eq(AdminAiModelEntryEntity::getEnabled, true)
-                .orderByDesc(AdminAiModelEntryEntity::getDefaultEntry)
-                .orderByAsc(AdminAiModelEntryEntity::getId);
-        if (provenanceMarked) {
-            query.isNotNull(AdminAiModelEntryEntity::getSourceAgentId);
-        } else {
-            query.isNull(AdminAiModelEntryEntity::getSourceAgentId);
-        }
-        return modelEntryMapper.selectList(query);
-    }
-
     private record ChainLink(Long id, String displayName, AgentModelSelection selection) {}
 
-    /** 清除同「来源 × 模式」内的其他默认位（与 V61 的来源唯一索引同口径）。 */
+    /** 清除同「来源 × 模式」内的其他默认位（与 V62 的来源唯一索引同口径）。 */
     private void clearOtherDefaults(Long sourceAgentId, Long keepId, String mode) {
         LambdaQueryWrapper<AdminAiModelEntryEntity> query = new LambdaQueryWrapper<AdminAiModelEntryEntity>()
                 .eq(AdminAiModelEntryEntity::getDefaultEntry, true)
@@ -258,7 +266,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         entry.setApiKey(cipher.encrypt(apiKey));
         entry.setBaseUrl(normalizeBaseUrl(request.baseUrl()));
         // 入口平台化（Issue #210 UoW-6）：agent_id 停写恒空；来源标注 sourceAgentId
-        // 只由 V61 迁移落、新建与编辑都不写（编辑时实体自带值原样回写）。
+        // 只由 V62 迁移落、新建与编辑都不写（编辑时实体自带值原样回写）。
         entry.setAgentId(null);
         String mode = normalizeMode(request.mode());
         entry.setMode(mode);

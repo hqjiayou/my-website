@@ -1,5 +1,5 @@
 -- =============================================================================
--- website-services | Flyway V61 | 模型入口平台化（Issue #210 UoW-6，解耦 Phase 2）
+-- website-services | Flyway V62 | 模型入口平台化（Issue #210 UoW-6，解耦 Phase 2）
 -- agent_model_entry.agent_id 作用域退役：存量专属入口转平台注册，原归属转存
 -- source_agent_id 作来源标注（留痕；组链按「带来源标注优先层 → 平台原生层」
 -- 组装，单 agent 形态下与改造前逐条等价，口径同 lessons 的 sourceAgentId 范本）。

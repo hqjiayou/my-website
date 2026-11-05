@@ -627,6 +627,16 @@ export default {
         saved: 'MCP selection saved',
         loadError: 'Failed to load the MCP selection.',
       },
+      chainPreset: {
+        title: 'Chat chain preset',
+        hint: 'Reference a platform chain preset as this agent\'s chat chain; saving switches the chain immediately. Create and edit presets on the AI settings page. With no reference the chat chain is empty and chat is blocked.',
+        none: 'None',
+        save: 'Save',
+        saved: 'Chain preset reference saved',
+        members: 'Chain members',
+        noMembers: 'No members',
+        loadError: 'Failed to load the chain preset reference.',
+      },
     },
     preview: {
       panel: 'Preview setup',

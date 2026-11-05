@@ -9,37 +9,16 @@ import java.util.List;
 import org.springframework.util.StringUtils;
 
 /**
- * 平台模型入口生效链规则（与 admin {@code AdminAiModelEntryServiceImpl.selectionChain} 同规则，
- * 两处须一致）：站点 chat（{@code AgentAiServiceImpl}）与网关 {@code /v1} 转发
- * （{@code GatewayV1ServiceImpl}）共用这套查询与组装，不另写一份，防止规则分叉。
+ * 网关 {@code /v1} 转发（{@code GatewayV1ServiceImpl}）用的入口查询与凭证组装。
+ * 站点 chat 的生效链自 Issue #210 UoW-7 起改走链预设（agent 引用的预设成员交
+ * agent-core {@code ModelChainResolver.resolvePresetChain}），不再经本类；本类
+ * 只剩网关的 alias 链在用（其规则独立、不在本单范围）。
  *
  * <p>纯静态：不持有状态，调用方自带 {@code AgentAiModelEntryMapper}/{@code ModelEntryCipher}。
  */
 public final class AgentModelChainUtils {
 
     private AgentModelChainUtils() {}
-
-    /**
-     * 平台链分层查询（Issue #210 UoW-6）：{@code provenanceMarked} 为 true 取带来源
-     * 标注的启用入口（优先层，平台化前为 agent 专属），false 取平台原生启用入口
-     * （平台层）；层内默认在前，其余 id 升序。站点 chat 组链用，与 admin
-     * {@code AdminAiModelEntryServiceImpl} 的分层口径一致；下方的
-     * {@link #enabledModelEntries} 按 agent_id 作用域查询只剩网关 /v1 在用，不动。
-     */
-    public static List<AgentAiModelEntryEntity> enabledEntriesByProvenance(
-            AgentAiModelEntryMapper mapper, boolean provenanceMarked) {
-        LambdaQueryWrapper<AgentAiModelEntryEntity> query = new LambdaQueryWrapper<AgentAiModelEntryEntity>()
-                .eq(AgentAiModelEntryEntity::getEnabled, true)
-                .orderByDesc(AgentAiModelEntryEntity::getDefaultEntry)
-                .orderByAsc(AgentAiModelEntryEntity::getId);
-        if (provenanceMarked) {
-            query.isNotNull(AgentAiModelEntryEntity::getSourceAgentId);
-        } else {
-            query.isNull(AgentAiModelEntryEntity::getSourceAgentId);
-        }
-        List<AgentAiModelEntryEntity> entries = mapper.selectList(query);
-        return entries == null ? List.of() : entries;
-    }
 
     /** 作用域内启用入口：默认在前，其余 id 升序。{@code agentId} 为 null 即全站作用域。 */
     public static List<AgentAiModelEntryEntity> enabledModelEntries(AgentAiModelEntryMapper mapper, Long agentId) {

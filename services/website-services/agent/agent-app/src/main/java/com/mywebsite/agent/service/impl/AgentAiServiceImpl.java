@@ -1,5 +1,7 @@
 package com.mywebsite.agent.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,10 +31,14 @@ import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.agent.dto.AgentAiAttachmentDto;
 import com.mywebsite.agent.dto.AgentAiChatRequestDto;
 import com.mywebsite.agent.dto.AgentAiModelModesDto;
+import com.mywebsite.agent.entity.AgentAiChainPresetEntity;
 import com.mywebsite.agent.entity.AgentAiKnowledgeDocumentEntity;
 import com.mywebsite.agent.entity.AgentAiModelEntryEntity;
+import com.mywebsite.agent.entity.AgentEntity;
+import com.mywebsite.agent.mapper.AgentAiChainPresetMapper;
 import com.mywebsite.agent.mapper.AgentAiKnowledgeDocumentMapper;
 import com.mywebsite.agent.mapper.AgentAiModelEntryMapper;
+import com.mywebsite.agent.mapper.AgentMapper;
 import com.mywebsite.agent.dto.AgentAiChatResponseDto;
 import com.mywebsite.agent.dto.AgentAiDocumentDto;
 import com.mywebsite.agent.service.ChatDocumentTextExtractor;
@@ -50,11 +56,12 @@ import com.mywebsite.agent.service.AgentUsageService;
 import com.mywebsite.agent.service.AgentUserMemoryService;
 import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
 import com.mywebsite.agent.utils.AgentExperienceLessonUtils;
-import com.mywebsite.agent.utils.AgentModelChainUtils;
 import com.mywebsite.agent.utils.ModelChainResolver;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -199,6 +206,8 @@ public class AgentAiServiceImpl implements AgentAiService {
     private final AgentEmbeddingClassService embeddingClassService;
     private final AgentExperienceLessonService experienceLessonService;
     private final AgentMcpSelectionService mcpSelectionService;
+    private final AgentMapper agentMapper;
+    private final AgentAiChainPresetMapper chainPresetMapper;
 
     public AgentAiServiceImpl(
             AgentClient agentClient,
@@ -215,7 +224,9 @@ public class AgentAiServiceImpl implements AgentAiService {
             AgentUsageService usageService,
             AgentEmbeddingClassService embeddingClassService,
             AgentExperienceLessonService experienceLessonService,
-            AgentMcpSelectionService mcpSelectionService) {
+            AgentMcpSelectionService mcpSelectionService,
+            AgentMapper agentMapper,
+            AgentAiChainPresetMapper chainPresetMapper) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.modelEntryCipher = modelEntryCipher;
@@ -231,6 +242,8 @@ public class AgentAiServiceImpl implements AgentAiService {
         this.embeddingClassService = embeddingClassService;
         this.experienceLessonService = experienceLessonService;
         this.mcpSelectionService = mcpSelectionService;
+        this.agentMapper = agentMapper;
+        this.chainPresetMapper = chainPresetMapper;
     }
 
     @Override
@@ -742,23 +755,67 @@ public class AgentAiServiceImpl implements AgentAiService {
     /**
      * 生效链：规则在 agent-core 的 {@code ModelChainResolver}（Issue #132，与 admin
      * {@code AdminAiModelEntryServiceImpl.selectionChain} 共用同一份实现，不再两处手写）。
-     * 入口平台化后（Issue #210 UoW-6）链是平台链、与对话所属 agent 无关：
-     * 首元是主用（来源标注层默认，否则平台原生默认），主用坏掉整链为空（ADR-0004）；
-     * mode 非空时先按模式过滤（备援封闭在模式内）；为空时即整链。
-     * {@code agentId} 参数保留待 UoW-7 链预设引用时收口。
+     * 链预设落地后（Issue #210 UoW-7）链由对话所属 agent 引用的对话链预设决定：
+     * 按预设的有序 entry ids 取启用入口交 {@code resolvePresetChain} 组链；首元是
+     * 主用（预设序内第一个默认），主用坏掉整链为空（ADR-0004）；mode 非空时先按
+     * 模式过滤（备援封闭在模式内）；为空时即整链。agent 未引用预设时链为空。
+     * UoW-6 的来源分层过渡组链整体退役，{@code source_agent_id} 不再参与组链。
      */
     private List<AgentModelSelection> loadModelChain(long agentId, String mode) {
         return loadModelChainLinks(agentId, mode).stream().map(ChainLink::selection).toList();
     }
 
     private List<ChainLink> loadModelChainLinks(long agentId, String mode) {
-        return ModelChainResolver.resolveChain(
-                        snapshots(AgentModelChainUtils.enabledEntriesByProvenance(modelEntryMapper, true)),
-                        snapshots(AgentModelChainUtils.enabledEntriesByProvenance(modelEntryMapper, false)),
-                        mode)
-                .stream()
+        List<Long> entryIds = referencedEntryIds(agentId);
+        if (entryIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, AgentAiModelEntryEntity> entriesById = new HashMap<>();
+        for (AgentAiModelEntryEntity entry : modelEntryMapper.selectBatchIds(entryIds)) {
+            entriesById.put(entry.getId(), entry);
+        }
+        List<AgentAiModelEntryEntity> members = new ArrayList<>();
+        for (Long entryId : entryIds) {
+            AgentAiModelEntryEntity entry = entriesById.get(entryId);
+            if (entry != null && Boolean.TRUE.equals(entry.getEnabled())) {
+                members.add(entry);
+            }
+        }
+        return ModelChainResolver.resolvePresetChain(snapshots(members), mode).stream()
                 .map(link -> new ChainLink(link.id(), link.displayName(), link.selection()))
                 .toList();
+    }
+
+    /**
+     * agent 引用预设的有序成员入口 id：agent 不存在、未引用预设或预设已删除时为空
+     * （＝无链，诚实无模型）。脏 JSON 按无成员处理并记 warn，不阻断对话主流程。
+     */
+    private List<Long> referencedEntryIds(long agentId) {
+        AgentEntity agent = agentMapper.selectById(agentId);
+        if (agent == null || agent.getChainPresetId() == null) {
+            return List.of();
+        }
+        AgentAiChainPresetEntity preset = chainPresetMapper.selectById(agent.getChainPresetId());
+        if (preset == null || !StringUtils.hasText(preset.getEntryIds())) {
+            return List.of();
+        }
+        try {
+            List<Long> parsed =
+                    objectMapper.readValue(preset.getEntryIds(), new TypeReference<List<Long>>() {});
+            if (parsed == null || parsed.isEmpty()) {
+                return List.of();
+            }
+            LinkedHashSet<Long> unique = new LinkedHashSet<>();
+            for (Long entryId : parsed) {
+                if (entryId != null) {
+                    unique.add(entryId);
+                }
+            }
+            return new ArrayList<>(unique);
+        } catch (JsonProcessingException ex) {
+            log.warn("chain preset {} has malformed entry_ids, treated as empty", preset.getId(), ex);
+            return List.of();
+        }
     }
 
     /** 实体→中立快照：解密在本侧完成（解不出为 null），规则引擎只吃快照。 */
