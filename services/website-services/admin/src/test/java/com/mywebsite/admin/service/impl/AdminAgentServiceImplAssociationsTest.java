@@ -16,10 +16,10 @@ import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentDetailDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentKindUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListItemDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListQuery;
+import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentUpdateRequest;
 import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.entity.AdminAiChainPresetEntity;
 import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
-import com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.mapper.AdminAiChainPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
@@ -36,6 +36,7 @@ import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.page.PageResult;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -98,13 +99,6 @@ class AdminAgentServiceImplAssociationsTest {
         return entity;
     }
 
-    private static AdminAiKnowledgeBaseSubscriptionEntity subscription(long agentId, long baseId) {
-        AdminAiKnowledgeBaseSubscriptionEntity row = new AdminAiKnowledgeBaseSubscriptionEntity();
-        row.setAgentId(agentId);
-        row.setBaseId(baseId);
-        return row;
-    }
-
     @Test
     void listSitesAssemblesSubscriptionCountsAndPresetNames() {
         AdminAgentEntity withAll = agent(1L, "AI_ONLY", 11L, 21L);
@@ -113,11 +107,11 @@ class AdminAgentServiceImplAssociationsTest {
         page.setRecords(List.of(withAll, bare));
         page.setTotal(2);
         when(adminAgentMapper.selectPage(any(), any())).thenReturn(page);
-        // agent 1 三行订阅（含一行创建者行，口径只数行数）、agent 2 一行。
-        when(subscriptionMapper.selectList(any()))
+        // agent 1 三行订阅（含一行创建者行，口径只数行数）、agent 2 一行（聚合查询结果行）。
+        when(subscriptionMapper.selectMaps(any()))
                 .thenReturn(List.of(
-                        subscription(1L, 101L), subscription(1L, 102L), subscription(1L, 103L),
-                        subscription(2L, 201L)));
+                        Map.of("agent_id", 1L, "subscription_count", 3L),
+                        Map.of("agent_id", 2L, "subscription_count", 1L)));
         AdminAiChainPresetEntity chainPreset = new AdminAiChainPresetEntity();
         chainPreset.setId(11L);
         chainPreset.setName("平台默认链");
@@ -154,7 +148,7 @@ class AdminAgentServiceImplAssociationsTest {
         page.setRecords(List.of(stale));
         page.setTotal(1);
         when(adminAgentMapper.selectPage(any(), any())).thenReturn(page);
-        when(subscriptionMapper.selectList(any())).thenReturn(List.of());
+        when(subscriptionMapper.selectMaps(any())).thenReturn(List.of());
         when(chainPresetMapper.selectBatchIds(anyCollection())).thenReturn(List.of());
         when(configPresetMapper.selectBatchIds(anyCollection())).thenReturn(List.of());
 
@@ -182,6 +176,8 @@ class AdminAgentServiceImplAssociationsTest {
 
     @Test
     void updateKindRejectsValueOutsideClosedEnum() {
+        when(adminAgentMapper.selectById(5L)).thenReturn(agent(5L, "SITE", null, null));
+
         assertThatThrownBy(() -> service.updateKind(5L, new AdminAgentKindUpdateRequest("HYBRID", 0)))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
@@ -190,6 +186,47 @@ class AdminAgentServiceImplAssociationsTest {
                             assertThat(ex.getMessageKey()).isEqualTo(AdminAgentMessageKeys.AGENT_KIND_INVALID);
                         });
         verify(adminAgentMapper, never()).updateById(any(AdminAgentEntity.class));
+    }
+
+    @Test
+    void updateKindReturnsNotFoundForMissingAgentEvenWithInvalidKind() {
+        // 校验顺序：先验存在再验枚举——agent 不存在时即使 kind 非法也先 404。
+        when(adminAgentMapper.selectById(404L)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.updateKind(404L, new AdminAgentKindUpdateRequest("HYBRID", 0)))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
+        verify(adminAgentMapper, never()).updateById(any(AdminAgentEntity.class));
+    }
+
+    @Test
+    void updateSiteRejectsMissingConfigPreset() {
+        // 全量更新带不存在的配置预设引用：与专属端点同口径抛 404，不落库撞外键变 500。
+        AdminAgentEntity entity = agent(6L, "SITE", null, null);
+        when(adminAgentMapper.selectById(6L)).thenReturn(entity);
+        when(configPresetMapper.selectById(404L)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.updateSite(
+                        6L, new AdminAgentUpdateRequest("Renamed", null, null, null, 404L, 0, null)))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
+        verify(adminAgentMapper, never()).updateById(any(AdminAgentEntity.class));
+    }
+
+    @Test
+    void listSitesClampsPageNumToAtLeastOne() {
+        Page<AdminAgentEntity> page = new Page<>(1, 20);
+        page.setRecords(List.of());
+        page.setTotal(0);
+        when(adminAgentMapper.selectPage(any(), any())).thenReturn(page);
+
+        service.listSites(new AdminAgentListQuery(0, 20, null, null));
+
+        ArgumentCaptor<Page> captor = ArgumentCaptor.forClass(Page.class);
+        verify(adminAgentMapper).selectPage(captor.capture(), any());
+        assertThat(captor.getValue().getCurrent()).isEqualTo(1L);
     }
 
     @Test

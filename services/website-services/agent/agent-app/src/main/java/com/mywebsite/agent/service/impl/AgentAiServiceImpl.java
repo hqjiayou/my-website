@@ -837,10 +837,6 @@ public class AgentAiServiceImpl implements AgentAiService {
      * 模式过滤（备援封闭在模式内）；为空时即整链。agent 未引用预设时链为空。
      * UoW-6 的来源分层过渡组链整体退役，{@code source_agent_id} 不再参与组链。
      */
-    private List<AgentModelSelection> loadModelChain(long agentId, String mode) {
-        return loadModelChainLinks(agentId, mode).stream().map(ChainLink::selection).toList();
-    }
-
     private List<ChainLink> loadModelChainLinks(long agentId, String mode) {
         List<Long> entryIds = referencedEntryIds(agentId);
         if (entryIds.isEmpty()) {

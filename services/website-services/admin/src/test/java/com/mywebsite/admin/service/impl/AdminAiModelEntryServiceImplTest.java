@@ -6,12 +6,20 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mywebsite.admin.constant.AdminAiModelEntryMessageKeys;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryDto;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryWriteRequest;
+import com.mywebsite.admin.entity.AdminAiChainPresetEntity;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
+import com.mywebsite.admin.mapper.AdminAiChainPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.service.AgentEmbeddingClassService;
+import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.infra.crypto.ModelEntryCipher;
 import java.util.List;
@@ -45,12 +53,16 @@ class AdminAiModelEntryServiceImplTest {
     @Mock
     private com.mywebsite.admin.service.AdminAiChainPresetService chainPresetService;
 
+    @Mock
+    private AdminAiChainPresetMapper chainPresetMapper;
+
     private AdminAiModelEntryServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new AdminAiModelEntryServiceImpl(
-                modelEntryMapper, cipher, embeddingClassService, chainPresetService);
+                modelEntryMapper, cipher, embeddingClassService, chainPresetService,
+                chainPresetMapper, new ObjectMapper());
         // 无默认入口的用例走不到解密，stub 放宽避免 strict stub 误报
         lenient().when(cipher.decrypt(any())).thenAnswer(invocation -> {
             String raw = invocation.getArgument(0);
@@ -325,5 +337,50 @@ class AdminAiModelEntryServiceImplTest {
         assertThat(captor.getValue().getAgentId()).isNull();
         assertThat(captor.getValue().getSourceAgentId()).isNull();
         assertThat(dto.sourceAgentId()).isNull();
+    }
+
+    private static AdminAiChainPresetEntity presetWithMembers(long id, String entryIdsJson) {
+        AdminAiChainPresetEntity preset = new AdminAiChainPresetEntity();
+        preset.setId(id);
+        preset.setName("preset-" + id);
+        preset.setPurpose("CHAT");
+        preset.setEntryIds(entryIdsJson);
+        return preset;
+    }
+
+    @Test
+    void deleteEntryRejectsWhenReferencedByChainPreset() {
+        // 与删预设的引用守卫对称：入口仍被链预设引用时拦截，不留悬空成员。
+        when(modelEntryMapper.selectById(7L)).thenReturn(entry(7L, null, "openai:gpt-x", false));
+        when(chainPresetMapper.selectList(any()))
+                .thenReturn(List.of(
+                        presetWithMembers(901L, "[3, 7, 9]"),
+                        presetWithMembers(902L, "[7]"),
+                        presetWithMembers(903L, "[3, 9]")));
+
+        assertThatThrownBy(() -> service.deleteEntry(7L))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> {
+                            assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode());
+                            assertThat(ex.getMessageKey())
+                                    .isEqualTo(AdminAiModelEntryMessageKeys.ENTRY_REFERENCED);
+                            assertThat(ex.getMessageArgs()).containsExactly(2L);
+                        });
+        verify(modelEntryMapper, never()).updateById(any(AdminAiModelEntryEntity.class));
+        verify(modelEntryMapper, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteEntryDeletesWhenNoPresetReferencesIt() {
+        AdminAiModelEntryEntity target = entry(7L, null, "openai:gpt-x", false);
+        when(modelEntryMapper.selectById(7L)).thenReturn(target);
+        when(chainPresetMapper.selectList(any()))
+                .thenReturn(List.of(presetWithMembers(901L, "[3, 9]")));
+
+        service.deleteEntry(7L);
+
+        verify(modelEntryMapper).updateById(target);
+        verify(modelEntryMapper).deleteById(7L);
     }
 }

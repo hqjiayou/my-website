@@ -302,13 +302,16 @@ public class GatewayV1ServiceImpl implements GatewayV1Service {
     private record GatewayChainLink(Long entryId, Long agentId, String mode, AgentModelSelection selection) {}
 
     /**
-     * alias 命中入口为主用（不要求其为默认入口），备援沿用 {@link AgentModelChainUtils} 的
-     * 作用域规则（主用的 agentId 作用域 × mode），只保留 {@code openai:} 形状（混合 provider
-     * 的备援走不了同一套上游协议）。与改造前的 {@code buildOpenAiChain} 同规则，只是
-     * 保留每条的入口 id／agentId／mode 供记账归属。
+     * alias 命中入口为主用（不要求其为默认入口），备援为平台内同 {@code mode} 的
+     * 其余启用入口，只保留 {@code openai:} 形状（混合 provider 的备援走不了同一套
+     * 上游协议）。保留每条的入口 id／agentId／mode 供记账归属。
+     *
+     * <p>入口平台化（Flyway V62）后 {@code agent_id} 停写恒空，原「主用 agentId
+     * 作用域 × mode」的备援分支已无数据可命中并删除——现行备援即全平台同模式，
+     * 与改造前该分支不命中时的行为一致。
      *
      * <p>主用解密不出 key 时直接返回空链：客户端用 alias 显式点了这个模型，key 坏掉不能静默换成
-     * 备援顶替成另一个模型去回应（与站点 chat {@code loadModelChain} 的「坏主用不被顶替」同一立场）。
+     * 备援顶替成另一个模型去回应（与站点 chat {@code loadModelChainLinks} 的「坏主用不被顶替」同一立场）。
      */
     private List<GatewayChainLink> buildOpenAiChain(AgentAiModelEntryEntity primary) {
         AgentModelSelection primarySelection = AgentModelChainUtils.toModelSelection(primary, modelEntryCipher);
@@ -318,15 +321,6 @@ public class GatewayV1ServiceImpl implements GatewayV1Service {
         List<GatewayChainLink> chain = new ArrayList<>();
         chain.add(linkOf(primary, primarySelection));
         String mode = AgentModelChainUtils.entryMode(primary);
-        Long agentId = primary.getAgentId();
-        if (agentId != null) {
-            appendLinks(
-                    chain,
-                    AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId).stream()
-                            .filter(entry -> mode.equals(AgentModelChainUtils.entryMode(entry)))
-                            .toList(),
-                    primary.getId());
-        }
         appendLinks(
                 chain,
                 AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null).stream()

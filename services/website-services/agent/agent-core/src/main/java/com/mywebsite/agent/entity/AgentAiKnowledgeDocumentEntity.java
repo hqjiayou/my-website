@@ -12,7 +12,7 @@ public class AgentAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     /**
      * 所属知识空间（V29 列，admin 侧写入）。文档只属一个空间：站点侧一切文档
      * 可见性过滤按本列对 agent 可达空间集（创建∪订阅）判定（Issue #209 UoW-4
-     * 定稿）；文档原 {@code agent_id} 列已随 UoW-5 的 Flyway V62 删除。
+     * 定稿）；文档原 {@code agent_id} 列已随 UoW-5 的 Flyway V64 删除。
      */
     private Long baseId;
 
