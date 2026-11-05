@@ -59,6 +59,10 @@ class RetrievalUpsertRequest(BaseModel):
     embedding_classes: list[EmbeddingClassCredentials] | None = Field(
         default=None, alias="embeddingClasses"
     )
+    # Issue #202 UoW-2：true 表示本次 embeddingClasses 是该分区的完整登记类集，
+    # 写完后可按此集差集清理已注销类的残留行。缺省/false（fill-missing 子集写、
+    # 旧版 Java）一律不清理——子集写按差集清理会误删其它类（#126 不变量）。
+    embedding_classes_complete: bool = Field(default=False, alias="embeddingClassesComplete")
     segments: list[RetrievalSegment] | None = None
     tables: list[RetrievalTable] | None = None
 

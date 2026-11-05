@@ -287,6 +287,19 @@ def class_row_delete_sql(table: str, *, include_legacy_nulls: bool = False) -> s
     )
 
 
+def prune_delete_sql(table: str) -> str:
+    """差集清理（Issue #202 UoW-2）：删本档在该表中、模型名不在保留集内的行。
+
+    只由「完整类集」写入触发。embedding_model 为 NULL 的存量行比较结果为
+    NULL、不会被删（归属未知，照 include_legacy_nulls 的保守口径保留）。
+    """
+    qualified = qualified_chunks_table(table)
+    return (
+        f"DELETE FROM {qualified} WHERE agent_id = $1 AND source_id = $2 "
+        "AND NOT (embedding_model = ANY($3::text[]))"
+    )
+
+
 def _class_index_names(table: str) -> tuple[str, str]:
     """遗留表沿用原来的索引名。新维度表用自己的名字，避免和 chunks 冲突。"""
     qualified_chunks_table(table)
@@ -404,6 +417,10 @@ class RetrievalStore(Protocol):
     ) -> int: ...
 
     async def delete_document(self, *, agent_id: str, source_id: str) -> None: ...
+
+    async def prune_document_classes(
+        self, *, agent_id: str, source_id: str, keep_models: list[str]
+    ) -> None: ...
 
     async def replace_sheet_rows(
         self,
@@ -834,6 +851,21 @@ class PgVectorRetrievalStore:
                     agent_id,
                     source_id,
                 )
+
+    async def prune_document_classes(
+        self, *, agent_id: str, source_id: str, keep_models: list[str]
+    ) -> None:
+        """删掉本档在所有类表中、不属于 keep_models 的行（已注销类的残留）。
+
+        只删 chunks 类表，不动 sheet_rows（结构化行与嵌入类无关）。
+        keep 名单先经 embedding_class_name 规范化，与写入时的类键同口径。
+        """
+        keep = [embedding_class_name(model) for model in keep_models]
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            tables = await self._list_class_tables(conn)
+            for table in tables:
+                await conn.execute(prune_delete_sql(table), agent_id, source_id, keep)
 
     async def search(
         self,

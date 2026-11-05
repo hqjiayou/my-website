@@ -717,7 +717,8 @@ async def test_service_retrieve_context_degrades_on_store_failure() -> None:
     assert service.last_error is None
     assert await service.retrieve_context(agent_id="1", query="q") == []
     assert service.degraded is True
-    assert service.last_error == "RuntimeError"
+    # Issue #202 UoW-3：向量首查失败走字面降级（本 store 字面无命中），记不完整。
+    assert service.last_error == "EmbeddingError"
     assert await service.retrieve_context(agent_id="1", query="q") == []
     assert service.degraded is False
     assert service.last_error is None
@@ -985,10 +986,12 @@ def test_retrieval_search_degrades_when_embedding_fails() -> None:
     assert response.status_code == 200
     assert response.json() == {"hits": [], "degraded": True}
     assert service.degraded is True
-    assert service.last_error == "RuntimeError"
+    # Issue #202 UoW-3：嵌入失败走纯字面降级（此处字面无命中），last_error 记为
+    # 不完整（EmbeddingError），不再是整次抛错的 RuntimeError。
+    assert service.last_error == "EmbeddingError"
 
 
-def test_vector_failure_does_not_return_lexical_hits() -> None:
+def test_vector_failure_falls_back_to_lexical_hits() -> None:
     class VectorDown(FakeStore):
         def __init__(self) -> None:
             super().__init__()
@@ -1009,12 +1012,23 @@ def test_vector_failure_does_not_return_lexical_hits() -> None:
         headers=TOKEN_HEADER,
         json={"agentId": "7", "query": "XJ-900", "topK": 4},
     )
+    # Issue #202 UoW-3：向量查询故障时字面通道兜底，命中照常返回但 degraded 为真。
     assert response.status_code == 200
-    assert response.json() == {"hits": [], "degraded": True}
-    assert store.lexical_calls == 0
+    assert response.json() == {
+        "hits": [
+            {
+                "sourceId": "kb:code",
+                "chunkIndex": 0,
+                "score": 1.0,
+                "content": "model XJ-900 specs",
+            }
+        ],
+        "degraded": True,
+    }
+    assert store.lexical_calls == 1
 
 
-def test_embedder_failure_does_not_call_lexical_search() -> None:
+def test_embedder_failure_falls_back_to_lexical_search() -> None:
     class LexicalReady(FakeStore):
         def __init__(self) -> None:
             super().__init__()
@@ -1036,9 +1050,20 @@ def test_embedder_failure_does_not_call_lexical_search() -> None:
         headers=TOKEN_HEADER,
         json={"agentId": "7", "query": "XJ-900", "topK": 4},
     )
+    # Issue #202 UoW-3：嵌入故障时字面通道兜底（覆盖率 1.0），degraded 为真。
     assert response.status_code == 200
-    assert response.json() == {"hits": [], "degraded": True}
-    assert store.lexical_calls == 0
+    assert response.json() == {
+        "hits": [
+            {
+                "sourceId": "kb:code",
+                "chunkIndex": 0,
+                "score": 1.0,
+                "content": "model XJ-900 specs",
+            }
+        ],
+        "degraded": True,
+    }
+    assert store.lexical_calls == 1
 
 
 def test_like_literal_pattern_escapes_wildcards() -> None:
