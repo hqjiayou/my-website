@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -74,6 +76,9 @@ class AdminAiKnowledgeServiceImplTest {
     private com.mywebsite.admin.mapper.AdminAiKnowledgeBaseLinkMapper linkMapper;
 
     @Mock
+    private com.mywebsite.admin.mapper.AdminAiKnowledgeRetrievalSyncIssueMapper syncIssueMapper;
+
+    @Mock
     private com.mywebsite.infra.service.ObjectStorageService objectStorageService;
 
     @Mock
@@ -92,7 +97,8 @@ class AdminAiKnowledgeServiceImplTest {
                 new com.mywebsite.infra.properties.StorageProperties(),
                 baseMapper,
                 linkMapper,
-                adminAiStreamExecutor);
+                adminAiStreamExecutor,
+                syncIssueMapper);
     }
 
     @Test
@@ -254,6 +260,146 @@ class AdminAiKnowledgeServiceImplTest {
         assertThat(overview.sites().get(0).failedDocuments()).isEqualTo(1);
         assertThat(overview.recentFailures()).hasSize(1);
         assertThat(overview.recentFailures().get(0).indexError()).isEqualTo("boom");
+    }
+
+    // ------------------------------------------------------------------
+    // Issue #203：同步问题行（tombstone / 链接分区滞后 / 定时重试 / 总览计数）
+    // ------------------------------------------------------------------
+
+    private static com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity syncIssue(
+            long id, long agentId, String sourceId, String op, int attempts) {
+        com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity issue =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity();
+        issue.setId(id);
+        issue.setAgentId(agentId);
+        issue.setSourceId(sourceId);
+        issue.setOp(op);
+        issue.setAttempts(attempts);
+        return issue;
+    }
+
+    @Test
+    void linkBaseFanOutFailureRecordsUpsertIssue() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(5L);
+        base.setAgentId(1L);
+        when(baseMapper.selectById(5L)).thenReturn(base);
+        com.mywebsite.admin.entity.AdminAgentEntity targetSite = new com.mywebsite.admin.entity.AdminAgentEntity();
+        targetSite.setId(2L);
+        when(adminAgentMapper.selectById(2L)).thenReturn(targetSite);
+        when(linkMapper.selectOne(any())).thenReturn(null);
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(doc));
+        when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of());
+        doThrow(new RuntimeException("python down")).when(agentClient).upsertRetrievalDocument(any());
+        when(syncIssueMapper.selectOne(any())).thenReturn(null);
+
+        service.linkBase(5L, 2L);
+
+        verify(syncIssueMapper).insert(argThat((com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity issue) ->
+                issue.getAgentId() == 2L
+                        && "kb:11".equals(issue.getSourceId())
+                        && com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT
+                                .equals(issue.getOp())));
+    }
+
+    @Test
+    void unlinkBaseDeleteFailureRecordsTombstone() {
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
+        link.setId(7L);
+        when(linkMapper.selectOne(any())).thenReturn(link);
+        when(knowledgeMapper.selectList(any()))
+                .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
+        doThrow(new RuntimeException("python down"))
+                .when(agentClient)
+                .deleteRetrievalDocument(eq("2"), eq("kb:11"));
+        when(syncIssueMapper.selectOne(any())).thenReturn(null);
+
+        service.unlinkBase(5L, 2L);
+
+        verify(syncIssueMapper).insert(argThat((com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity issue) ->
+                issue.getAgentId() == 2L
+                        && "kb:11".equals(issue.getSourceId())
+                        && com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE
+                                .equals(issue.getOp())));
+    }
+
+    @Test
+    void retryDeletesTombstoneAfterSuccessfulDelete() {
+        when(syncIssueMapper.selectList(any())).thenReturn(List.of(syncIssue(
+                3L,
+                2L,
+                "kb:11",
+                com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE,
+                1)));
+
+        service.retryRetrievalSyncIssues();
+
+        verify(agentClient).deleteRetrievalDocument("2", "kb:11");
+        verify(syncIssueMapper).deleteById(3L);
+    }
+
+    @Test
+    void retryBumpsAttemptsWhenDeleteStillFails() {
+        when(syncIssueMapper.selectList(any())).thenReturn(List.of(syncIssue(
+                3L,
+                2L,
+                "kb:11",
+                com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE,
+                1)));
+        doThrow(new RuntimeException("still down"))
+                .when(agentClient)
+                .deleteRetrievalDocument(any(), any());
+
+        service.retryRetrievalSyncIssues();
+
+        verify(syncIssueMapper).updateById(argThat((com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity issue) -> issue.getAttempts() == 2));
+        verify(syncIssueMapper, never()).deleteById(3L);
+    }
+
+    @Test
+    void retryDropsUpsertIssueWhenDocumentIsGone() {
+        when(syncIssueMapper.selectList(any())).thenReturn(List.of(syncIssue(
+                4L,
+                2L,
+                "kb:99",
+                com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT,
+                0)));
+        // knowledgeMapper.selectById 未打桩：默认 null，文档已不存在，问题行应作废
+        service.retryRetrievalSyncIssues();
+
+        verify(syncIssueMapper).deleteById(4L);
+        verify(agentClient, never()).upsertRetrievalDocument(any());
+    }
+
+    @Test
+    void overviewCountsSyncIssues() {
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of());
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of());
+        var upsert = syncIssue(
+                1L,
+                2L,
+                "kb:11",
+                com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT,
+                0);
+        upsert.setCreatedAt(java.time.OffsetDateTime.parse("2026-11-05T00:00:00Z"));
+        var delete = syncIssue(
+                2L,
+                2L,
+                "kb:12",
+                com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE,
+                3);
+        delete.setCreatedAt(java.time.OffsetDateTime.parse("2026-11-05T01:00:00Z"));
+        when(syncIssueMapper.selectList(any())).thenReturn(List.of(upsert, delete));
+
+        var overview = service.knowledgeOverview();
+
+        assertThat(overview.laggingLinkPartitions()).isEqualTo(1);
+        assertThat(overview.pendingRetrievalDeletes()).isEqualTo(1);
+        assertThat(overview.oldestSyncIssueAt())
+                .isEqualTo(java.time.OffsetDateTime.parse("2026-11-05T00:00:00Z"));
     }
 
     @Test

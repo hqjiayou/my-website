@@ -83,7 +83,13 @@ public final class AdminAiKnowledgeDtos {
             long staleDocuments,
             long originalBytes,
             List<AdminAiKnowledgeAgentStatDto> sites,
-            List<AdminAiKnowledgeFailureDto> recentFailures) {}
+            List<AdminAiKnowledgeFailureDto> recentFailures,
+            /** Issue #203：链接分区扇出失败待重试的（文档×分区）数——消费站点实际检索可能缺这些文档。 */
+            long laggingLinkPartitions,
+            /** Issue #203：删除失败待重试的 tombstone 数——这些文档已删但向量残留仍可能被命中。 */
+            long pendingRetrievalDeletes,
+            /** 最早一条未解决同步问题的时间；无问题时为 null。 */
+            java.time.OffsetDateTime oldestSyncIssueAt) {}
 
     public record AdminAiKnowledgeAgentStatDto(
             Long agentId,
