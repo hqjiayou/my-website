@@ -2,6 +2,7 @@ package com.mywebsite.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -107,7 +108,13 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
             conversation.setAgentUserId(agentUserId);
             history = List.of();
         }
-        return new ChatPreparation(conversation, history, loadPromptProfile(agentId), readTodos(conversation));
+        AgentAiConfigPresetEntity preset = resolveConfigPreset(agentId);
+        return new ChatPreparation(
+                conversation,
+                history,
+                toPromptProfile(preset),
+                readTodos(conversation),
+                presetSkillIds(preset));
     }
 
     @Override
@@ -556,13 +563,37 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
         }
     }
 
-    private AgentPromptProfile loadPromptProfile(long agentId) {
-        AgentAiConfigPresetEntity preset = resolveConfigPreset(agentId);
+    private static AgentPromptProfile toPromptProfile(AgentAiConfigPresetEntity preset) {
         if (preset == null) {
             return null;
         }
         Double temperature = preset.getTemperature() == null ? null : preset.getTemperature().doubleValue();
         return new AgentPromptProfile(preset.getSystemPrompt(), temperature);
+    }
+
+    /**
+     * 预设默认 skill 集（Issue #211 UoW-9）：{@code default_skill_ids} 是有序 JSON
+     * 数组文本，解析后原序透传——未知 id 不在 Java 侧过滤，处置政策只有一个点
+     * （Python {@code agent_skills_unknown_policy}）。无预设、空集或脏 JSON 一律
+     * 返回 null：请求 skills 字段缺席，Python env 默认兜底逐字不变；脏 JSON 记
+     * warn，不拖垮对话主流程。
+     */
+    private List<String> presetSkillIds(AgentAiConfigPresetEntity preset) {
+        if (preset == null || !StringUtils.hasText(preset.getDefaultSkillIds())) {
+            return null;
+        }
+        try {
+            List<String> parsed = objectMapper.readValue(
+                    preset.getDefaultSkillIds(), new TypeReference<List<String>>() {});
+            List<String> skills = parsed.stream().filter(Objects::nonNull).toList();
+            return skills.isEmpty() ? null : List.copyOf(skills);
+        } catch (JsonProcessingException ex) {
+            log.warn(
+                    "config preset {} has malformed default_skill_ids, treated as no preset skills",
+                    preset.getId(),
+                    ex);
+            return null;
+        }
     }
 
     /**
