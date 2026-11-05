@@ -78,7 +78,12 @@ class AgentAiChatMvcTest extends AbstractAgentSpringBootTest {
                         + " VALUES ('Test Key', 'google:test-model', 'test-api-key', 10, TRUE, TRUE, 'KEY')");
         // 链预设口径（Issue #210 UoW-7）：链由 agent 引用的预设决定，把刚种的入口装进
         // 预设 9001 并让 agent 10 引用，否则组链为空、请求到不了被 mock 的 agentClient。
+        // 注意：agent 行须真实存在——组链先查 agent 再取预设；旧两层口径只按入口 agent_id
+        // 找入口、不读 agent 行，所以此前不需种 agent 行；预设口径下缺行即链空（503）。
         Long seededEntryId = jdbcTemplate.queryForObject("SELECT id FROM agent_model_entry", Long.class);
+        jdbcTemplate.update("DELETE FROM agent WHERE id = 10");
+        jdbcTemplate.update(
+                "INSERT INTO agent (id, agent_name, agent_type, status) VALUES (10, 'Test Agent', 'PERSONAL', 'ACTIVE')");
         jdbcTemplate.update("DELETE FROM agent_ai_chain_preset");
         jdbcTemplate.update(
                 "INSERT INTO agent_ai_chain_preset (id, name, purpose, entry_ids) VALUES (9001, 'test-chain', 'CHAT', ?)",
