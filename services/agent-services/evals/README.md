@@ -44,6 +44,7 @@ uv run python -m agent_services.evals.run_answer_eval [--out <dir|file>]
 | `--lessons-file <path>` | 经验条目 JSON 数组，形状与对话请求字段 `experienceLessons` 一致：`[{"lessonNo": 6, "lesson": "…"}]`；经组装段注入每轮。空数组是合法的「关」臂；文件缺失/JSON 坏/条目形状不对一律报错退出 | 无条目 |
 | `--distractors` | 并入 `distractors.json` 给检索与引用精度施压 | 不并入 |
 | `--baseline <report.json>` | 与既有报告逐题对照：本轮报告附 `baselineDiff`（指标 delta、pass 翻转、单边题），有 pass→fail 翻转时退出码 3；基线文件坏/缺失先于跑分报错退出 | 不对照 |
+| `--pace-seconds <float>` | 题与题之间的睡眠秒数（首题前不睡），用于贴合 provider 限速（如免费层 RPM）；启用（>0）时报告顶层记 `paceSeconds`、Markdown 报告头同步标注 | `0`（不睡，行为与此前一致） |
 | `--out` | 报告输出目录或 `.json`/`.md` 路径 | `evals/reports/` 下时间戳文件 |
 
 四参数可叠加（如 golden＋默认 skills、skill_qa＋对应 skills、golden＋lessons
@@ -53,6 +54,25 @@ uv run python -m agent_services.evals.run_answer_eval [--out <dir|file>]
 
 skills 解析目录与单轮 skill 指令字数上限取进程 Settings
 （`AGENT_SKILLS_DIR` / `AGENT_SKILLS_MAX_INSTRUCTION_CHARS`），与生产同源。
+
+### Runner 工具面（#204 保真）
+
+每轮 run 的工具面与生产对齐两件（#204 UoW-1）：
+
+- **文档枚举**：`build_knowledge_toolset` 注入一个由本轮 `loaded_corpus`
+  驱动的假 Java client（`CorpusKnowledgeClient`，在 runner 内），使
+  `list_knowledge_documents` 与生产一样注册可用，集合级题可走「枚举
+  全集→逐份抽取」的生产打法。假 client 语义对齐 Java internal 端点：
+  keyword 按标题子串过滤、limit 夹 1..200、offset 下限 0、
+  `truncated = offset + len(items) < total`；枚举范围与索引范围一致
+  （`--distractors` 并入时同步包含）。与生产的刻意差异：items 的
+  `sourceId` 用 corpus 的 `source_id`（而非生产的 `kb:<id>`），因为
+  eval 内检索/引用口径用的就是 source_id，枚举 id 必须与引用面对齐；
+  `id` 用 corpus 序号填充；语料没有的元数据（`sourceFormat` /
+  `originalFilename` / `createdAt` / `updatedAt`）为 None，按格式或
+  时间过滤时返回空集，不伪造。
+- **todo 工具集**：按生产默认（`AGENT_ENABLE_TODO_TOOLS=True`）每题
+  注册一套，每题新建 `TodoStore`，状态不跨题泄漏。
 
 ## 判分口径
 
@@ -225,6 +245,23 @@ pass 状态与 status（`pass_to_fail` / `fail_to_pass` / `unchanged` /
 unscored 只用于异常/超时这类**没有结果**的题。整轮全部 unscored 时
 按 BLOCKED 等价处理：报告照常落盘，CLI 打印 `BLOCKED` 并退出 2；
 部分 unscored 时整轮继续，退出码语义不变。
+
+### blocked 口径（#204 UoW-2，与 unscored 并列）
+
+`run_chat` 返回 ChatBlocked 且 `error_code` 为
+`EXTERNAL_DEPENDENCY_BLOCKED` 时（429、上游故障等外部依赖失败——本轮
+根本没产生回答），该题记 **blocked**：报告行带 `blocked: true`（并保留
+`blockedReason` / `errorCode` / `retrieved` 等既有字段），四指标与
+`passed` 全为 None；汇总只统计已计分题，blocked 另在
+`summary.blockedCount` / `summary.blockedCases` 单列（只在存在 blocked
+行时出现），Markdown 报告另有 `## Blocked` 段。`--baseline` diff 中
+blocked 与 unscored 同级：任一侧 blocked 都单列（状态 `blocked` /
+`baseline_blocked`）、不算 pass 翻转。退出码：整轮**无任何已计分题**
+（全部 blocked、全部 unscored 或两者混合）时按 BLOCKED 退出 2；部分
+blocked 时整轮继续，退出码语义不变。上文 unscored 口径中「ChatBlocked
+照常计分」自 #204 起仅适用于**其他** error_code（如预算超限
+`AGENT_BUDGET_EXCEEDED`）：那类题是产生了可判结果，计分口径逐字不变；
+只有 EXTERNAL_DEPENDENCY_BLOCKED 这一类改记 blocked。
 
 ## 对抗题集（#191 guardrails 执行化验收）
 

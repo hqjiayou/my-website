@@ -30,6 +30,14 @@ evals/README.md。
 支撑多轮题；经验敏感题集 ``evals/experience_qa.jsonl`` 配合
 ``--lessons-file evals/fixtures/lessons_sample.json`` 做关/开两轮对照。
 口径见 scoring 与 evals/README.md。
+
+Runner 保真与口径修复（#204）：工具面与生产对齐——每轮默认接通由本轮
+语料驱动的假 Java client（``CorpusKnowledgeClient``，使
+``list_knowledge_documents`` 注册）与 todo 工具集（生产默认开启、每题
+独立 TodoStore）；provider 受阻（ChatBlocked 且 error_code 为
+EXTERNAL_DEPENDENCY_BLOCKED）改记 blocked，与 unscored 同级（不计分、
+不进均值、整轮无已计分题时退出码 2），其他 error_code 照常计分；
+``--pace-seconds`` 在题与题之间留节奏（首题前不睡、缺省 0 不睡）。
 """
 
 from __future__ import annotations
@@ -67,6 +75,7 @@ from agent_services.agent.skills import (
     list_skill_catalog,
     resolve_skills,
 )
+from agent_services.agent.todo_tools import TodoStore, build_todo_toolset
 from agent_services.config import RETRIEVAL_MIN_SCORE_DEFAULT, Settings
 from agent_services.evals.scoring import (
     BEHAVIOR_CHECK_NAMES,
@@ -184,6 +193,82 @@ def load_corpus(path: Path | None = None) -> list[CorpusDoc]:
             )
         )
     return docs
+
+
+class CorpusKnowledgeClient:
+    """由本轮 eval 语料驱动的假 Java client（Issue #204 UoW-1）。
+
+    duck-typing 对齐 ``BusinessApiClient.list_knowledge_documents`` 的签名，
+    供 ``build_knowledge_toolset(..., client=...)`` 注册
+    ``list_knowledge_documents``，使集合级题在 eval 内与生产一样可先枚举
+    全集再逐份抽取。语义对齐 Java ``AgentInternalServiceImpl``
+    的 listKnowledgeDocuments：keyword 按标题子串过滤；limit 夹 1..200、
+    offset 下限 0；返回 {items, total, limit, offset, truncated}，
+    truncated = offset + len(items) < total；items 形状对齐
+    AgentKnowledgeDocumentItemDto。
+
+    与生产的差异（刻意为之，勿对齐回去）：生产 sourceId 是 ``kb:<文档id>``，
+    但 eval 语料没有 Java 文档 id，且 eval 内的检索/引用口径
+    （expected_sources、citations、collector）用的就是 corpus 的
+    source_id——若这里返回 kb:<序号>，模型从枚举拿到的 id 与检索片段的
+    source_id 对不上，枚举结果无法与引用面对齐。故 id 用 corpus 序号
+    （仅作 DTO 形状填充），sourceId 直接用 corpus 的 source_id。
+    eval 语料没有格式与时间元数据：sourceFormat / originalFilename /
+    createdAt / updatedAt 一律 None、indexStatus 记 "INDEXED"（语料已
+    全部种入本轮索引）；按 source_format 或时间范围过滤时无文档可匹配
+    （元数据为 None 即不命中），返回空集，不伪造元数据。
+    """
+
+    def __init__(self, corpus: Sequence[CorpusDoc]) -> None:
+        self._corpus = list(corpus)
+
+    async def list_knowledge_documents(
+        self,
+        agent_id: str,
+        keyword: str | None = None,
+        source_format: str | None = None,
+        created_from: str | None = None,
+        created_to: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, object]:
+        del agent_id  # eval 语料不分 agent：本轮 loaded_corpus 即全集。
+        effective_limit = min(max(limit, 1), 200)
+        effective_offset = max(offset, 0)
+        cleaned_keyword = keyword.strip() if keyword else ""
+        matched: list[tuple[int, CorpusDoc]] = []
+        for index, doc in enumerate(self._corpus):
+            if cleaned_keyword and cleaned_keyword not in doc.title:
+                continue
+            # 格式/时间元数据在 eval 语料中不存在：带此类过滤即无可匹配
+            # 文档（与「该类文档不存在」同义），返回空集而非伪造命中。
+            if source_format and source_format.strip():
+                continue
+            if created_from or created_to:
+                continue
+            matched.append((index, doc))
+        total = len(matched)
+        page = matched[effective_offset : effective_offset + effective_limit]
+        items = [
+            {
+                "id": index,
+                "sourceId": doc.source_id,
+                "title": doc.title,
+                "sourceFormat": None,
+                "originalFilename": None,
+                "indexStatus": "INDEXED",
+                "createdAt": None,
+                "updatedAt": None,
+            }
+            for index, doc in page
+        ]
+        return {
+            "items": items,
+            "total": total,
+            "limit": effective_limit,
+            "offset": effective_offset,
+            "truncated": effective_offset + len(items) < total,
+        }
 
 
 def _opt_text(payload: dict[str, object], key: str, label: str) -> str:
@@ -749,6 +834,7 @@ async def _run_case(
     experience_lessons: list[ExperienceLessonItem] | None = None,
     skills_dir: str | None = None,
     skills_self_select_enabled: bool = False,
+    knowledge_client: CorpusKnowledgeClient | None = None,
 ) -> dict[str, object]:
     # 与生产路径一致：知识检索由 agent 经 search_site_knowledge 工具执行，
     # 命中片段经 collector 回流生成 citations；评测量的就是这条链。
@@ -757,9 +843,18 @@ async def _run_case(
     # api/internal.py 同一函数、同一输入），不在 runner 内另造旁路。
     # 多轮题的 history（#190）同理：题目字段即 ChatHistoryMessage 列表，
     # 原样作 run_chat 的 history 入参，不做改写。
+    # 工具面保真（#204 UoW-1）：knowledge_client 是由本轮语料驱动的假 Java
+    # client（run_answer_eval 构建后传入），使 list_knowledge_documents 与
+    # 生产一样注册；todo 按生产默认（AGENT_ENABLE_TODO_TOOLS=True）每题
+    # 注册一套，每题新建 TodoStore、状态不跨题泄漏。
     collector = KnowledgeSearchCollector()
-    toolset = build_knowledge_toolset(agent_id, service, collector=collector)
-    toolsets: list[object] = [toolset]
+    toolset = build_knowledge_toolset(
+        agent_id,
+        service,
+        collector=collector,
+        client=knowledge_client,  # type: ignore[arg-type] — duck-typing 对齐 BusinessApiClient 的枚举方法
+    )
+    toolsets: list[object] = [toolset, build_todo_toolset(TodoStore())]
     # 自选场景（Issue #195）：与生产 toolset_factory 同一工具、同一收集器，
     # 开关来自进程 Settings（main 透传）；关时不注册，run 与接通前一致。
     skill_collector: SkillLoadCollector | None = None
@@ -819,15 +914,30 @@ async def _run_case(
     citations = _jsonable_citations(citations)
     citation_source_ids = _citation_ids(citations)
     observed = _observed_sources(chunks, citation_source_ids)
-    scores = score_case(
-        category=case.category,
-        expected_sources=case.expected_sources,
-        expected_keywords=case.expected_keywords,
-        observed_sources=observed,
-        citation_source_ids=citation_source_ids,
-        answer=answer,
-        behavior_checks=case.behavior_checks,
-    )
+    # provider 受阻（#204 UoW-2）：error_code 为 EXTERNAL_DEPENDENCY_BLOCKED
+    # 表示本轮没有产生可判的回答（429/上游故障等外部依赖失败），按
+    # error_code 判定（ChatBlocked 与无回复兜底两路同码同口径），改记
+    # blocked——与 unscored 同级：四指标与 passed 全 None、不进均值。
+    # 其他 error_code 的 ChatBlocked（如预算超限）照常计分，口径不变。
+    provider_blocked = error_code == "EXTERNAL_DEPENDENCY_BLOCKED"
+    if provider_blocked:
+        scores: dict[str, object] = {
+            "retrieval_hit": None,
+            "citation_precision": None,
+            "keyword_coverage": None,
+            "refusal_correct": None,
+            "passed": None,
+        }
+    else:
+        scores = score_case(
+            category=case.category,
+            expected_sources=case.expected_sources,
+            expected_keywords=case.expected_keywords,
+            observed_sources=observed,
+            citation_source_ids=citation_source_ids,
+            answer=answer,
+            behavior_checks=case.behavior_checks,
+        )
     row: dict[str, object] = {
         "id": case.id,
         "category": case.category,
@@ -848,6 +958,10 @@ async def _run_case(
         "citations": citations,
         "scores": scores,
     }
+    # blocked 标记（#204 UoW-2）：只在 provider 受阻时出现，缺省报告行
+    # 形状与此前一致；blockedReason/errorCode/retrieved 已在上方照常保留。
+    if provider_blocked:
+        row["blocked"] = True
     # 集合级标注只在用例带了才进报告，旧用例的报告形状不变。
     if case.expected_behavior:
         row["expectedBehavior"] = case.expected_behavior
@@ -860,7 +974,8 @@ async def _run_case(
         ]
     # 行为检查逐项结果只在题目声明了 behavior_checks 时出现（#190 UoW-1）；
     # 与 score_case 内部计入 passed 的是同一份计算，口径不会漂移。
-    if case.behavior_checks:
+    # blocked 题没有回答可判（#204 UoW-2），与 unscored 行一样不附行为结果。
+    if case.behavior_checks and not provider_blocked:
         row["behaviorChecks"] = evaluate_behavior_checks(
             case.behavior_checks,
             answer=answer,
@@ -1001,6 +1116,10 @@ def render_markdown(report: dict[str, object]) -> str:
         lines.append(f"- Harness dir: `{report['harnessDir']}`")
     if report.get("lessonsCount"):
         lines.append(f"- Experience lessons: {report['lessonsCount']} 条（文件注入）")
+    # 题间节奏标注（#204 UoW-3）：只在启用（>0）时出现，与 JSON 同口径。
+    pace_value = report.get("paceSeconds")
+    if isinstance(pace_value, (int, float)) and not isinstance(pace_value, bool):
+        lines.append(f"- Pace: {pace_value:g} seconds between cases")
     # 配置指纹（#187 UoW-2）：旧报告无此块时整段跳过，不影响其渲染。
     fingerprint = report.get("fingerprint")
     if isinstance(fingerprint, dict):
@@ -1126,6 +1245,34 @@ def render_markdown(report: dict[str, object]) -> str:
             ]
         )
         for entry in unscored_cases:
+            if not isinstance(entry, dict):
+                continue
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _cell(entry.get("id")),
+                        _cell(entry.get("category")),
+                        _cell(entry.get("reason")),
+                    ]
+                )
+                + " |"
+            )
+    # blocked 单列（#204 UoW-2）：provider 受阻、没有回答可判，不混进均值。
+    blocked_cases = summary.get("blockedCases")
+    if isinstance(blocked_cases, list) and blocked_cases:
+        lines.extend(
+            [
+                "",
+                "## Blocked",
+                "",
+                "下列题目因 provider 受阻（EXTERNAL_DEPENDENCY_BLOCKED）未产生回答，未计分、不进均值（口径见 evals/README.md）：",
+                "",
+                "| id | category | reason |",
+                "| --- | --- | --- |",
+            ]
+        )
+        for entry in blocked_cases:
             if not isinstance(entry, dict):
                 continue
             lines.append(
@@ -1377,9 +1524,10 @@ def build_baseline_diff(
     """逐题 diff 本轮报告与基线报告（#187 UoW-2）。
 
     翻转只认两边都有真实 pass 状态的题：本轮 unscored 的题单列（不是
-    fail、不算翻转）；基线 unscored 的题同理单列。基线有而本轮缺的题、
-    本轮新增题单列说明，不混入翻转判定。指纹关键项不一致时 warnings
-    非空——diff 照常产出，但分数不可直接比。
+    fail、不算翻转）；基线 unscored 的题同理单列。本轮/基线 blocked
+    （provider 受阻，#204 UoW-2）与 unscored 同级：一并单列、不算翻转。
+    基线有而本轮缺的题、本轮新增题单列说明，不混入翻转判定。指纹关键
+    项不一致时 warnings 非空——diff 照常产出，但分数不可直接比。
     """
     current_rows = _rows_by_id(current)
     baseline_rows = _rows_by_id(baseline)
@@ -1397,6 +1545,8 @@ def build_baseline_diff(
     missing: list[str] = []
     unscored_now: list[str] = []
     unscored_base: list[str] = []
+    blocked_now: list[str] = []
+    blocked_base: list[str] = []
     ordered_ids = list(current_rows) + [
         case_id for case_id in baseline_rows if case_id not in current_rows
     ]
@@ -1432,9 +1582,15 @@ def build_baseline_diff(
         if cur.get("unscored"):
             status = "unscored"
             unscored_now.append(case_id)
+        elif cur.get("blocked"):
+            status = "blocked"
+            blocked_now.append(case_id)
         elif base.get("unscored"):
             status = "baseline_unscored"
             unscored_base.append(case_id)
+        elif base.get("blocked"):
+            status = "baseline_blocked"
+            blocked_base.append(case_id)
         elif base_passed is True and cur_passed is False:
             status = "pass_to_fail"
             pass_to_fail.append(case_id)
@@ -1469,6 +1625,8 @@ def build_baseline_diff(
         "missingCases": missing,
         "unscoredCases": unscored_now,
         "baselineUnscoredCases": unscored_base,
+        "blockedCases": blocked_now,
+        "baselineBlockedCases": blocked_base,
         "cases": case_diffs,
     }
 
@@ -1532,6 +1690,8 @@ def _render_baseline_diff(diff: dict[str, object]) -> list[str]:
         ("本轮缺失（基线有此题）", "missingCases"),
         ("本轮 unscored（不算翻转）", "unscoredCases"),
         ("基线 unscored（不算翻转）", "baselineUnscoredCases"),
+        ("本轮 blocked（不算翻转）", "blockedCases"),
+        ("基线 blocked（不算翻转）", "baselineBlockedCases"),
     ]
     single_lines = [
         f"- {label}：{_ids_cell(diff.get(key))}"
@@ -1582,13 +1742,14 @@ def _render_baseline_diff(diff: dict[str, object]) -> list[str]:
 
 
 def _run_exit_code(report: dict[str, object]) -> int:
-    """整轮退出码（#187 UoW-2）：全 unscored 视同 BLOCKED(2)；相对基线
-    出现 pass→fail 翻转记 3；其余 0。unscored 不算 fail 翻转。"""
+    """整轮退出码（#187 UoW-2）：无任何已计分题（全部 unscored，或
+    #204 起全部 blocked/unscored 混合）视同 BLOCKED(2)；相对基线
+    出现 pass→fail 翻转记 3；其余 0。unscored/blocked 不算 fail 翻转。"""
     cases = report.get("cases")
     rows = (
         [row for row in cases if isinstance(row, dict)] if isinstance(cases, list) else []
     )
-    if rows and all(row.get("unscored") for row in rows):
+    if rows and all(row.get("unscored") or row.get("blocked") for row in rows):
         return BLOCKED_EXIT
     diff = report.get("baselineDiff")
     if isinstance(diff, dict):
@@ -1619,6 +1780,7 @@ async def run_answer_eval(
     lessons_file: str | None = None,
     baseline_report: dict[str, object] | None = None,
     case_timeout_seconds: float = CASE_TIMEOUT_SECONDS,
+    pace_seconds: float = 0.0,
 ) -> AnswerEvalRun:
     """对题集跑检索 + run_chat，评分，并在给出 out 时写下 JSON 与 Markdown。
 
@@ -1647,6 +1809,14 @@ async def run_answer_eval(
       给出时报告带 ``baselineDiff`` 逐题对照（见 build_baseline_diff）。
     - ``case_timeout_seconds``：单题墙钟上限，超限记 unscored。
       每题独立隔离：单题异常/超时只记该题 unscored，整轮继续。
+
+    保真与节奏（#204）：每轮由 ``loaded_corpus`` 构建
+    ``CorpusKnowledgeClient`` 注入每题（枚举工具接通，范围与索引一致，
+    含 --distractors 并入的文档）；``pace_seconds``（CLI
+    ``--pace-seconds``）为题间睡眠秒数，首题前不睡、0 时不调用
+    sleep，启用时报告顶层记 ``paceSeconds``。provider 受阻题记
+    blocked、不进聚合分母，汇总单列 ``blockedCount`` /
+    ``blockedCases``（与 unscored 并列）。
     """
     loaded_corpus = list(corpus) if corpus is not None else load_corpus()
     loaded_cases = list(cases) if cases is not None else load_cases()
@@ -1677,9 +1847,16 @@ async def run_answer_eval(
         return resolutions[key]
 
     lessons = list(experience_lessons) if experience_lessons else None
+    # 枚举用假 client 基于同一份 loaded_corpus（#204 UoW-1）：枚举范围与
+    # build_eval_index 的索引范围逐字一致，--distractors 并入时同步包含。
+    knowledge_client = CorpusKnowledgeClient(loaded_corpus)
     rows: list[dict[str, object]] = []
     try:
-        for case in loaded_cases:
+        for index, case in enumerate(loaded_cases):
+            # 题间节奏（#204 UoW-3）：首题前不睡；pace 为 0 时不调用
+            # sleep，缺省行为与此前逐字一致。
+            if index > 0 and pace_seconds > 0:
+                await asyncio.sleep(pace_seconds)
             # 逐题隔离（#187 UoW-2）：单题异常/超时只记该题 unscored，
             # 不中断整轮、不记 0 分（见 _unscored_row 的口径）。
             try:
@@ -1696,6 +1873,7 @@ async def run_answer_eval(
                         experience_lessons=lessons,
                         skills_dir=resolved_skills_dir,
                         skills_self_select_enabled=skills_self_select_enabled,
+                        knowledge_client=knowledge_client,
                     ),
                     timeout=case_timeout_seconds,
                 )
@@ -1705,7 +1883,9 @@ async def run_answer_eval(
             rows.append(row)
     finally:
         await service.close()
-    scored_rows = [row for row in rows if not row.get("unscored")]
+    scored_rows = [
+        row for row in rows if not row.get("unscored") and not row.get("blocked")
+    ]
     summary = aggregate(
         [{"category": row["category"], **row["scores"]} for row in scored_rows if isinstance(row["scores"], dict)]
     )
@@ -1717,6 +1897,16 @@ async def run_answer_eval(
     if unscored_entries:
         summary["unscoredCount"] = len(unscored_entries)
         summary["unscoredCases"] = unscored_entries
+    # blocked 单列（#204 UoW-2）：与 unscored 并列，只在存在 blocked 行
+    # 时出现，缺省报告形状不变。
+    blocked_entries = [
+        {"id": row["id"], "category": row["category"], "reason": row.get("blockedReason")}
+        for row in rows
+        if row.get("blocked")
+    ]
+    if blocked_entries:
+        summary["blockedCount"] = len(blocked_entries)
+        summary["blockedCases"] = blocked_entries
     warning_entries = [
         {"id": row["id"], "category": row["category"], "warnings": row["warnings"]}
         for row in rows
@@ -1742,6 +1932,9 @@ async def run_answer_eval(
         report["harnessDir"] = harness_dir
     if lessons:
         report["lessonsCount"] = len(lessons)
+    # 题间节奏标注（#204 UoW-3）：只在启用（>0）时出现，便于事后核对跑批条件。
+    if pace_seconds > 0:
+        report["paceSeconds"] = pace_seconds
     # 配置指纹（#187 UoW-2）：每份报告都带，随报告归档。
     report["fingerprint"] = build_fingerprint(
         model_name=model_name,
@@ -1845,6 +2038,14 @@ def _parser() -> argparse.ArgumentParser:
         "against: per-case metric deltas and pass flips are attached to the new "
         "report. Exit code 3 when any case flips pass→fail vs the baseline.",
     )
+    parser.add_argument(
+        "--pace-seconds",
+        type=float,
+        default=0.0,
+        help="Seconds to sleep between cases (never before the first case), to "
+        "stay within provider rate limits. Default: 0 (no pacing). When > 0 the "
+        "report is annotated with paceSeconds.",
+    )
     return parser
 
 
@@ -1913,6 +2114,7 @@ def main(argv: list[str] | None = None) -> int:
             else str(evals_root() / "golden_qa.jsonl"),
             lessons_file=str(args.lessons_file) if args.lessons_file is not None else None,
             baseline_report=baseline_report,
+            pace_seconds=args.pace_seconds,
         )
     )
     if result.json_path is not None:
@@ -1931,8 +2133,9 @@ def main(argv: list[str] | None = None) -> int:
         total = len(report_cases) if isinstance(report_cases, list) else 0
         print(
             blocked_text(
-                f"all {total} cases were unscored (per-case errors or timeouts); "
-                "see the report's Unscored section for reasons."
+                f"no case produced a scored result (all {total} cases were "
+                "blocked or unscored); see the report's Blocked/Unscored "
+                "sections for reasons."
             ),
             flush=True,
         )
