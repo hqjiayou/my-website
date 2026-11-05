@@ -38,6 +38,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 /**
  * 媒体平台化（#212）服务层规则：可见性、引用幂等、删除拦截顺序、删站级联、列表视图分发。
@@ -185,6 +186,20 @@ class AdminMediaServiceImplPlatformTest {
                 .isInstanceOfSatisfying(BusinessException.class, ex ->
                         assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
         verify(adminMediaReferenceMapper, never()).insert(any(AdminMediaReferenceEntity.class));
+    }
+
+    @Test
+    void reference_concurrentDuplicateInsertIsIdempotentSuccess() {
+        siteExists(AGENT_B);
+        when(adminMediaMapper.selectById(MEDIA_ID)).thenReturn(media(AGENT_A, "PLATFORM"));
+        when(adminMediaReferenceMapper.selectCount(any())).thenReturn(0L);
+        when(adminMediaReferenceMapper.insert(any(AdminMediaReferenceEntity.class)))
+                .thenThrow(new DuplicateKeyException("uk_media_reference_media_agent"));
+
+        // 并发下另一请求抢先插入：唯一约束冲突应被吞为幂等成功，不外抛。
+        service.referenceMedia(AGENT_B, MEDIA_ID);
+
+        verify(adminMediaReferenceMapper).insert(any(AdminMediaReferenceEntity.class));
     }
 
     // ---------- unreference ----------

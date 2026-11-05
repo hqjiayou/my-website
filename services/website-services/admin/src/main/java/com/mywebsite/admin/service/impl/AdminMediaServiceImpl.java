@@ -25,6 +25,7 @@ import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.common.page.PageResult;
 import com.mywebsite.infra.properties.StorageProperties;
 import com.mywebsite.infra.service.ObjectStorageService;
+import org.springframework.dao.DuplicateKeyException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -90,7 +91,7 @@ public class AdminMediaServiceImpl implements AdminMediaService {
                 ? query.contentTypePrefix().trim()
                 : null;
         String view = query != null && StringUtils.hasText(query.view())
-                ? query.view().trim()
+                ? query.view().trim().toLowerCase(java.util.Locale.ROOT)
                 : AdminMediaConstants.VIEW_LIBRARY;
 
         Page<AdminMediaListRow> page;
@@ -211,7 +212,12 @@ public class AdminMediaServiceImpl implements AdminMediaService {
         AdminMediaReferenceEntity reference = new AdminMediaReferenceEntity();
         reference.setMediaId(mediaId);
         reference.setAgentId(agentId);
-        adminMediaReferenceMapper.insert(reference);
+        try {
+            adminMediaReferenceMapper.insert(reference);
+        } catch (DuplicateKeyException ex) {
+            // 并发下另一请求已抢先插入同一引用行（uk_media_reference_media_agent）：
+            // 结果与先查到的幂等路径一致，按成功返回，不把竞态暴露成 500。
+        }
     }
 
     @Override

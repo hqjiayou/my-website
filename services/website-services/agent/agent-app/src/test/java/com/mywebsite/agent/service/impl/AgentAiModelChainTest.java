@@ -453,4 +453,68 @@ class AgentAiModelChainTest {
         assertThat(modes.modes().get(0).entries()).extracting(item -> item.id()).containsExactly(1L);
         assertThat(modes.modes().get(0).entries().get(0).modelSpec()).isEqualTo("google:global-default");
     }
+
+    @Test
+    void chatSkipsPresetMemberMissingFromBatchResult() {
+        AgentAiModelEntryEntity primary = entry(3L, "google:agent-default", true);
+        AgentAiModelEntryEntity vanished = entry(5L, "openai:vanished", false);
+        AgentAiModelEntryEntity alt = entry(7L, "anthropic:agent-alt", false);
+        // 预设声明三名成员，批量查询少返中间一名（成员已删）：应被跳过，链由剩余成员组成。
+        givenChainPreset(900L, List.of(primary, vanished, alt), List.of(primary, alt));
+
+        AgentChatRequest request = capturedRequest();
+
+        assertThat(request.model().spec()).isEqualTo("google:agent-default");
+        assertThat(request.fallbackModels())
+                .extracting(selection -> selection.spec())
+                .containsExactly("anthropic:agent-alt");
+    }
+
+    @Test
+    @MockitoSettings(strictness = Strictness.LENIENT)
+    void chatBlockedWhenPresetEntryIdsMalformed() {
+        agent.setChainPresetId(900L);
+        AgentAiChainPresetEntity preset = new AgentAiChainPresetEntity();
+        preset.setId(900L);
+        preset.setEntryIds("[{broken");
+        when(chainPresetMapper.selectById(900L)).thenReturn(preset);
+
+        // entry_ids 脏 JSON 按无成员处理 → 空链 BLOCKED，不把解析异常抛给调用方。
+        assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY")))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode())
+                                .isEqualTo(com.mywebsite.common.enums.ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()));
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
+    @MockitoSettings(strictness = Strictness.LENIENT)
+    void chatBlockedWhenReferencedPresetRowMissing() {
+        agent.setChainPresetId(900L);
+        when(chainPresetMapper.selectById(900L)).thenReturn(null);
+
+        // 引用指向已不存在（已删）的预设行 → 空链 BLOCKED，不回退任何默认链。
+        assertThatThrownBy(() -> service.chat(10L, new AgentAiChatRequestDto("hello", null, null, null, "KEY")))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode())
+                                .isEqualTo(com.mywebsite.common.enums.ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode()));
+        verify(agentClient, never()).chat(any());
+    }
+
+    @Test
+    void chatDedupesDuplicatePresetMemberIdsKeepingOrder() {
+        AgentAiModelEntryEntity primary = entry(3L, "google:agent-default", true);
+        AgentAiModelEntryEntity alt = entry(5L, "openai:agent-alt", false);
+        // entry_ids 含重复 id（[3,3,5]）：去重保序，链中同一入口只出现一次。
+        givenChainPreset(900L, List.of(primary, primary, alt), List.of(primary, alt));
+
+        AgentChatRequest request = capturedRequest();
+
+        assertThat(request.model().spec()).isEqualTo("google:agent-default");
+        assertThat(request.fallbackModels())
+                .extracting(selection -> selection.spec())
+                .containsExactly("openai:agent-alt");
+    }
 }
