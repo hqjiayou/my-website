@@ -34,6 +34,7 @@ public final class AdminAgentDtos {
             String status,
             String defaultDomain,
             String description,
+            Long configPresetId,
             Integer version,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {}
@@ -47,11 +48,13 @@ public final class AdminAgentDtos {
             @Size(max = 4000) String description,
             @Valid AdminAppearanceConfigV1Dto appearance) {}
 
+    /** {@code configPresetId} 走全量表单提交口径：给出即引用该预设，null 即清除引用（#211 UoW-8）。 */
     public record AdminAgentUpdateRequest(
             @NotBlank @Size(max = 255) String agentName,
             @Size(max = 32) String agentType,
             @Size(max = 255) String defaultDomain,
             @Size(max = 4000) String description,
+            Long configPresetId,
             @NotNull Integer version) {}
 
     public record AdminAgentStatusUpdateRequest(

@@ -11,10 +11,11 @@ import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpReadyDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionUpdateRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
+import com.mywebsite.admin.entity.AdminAgentEntity;
+import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
-import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
+import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
-import com.mywebsite.admin.mapper.AdminAiPromptProfileMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
@@ -69,7 +70,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     private final AgentClient agentClient;
     private final AgentProperties agentProperties;
     private final AdminAgentMapper adminAgentMapper;
-    private final AdminAiPromptProfileMapper promptProfileMapper;
+    private final AdminAiConfigPresetMapper configPresetMapper;
     private final AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper;
     private final AdminAiModelEntryService modelEntryService;
     private final LocalizedMessageService localizedMessageService;
@@ -84,7 +85,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             AgentClient agentClient,
             AgentProperties agentProperties,
             AdminAgentMapper adminAgentMapper,
-            AdminAiPromptProfileMapper promptProfileMapper,
+            AdminAiConfigPresetMapper configPresetMapper,
             AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper,
             AdminAiModelEntryService modelEntryService,
             LocalizedMessageService localizedMessageService,
@@ -97,7 +98,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.adminAgentMapper = adminAgentMapper;
-        this.promptProfileMapper = promptProfileMapper;
+        this.configPresetMapper = configPresetMapper;
         this.knowledgeDocumentMapper = knowledgeDocumentMapper;
         this.modelEntryService = modelEntryService;
         this.localizedMessageService = localizedMessageService;
@@ -384,16 +385,28 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         return StringUtils.hasText(content) ? title + "\n" + content : title;
     }
 
+    /**
+     * 配置预设解析（Issue #211 UoW-8）：与正式对话同口径——agent →
+     * {@code config_preset_id} → 预设行；无引用返回 null（未配置常态，不记日志），
+     * 引用悬空或预设已软删返回 null 并记 warn。旧表
+     * {@code agent_ai_prompt_profile} 自本单起停读。试聊 skills 仍走请求级
+     * {@code normalizeSkills}，不读预设默认集（UoW-9 只改正式对话）。
+     */
     private AgentPromptProfile loadPromptProfile(long agentId) {
-        AdminAiPromptProfileEntity profile = promptProfileMapper.selectOne(
-                new LambdaQueryWrapper<AdminAiPromptProfileEntity>()
-                        .eq(AdminAiPromptProfileEntity::getAgentId, agentId)
-                        .last("LIMIT 1"));
-        if (profile == null) {
+        AdminAgentEntity agent = adminAgentMapper.selectById(agentId);
+        if (agent == null || agent.getConfigPresetId() == null) {
             return null;
         }
-        Double temperature = profile.getTemperature() == null ? null : profile.getTemperature().doubleValue();
-        return new AgentPromptProfile(profile.getSystemPrompt(), temperature);
+        AdminAiConfigPresetEntity preset = configPresetMapper.selectById(agent.getConfigPresetId());
+        if (preset == null) {
+            log.warn(
+                    "agent {} references config preset {} which is missing or deleted; preview falls back to no profile",
+                    agentId,
+                    agent.getConfigPresetId());
+            return null;
+        }
+        Double temperature = preset.getTemperature() == null ? null : preset.getTemperature().doubleValue();
+        return new AgentPromptProfile(preset.getSystemPrompt(), temperature);
     }
 
     /**

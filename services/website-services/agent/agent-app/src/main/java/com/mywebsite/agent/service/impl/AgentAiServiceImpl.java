@@ -477,8 +477,10 @@ public class AgentAiServiceImpl implements AgentAiService {
                 conversationId == null ? null : String.valueOf(conversationId),
                 preparation.promptProfile(),
                 preparation.history().isEmpty() ? null : preparation.history(),
-                // 终端用户不能指定 skills（防前台激活任意指令模块）；只用 agent-services 平台默认
-                null,
+                // 终端用户不能指定 skills（防前台激活任意指令模块）；取该 agent 配置
+                // 预设的默认集（Issue #211 UoW-9），无预设/空集时为 null，Python 以
+                // 平台 env 默认兜底。
+                preparation.presetSkills(),
                 preparation.todos().isEmpty() ? null : preparation.todos(),
                 chain.isEmpty() ? null : chain.get(0),
                 callbackBaseUrl(),

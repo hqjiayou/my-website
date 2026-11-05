@@ -117,7 +117,7 @@ class AgentAiMemoryInjectionTest {
         when(knowledgeDocumentMapper.selectList(any())).thenReturn(List.of());
         AgentAiConversationEntity conversation = conversation(77L);
         when(conversationService.prepare(10L, 200L, null))
-                .thenReturn(new ChatPreparation(conversation, List.of(), null, List.of()));
+                .thenReturn(new ChatPreparation(conversation, List.of(), null, List.of(), null));
         List<String> memories = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
             memories.add("m" + i);
@@ -160,7 +160,7 @@ class AgentAiMemoryInjectionTest {
     @Test
     void streamDoneStoresExtractedMemoriesWithTheReply() {
         AgentAiConversationEntity conversation = conversation(77L);
-        ChatPreparation preparation = new ChatPreparation(conversation, List.of(), null, List.of());
+        ChatPreparation preparation = new ChatPreparation(conversation, List.of(), null, List.of(), null);
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
                     listener.onEvent(

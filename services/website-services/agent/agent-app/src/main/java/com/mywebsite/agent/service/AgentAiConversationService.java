@@ -116,9 +116,15 @@ public interface AgentAiConversationService {
      */
     List<AgentAiSearchHitDto> searchConversations(long agentId, long agentUserId, String query);
 
+    /**
+     * 一轮组装快照。{@code presetSkills} 为该 agent 配置预设的默认 skill 集
+     * （Issue #211 UoW-9）：非空时正式对话以此下发 {@code AgentChatRequest.skills}，
+     * 无预设或默认集为空时为 null（Python 以平台 env 默认兜底）。
+     */
     record ChatPreparation(
             AgentAiConversationEntity conversation,
             List<AgentChatHistoryMessage> history,
             AgentPromptProfile promptProfile,
-            List<AgentTodoItem> todos) {}
+            List<AgentTodoItem> todos,
+            List<String> presetSkills) {}
 }
