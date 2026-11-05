@@ -25,9 +25,11 @@ import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUpdateReques
 import com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
+import com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseLinkMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
+import com.mywebsite.admin.mapper.AdminAiKnowledgeRetrievalSyncIssueMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService.ReembedConflictException;
@@ -66,6 +68,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -94,6 +97,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     private final AdminAiKnowledgeBaseMapper baseMapper;
     private final AdminAiKnowledgeBaseLinkMapper linkMapper;
     private final ExecutorService adminAiStreamExecutor;
+    private final AdminAiKnowledgeRetrievalSyncIssueMapper syncIssueMapper;
 
     public AdminAiKnowledgeServiceImpl(
             AdminAiKnowledgeDocumentMapper knowledgeMapper,
@@ -104,7 +108,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             StorageProperties storageProperties,
             AdminAiKnowledgeBaseMapper baseMapper,
             AdminAiKnowledgeBaseLinkMapper linkMapper,
-            ExecutorService adminAiStreamExecutor) {
+            ExecutorService adminAiStreamExecutor,
+            AdminAiKnowledgeRetrievalSyncIssueMapper syncIssueMapper) {
         this.knowledgeMapper = knowledgeMapper;
         this.adminAgentMapper = adminAgentMapper;
         this.agentClient = agentClient;
@@ -114,6 +119,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         this.baseMapper = baseMapper;
         this.linkMapper = linkMapper;
         this.adminAiStreamExecutor = adminAiStreamExecutor;
+        this.syncIssueMapper = syncIssueMapper;
     }
 
     @Override
@@ -331,6 +337,24 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                         doc.getUpdatedAt()))
                 .toList();
 
+        // Issue #203：同步问题表让链接分区滞后与待删残留在总览可见（此前只存在于日志）。
+        List<AdminAiKnowledgeRetrievalSyncIssueEntity> syncIssues = syncIssueMapper.selectList(
+                new LambdaQueryWrapper<AdminAiKnowledgeRetrievalSyncIssueEntity>());
+        if (syncIssues == null) {
+            syncIssues = List.of();
+        }
+        long laggingLinkPartitions = syncIssues.stream()
+                .filter(issue -> AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT.equals(issue.getOp()))
+                .count();
+        long pendingRetrievalDeletes = syncIssues.stream()
+                .filter(issue -> AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE.equals(issue.getOp()))
+                .count();
+        OffsetDateTime oldestSyncIssueAt = syncIssues.stream()
+                .map(AdminAiKnowledgeRetrievalSyncIssueEntity::getCreatedAt)
+                .filter(Objects::nonNull)
+                .min(OffsetDateTime::compareTo)
+                .orElse(null);
+
         return new AdminAiKnowledgeOverviewDto(
                 documents.size(),
                 indexed,
@@ -339,7 +363,10 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 stale,
                 originalBytes,
                 agentStats,
-                recentFailures);
+                recentFailures,
+                laggingLinkPartitions,
+                pendingRetrievalDeletes,
+                oldestSyncIssueAt);
     }
 
     @Override
@@ -478,10 +505,10 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         link.setBaseId(baseId);
         link.setAgentId(targetAgentId);
         linkMapper.insert(link);
-        // 扇出：该库现存 ACTIVE 文档同步进目标站点分区（best-effort，失败只记日志）
+        // 扇出：该库现存 ACTIVE 文档同步进目标站点分区（失败记日志并落同步问题行，Issue #203）
         for (AdminAiKnowledgeDocumentEntity document : activeDocumentsOfBase(baseId)) {
             try {
-                upsertDerivedIndexForSite(document, targetAgentId);
+                upsertLinkPartition(document, targetAgentId);
             } catch (RuntimeException ex) {
                 log.warn(
                         "KB link fan-out upsert failed (baseId={}, targetAgentId={}, documentId={})",
@@ -507,7 +534,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         linkMapper.deleteById(existing.getId());
         for (AdminAiKnowledgeDocumentEntity document : activeDocumentsOfBase(baseId)) {
             try {
-                agentClient.deleteRetrievalDocument(String.valueOf(targetAgentId), sourceId(document.getId()));
+                deleteFromPartition(targetAgentId, sourceId(document.getId()));
             } catch (RuntimeException ex) {
                 log.warn(
                         "KB unlink fan-out delete failed (baseId={}, targetAgentId={}, documentId={})",
@@ -807,12 +834,13 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     continue;
                 }
                 // 共享扇出：链接站点分区用各自的入口规格重嵌，失败计入 failed（以目标站点标注）
+                // 并落同步问题行待重试（Issue #203）
                 for (Long target : partitionAgentIds(document)) {
                     if (target.equals(document.getAgentId())) {
                         continue;
                     }
                     try {
-                        upsertDerivedIndexForSite(document, target);
+                        upsertLinkPartition(document, target);
                     } catch (RuntimeException ex) {
                         failed.add(new AdminAiKnowledgeReembedFailureDto(
                                 target, sourceId(document.getId()), indexError(ex)));
@@ -950,7 +978,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     continue;
                 }
                 try {
-                    upsertDerivedIndexForSite(entity, target, parts);
+                    upsertLinkPartition(entity, target, parts);
                 } catch (RuntimeException ex) {
                     log.warn(
                             "KB fan-out sync failed (ownerAgentId={}, targetAgentId={}, documentId={});"
@@ -976,7 +1004,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         } else {
             for (Long target : targets) {
                 try {
-                    agentClient.deleteRetrievalDocument(String.valueOf(target), sourceId(entity.getId()));
+                    deleteFromPartition(target, sourceId(entity.getId()));
                 } catch (RuntimeException ex) {
                     log.warn(
                             "KB derived index delete failed (agentId={}, documentId={}); index may lag",
@@ -1003,6 +1031,11 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             boolean classesComplete) {
         agentClient.upsertRetrievalDocument(
                 retrievalDocument(entity, targetAgentId, classes, parts, classesComplete));
+        // Issue #203 复评三审计：写入成功即作废同分区同文档的待删 tombstone——
+        // 否则文档停用期落下的 DELETE 行会在文档恢复 ACTIVE 并重写后被重试任务
+        // 执行，把活向量删掉（文档 INDEXED 却检索不到）。
+        clearSyncIssue(
+                targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE);
     }
 
     private static AgentRetrievalDocument retrievalDocument(
@@ -1106,13 +1139,204 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
     private void removeFromDerivedIndex(long agentId, long documentId) {
         try {
-            agentClient.deleteRetrievalDocument(String.valueOf(agentId), sourceId(documentId));
+            deleteFromPartition(agentId, sourceId(documentId));
         } catch (RuntimeException ex) {
             log.warn(
                     "KB derived index delete failed (agentId={}, documentId={}); index may lag",
                     agentId,
                     documentId,
                     ex);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Issue #203：派生索引同步问题（落行＋定时重试），所有者分区不入表
+    // ------------------------------------------------------------------
+
+    private static LambdaQueryWrapper<AdminAiKnowledgeRetrievalSyncIssueEntity> syncIssueKey(
+            long agentId, String sourceId, String op) {
+        return new LambdaQueryWrapper<AdminAiKnowledgeRetrievalSyncIssueEntity>()
+                .eq(AdminAiKnowledgeRetrievalSyncIssueEntity::getAgentId, agentId)
+                .eq(AdminAiKnowledgeRetrievalSyncIssueEntity::getSourceId, sourceId)
+                .eq(AdminAiKnowledgeRetrievalSyncIssueEntity::getOp, op);
+    }
+
+    /** 落/更新同步问题行。落行本身失败只记日志，不能掩盖原始同步结果。 */
+    private void recordSyncIssue(long agentId, String sourceId, String op, RuntimeException failure) {
+        try {
+            AdminAiKnowledgeRetrievalSyncIssueEntity existing =
+                    syncIssueMapper.selectOne(syncIssueKey(agentId, sourceId, op));
+            OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+            if (existing == null) {
+                AdminAiKnowledgeRetrievalSyncIssueEntity issue =
+                        new AdminAiKnowledgeRetrievalSyncIssueEntity();
+                issue.setAgentId(agentId);
+                issue.setSourceId(sourceId);
+                issue.setOp(op);
+                issue.setAttempts(0);
+                issue.setLastError(indexError(failure));
+                issue.setCreatedAt(now);
+                issue.setUpdatedAt(now);
+                syncIssueMapper.insert(issue);
+            } else {
+                existing.setAttempts(existing.getAttempts() == null ? 1 : existing.getAttempts() + 1);
+                existing.setLastError(indexError(failure));
+                existing.setUpdatedAt(now);
+                syncIssueMapper.updateById(existing);
+            }
+        } catch (RuntimeException recordFailure) {
+            log.warn(
+                    "KB retrieval sync issue record failed (agentId={}, sourceId={}, op={})",
+                    agentId,
+                    sourceId,
+                    op,
+                    recordFailure);
+        }
+    }
+
+    /** 同步成功后清掉对应的问题行；清行失败只记日志。 */
+    private void clearSyncIssue(long agentId, String sourceId, String op) {
+        try {
+            syncIssueMapper.delete(syncIssueKey(agentId, sourceId, op));
+        } catch (RuntimeException clearFailure) {
+            log.warn(
+                    "KB retrieval sync issue clear failed (agentId={}, sourceId={}, op={})",
+                    agentId,
+                    sourceId,
+                    op,
+                    clearFailure);
+        }
+    }
+
+    /** 链接分区扇出 upsert：成功清 op=UPSERT 问题行，失败落行并原样抛回（调用方维持原日志/计数语义）。 */
+    private void upsertLinkPartition(AdminAiKnowledgeDocumentEntity entity, long targetAgentId) {
+        try {
+            upsertDerivedIndexForSite(entity, targetAgentId);
+            clearSyncIssue(
+                    targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT);
+        } catch (RuntimeException ex) {
+            recordSyncIssue(
+                    targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT, ex);
+            throw ex;
+        }
+    }
+
+    private void upsertLinkPartition(
+            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, DerivedIndexParts parts) {
+        try {
+            upsertDerivedIndexForSite(entity, targetAgentId, parts);
+            clearSyncIssue(
+                    targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT);
+        } catch (RuntimeException ex) {
+            recordSyncIssue(
+                    targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT, ex);
+            throw ex;
+        }
+    }
+
+    /** 分区删除：成功清 op=DELETE 与 op=UPSERT 问题行（删除取代待同步），失败落 tombstone 行并原样抛回。 */
+    private void deleteFromPartition(long agentId, String sourceId) {
+        try {
+            agentClient.deleteRetrievalDocument(String.valueOf(agentId), sourceId);
+            clearSyncIssue(agentId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE);
+            clearSyncIssue(agentId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT);
+        } catch (RuntimeException ex) {
+            recordSyncIssue(agentId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE, ex);
+            throw ex;
+        }
+    }
+
+    /**
+     * 定时重试同步问题行（Issue #203）：DELETE 重删、UPSERT 重同步链接分区。
+     * 已被业务变化取代的行（文档已删/已解链/非 ACTIVE/source 格式异常）直接作废删行；
+     * 重试再失败只累加 attempts，留下轮。单行失败不影响其它行。
+     */
+    @Override
+    @Scheduled(fixedDelayString = "${admin.knowledge.sync-issue-fixed-delay-ms:900000}")
+    public void retryRetrievalSyncIssues() {
+        List<AdminAiKnowledgeRetrievalSyncIssueEntity> issues = syncIssueMapper.selectList(
+                new LambdaQueryWrapper<AdminAiKnowledgeRetrievalSyncIssueEntity>()
+                        .orderByAsc(AdminAiKnowledgeRetrievalSyncIssueEntity::getCreatedAt)
+                        .last("LIMIT 200"));
+        if (issues == null) {
+            return;
+        }
+        for (AdminAiKnowledgeRetrievalSyncIssueEntity issue : issues) {
+            try {
+                if (AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE.equals(issue.getOp())) {
+                    // 复评三审计第二层防护：落行后文档又恢复 ACTIVE 且仍属该分区时，
+                    // 这条 tombstone 已被后续重写取代，作废不执行（与 upsert 成功清行互为冗余）。
+                    if (!deleteIssueSuperseded(issue)) {
+                        agentClient.deleteRetrievalDocument(
+                                String.valueOf(issue.getAgentId()), issue.getSourceId());
+                    }
+                    syncIssueMapper.deleteById(issue.getId());
+                } else if (AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT.equals(issue.getOp())) {
+                    if (retryLinkPartitionUpsert(issue)) {
+                        syncIssueMapper.deleteById(issue.getId());
+                    } else {
+                        bumpSyncIssue(issue, null);
+                    }
+                } else {
+                    // 未知 op：留行待人工处理，只累加次数以便在总览/表里可见异常
+                    bumpSyncIssue(issue, null);
+                }
+            } catch (RuntimeException ex) {
+                bumpSyncIssue(issue, ex);
+            }
+        }
+    }
+
+    /** tombstone 是否已被后续重写取代：文档存在、ACTIVE 且该分区仍在文档的目标分区内。 */
+    private boolean deleteIssueSuperseded(AdminAiKnowledgeRetrievalSyncIssueEntity issue) {
+        Long documentId = parseSourceDocumentId(issue.getSourceId());
+        if (documentId == null) {
+            return false;
+        }
+        AdminAiKnowledgeDocumentEntity document = knowledgeMapper.selectById(documentId);
+        return document != null
+                && AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(document.getStatus())
+                && partitionAgentIds(document).contains(issue.getAgentId());
+    }
+
+    /** @return true 表示该行可以删（已同步成功，或已被业务变化取代）；false 表示文档暂不可同步，留下轮。 */
+    private boolean retryLinkPartitionUpsert(AdminAiKnowledgeRetrievalSyncIssueEntity issue) {
+        Long documentId = parseSourceDocumentId(issue.getSourceId());
+        if (documentId == null) {
+            return true;
+        }
+        AdminAiKnowledgeDocumentEntity document = knowledgeMapper.selectById(documentId);
+        if (document == null
+                || !AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(document.getStatus())
+                || !partitionAgentIds(document).contains(issue.getAgentId())) {
+            return true;
+        }
+        upsertDerivedIndexForSite(document, issue.getAgentId());
+        return true;
+    }
+
+    private void bumpSyncIssue(AdminAiKnowledgeRetrievalSyncIssueEntity issue, RuntimeException failure) {
+        try {
+            issue.setAttempts(issue.getAttempts() == null ? 1 : issue.getAttempts() + 1);
+            if (failure != null) {
+                issue.setLastError(indexError(failure));
+            }
+            issue.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
+            syncIssueMapper.updateById(issue);
+        } catch (RuntimeException bumpFailure) {
+            log.warn(
+                    "KB retrieval sync issue bump failed (issueId={})", issue.getId(), bumpFailure);
+        }
+    }
+
+    private static Long parseSourceDocumentId(String sourceId) {
+        if (sourceId == null || !sourceId.startsWith("kb:")) {
+            return null;
+        }
+        try {
+            return Long.parseLong(sourceId.substring("kb:".length()));
+        } catch (NumberFormatException ex) {
+            return null;
         }
     }
 
