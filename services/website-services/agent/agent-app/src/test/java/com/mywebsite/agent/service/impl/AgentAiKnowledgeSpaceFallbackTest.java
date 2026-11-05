@@ -18,9 +18,13 @@ import com.mywebsite.agent.dto.AgentKnowledgeSearchRequestDto;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.entity.AgentAiConversationEntity;
 import com.mywebsite.agent.entity.AgentAiKnowledgeDocumentEntity;
+import com.mywebsite.agent.entity.AgentAiChainPresetEntity;
 import com.mywebsite.agent.entity.AgentAiModelEntryEntity;
+import com.mywebsite.agent.entity.AgentEntity;
 import com.mywebsite.agent.mapper.AgentAiKnowledgeDocumentMapper;
+import com.mywebsite.agent.mapper.AgentAiChainPresetMapper;
 import com.mywebsite.agent.mapper.AgentAiModelEntryMapper;
+import com.mywebsite.agent.mapper.AgentMapper;
 import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.agent.service.AgentAiConversationService;
 import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
@@ -106,6 +110,12 @@ class AgentAiKnowledgeSpaceFallbackTest {
     @Mock
     private KnowledgeSpaceResolver knowledgeSpaceResolver;
 
+    @Mock
+    private AgentMapper agentMapper;
+
+    @Mock
+    private AgentAiChainPresetMapper chainPresetMapper;
+
     @Captor
     private ArgumentCaptor<LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity>> documentWrapperCaptor;
 
@@ -132,6 +142,8 @@ class AgentAiKnowledgeSpaceFallbackTest {
                 embeddingClassService,
                 mock(AgentExperienceLessonService.class),
                 mock(AgentMcpSelectionService.class),
+                agentMapper,
+                chainPresetMapper,
                 knowledgeSpaceResolver);
         String subject = SubjectCodes.formatAgentUserSubject(200L);
         AuthContext.set(new AuthenticatedUser(TokenAudience.AGENT, subject, "u", 10L, Set.of()));
@@ -194,7 +206,19 @@ class AgentAiKnowledgeSpaceFallbackTest {
         entry.setEnabled(true);
         entry.setDefaultEntry(true);
         entry.setMode("KEY");
-        when(modelEntryMapper.selectList(any())).thenReturn(List.of(entry), List.of());
+        // 组链改吃预设后入口经 selectBatchIds 取，此 selectList 桩仅留作他路兜底、改 lenient。
+        org.mockito.Mockito.lenient()
+                .when(modelEntryMapper.selectList(any())).thenReturn(List.of(entry), List.of());
+        // #210 合并适配：组链改吃链预设——agent 10 引用预设 900，成员只有入口 3。
+        AgentEntity agent = new AgentEntity();
+        agent.setId(10L);
+        agent.setChainPresetId(900L);
+        when(agentMapper.selectById(10L)).thenReturn(agent);
+        AgentAiChainPresetEntity preset = new AgentAiChainPresetEntity();
+        preset.setId(900L);
+        preset.setEntryIds("[3]");
+        when(chainPresetMapper.selectById(900L)).thenReturn(preset);
+        when(modelEntryMapper.selectBatchIds(java.util.List.of(3L))).thenReturn(List.of(entry));
         when(modelEntryCipher.decrypt("enc:key-3")).thenReturn("key-3");
         when(agentClient.chat(chatRequestCaptor.capture()))
                 .thenReturn(new AgentChatResponse(
