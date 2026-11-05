@@ -22,7 +22,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mywebsite.admin.entity.AdminAiConversationEntity;
 import com.mywebsite.admin.entity.AdminAiMessageEntity;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
+import com.mywebsite.admin.entity.AdminAgentEntity;
+import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
 import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
+import com.mywebsite.admin.mapper.AdminAgentMapper;
+import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiConversationMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminAiMessageMapper;
@@ -82,6 +86,12 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
 
     @Autowired
     private AdminAiPromptProfileMapper promptProfileMapper;
+
+    @Autowired
+    private AdminAiConfigPresetMapper configPresetMapper;
+
+    @Autowired
+    private AdminAgentMapper adminAgentMapper;
 
     @Autowired
     private AdminAiModelEntryMapper modelEntryMapper;
@@ -169,6 +179,15 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                         .content(MAPPER.writeValueAsString(prompt)))
                 .andExpect(status().isOk());
 
+        // Issue #211：给该 agent 挂一个共享配置预设，删 agent 后预设须存活。
+        AdminAiConfigPresetEntity preset = new AdminAiConfigPresetEntity();
+        preset.setName("preset-for-delete-agent");
+        preset.setSystemPrompt("shop");
+        configPresetMapper.insert(preset);
+        AdminAgentEntity agentRow = adminAgentMapper.selectById(agentId);
+        agentRow.setConfigPresetId(preset.getId());
+        adminAgentMapper.updateById(agentRow);
+
         ObjectNode knowledge = MAPPER.createObjectNode();
         knowledge.put("title", "Hours");
         knowledge.put("content", "09:00-18:00");
@@ -187,9 +206,13 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(status().isOk());
 
         assertThat(knowledgeDocumentMapper.selectById(docId)).isNull();
+        // Issue #211 起口径变更：旧 profile 表已是退役数据（解析停读），删
+        // agent 不再清旧行，行保留待 #213 退役迁移统一清理；共享配置预设是
+        // 平台资源，同样不得被删 agent 级联删除。
         assertThat(promptProfileMapper.selectCount(new LambdaQueryWrapper<AdminAiPromptProfileEntity>()
                         .eq(AdminAiPromptProfileEntity::getAgentId, agentId)))
-                .isZero();
+                .isEqualTo(1);
+        assertThat(configPresetMapper.selectById(preset.getId())).isNotNull();
         assertThat(conversationMapper.selectById(conversationId)).isNull();
         assertThat(messageMapper.selectCount(new LambdaQueryWrapper<AdminAiMessageEntity>()
                         .eq(AdminAiMessageEntity::getConversationId, conversationId)))
