@@ -10,12 +10,12 @@
 
 | 文件 | 内容 |
 | --- | --- |
-| `golden_qa.jsonl` | 黄金集 23 题：`id/question/expected_sources/expected_keywords/category`，集合级题另带 `expected_behavior/expected_answer`；5 道多轮题（`mt-` 前缀）另带 `history`（先前轮次），6 道集合级题中 5 道另带 `behavior_checks`（见下「行为判分」） |
-| `skill_qa.jsonl` | skill 题集 40 题：`id/skill/kind/question/expected_behavior/expected_answer`，部分带 `expected_keywords` 与 `golden_ref`（与黄金集的同锚引用）；其中 3 题带 `mode: "self-select"`（#195 自选题，见下「自选场景」） |
+| `golden_qa.jsonl` | 黄金集 24 题：`id/question/expected_sources/expected_keywords/category`，集合级题另带 `expected_behavior/expected_answer`；5 道多轮题（`mt-` 前缀）另带 `history`（先前轮次），6 道集合级题中 5 道另带 `behavior_checks`（见下「行为判分」）；另有 1 道长文题（`category: "long"`，#206，锚点事实在长文档末段） |
+| `skill_qa.jsonl` | skill 题集 41 题：`id/skill/kind/question/expected_behavior/expected_answer`，部分带 `expected_keywords` 与 `golden_ref`（与黄金集的同锚引用）；其中 3 题带 `mode: "self-select"`（#195 自选题，见下「自选场景」） |
 | `experience_qa.jsonl` | 经验敏感集 3 题（#190）：形状同黄金集，期望按注入样例 lesson 后的口径写定，须配 `fixtures/lessons_sample.json` 两轮对照读（见下「经验敏感集」） |
 | `fixtures/lessons_sample.json` | 经验敏感集的样例 lessons（lessonNo 6/7/8），经 `--lessons-file` 注入 |
 | `adversarial_grounding.jsonl` | 对抗题集 10 题（#191）：形状同黄金集另带 `mechanism`，诱导四条执行化机制违规，真模型选跑判拦截是否生效（见下「对抗题集」） |
-| `corpus.json` | 评估语料（进程内索引，非业务真相源） |
+| `corpus.json` | 评估语料（进程内索引，非业务真相源）16 份：含 #206 追加的真冲突版本对（`supplier-hours-2025` / `supplier-hours-2026`，同一事实新旧两版互相取代）与长文档 `cafe-roast-guide`（约 650 字、多段落，目标事实写在末段，测长文后段召回） |
 | `distractors.json` | 对抗性近失文档层，仅 `--distractors` 时并入索引 |
 | `reports/` | 跑分报告归档（UoW-2 起含基线约定） |
 
@@ -28,7 +28,7 @@ uv run python -m agent_services.evals.run_answer_eval [--out <dir|file>]
 
 未配置模型（无 `AI_MODEL`/凭证）时打印 `BLOCKED` 并以退出码 2 退出，
 不用假模型冒充跑分；注入类文件（`--cases`/`--lessons-file`/`--harness-dir`/
-`--baseline`）坏或缺失时先于跑分打印 `ERROR` 并以退出码 2 退出，不静默降级。
+`--baseline`/`--resume-from`）坏或缺失时先于跑分打印 `ERROR` 并以退出码 2 退出，不静默降级。
 
 退出码（#187 UoW-2 起）：`0` 正常（含无基线、或有基线但无 pass→fail
 翻转）；`2` 文件错误/BLOCKED（含整轮全 unscored，见下）；`3` 给了
@@ -45,6 +45,7 @@ uv run python -m agent_services.evals.run_answer_eval [--out <dir|file>]
 | `--distractors` | 并入 `distractors.json` 给检索与引用精度施压 | 不并入 |
 | `--baseline <report.json>` | 与既有报告逐题对照：本轮报告附 `baselineDiff`（指标 delta、pass 翻转、单边题），有 pass→fail 翻转时退出码 3；基线文件坏/缺失先于跑分报错退出 | 不对照 |
 | `--pace-seconds <float>` | 题与题之间的睡眠秒数（首题前不睡），用于贴合 provider 限速（如免费层 RPM）；启用（>0）时报告顶层记 `paceSeconds`、Markdown 报告头同步标注 | `0`（不睡，行为与此前一致） |
+| `--resume-from <report.json>` | 断点续跑（#206）：复用旧报告中已计分的行、只重跑未完成题；先过指纹闸（见下「断点续跑」），文件坏/缺失或指纹不一致先于跑分报错退出；可与 `--baseline` 同时给 | 不续跑 |
 | `--out` | 报告输出目录或 `.json`/`.md` 路径 | `evals/reports/` 下时间戳文件 |
 
 四参数可叠加（如 golden＋默认 skills、skill_qa＋对应 skills、golden＋lessons
@@ -262,6 +263,38 @@ blocked 时整轮继续，退出码语义不变。上文 unscored 口径中「Ch
 照常计分」自 #204 起仅适用于**其他** error_code（如预算超限
 `AGENT_BUDGET_EXCEEDED`）：那类题是产生了可判结果，计分口径逐字不变；
 只有 EXTERNAL_DEPENDENCY_BLOCKED 这一类改记 blocked。
+
+### 断点续跑 --resume-from（#206 UoW-1）
+
+一轮跑分中途被外部依赖打断（部分题 blocked）或进程中断（部分题
+unscored）后，不必整轮重跑：`--resume-from <旧报告.json>` 只重跑未
+完成的题。
+
+- **指纹闸**：旧报告的 `fingerprint` 与本轮现算指纹须逐项全等
+  （`model` / `passRule` / `casesFile` / `corpus` / `harnessDir` /
+  `skills` / `lessons`），任一项不一致 → 先于跑分 `ERROR` 退出 2 并
+  列明不一致的项，不静默降级成整轮重跑。语料、题集、模型或注入有
+  任何变化，旧行分数即不可复用。
+- **复用口径**：旧行已计分（非 unscored、非 blocked、`scores.passed`
+  非 None）的按本轮题序逐字拼回本轮报告，不再调用模型；blocked、
+  unscored 与旧报告里没有的题正常执行。`--pace-seconds` 只作用于
+  实际执行的题（以实际执行序计，第一个实际执行的题之前不睡）。
+- **报告标注**：给了 `--resume-from` 时，报告顶层记 `resumedFrom`
+  （传入的路径字符串）与 `resumedCount`（复用行数），Markdown 报告
+  头同步一行。与 `--baseline` 可同时给：续跑补齐本轮报告，基线对照
+  照常对补齐后的报告做 diff。
+
+### manualOnly 口径（#206 UoW-4）
+
+已计分行中，若四指标（`retrieval_hit` / `citation_precision` /
+`keyword_coverage` / `refusal_correct`）全为 None——典型是无
+expected_sources、无 expected_keywords 的纯行为 skill 题——确定性
+指标无从判分，只能人工核对该题的 `expected_behavior`。这类行在汇总
+另记 `summary.manualOnlyCount` / `summary.manualOnlyCases` 单列（只
+在存在时出现），Markdown 报告另有 `## Manual-only cases` 段。注意：
+单列只是标注，**聚合口径不变**——这类行仍留在 overall/byCategory
+分母内，其 `passed=False` 表示「无指标可判」，不是答错，不要据此
+读成失败率。blocked / unscored 行各有自己的单列，不在此重复收录。
 
 ## 对抗题集（#191 guardrails 执行化验收）
 
