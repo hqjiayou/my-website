@@ -152,6 +152,7 @@ export default {
       extractTitle: 'Distill from recent conversations',
       extractDescription:
         'Pre-filters recent real conversations by failure signals (tool failures / empty searches / heavy tool use), then distills them into candidates in batches. Output only lands in the pending queue and never takes effect automatically; failed turns are counted honestly in the summary.',
+      extractModeNote: 'Distillation is a batch job and always runs on the Key mode chain (it never falls back to CLI); when the Key chain has no usable entry, the group is counted as failed, honestly.',
       windowDays: 'Lookback days',
       maxTurns: 'Max candidate turns',
       extract: 'Distill recent conversations',

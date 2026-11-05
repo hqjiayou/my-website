@@ -2,6 +2,8 @@ package com.mywebsite.admin.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -231,16 +233,17 @@ class AdminAiExperienceExtractionServiceImplTest {
     }
 
     @Test
-    void emptyChainCountsTurnsAsFailedWithoutCallingClient() {
+    void emptyKeyChainCountsTurnsAsFailedWithoutFallingBackToCli() {
         when(messageMapper.selectList(any())).thenReturn(List.of(assistant(101L, 7L, META_HEAVY)));
         when(modelEntryService.selectionChain(7L, "KEY")).thenReturn(List.of());
-        when(modelEntryService.selectionChain(7L, "CLI")).thenReturn(List.of());
 
         AdminAiExperienceExtractionResultDto result = service.extractRecent(new AdminAiExperienceExtractionRequestDto(null, null));
 
         assertThat(result.scannedTurns()).isEqualTo(1);
         assertThat(result.failedTurns()).isEqualTo(1);
         assertThat(result.extractionCalls()).isZero();
+        // 固定 KEY 单模式（Issue #208 UoW-M2）：KEY 链为空即诚实失败，CLI 链连咨询都不咨询。
+        verify(modelEntryService, never()).selectionChain(anyLong(), eq("CLI"));
         verify(agentClient, never()).extractExperience(any());
         verify(usageService, never()).recordUsage(any());
     }

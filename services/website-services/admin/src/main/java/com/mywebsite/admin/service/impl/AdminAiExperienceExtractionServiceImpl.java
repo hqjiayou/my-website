@@ -51,13 +51,16 @@ import org.springframework.util.StringUtils;
  * {@code agent_meta} 里也没有 error/超限字段——这类教训 v1 无原料，靠 UoW-3 的
  * 手动新建候选兜底，本预筛只覆盖「成功轮内的失败信号」。
  *
- * <p><b>组链口径</b>（P3 定案）：按来源 agent 分组，每组用该 agent 的生效链
- * （与 KB OCR 同口径先 KEY 链、空了才 CLI 链）——链首即该 agent 的主用入口
+ * <p><b>组链口径</b>（Issue #208 UoW-M2，总单 #207 定案 6）：按来源 agent 分组，
+ * 每组固定用该 agent 的 <b>KEY 模式</b>生效链（显式单模式，不跨模式回退——
+ * 取代旧的先 KEY 后 CLI 口径）——链首即该 agent 的 KEY 主用入口
  * （站默认，无站默认时全站默认，即定案所说手动批量用平台默认入口的落点）；
- * 备援随请求带给执行层顺链。链为空的组整组计入失败轮数，不静默跳过。
+ * 备援随请求带给执行层顺链（备援封闭在 KEY 模式内）。KEY 链为空的组整组计入
+ * 失败轮数、诚实失败，不静默跳过、更不改走 CLI。
  *
  * <p><b>记账</b>（#140 一表制）：每次提炼调用成功后经 {@link AgentUsageService}
- * 落一行 {@code source=EXPERIENCE}；执行层没回报 usage 时 tokens 记 NULL。
+ * 落一行 {@code source=EXPERIENCE}，mode 记实际所走模式（单模式口径下恒为 KEY，
+ * 由取链变量传入、非写死装饰）；执行层没回报 usage 时 tokens 记 NULL。
  * 调用失败不记账（与试聊「无 DONE 不记」同口径）。
  */
 @Service
@@ -127,15 +130,13 @@ public class AdminAiExperienceExtractionServiceImpl implements AdminAiExperience
         int produced = 0;
         for (Map.Entry<Long, List<CandidateTurn>> group : byAgent.entrySet()) {
             long agentId = group.getKey();
-            List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, "KEY");
+            // 固定 KEY 单模式（定案 6）：不跨模式补 CLI 链；KEY 无入口即整组诚实失败。
             String mode = "KEY";
-            if (chain.isEmpty()) {
-                chain = modelEntryService.selectionChain(agentId, "CLI");
-                mode = "CLI";
-            }
+            List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, mode);
             if (chain.isEmpty()) {
                 failedTurns += group.getValue().size();
-                log.warn("experience extraction skipped {} turns for agent {}: no usable model entry chain",
+                log.warn(
+                        "experience extraction skipped {} turns for agent {}: no usable KEY model entry chain",
                         group.getValue().size(), agentId);
                 continue;
             }
