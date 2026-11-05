@@ -38,6 +38,12 @@ Runner 保真与口径修复（#204）：工具面与生产对齐——每轮默
 EXTERNAL_DEPENDENCY_BLOCKED）改记 blocked，与 unscored 同级（不计分、
 不进均值、整轮无已计分题时退出码 2），其他 error_code 照常计分；
 ``--pace-seconds`` 在题与题之间留节奏（首题前不睡、缺省 0 不睡）。
+
+第二批（#206）：``--resume-from <report.json>`` 断点续跑——旧报告指纹
+与本轮指纹逐项全等才允许续（指纹闸，任一项不一致先于跑分报错退出），
+旧行中已计分者逐字复用、其余题重跑，pace 只作用于实际执行的题；
+汇总新增 ``manualOnly`` 单列（已计分行中四指标全 None 的纯行为题，
+只呈现、不改聚合口径，见 ``run_answer_eval``）。
 """
 
 from __future__ import annotations
@@ -1120,6 +1126,12 @@ def render_markdown(report: dict[str, object]) -> str:
     pace_value = report.get("paceSeconds")
     if isinstance(pace_value, (int, float)) and not isinstance(pace_value, bool):
         lines.append(f"- Pace: {pace_value:g} seconds between cases")
+    # 续跑标注（#206 UoW-1）：只在给了 --resume-from 时出现，与 JSON 同口径。
+    resumed_from = report.get("resumedFrom")
+    if isinstance(resumed_from, str) and resumed_from:
+        lines.append(
+            f"- Resumed from: `{resumed_from}`（复用 {report.get('resumedCount')} 题）"
+        )
     # 配置指纹（#187 UoW-2）：旧报告无此块时整段跳过，不影响其渲染。
     fingerprint = report.get("fingerprint")
     if isinstance(fingerprint, dict):
@@ -1286,6 +1298,34 @@ def render_markdown(report: dict[str, object]) -> str:
                 )
                 + " |"
             )
+    # 纯行为题单列（#206 UoW-4）：四指标全无机器锚点，仍在均值分母内，
+    # 单列只是提醒人工核对，不要把 passed=False 读成答错。
+    manual_only_cases = summary.get("manualOnlyCases")
+    if isinstance(manual_only_cases, list) and manual_only_cases:
+        lines.extend(
+            [
+                "",
+                "## Manual-only cases",
+                "",
+                "下列题目四指标皆无机器锚点（纯行为题），须人工核对 expected_behavior；其 passed=False 非答错（口径见 evals/README.md）：",
+                "",
+                "| id | category |",
+                "| --- | --- |",
+            ]
+        )
+        for entry in manual_only_cases:
+            if not isinstance(entry, dict):
+                continue
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _cell(entry.get("id")),
+                        _cell(entry.get("category")),
+                    ]
+                )
+                + " |"
+            )
     # 行为检查逐项结果（#190 UoW-1）：只列声明了 behavior_checks 的题。
     behavior_rows = [
         case for case in case_rows if isinstance(case.get("behaviorChecks"), dict)
@@ -1368,6 +1408,79 @@ def load_baseline_report(path: Path) -> dict[str, object]:
     if not isinstance(raw.get("cases"), list):
         raise ValueError("--baseline report has no cases list; not an eval report.")
     return raw
+
+
+def load_resume_report(path: Path) -> dict[str, object]:
+    """加载 --resume-from 的旧报告 JSON（#206 UoW-1）；口径同 --baseline。
+
+    缺失/坏 JSON/非报告形状一律明确报错，不静默当无续跑。指纹是否与本轮
+    全等由 ``_check_resume_fingerprint`` 在跑分前另行把关（需要本轮指纹
+    才能比对，不在本函数内做）。
+    """
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"--resume-from cannot be read: {path} ({exc}).") from exc
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"--resume-from is not valid JSON: {path} ({exc}).") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("--resume-from must be a report JSON object.")
+    if not isinstance(raw.get("cases"), list):
+        raise ValueError("--resume-from report has no cases list; not an eval report.")
+    return raw
+
+
+# 指纹闸逐项比对的键（#206 UoW-1）：与 build_fingerprint 的键集一致。
+_RESUME_FINGERPRINT_KEYS: tuple[str, ...] = (
+    "model",
+    "passRule",
+    "casesFile",
+    "corpus",
+    "harnessDir",
+    "skills",
+    "lessons",
+)
+
+
+def _check_resume_fingerprint(
+    current_fingerprint: dict[str, object], resume_report: dict[str, object]
+) -> None:
+    """指纹闸：旧报告指纹须与本轮指纹逐项全等，否则抛 ValueError 拒绝续跑。
+
+    续跑只允许续「同一配置的一轮」：臂（harnessDir/skills/lessons）或锚
+    （model/passRule/casesFile/corpus）任一不同都拒绝，不做跨配置拼接。
+    旧报告无 fingerprint（UoW-2 之前的产物）无从核对，同样拒绝。错误信息
+    逐项列出不一致的键，供执行人定位是哪一臂变了。
+    """
+    resume_fingerprint = resume_report.get("fingerprint")
+    if not isinstance(resume_fingerprint, dict):
+        raise ValueError(
+            "--resume-from report has no fingerprint; cannot verify it is the "
+            "same configuration as this run, refusing to resume."
+        )
+    mismatched = [
+        key
+        for key in _RESUME_FINGERPRINT_KEYS
+        if current_fingerprint.get(key) != resume_fingerprint.get(key)
+    ]
+    if mismatched:
+        raise ValueError(
+            "--resume-from fingerprint mismatch on: "
+            + ", ".join(mismatched)
+            + "; resume only continues a run with an identical configuration."
+        )
+
+
+def _row_is_scored(row: object) -> bool:
+    """旧行是否已计分可复用（#206 UoW-1）：非 unscored、非 blocked、passed 非 None。"""
+    if not isinstance(row, dict):
+        return False
+    if row.get("unscored") or row.get("blocked"):
+        return False
+    scores = row.get("scores")
+    return isinstance(scores, dict) and scores.get("passed") is not None
 
 
 def _num(value: object) -> float | None:
@@ -1781,6 +1894,8 @@ async def run_answer_eval(
     baseline_report: dict[str, object] | None = None,
     case_timeout_seconds: float = CASE_TIMEOUT_SECONDS,
     pace_seconds: float = 0.0,
+    resume_report: dict[str, object] | None = None,
+    resume_from: str | None = None,
 ) -> AnswerEvalRun:
     """对题集跑检索 + run_chat，评分，并在给出 out 时写下 JSON 与 Markdown。
 
@@ -1817,6 +1932,20 @@ async def run_answer_eval(
     sleep，启用时报告顶层记 ``paceSeconds``。provider 受阻题记
     blocked、不进聚合分母，汇总单列 ``blockedCount`` /
     ``blockedCases``（与 unscored 并列）。
+
+    续跑（#206 UoW-1）：``resume_report``（CLI ``--resume-from`` 已加载的
+    旧报告）给出时，先过指纹闸——旧报告指纹与本轮指纹逐项全等才允许
+    续，任一不一致抛 ValueError（CLI 层据此先于跑分 ERROR 退出 2）；
+    旧行中已计分者（非 unscored、非 blocked、passed 非 None）逐字复用、
+    按本轮题序拼回，其余题正常执行；pace 只作用于实际执行的题（按
+    实际执行序计，第一个实际执行的题之前不睡）。报告顶层记
+    ``resumedFrom``（``resume_from`` 路径字符串）与 ``resumedCount``。
+
+    纯行为题单列（#206 UoW-4）：汇总在已计分行中筛四指标
+    （retrieval_hit / citation_precision / keyword_coverage /
+    refusal_correct）全为 None 的行，单列 ``manualOnlyCount`` /
+    ``manualOnlyCases``（仅存在时出现）——只呈现，aggregate 口径不动，
+    这类行仍留在聚合分母内。
     """
     loaded_corpus = list(corpus) if corpus is not None else load_corpus()
     loaded_cases = list(cases) if cases is not None else load_cases()
@@ -1825,7 +1954,6 @@ async def run_answer_eval(
     else:
         validate_golden(loaded_corpus, loaded_cases)
     when = _stamp(generated_at or datetime.now(UTC))
-    service = await build_eval_index(loaded_corpus, agent_id=agent_id)
     base_skills = [skill_id.strip() for skill_id in skills or [] if skill_id.strip()]
     resolved_skills_dir = skills_dir or default_skills_directory()
     resolutions: dict[tuple[str, ...], SkillResolution] = {}
@@ -1847,16 +1975,51 @@ async def run_answer_eval(
         return resolutions[key]
 
     lessons = list(experience_lessons) if experience_lessons else None
+    # 配置指纹（#187 UoW-2）：先于跑分算出——报告归档用它，#206 续跑的
+    # 指纹闸也用它（闸必须在建索引与逐题执行之前把关，不烧任何请求）。
+    fingerprint = build_fingerprint(
+        model_name=model_name,
+        cases_file=cases_file,
+        case_count=len(loaded_cases),
+        corpus=loaded_corpus,
+        harness_dir=harness_dir,
+        skills=base_skills,
+        lessons_file=lessons_file,
+        lessons_count=len(lessons) if lessons else 0,
+    )
+    # 续跑行复用表（#206 UoW-1）：指纹闸通过后，旧行中已计分者按 id 备查；
+    # 旧报告里本轮没有的题 id 不进本轮（按本轮题序拼回，多余者忽略）。
+    reusable_rows: dict[str, dict[str, object]] = {}
+    if resume_report is not None:
+        _check_resume_fingerprint(fingerprint, resume_report)
+        for old_row in resume_report.get("cases", []):
+            if _row_is_scored(old_row):
+                assert isinstance(old_row, dict)
+                old_id = old_row.get("id")
+                if isinstance(old_id, str) and old_id not in reusable_rows:
+                    reusable_rows[old_id] = old_row
+    service = await build_eval_index(loaded_corpus, agent_id=agent_id)
     # 枚举用假 client 基于同一份 loaded_corpus（#204 UoW-1）：枚举范围与
     # build_eval_index 的索引范围逐字一致，--distractors 并入时同步包含。
     knowledge_client = CorpusKnowledgeClient(loaded_corpus)
     rows: list[dict[str, object]] = []
+    resumed_count = 0
+    executed_count = 0
     try:
-        for index, case in enumerate(loaded_cases):
-            # 题间节奏（#204 UoW-3）：首题前不睡；pace 为 0 时不调用
-            # sleep，缺省行为与此前逐字一致。
-            if index > 0 and pace_seconds > 0:
+        for case in loaded_cases:
+            # 续跑复用（#206 UoW-1）：已计分旧行逐字拼回，不执行、不占
+            # pace 的执行序。
+            reused = reusable_rows.get(case.id)
+            if reused is not None:
+                rows.append(reused)
+                resumed_count += 1
+                continue
+            # 题间节奏（#204 UoW-3，#206 改按实际执行序计）：第一个实际
+            # 执行的题之前不睡；pace 为 0 时不调用 sleep，缺省行为与
+            # 此前逐字一致。
+            if executed_count > 0 and pace_seconds > 0:
                 await asyncio.sleep(pace_seconds)
+            executed_count += 1
             # 逐题隔离（#187 UoW-2）：单题异常/超时只记该题 unscored，
             # 不中断整轮、不记 0 分（见 _unscored_row 的口径）。
             try:
@@ -1907,6 +2070,27 @@ async def run_answer_eval(
     if blocked_entries:
         summary["blockedCount"] = len(blocked_entries)
         summary["blockedCases"] = blocked_entries
+    # 纯行为题单列（#206 UoW-4）：已计分行中四指标全 None 者（无机器锚点、
+    # passed 恒 False，只能人工核对 expected_behavior）。只呈现：这类行
+    # 已在 scored_rows 内、仍留在 aggregate 分母里，聚合口径逐字不动；
+    # blocked/unscored 行不在 scored_rows 中，不会被重复收录。
+    manual_only_entries = [
+        {"id": row["id"], "category": row["category"]}
+        for row in scored_rows
+        if isinstance(row["scores"], dict)
+        and all(
+            row["scores"].get(name) is None
+            for name in (
+                "retrieval_hit",
+                "citation_precision",
+                "keyword_coverage",
+                "refusal_correct",
+            )
+        )
+    ]
+    if manual_only_entries:
+        summary["manualOnlyCount"] = len(manual_only_entries)
+        summary["manualOnlyCases"] = manual_only_entries
     warning_entries = [
         {"id": row["id"], "category": row["category"], "warnings": row["warnings"]}
         for row in rows
@@ -1935,17 +2119,14 @@ async def run_answer_eval(
     # 题间节奏标注（#204 UoW-3）：只在启用（>0）时出现，便于事后核对跑批条件。
     if pace_seconds > 0:
         report["paceSeconds"] = pace_seconds
-    # 配置指纹（#187 UoW-2）：每份报告都带，随报告归档。
-    report["fingerprint"] = build_fingerprint(
-        model_name=model_name,
-        cases_file=cases_file,
-        case_count=len(loaded_cases),
-        corpus=loaded_corpus,
-        harness_dir=harness_dir,
-        skills=base_skills,
-        lessons_file=lessons_file,
-        lessons_count=len(lessons) if lessons else 0,
-    )
+    # 续跑标注（#206 UoW-1）：只在给了 --resume-from 时出现；复用行数
+    # 为 0 也如实记录（闸过了但无行可复用，与没给续跑是两回事）。
+    if resume_report is not None:
+        report["resumedFrom"] = resume_from
+        report["resumedCount"] = resumed_count
+    # 配置指纹（#187 UoW-2）：每份报告都带，随报告归档（已在跑分前算出，
+    # 同一份对象也是续跑指纹闸的比对基准）。
+    report["fingerprint"] = fingerprint
     if baseline_report is not None:
         report["baselineDiff"] = build_baseline_diff(report, baseline_report)
     json_path = None
@@ -2046,6 +2227,16 @@ def _parser() -> argparse.ArgumentParser:
         "stay within provider rate limits. Default: 0 (no pacing). When > 0 the "
         "report is annotated with paceSeconds.",
     )
+    parser.add_argument(
+        "--resume-from",
+        type=Path,
+        default=None,
+        help="Previous run's report JSON to resume from: rows already scored "
+        "are reused verbatim and only the remaining cases are executed. The "
+        "old report's fingerprint must match this run's configuration exactly "
+        "(fingerprint gate), otherwise the run errors out before scoring. "
+        "May be combined with --baseline.",
+    )
     return parser
 
 
@@ -2089,6 +2280,13 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(f"ERROR: {exc}", file=sys.stderr, flush=True)
             return BLOCKED_EXIT
+    resume_report: dict[str, object] | None = None
+    if args.resume_from is not None:
+        try:
+            resume_report = load_resume_report(args.resume_from)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr, flush=True)
+            return BLOCKED_EXIT
     settings = Settings()
     model, spec, blocked = configured_model_block(settings)
     if blocked or model is None:
@@ -2096,27 +2294,35 @@ def main(argv: list[str] | None = None) -> int:
         return BLOCKED_EXIT
     destination = args.out if args.out is not None else evals_root() / "reports"
     corpus = load_corpus() + load_distractors() if args.distractors else None
-    result = asyncio.run(
-        run_answer_eval(
-            model,
-            model_name=spec,
-            out=destination,
-            corpus=corpus,
-            cases=cases,
-            skills=_parse_skills_arg(args.skills),
-            harness_dir=harness_dir,
-            experience_lessons=lessons,
-            skills_dir=settings.agent_skills_dir.strip() or default_skills_directory(),
-            skills_max_instruction_chars=settings.agent_skills_max_instruction_chars,
-            skills_self_select_enabled=settings.agent_skills_self_select_enabled,
-            cases_file=str(args.cases)
-            if args.cases is not None
-            else str(evals_root() / "golden_qa.jsonl"),
-            lessons_file=str(args.lessons_file) if args.lessons_file is not None else None,
-            baseline_report=baseline_report,
-            pace_seconds=args.pace_seconds,
+    try:
+        result = asyncio.run(
+            run_answer_eval(
+                model,
+                model_name=spec,
+                out=destination,
+                corpus=corpus,
+                cases=cases,
+                skills=_parse_skills_arg(args.skills),
+                harness_dir=harness_dir,
+                experience_lessons=lessons,
+                skills_dir=settings.agent_skills_dir.strip() or default_skills_directory(),
+                skills_max_instruction_chars=settings.agent_skills_max_instruction_chars,
+                skills_self_select_enabled=settings.agent_skills_self_select_enabled,
+                cases_file=str(args.cases)
+                if args.cases is not None
+                else str(evals_root() / "golden_qa.jsonl"),
+                lessons_file=str(args.lessons_file) if args.lessons_file is not None else None,
+                baseline_report=baseline_report,
+                pace_seconds=args.pace_seconds,
+                resume_report=resume_report,
+                resume_from=str(args.resume_from) if args.resume_from is not None else None,
+            )
         )
-    )
+    except ValueError as exc:
+        # 续跑指纹闸（#206 UoW-1）在跑分前抛 ValueError：与注入文件错误
+        # 同口径，ERROR 退出 2，不静默降级成整轮重跑。
+        print(f"ERROR: {exc}", file=sys.stderr, flush=True)
+        return BLOCKED_EXIT
     if result.json_path is not None:
         print(result.json_path, flush=True)
     if result.markdown_path is not None:

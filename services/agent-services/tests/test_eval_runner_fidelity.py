@@ -59,12 +59,12 @@ async def test_fake_client_lists_full_corpus_by_default() -> None:
     corpus = load_corpus()
     client = CorpusKnowledgeClient(corpus)
     page = await client.list_knowledge_documents("eval-golden")
-    assert page["total"] == len(corpus) == 13
+    assert page["total"] == len(corpus) == 16
     assert page["limit"] == 100
     assert page["offset"] == 0
     assert page["truncated"] is False
     items = page["items"]
-    assert isinstance(items, list) and len(items) == 13
+    assert isinstance(items, list) and len(items) == 16
     first = items[0]
     assert isinstance(first, dict)
     assert first["id"] == 0
@@ -98,20 +98,20 @@ async def test_fake_client_keyword_filters_by_title_substring() -> None:
 async def test_fake_client_pagination_and_truncated_boundaries() -> None:
     client = CorpusKnowledgeClient(load_corpus())
     first = await client.list_knowledge_documents("eval-golden", limit=5, offset=0)
-    assert first["total"] == 13 and first["truncated"] is True
+    assert first["total"] == 16 and first["truncated"] is True
     assert isinstance(first["items"], list) and len(first["items"]) == 5
 
     # offset + len(items) == total 时恰好读完，不是 truncated。
-    last = await client.list_knowledge_documents("eval-golden", limit=5, offset=8)
+    last = await client.list_knowledge_documents("eval-golden", limit=5, offset=11)
     assert last["truncated"] is False
     assert isinstance(last["items"], list) and len(last["items"]) == 5
 
-    tail = await client.list_knowledge_documents("eval-golden", limit=5, offset=10)
+    tail = await client.list_knowledge_documents("eval-golden", limit=5, offset=13)
     assert tail["truncated"] is False
     assert isinstance(tail["items"], list) and len(tail["items"]) == 3
 
     beyond = await client.list_knowledge_documents("eval-golden", limit=5, offset=99)
-    assert beyond["total"] == 13
+    assert beyond["total"] == 16
     assert beyond["items"] == []
     assert beyond["truncated"] is False
 
@@ -148,7 +148,7 @@ async def test_fake_client_enumerates_distractors_when_merged() -> None:
     merged = load_corpus() + load_distractors()
     client = CorpusKnowledgeClient(merged)
     page = await client.list_knowledge_documents("eval-golden", limit=200)
-    assert page["total"] == len(merged) == 21
+    assert page["total"] == len(merged) == 24
 
     sewing = await client.list_knowledge_documents("eval-golden", keyword="缝纫机")
     assert sewing["total"] == 2
