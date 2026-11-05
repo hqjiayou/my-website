@@ -554,6 +554,7 @@ class RetrievalService:
         embedding_classes: list[EmbeddingClass] | None = None,
         segments: list[IndexSegment] | None = None,
         tables: list[IndexTable] | None = None,
+        prune_stale_classes: bool = False,
     ) -> int:
         chunks, locations = _chunks_for_index(content, segments)
         if not chunks:
@@ -574,6 +575,8 @@ class RetrievalService:
                 item=classes[0],
                 locations=locations,
             )
+            if prune_stale_classes:
+                await self._prune_stale_classes(agent_id, source_id, classes)
             await self._replace_sheet_rows(agent_id, source_id, title, tables)
             return count
         count = 0
@@ -597,8 +600,29 @@ class RetrievalService:
                 )
         if failures:
             raise RuntimeError("One or more embedding classes failed to index.")
+        if prune_stale_classes:
+            await self._prune_stale_classes(agent_id, source_id, classes)
         await self._replace_sheet_rows(agent_id, source_id, title, tables)
         return count
+
+    async def _prune_stale_classes(
+        self, agent_id: str, source_id: str, classes: list[EmbeddingClass]
+    ) -> None:
+        """完整类集写入成功后，清理该文档在未登记类下的残留行（Issue #202 UoW-2）。
+
+        只在调用方明示本次是完整类集（prune_stale_classes）时执行：fill-missing
+        子集写绝不走到这里。store 未实现该方法（测试替身等）时跳过，与
+        _replace_sheet_rows 的 getattr 口径一致；生产 PgVector store 恒实现。
+        清理失败照常上抛——Java 侧会把文档标 FAILED，不假装索引完全同步。
+        """
+        prune = getattr(self._store, "prune_document_classes", None)
+        if prune is None:
+            return
+        await prune(
+            agent_id=agent_id,
+            source_id=source_id,
+            keep_models=[item.name for item in classes],
+        )
 
     async def _replace_sheet_rows(
         self,
@@ -758,6 +782,28 @@ class RetrievalService:
                     )
         return ordered[:top_k]
 
+    async def _lexical_only(
+        self,
+        *,
+        agent_id: str,
+        query: str,
+        top_k: int,
+        classes: list[EmbeddingClass],
+        model_selection: ModelSelection | None,
+    ) -> list[RetrievedChunk]:
+        """纯字面降级（Issue #202 UoW-3）：覆盖率成一路名次、per-source 上限、再走 rerank 收尾。
+
+        调用方须已置 _retrieval_incomplete；字面无命中时返回空（degraded 仍真，
+        不假装正常空结果）。分数门 min_score/ratio_floor 是向量余弦口径，不套到字面覆盖率上。
+        """
+        terms, lexical_hits = await self._lexical_hits(agent_id, query, classes)
+        fused = apply_per_source_cap(
+            lexical_rank_path(lexical_hits, terms), self._max_chunks_per_source
+        )
+        return await self._finish_with_rerank(
+            fused, query=query, top_k=top_k, model_selection=model_selection
+        )
+
     async def _search_one(
         self,
         item: EmbeddingClass,
@@ -770,17 +816,34 @@ class RetrievalService:
         """只有一类时保持原来的余弦、字面覆盖率取较大值、相对裁剪。"""
         if item.client is None:
             raise RuntimeError("Embedding client is not configured.")
-        embedding = await item.client.embed_query(query)
-        vector_hits = apply_min_score(
-            await self._store.search(
+        try:
+            embedding = await item.client.embed_query(query)
+            vector_hits = apply_min_score(
+                await self._store.search(
+                    agent_id=agent_id,
+                    embedding=embedding,
+                    top_k=top_k,
+                    embedding_model=item.name,
+                ),
+                self._min_score,
+            )
+        except Exception as exc:  # noqa: BLE001 — 向量通道故障降级纯字面（Issue #202 UoW-3）
+            # 字面通道（ILIKE）不依赖嵌入：向量侧抖动时用它兜底并标不完整，
+            # 与多类路径「一类失败仍出字面结果」对齐。字面再失败则照常上抛，
+            # 由 retrieve_chunks 整次降级为空。
+            logger.warning(
+                "retrieval vector path failed for class %s (%s); falling back to lexical only",
+                item.name,
+                type(exc).__name__,
+            )
+            self._retrieval_incomplete = True
+            return await self._lexical_only(
                 agent_id=agent_id,
-                embedding=embedding,
+                query=query,
                 top_k=top_k,
-                embedding_model=item.name,
-            ),
-            self._min_score,
-        )
-        # 上面的嵌入和向量查询若失败会直接抛出，词法查询不会先跑。
+                classes=[item],
+                model_selection=model_selection,
+            )
         terms, lexical_hits = await self._lexical_hits(agent_id, query, [item])
         fused = apply_per_source_cap(
             apply_score_ratio_floor(
@@ -831,7 +894,16 @@ class RetrievalService:
                     type(exc).__name__,
                 )
         if failures == len(classes):
-            raise RuntimeError("All embedding classes failed.")
+            # 全部类向量失败时与单类同口径（Issue #202 UoW-3）：降级纯字面，
+            # 不整次落空；置 _retrieval_incomplete 让 degraded 随之成立。
+            self._retrieval_incomplete = True
+            return await self._lexical_only(
+                agent_id=agent_id,
+                query=query,
+                top_k=top_k,
+                classes=classes,
+                model_selection=model_selection,
+            )
         if failures:
             self._retrieval_incomplete = True
         terms, lexical_hits = await self._lexical_hits(agent_id, query, classes)

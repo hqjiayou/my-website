@@ -15,7 +15,24 @@ public record AgentRetrievalDocument(
         String baseUrl,
         List<AgentEmbeddingClass> embeddingClasses,
         List<AgentRetrievalSegment> segments,
-        List<AgentRetrievalTable> tables) {
+        List<AgentRetrievalTable> tables,
+        /** Issue #202 UoW-2：TRUE＝本次 embeddingClasses 是该分区的完整登记类集，Python 写完后可按差集清理已注销类的残留行；null/false＝子集写（如 fill-missing 补写），不清理。 */
+        Boolean embeddingClassesComplete) {
+
+    public AgentRetrievalDocument(
+            String agentId,
+            String sourceId,
+            String title,
+            String content,
+            String embeddingSpec,
+            String apiKey,
+            String baseUrl,
+            List<AgentEmbeddingClass> embeddingClasses,
+            List<AgentRetrievalSegment> segments,
+            List<AgentRetrievalTable> tables) {
+        this(agentId, sourceId, title, content, embeddingSpec, apiKey, baseUrl,
+                embeddingClasses, segments, tables, null);
+    }
 
     public AgentRetrievalDocument(
             String agentId,

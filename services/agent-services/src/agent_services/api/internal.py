@@ -866,6 +866,7 @@ async def upsert_retrieval_document(
             ),
             embedding_model=None if embedding_classes else body.embedding_spec,
             embedding_classes=embedding_classes,
+            prune_stale_classes=body.embedding_classes_complete,
             segments=None
             if body.segments is None
             else [

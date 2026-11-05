@@ -75,6 +75,9 @@ public interface AdminAiKnowledgeService {
     /** 知识中心总览：全平台文档/索引健康/原档用量聚合 + 分站点统计 + 最近失败。 */
     AdminAiKnowledgeDtos.AdminAiKnowledgeOverviewDto knowledgeOverview();
 
+    /** Issue #203：定时重试派生索引同步问题行（tombstone 删除与链接分区同步）。 */
+    void retryRetrievalSyncIssues();
+
     /** 批量重试全部「索引失败且启用中」的文档，返回尝试/成功数。 */
     AdminAiKnowledgeDtos.AdminAiKnowledgeReindexFailedResultDto reindexFailedDocuments();
 

@@ -317,7 +317,8 @@ async def test_one_class_keeps_current_cosine_and_coverage_score() -> None:
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:code", 1.0)]
 
 
-async def test_one_class_embed_failure_skips_lexical_and_degrades() -> None:
+async def test_one_class_embed_failure_falls_back_to_lexical_and_degrades() -> None:
+    """Issue #202 UoW-3：单类嵌入失败降级纯字面，命中返回且 degraded 为真。"""
     store = _ClassStore({})
     service = RetrievalService(None, store, rerank_enabled=False)
     hits = await service.retrieve_chunks(
@@ -325,9 +326,9 @@ async def test_one_class_embed_failure_skips_lexical_and_degrades() -> None:
         query="XJ-900",
         embedding_classes=_classes(("openai:a", _ClassEmbedder(0.1, fail=True))),
     )
-    assert hits == []
+    assert [hit.source_id for hit in hits] == ["kb:code"]
     assert service.degraded is True
-    assert store.lexical_calls == 0
+    assert store.lexical_calls == 1
 
 
 async def test_partial_class_failure_keeps_other_classes_and_lexical() -> None:
@@ -347,7 +348,8 @@ async def test_partial_class_failure_keeps_other_classes_and_lexical() -> None:
     assert store.lexical_calls == 1
 
 
-async def test_all_class_embed_failures_degrade_without_lexical() -> None:
+async def test_all_class_embed_failures_fall_back_to_lexical() -> None:
+    """Issue #202 UoW-3：多类全部失败与单类同口径——纯字面兜底，不整次落空。"""
     store = _ClassStore({"openai:a": [RetrievedChunk("kb:vec", 0, "vector hit", 0.8)]})
     service = RetrievalService(None, store, rerank_enabled=False)
     hits = await service.retrieve_chunks(
@@ -358,9 +360,9 @@ async def test_all_class_embed_failures_degrade_without_lexical() -> None:
             ("openai:b", _ClassEmbedder(0.2, fail=True)),
         ),
     )
-    assert hits == []
+    assert [hit.source_id for hit in hits] == ["kb:code"]
     assert service.degraded is True
-    assert store.lexical_calls == 0
+    assert store.lexical_calls == 1
 
 
 async def test_upsert_of_one_class_does_not_remove_another() -> None:
@@ -394,6 +396,91 @@ async def test_upsert_of_one_class_does_not_remove_another() -> None:
     )
     assert ("1", "kb:1", "openai:a") in store.kept
     assert ("1", "kb:1", "openai:b") in store.kept
+
+
+class _PruningStore(FakeStore):
+    """按 (agent, source, model) 记行的 store，实现差集清理供 UoW-2 验证。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.kept: dict[tuple[str, str, str], list[str]] = {}
+        self.prune_calls: list[list[str]] = []
+
+    async def upsert_document(
+        self, *, agent_id, source_id, title, chunks, embeddings, embedding_model: str = ""
+    ) -> int:
+        self.kept[(agent_id, source_id, embedding_model)] = list(chunks)
+        return len(chunks)
+
+    async def prune_document_classes(self, *, agent_id, source_id, keep_models) -> None:
+        self.prune_calls.append(list(keep_models))
+        keep = set(keep_models)
+        for key in [k for k in self.kept if k[0] == agent_id and k[1] == source_id]:
+            if key[2] not in keep:
+                del self.kept[key]
+
+
+async def test_complete_upsert_prunes_deregistered_class_rows() -> None:
+    """Issue #202 UoW-2：完整类集重写后，已注销类的旧行被差集清理（防复活）。"""
+    store = _PruningStore()
+    service = RetrievalService(None, store)
+    await service.upsert_document(
+        agent_id="1",
+        source_id="kb:1",
+        title="t",
+        content="alpha facts",
+        embedding_classes=_classes(
+            ("openai:a", _ClassEmbedder(0.1)), ("openai:b", _ClassEmbedder(0.2))
+        ),
+        prune_stale_classes=True,
+    )
+    assert ("1", "kb:1", "openai:b") in store.kept
+    # 类 B 被注销：以仅 A 的完整类集改正文重写，B 的旧行必须消失。
+    await service.upsert_document(
+        agent_id="1",
+        source_id="kb:1",
+        title="t",
+        content="alpha facts revised",
+        embedding_classes=_classes(("openai:a", _ClassEmbedder(0.1))),
+        prune_stale_classes=True,
+    )
+    assert ("1", "kb:1", "openai:b") not in store.kept
+    assert store.kept[("1", "kb:1", "openai:a")] == ["alpha facts revised"]
+    assert store.prune_calls[-1] == ["openai:a"]
+
+
+async def test_subset_upsert_without_complete_flag_never_prunes() -> None:
+    """fill-missing 子集写（缺省 flag）绝不触发清理——#126 不变量。"""
+    store = _PruningStore()
+    service = RetrievalService(None, store)
+    await service.upsert_document(
+        agent_id="1",
+        source_id="kb:1",
+        title="t",
+        content="alpha facts",
+        embedding_classes=_classes(("openai:a", _ClassEmbedder(0.1))),
+    )
+    await service.upsert_document(
+        agent_id="1",
+        source_id="kb:1",
+        title="t",
+        content="alpha facts",
+        embedding_classes=_classes(("openai:b", _ClassEmbedder(0.2))),
+    )
+    assert store.prune_calls == []
+    assert ("1", "kb:1", "openai:a") in store.kept
+    assert ("1", "kb:1", "openai:b") in store.kept
+
+
+def test_prune_delete_sql_is_difference_only() -> None:
+    from agent_services.retrieval.store import prune_delete_sql
+
+    sql = prune_delete_sql("chunks_d768")
+    assert "agent_retrieval.chunks_d768" in sql
+    assert "NOT (embedding_model = ANY($3::text[]))" in sql
+    assert "sheet_rows" not in sql
+    with pytest.raises(ValueError):
+        prune_delete_sql("chunks;drop table chunks")
 
 
 def test_search_endpoint_uses_each_registered_class(monkeypatch: pytest.MonkeyPatch) -> None:
