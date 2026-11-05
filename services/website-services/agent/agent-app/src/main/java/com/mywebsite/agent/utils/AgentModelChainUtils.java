@@ -9,9 +9,10 @@ import java.util.List;
 import org.springframework.util.StringUtils;
 
 /**
- * 平台模型入口生效链规则（与 admin {@code AdminAiModelEntryServiceImpl.selectionChain} 同规则，
- * 两处须一致）：站点 chat（{@code AgentAiServiceImpl}）与网关 {@code /v1} 转发
- * （{@code GatewayV1ServiceImpl}）共用这套查询与组装，不另写一份，防止规则分叉。
+ * 网关 {@code /v1} 转发（{@code GatewayV1ServiceImpl}）用的入口查询与凭证组装。
+ * 站点 chat 的生效链自 Issue #210 UoW-7 起改走链预设（agent 引用的预设成员交
+ * agent-core {@code ModelChainResolver.resolvePresetChain}），不再经本类；本类
+ * 只剩网关的 alias 链在用（其规则独立、不在本单范围）。
  *
  * <p>纯静态：不持有状态，调用方自带 {@code AgentAiModelEntryMapper}/{@code ModelEntryCipher}。
  */

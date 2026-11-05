@@ -65,6 +65,10 @@ class AgentAiExperienceLessonInjectionTest {
 
     @Mock private AgentAiModelEntryMapper modelEntryMapper;
 
+    @Mock private com.mywebsite.agent.mapper.AgentMapper agentMapper;
+
+    @Mock private com.mywebsite.agent.mapper.AgentAiChainPresetMapper chainPresetMapper;
+
     @Mock private AgentAiKnowledgeDocumentMapper knowledgeDocumentMapper;
 
     @Mock private LocalizedMessageService localizedMessageService;
@@ -93,6 +97,8 @@ class AgentAiExperienceLessonInjectionTest {
                 Mockito.mock(AgentEmbeddingClassService.class),
                 experienceLessonService,
                 Mockito.mock(com.mywebsite.agent.service.AgentMcpSelectionService.class),
+                agentMapper,
+                chainPresetMapper,
                 Mockito.mock(KnowledgeSpaceResolver.class));
         String subject = SubjectCodes.formatAgentUserSubject(200L);
         AuthContext.set(new AuthenticatedUser(TokenAudience.AGENT, subject, "u", 10L, Set.of()));
@@ -118,7 +124,17 @@ class AgentAiExperienceLessonInjectionTest {
         entry.setEnabled(true);
         entry.setDefaultEntry(true);
         entry.setMode("KEY");
-        when(modelEntryMapper.selectList(any())).thenReturn(List.of(entry), List.of());
+        // 链预设口径（Issue #210 UoW-7）：agent 10 引用只含该入口的预设
+        com.mywebsite.agent.entity.AgentEntity agent = new com.mywebsite.agent.entity.AgentEntity();
+        agent.setId(10L);
+        agent.setChainPresetId(900L);
+        when(agentMapper.selectById(10L)).thenReturn(agent);
+        com.mywebsite.agent.entity.AgentAiChainPresetEntity preset =
+                new com.mywebsite.agent.entity.AgentAiChainPresetEntity();
+        preset.setId(900L);
+        preset.setEntryIds("[3]");
+        when(chainPresetMapper.selectById(900L)).thenReturn(preset);
+        when(modelEntryMapper.selectBatchIds(any())).thenReturn(List.of(entry));
         when(modelEntryCipher.decrypt("enc:key-3")).thenReturn("key-3");
     }
 

@@ -14,13 +14,19 @@ import { modelIdFromSpec } from '@/utils/modelSpec'
 
 import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
 
-function entryFor(entries: AiModelEntry[], agentId: number, mode: 'CLI' | 'KEY') {
+/**
+ * 该模式当前生效的平台入口（与 Java 平台链同规则，Issue #210 UoW-6）：入口已全平台
+ * 注册、与查看的 agent 无关；带来源标注的入口（原专属）优先层在前，层内默认在前、
+ * id 升序，第一个默认即主用。工作台改「按 agent 引用链预设」是 UoW-7 的事，
+ * 本页先按平台口径呈现与维护这条平台默认。
+ */
+function entryFor(entries: AiModelEntry[], mode: 'CLI' | 'KEY') {
   const enabled = entries.filter((entry) => entry.enabled && (entry.mode ?? 'KEY') === mode)
-  return (
-    enabled.find((entry) => entry.agentId === agentId && entry.defaultEntry) ??
-    enabled.find((entry) => entry.agentId == null && entry.defaultEntry) ??
-    null
-  )
+  const tier = (provenanceMarked: boolean) =>
+    enabled
+      .filter((entry) => (provenanceMarked ? entry.sourceAgentId != null : entry.sourceAgentId == null))
+      .sort((a, b) => Number(b.defaultEntry) - Number(a.defaultEntry) || a.id - b.id)
+  return [...tier(true), ...tier(false)].find((entry) => entry.defaultEntry) ?? null
 }
 
 function cliSpec(modelId: string) {
@@ -83,8 +89,8 @@ export function AgentAccessPage() {
   }
 
   const entries = entriesQuery.data ?? []
-  const cliEntry = entryFor(entries, site.id, 'CLI')
-  const keyEntry = entryFor(entries, site.id, 'KEY')
+  const cliEntry = entryFor(entries, 'CLI')
+  const keyEntry = entryFor(entries, 'KEY')
   const accounts = (usageQuery.data?.accounts ?? []).filter((account) => !account.disabled && !account.unavailable)
   const apiBaseUrl = usageQuery.data?.apiBaseUrl ?? ''
   const clientKeys = keysQuery.data?.apiKeys ?? []
@@ -116,7 +122,7 @@ export function AgentAccessPage() {
 function ScopeNote({ entry, agentId }: { entry: AiModelEntry | null; agentId: number }) {
   const { t } = useTranslation('sites')
   if (entry == null) return <p className="text-xs text-admin-muted">{t('access.none')}</p>
-  if (entry.agentId === agentId) return <p className="text-xs text-admin-muted">{t('access.usingAgent')}</p>
+  if (entry.sourceAgentId === agentId) return <p className="text-xs text-admin-muted">{t('access.usingAgent')}</p>
   return <p className="text-xs text-admin-muted">{t('access.usingGlobal')}</p>
 }
 
@@ -137,7 +143,9 @@ function CliAccessForm({
 }) {
   const { t } = useTranslation('sites')
   const queryClient = useQueryClient()
-  const owned = entry != null && entry.agentId === agentId
+  // 入口平台化后（#210 UoW-6）本表单维护的是平台 CLI 主用入口：有生效入口则更新它、
+  // 没有则新建平台入口，不再写 agent 作用域（agentId prop 仅 ScopeNote 标注用）。
+  const owned = entry != null
   const initialModel = entry ? modelIdFromSpec(entry.modelSpec) : ''
   const initialAccount =
     accounts.find((account) => visibleModelIds(account.provider, account.modelIds).includes(initialModel))?.name ??
@@ -149,7 +157,7 @@ function CliAccessForm({
   const [modelId, setModelId] = useState(modelIds.includes(initialModel) ? initialModel : (modelIds[0] ?? ''))
   const [clientKey, setClientKey] = useState('')
   const [changingKey, setChangingKey] = useState(false)
-  const hasSavedKey = entry != null && entry.agentId === agentId && entry.apiKeyConfigured
+  const hasSavedKey = entry != null && entry.apiKeyConfigured
   const showKeyList = !hasSavedKey || changingKey
   const ready = Boolean(apiBaseUrl) && accounts.length > 0 && modelIds.length > 0 && (clientKeys.length > 0 || owned)
 
@@ -173,7 +181,6 @@ function CliAccessForm({
       displayName: modelId.trim(),
       modelSpec: cliSpec(modelId),
       baseUrl: apiBaseUrl,
-      agentId,
       embeddingSpec: null,
       enabled: true,
       defaultEntry: true,
@@ -283,12 +290,11 @@ function CliAccessForm({
   )
 }
 
-function keyBody(entry: AiModelEntry, agentId: number | null, defaultEntry: boolean): AiModelEntryWriteInput {
+function keyBody(entry: AiModelEntry, defaultEntry: boolean): AiModelEntryWriteInput {
   return {
     displayName: entry.displayName,
     modelSpec: entry.modelSpec,
     baseUrl: entry.baseUrl,
-    agentId,
     embeddingSpec: entry.embeddingSpec,
     enabled: defaultEntry ? true : entry.enabled,
     defaultEntry,
@@ -318,12 +324,14 @@ function KeyAccessForm({
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!selected) return
-      if (entry && entry.agentId === agentId && entry.id !== selected.id) {
-        await aiApi.updateModelEntry(entry.id, keyBody(entry, null, false))
+      // 平台口径（#210 UoW-6）：把所选入口设为平台 KEY 默认。原生效入口是另一条时
+      // 先摘掉它的默认位；同来源内的默认互斥由服务端再兜底清一次。
+      if (entry && entry.id !== selected.id && entry.defaultEntry) {
+        await aiApi.updateModelEntry(entry.id, keyBody(entry, false))
       }
-      const already = selected.agentId === agentId && selected.defaultEntry && selected.enabled
+      const already = selected.defaultEntry && selected.enabled
       if (!already) {
-        await aiApi.updateModelEntry(selected.id, keyBody(selected, agentId, true))
+        await aiApi.updateModelEntry(selected.id, keyBody(selected, true))
       }
     },
     onSuccess: () => {
@@ -369,7 +377,7 @@ function KeyAccessForm({
               <option key={item.id} value={item.id}>
                 {item.displayName} · {item.modelSpec}
                 {item.apiKeyConfigured ? ` · ${item.apiKeyHint}` : ''}
-                {item.agentId != null && item.agentId !== agentId ? ` · ${t('access.keyBoundOther')}` : ''}
+                {item.sourceAgentId != null && item.sourceAgentId !== agentId ? ` · ${t('access.keyBoundOther')}` : ''}
               </option>
             ))}
           </select>

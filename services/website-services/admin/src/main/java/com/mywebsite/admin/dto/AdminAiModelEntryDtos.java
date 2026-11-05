@@ -9,7 +9,11 @@ public final class AdminAiModelEntryDtos {
 
     private AdminAiModelEntryDtos() {}
 
-    /** 不含 apiKey。短密钥只显示占位，避免末尾提示把整把 key 露出去。 */
+    /**
+     * 不含 apiKey。短密钥只显示占位，避免末尾提示把整把 key 露出去。
+     * {@code sourceAgentId} 是来源标注（平台化前所属 agent，Issue #210 UoW-6），
+     * 平台原生入口为 null；原 {@code agentId} 作用域字段已随入口平台化退役。
+     */
     public record AdminAiModelEntryDto(
             Long id,
             String displayName,
@@ -17,7 +21,7 @@ public final class AdminAiModelEntryDtos {
             boolean apiKeyConfigured,
             String apiKeyHint,
             String baseUrl,
-            Long agentId,
+            Long sourceAgentId,
             String embeddingSpec,
             boolean enabled,
             boolean defaultEntry,
@@ -26,12 +30,12 @@ public final class AdminAiModelEntryDtos {
             String mode,
             String alias) {}
 
+    /** 写入请求不再带 agent 作用域：入口一律平台注册（Issue #210 UoW-6）。 */
     public record AdminAiModelEntryWriteRequest(
             @NotBlank @Size(max = 128) String displayName,
             @NotBlank @Size(max = 256) String modelSpec,
             @Size(max = 4096) String apiKey,
             @Size(max = 512) String baseUrl,
-            Long agentId,
             @Size(max = 256) String embeddingSpec,
             @NotNull Boolean enabled,
             @NotNull Boolean defaultEntry,

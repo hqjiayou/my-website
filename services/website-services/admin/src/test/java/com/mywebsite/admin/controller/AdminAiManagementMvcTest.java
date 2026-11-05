@@ -258,15 +258,18 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
-        mockMvc.perform(post("/api/admin/ai/model-entries")
+        MvcResult cliCreated = mockMvc.perform(post("/api/admin/ai/model-entries")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(cliEntry)))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andReturn();
+        // 链预设口径（Issue #210 UoW-7）：把入口装进该 agent 的链预设，预览才组得出链
+        givenAgentChain(token, agentId,
+                MAPPER.readTree(cliCreated.getResponse().getContentAsString()).path("data").path("id").asLong());
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
                     listener.onEvent("START", "{\"ok\":true}");
@@ -301,15 +304,18 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
-        mockMvc.perform(post("/api/admin/ai/model-entries")
+        MvcResult cliCreated = mockMvc.perform(post("/api/admin/ai/model-entries")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(cliEntry)))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andReturn();
+        // 链预设口径（Issue #210 UoW-7）：把入口装进该 agent 的链预设，预览才组得出链
+        givenAgentChain(token, agentId,
+                MAPPER.readTree(cliCreated.getResponse().getContentAsString()).path("data").path("id").asLong());
         ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
         String cardJson = "{\"kind\":\"weather\",\"payload\":{\"current\":{\"temperatureC\":12.3}}}";
         doAnswer(invocation -> {
@@ -349,15 +355,18 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
-        mockMvc.perform(post("/api/admin/ai/model-entries")
+        MvcResult cliCreated = mockMvc.perform(post("/api/admin/ai/model-entries")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(cliEntry)))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andReturn();
+        // 链预设口径（Issue #210 UoW-7）：把入口装进该 agent 的链预设，预览才组得出链
+        givenAgentChain(token, agentId,
+                MAPPER.readTree(cliCreated.getResponse().getContentAsString()).path("data").path("id").asLong());
         ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
@@ -417,15 +426,18 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
-        mockMvc.perform(post("/api/admin/ai/model-entries")
+        MvcResult cliCreated = mockMvc.perform(post("/api/admin/ai/model-entries")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(cliEntry)))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andReturn();
+        // 链预设口径（Issue #210 UoW-7）：把入口装进该 agent 的链预设，预览才组得出链
+        givenAgentChain(token, agentId,
+                MAPPER.readTree(cliCreated.getResponse().getContentAsString()).path("data").path("id").asLong());
         ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
@@ -467,15 +479,18 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
-        mockMvc.perform(post("/api/admin/ai/model-entries")
+        MvcResult cliCreated = mockMvc.perform(post("/api/admin/ai/model-entries")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(cliEntry)))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andReturn();
+        // 链预设口径（Issue #210 UoW-7）：把入口装进该 agent 的链预设，预览才组得出链
+        givenAgentChain(token, agentId,
+                MAPPER.readTree(cliCreated.getResponse().getContentAsString()).path("data").path("id").asLong());
         ArgumentCaptor<AgentChatRequest> captor = ArgumentCaptor.forClass(AgentChatRequest.class);
         doAnswer(invocation -> {
                     AgentStreamListener listener = invocation.getArgument(1);
@@ -667,7 +682,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
@@ -694,6 +708,9 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andReturn();
         long keyId =
                 MAPPER.readTree(keyCreated.getResponse().getContentAsString()).path("data").path("id").asLong();
+
+        // 链预设口径（Issue #210 UoW-7）：两条入口装进该 agent 的链预设后才成链
+        givenAgentChain(token, agentId, cliId, keyId);
 
         // mode 缺省：CLI 链非空 → 落到 CLI，与 previewStream 的默认判定（previewMode）同一路径。
         mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/preview/model")
@@ -759,6 +776,8 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         var createdData = MAPPER.readTree(created.getResponse().getContentAsString()).path("data");
         long id = createdData.path("id").asLong();
         int version = createdData.path("version").asInt();
+        // 链预设口径（Issue #210 UoW-7）：把该入口装进该 agent 的链预设，下方预览才用得上
+        givenAgentChain(token, agentId, id);
 
         ObjectNode update = MAPPER.createObjectNode();
         update.put("displayName", "Gemini flash");
@@ -847,7 +866,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         agentEntry.put("displayName", "Agent Gemini");
         agentEntry.put("modelSpec", "google:gemini-3-flash-preview");
         agentEntry.put("apiKey", "agent-secret-key");
-        agentEntry.put("agentId", agentId);
         agentEntry.put("enabled", true);
         agentEntry.put("defaultEntry", true);
         mockMvc.perform(post("/api/admin/ai/model-entries")
@@ -855,24 +873,26 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(agentEntry)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.agentId").value((int) agentId))
+                .andExpect(jsonPath("$.data.sourceAgentId").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.defaultEntry").value(true));
         MvcResult scoped = mockMvc.perform(get("/api/admin/ai/model-entries")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andReturn();
-        boolean platformDefaultRemains = false;
-        boolean agentDefault = false;
+        boolean previousDefaultRemains = false;
+        boolean newDefault = false;
         for (var item : MAPPER.readTree(scoped.getResponse().getContentAsString()).path("data")) {
             if ("OpenAI".equals(item.path("displayName").asText())) {
-                platformDefaultRemains = item.path("defaultEntry").asBoolean();
+                previousDefaultRemains = item.path("defaultEntry").asBoolean();
             }
             if ("Agent Gemini".equals(item.path("displayName").asText())) {
-                agentDefault = item.path("defaultEntry").asBoolean();
+                newDefault = item.path("defaultEntry").asBoolean();
             }
         }
-        assertThat(platformDefaultRemains).isTrue();
-        assertThat(agentDefault).isTrue();
+        // 入口平台化（#210 UoW-6）：写入不再带 agent 作用域，新入口同为平台原生，
+        // 同模式默认互斥——先前默认（OpenAI）被清，新默认（Agent Gemini）成立。
+        assertThat(previousDefaultRemains).isFalse();
+        assertThat(newDefault).isTrue();
         for (var item : MAPPER.readTree(scoped.getResponse().getContentAsString()).path("data")) {
             mockMvc.perform(delete("/api/admin/ai/model-entries/" + item.path("id").asLong())
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -1096,7 +1116,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         entry.put("displayName", name);
         entry.put("modelSpec", spec);
         entry.put("apiKey", "sk-" + name);
-        entry.put("agentId", agentId);
         entry.put("mode", "KEY");
         entry.put("enabled", true);
         entry.put("defaultEntry", defaultEntry);
@@ -1106,7 +1125,85 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                         .content(MAPPER.writeValueAsString(entry)))
                 .andExpect(status().isOk())
                 .andReturn();
+        long entryId =
+                MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
+        // 链预设口径（Issue #210 UoW-7）：入口本身不再决定链，把它累积进该 agent 的
+        // 链预设并让 agent 引用，预览组链才看得到（同方法内多次调用按创建序累积）。
+        java.util.List<Long> memberIds =
+                chainEntryIdsByAgent.computeIfAbsent(agentId, key -> new java.util.ArrayList<>());
+        memberIds.add(entryId);
+        Long presetId = chainPresetIdsByAgent.get(agentId);
+        if (presetId == null) {
+            chainPresetIdsByAgent.put(agentId, createChainPreset(token, memberIds));
+            assignChainPreset(token, agentId, chainPresetIdsByAgent.get(agentId));
+        } else {
+            updateChainPresetMembers(token, presetId, memberIds);
+        }
+        return entryId;
+    }
+
+    /** 本方法内各 agent 的链预设夹具状态（JUnit 每方法新实例，天然隔离）。 */
+    private final java.util.Map<Long, Long> chainPresetIdsByAgent = new java.util.HashMap<>();
+
+    private final java.util.Map<Long, java.util.List<Long>> chainEntryIdsByAgent = new java.util.HashMap<>();
+
+    /** 建一条链预设（成员为给定的有序 entry ids），返回预设 id。 */
+    private long createChainPreset(String token, java.util.List<Long> entryIds) throws Exception {
+        ObjectNode preset = MAPPER.createObjectNode();
+        preset.put("name", "test-chain-" + System.nanoTime());
+        var ids = preset.putArray("entryIds");
+        for (Long entryId : entryIds) {
+            ids.add(entryId);
+        }
+        MvcResult created = mockMvc.perform(post("/api/admin/ai/chain-presets")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(preset)))
+                .andExpect(status().isOk())
+                .andReturn();
         return MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
+    }
+
+    /** 覆盖既有预设的成员（先读当前版本再整表更新）。 */
+    private void updateChainPresetMembers(String token, long presetId, java.util.List<Long> entryIds)
+            throws Exception {
+        MvcResult current = mockMvc.perform(get("/api/admin/ai/chain-presets/" + presetId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        var currentData = MAPPER.readTree(current.getResponse().getContentAsString()).path("data");
+        ObjectNode preset = MAPPER.createObjectNode();
+        preset.put("name", currentData.path("name").asText());
+        preset.put("version", currentData.path("version").asInt());
+        var ids = preset.putArray("entryIds");
+        for (Long entryId : entryIds) {
+            ids.add(entryId);
+        }
+        mockMvc.perform(put("/api/admin/ai/chain-presets/" + presetId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(preset)))
+                .andExpect(status().isOk());
+    }
+
+    /** 让 agent 引用给定预设（保存即换链）。 */
+    private void assignChainPreset(String token, long agentId, long presetId) throws Exception {
+        ObjectNode ref = MAPPER.createObjectNode();
+        ref.put("chainPresetId", presetId);
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/ai/chain-preset")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(ref)))
+                .andExpect(status().isOk());
+    }
+
+    /** 一次性夹具：建只含给定入口的预设并让 agent 引用（内联建入口的用例用）。 */
+    private void givenAgentChain(String token, long agentId, long... entryIds) throws Exception {
+        java.util.List<Long> ids = new java.util.ArrayList<>();
+        for (long entryId : entryIds) {
+            ids.add(entryId);
+        }
+        assignChainPreset(token, agentId, createChainPreset(token, ids));
     }
 
     private long createSite(String token) throws Exception {

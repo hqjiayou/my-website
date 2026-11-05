@@ -15,18 +15,19 @@ public interface AdminAiModelEntryService {
 
     void deleteEntry(long id);
 
-    /** 删站点级联：软删该站点作用域的入口（全站入口 agent_id 为空、不受影响），避免密文 key 残留。 */
-    void softDeleteByAgentId(long agentId);
-
     /**
-     * 该站点启用的默认入口；没有则用全站启用的默认入口。都没有时返回 null。
+     * agent 对话链的主用入口（链首）：链由该 agent 引用的对话链预设决定
+     * （Issue #210 UoW-7）。未引用预设、或预设内无可用主用时返回 null。
      */
     AgentModelSelection currentSelection(long agentId);
 
     /**
-     * 生效链：首元是 {@link #currentSelection(long)} 的主用入口，其后依次是同站其他启用入口、
-     * 全站其他启用入口（各组内默认在前、id 升序）。主用不存在（无默认，或默认解密不出 key）时返回空列表，
-     * 备援不得越过坏主用直接顶上。解密不出 key 的备援跳过。不分模式。
+     * agent 的对话生效链（Issue #210 UoW-7）：取该 agent 引用的链预设快照
+     * （有序 entry ids），按预设序取启用入口交 {@code ModelChainResolver} 既有
+     * 规则组链——首元是主用（预设序内第一个默认入口），其后按预设序备援；
+     * 主用不存在（预设内无默认，或默认解密不出 key）时返回空列表，备援不得
+     * 越过坏主用直接顶上；解密不出 key 的备援跳过；已删除/停用的成员不入链。
+     * 未引用预设时为空列表。不分模式。
      */
     List<AgentModelSelection> selectionChain(long agentId);
 

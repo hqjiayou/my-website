@@ -9,7 +9,6 @@ import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
-import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAppearanceService;
 import com.mywebsite.admin.service.AdminContentService;
 import com.mywebsite.admin.service.AdminMediaService;
@@ -27,11 +26,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 删站级联完整性（#141 UoW-2；#211 UoW-8 修订）：deleteSite 须覆盖九路软删——领域服务
- * （外观／内容／媒体／知识／会话）、模型入口服务，以及 agent-core 三张表（成员／用户
- * 记忆／会话分享）逐行软删。Prompt 配置自 #211 起退出级联：旧 profile 表停写、配置
- * 预设是共享资源不随 agent 删除，本 agent 只清 config_preset_id 引用。
- * 端到端逐表断言见 AdminAgentManagementMvcTest.deleteSiteCascadesToModelEntriesUsersMemoriesAndShares。
+ * 删站级联完整性（#141 UoW-2；#211 UoW-8 与 #210 UoW-6 先后修订）：deleteSite 须覆盖
+ * 软删——五路领域服务（外观／内容／媒体／知识／会话），以及 agent-core 三张表
+ * （成员／用户记忆／会话分享）逐行软删。两路先后退役：模型入口随入口平台化退役
+ * （#210 UoW-6：入口是平台资源、删站不级联，构造器已无该依赖）；Prompt 配置自
+ * #211 起退出级联（旧 profile 表停写、配置预设是共享资源不随 agent 删除），本
+ * agent 只清 config_preset_id 引用。
+ * 端到端逐表断言见 AdminAgentManagementMvcTest 的删站级联用例。
  */
 @ExtendWith(MockitoExtension.class)
 class AdminAgentServiceImplDeleteCascadeTest {
@@ -42,7 +43,6 @@ class AdminAgentServiceImplDeleteCascadeTest {
     @Mock private AdminContentService adminContentService;
     @Mock private AdminAiKnowledgeService adminAiKnowledgeService;
     @Mock private AdminAiConversationService adminAiConversationService;
-    @Mock private AdminAiModelEntryService adminAiModelEntryService;
     @Mock private AgentUserMapper agentUserMapper;
     @Mock private AgentUserMemoryMapper agentUserMemoryMapper;
     @Mock private AgentAiConversationShareMapper conversationShareMapper;
@@ -58,14 +58,13 @@ class AdminAgentServiceImplDeleteCascadeTest {
                 adminContentService,
                 adminAiKnowledgeService,
                 adminAiConversationService,
-                adminAiModelEntryService,
                 agentUserMapper,
                 agentUserMemoryMapper,
                 conversationShareMapper);
     }
 
     @Test
-    void deleteSiteCascadesAcrossAllNinePathsAndOnlyClearsPresetReference() {
+    void deleteSiteCascadesAcrossAllPathsAndOnlyClearsPresetReference() {
         AdminAgentEntity agent = new AdminAgentEntity();
         agent.setId(7L);
         agent.setConfigPresetId(99L);
@@ -92,7 +91,6 @@ class AdminAgentServiceImplDeleteCascadeTest {
         verify(adminMediaService).softDeleteByAgentId(7L);
         verify(adminAiKnowledgeService).softDeleteByAgentId(7L);
         verify(adminAiConversationService).softDeleteByAgentId(7L);
-        verify(adminAiModelEntryService).softDeleteByAgentId(7L);
 
         assertThat(member.getDeletedAt()).isNotNull();
         assertThat(memory.getDeletedAt()).isNotNull();

@@ -17,6 +17,9 @@ public class AgentEntity extends AbstractAuditableEntity {
     /** V60：引用的 AI 配置预设（#211）；可空，无预设时对话解析回退为无配置。 */
     private Long configPresetId;
 
+    /** V63：引用的对话链预设（Issue #210 UoW-7）；可空，未引用时对话链为空。 */
+    private Long chainPresetId;
+
     public String getAgentCode() {
         return agentCode;
     }
@@ -71,6 +74,14 @@ public class AgentEntity extends AbstractAuditableEntity {
 
     public void setTemplateId(Long templateId) {
         this.templateId = templateId;
+    }
+
+    public Long getChainPresetId() {
+        return chainPresetId;
+    }
+
+    public void setChainPresetId(Long chainPresetId) {
+        this.chainPresetId = chainPresetId;
     }
 
     public Long getConfigPresetId() {

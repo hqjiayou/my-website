@@ -1,12 +1,11 @@
 package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.mywebsite.admin.constant.AdminAgentMessageKeys;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryDto;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryWriteRequest;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
-import com.mywebsite.admin.mapper.AdminAgentMapper;
+import com.mywebsite.admin.service.AdminAiChainPresetService;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiModelEntryService.ChainCandidate;
 import com.mywebsite.agent.dto.AgentModelSelection;
@@ -17,7 +16,10 @@ import com.mywebsite.common.exception.BusinessException;
 import com.mywebsite.infra.crypto.ModelEntryCipher;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,19 +29,19 @@ import org.springframework.util.StringUtils;
 public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
 
     private final AdminAiModelEntryMapper modelEntryMapper;
-    private final AdminAgentMapper adminAgentMapper;
     private final ModelEntryCipher cipher;
     private final AgentEmbeddingClassService embeddingClassService;
+    private final AdminAiChainPresetService chainPresetService;
 
     public AdminAiModelEntryServiceImpl(
             AdminAiModelEntryMapper modelEntryMapper,
-            AdminAgentMapper adminAgentMapper,
             ModelEntryCipher cipher,
-            AgentEmbeddingClassService embeddingClassService) {
+            AgentEmbeddingClassService embeddingClassService,
+            AdminAiChainPresetService chainPresetService) {
         this.modelEntryMapper = modelEntryMapper;
-        this.adminAgentMapper = adminAgentMapper;
         this.cipher = cipher;
         this.embeddingClassService = embeddingClassService;
+        this.chainPresetService = chainPresetService;
     }
 
     @Override
@@ -60,10 +62,10 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         if (!StringUtils.hasText(request.apiKey())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        requireAgentIfPresent(request.agentId());
         boolean asDefault = asDefault(request);
         if (asDefault) {
-            clearOtherDefaults(request.agentId(), null, normalizeMode(request.mode()));
+            // 新入口一律平台原生来源：默认位在平台原生来源 × 模式内互斥。
+            clearOtherDefaults(null, null, normalizeMode(request.mode()));
         }
         String alias = normalizeAlias(request.alias());
         requireAliasAvailable(alias, null);
@@ -83,11 +85,11 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         if (request.version() == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        requireAgentIfPresent(request.agentId());
         AdminAiModelEntryEntity entry = requireEntry(id);
         boolean asDefault = asDefault(request);
         if (asDefault) {
-            clearOtherDefaults(request.agentId(), id, normalizeMode(request.mode()));
+            // 默认位在该入口自己的来源 × 模式内互斥（与 V62 的来源唯一索引同口径）。
+            clearOtherDefaults(entry.getSourceAgentId(), id, normalizeMode(request.mode()));
         }
         String apiKey = StringUtils.hasText(request.apiKey()) ? request.apiKey().trim() : decryptKey(entry);
         if (!StringUtils.hasText(apiKey)) {
@@ -115,20 +117,6 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         entry.setDeletedAt(OffsetDateTime.now(ZoneOffset.UTC));
         modelEntryMapper.updateById(entry);
         modelEntryMapper.deleteById(id);
-    }
-
-    @Override
-    @Transactional
-    public void softDeleteByAgentId(long agentId) {
-        List<AdminAiModelEntryEntity> entries = modelEntryMapper.selectList(
-                new LambdaQueryWrapper<AdminAiModelEntryEntity>()
-                        .eq(AdminAiModelEntryEntity::getAgentId, agentId));
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        for (AdminAiModelEntryEntity entry : entries) {
-            entry.setDeletedAt(now);
-            modelEntryMapper.updateById(entry);
-            modelEntryMapper.deleteById(entry.getId());
-        }
     }
 
     @Override
@@ -175,12 +163,33 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
 
     /**
      * 组链规则在 agent-core 的 {@code ModelChainResolver}（Issue #132，与 agent-app
-     * 共用同一份实现）；这里只做实体→快照映射与结果回译，规则不在本类重复。
+     * 共用同一份实现）；这里只做预设成员加载、实体→快照映射与结果回译，规则不在
+     * 本类重复。
+     *
+     * <p>链预设落地后（Issue #210 UoW-7）链由 agent 引用的对话链预设决定：按预设
+     * 的有序 entry ids 取入口（已删除的自动落选、停用的过滤，成员顺序即预设序），
+     * 交 {@code ModelChainResolver.resolvePresetChain} 按既有规则组链（mode 过滤、
+     * 默认/备援序、坏主用整链空）。UoW-6 的来源分层过渡组链整体退役，
+     * {@code source_agent_id} 只作来源标注、不再参与组链。agent 未引用预设时链为空。
      */
     private List<ChainLink> chainLinks(long agentId, String mode) {
         String normalized = chainMode(mode);
-        return ModelChainResolver.resolveChain(snapshots(enabledEntries(agentId)), snapshots(enabledEntries(null)), normalized)
-                .stream()
+        List<Long> entryIds = chainPresetService.referencedEntryIds(agentId);
+        if (entryIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, AdminAiModelEntryEntity> entriesById = new HashMap<>();
+        for (AdminAiModelEntryEntity entry : modelEntryMapper.selectBatchIds(entryIds)) {
+            entriesById.put(entry.getId(), entry);
+        }
+        List<AdminAiModelEntryEntity> members = new ArrayList<>();
+        for (Long entryId : entryIds) {
+            AdminAiModelEntryEntity entry = entriesById.get(entryId);
+            if (entry != null && Boolean.TRUE.equals(entry.getEnabled())) {
+                members.add(entry);
+            }
+        }
+        return ModelChainResolver.resolvePresetChain(snapshots(members), normalized).stream()
                 .map(link -> new ChainLink(link.id(), link.displayName(), link.selection()))
                 .toList();
     }
@@ -212,30 +221,17 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
                 .toList();
     }
 
-    /** 作用域内启用入口：默认在前，其余 id 升序（与 listEntries 的展示序一致）。 */
-    private List<AdminAiModelEntryEntity> enabledEntries(Long agentId) {
-        LambdaQueryWrapper<AdminAiModelEntryEntity> query = new LambdaQueryWrapper<AdminAiModelEntryEntity>()
-                .eq(AdminAiModelEntryEntity::getEnabled, true)
-                .orderByDesc(AdminAiModelEntryEntity::getDefaultEntry)
-                .orderByAsc(AdminAiModelEntryEntity::getId);
-        if (agentId == null) {
-            query.isNull(AdminAiModelEntryEntity::getAgentId);
-        } else {
-            query.eq(AdminAiModelEntryEntity::getAgentId, agentId);
-        }
-        return modelEntryMapper.selectList(query);
-    }
-
     private record ChainLink(Long id, String displayName, AgentModelSelection selection) {}
 
-    private void clearOtherDefaults(Long agentId, Long keepId, String mode) {
+    /** 清除同「来源 × 模式」内的其他默认位（与 V62 的来源唯一索引同口径）。 */
+    private void clearOtherDefaults(Long sourceAgentId, Long keepId, String mode) {
         LambdaQueryWrapper<AdminAiModelEntryEntity> query = new LambdaQueryWrapper<AdminAiModelEntryEntity>()
                 .eq(AdminAiModelEntryEntity::getDefaultEntry, true)
                 .eq(AdminAiModelEntryEntity::getMode, mode);
-        if (agentId == null) {
-            query.isNull(AdminAiModelEntryEntity::getAgentId);
+        if (sourceAgentId == null) {
+            query.isNull(AdminAiModelEntryEntity::getSourceAgentId);
         } else {
-            query.eq(AdminAiModelEntryEntity::getAgentId, agentId);
+            query.eq(AdminAiModelEntryEntity::getSourceAgentId, sourceAgentId);
         }
         for (AdminAiModelEntryEntity current : modelEntryMapper.selectList(query)) {
             if (keepId != null && keepId.equals(current.getId())) {
@@ -243,15 +239,6 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
             }
             current.setDefaultEntry(false);
             modelEntryMapper.updateById(current);
-        }
-    }
-
-    private void requireAgentIfPresent(Long agentId) {
-        if (agentId == null) {
-            return;
-        }
-        if (adminAgentMapper.selectById(agentId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
         }
     }
 
@@ -278,7 +265,9 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         entry.setModelSpec(normalizeSpec(request.modelSpec()));
         entry.setApiKey(cipher.encrypt(apiKey));
         entry.setBaseUrl(normalizeBaseUrl(request.baseUrl()));
-        entry.setAgentId(request.agentId());
+        // 入口平台化（Issue #210 UoW-6）：agent_id 停写恒空；来源标注 sourceAgentId
+        // 只由 V62 迁移落、新建与编辑都不写（编辑时实体自带值原样回写）。
+        entry.setAgentId(null);
         String mode = normalizeMode(request.mode());
         entry.setMode(mode);
         // CLI 的 key 是进代理的客户端 key，不能拿来做嵌入。
@@ -362,7 +351,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
                 StringUtils.hasText(plain),
                 apiKeyHint(plain),
                 entry.getBaseUrl(),
-                entry.getAgentId(),
+                entry.getSourceAgentId(),
                 entry.getEmbeddingSpec(),
                 Boolean.TRUE.equals(entry.getEnabled()),
                 Boolean.TRUE.equals(entry.getDefaultEntry()),

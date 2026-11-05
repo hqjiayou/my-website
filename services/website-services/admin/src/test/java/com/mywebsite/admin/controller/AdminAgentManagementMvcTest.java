@@ -350,12 +350,13 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
     }
 
     @Test
-    void deleteSiteCascadesToModelEntriesUsersMemoriesAndShares() throws Exception {
+    void deleteSiteCascadesToUsersMemoriesAndShares() throws Exception {
         String token = tokenFor(500L);
         long agentId = createAgent(token, "cascade_a");
         long otherAgentId = createAgent(token, "cascade_b");
 
-        // 本站作用域入口 + 全站入口（agent_id 空）+ 他站入口：删站只应动本站作用域那条。
+        // 入口已平台化（#210 UoW-6）：三条入口（含带历史 agent_id 的存量行）删站后都应保留；
+        // 级联只动成员/记忆/分享等 agent 自有数据。
         jdbcTemplate.update(
                 "INSERT INTO agent_model_entry (id, display_name, model_spec, api_key, agent_id) VALUES (910001, 'scoped', 'openai:x', 'enc:k1', ?)",
                 agentId);
@@ -385,10 +386,10 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         mockMvc.perform(delete("/api/admin/agents/" + agentId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk());
 
-        assertSoftDeleted("agent_model_entry", 910001L);
         assertSoftDeleted("agent_user", 910011L);
         assertSoftDeleted("agent_user_memory", 910021L);
         assertSoftDeleted("agent_ai_conversation_share", 910041L);
+        assertStillActive("agent_model_entry", 910001L);
         assertStillActive("agent_model_entry", 910002L);
         assertStillActive("agent_model_entry", 910003L);
         assertStillActive("agent_user", 910012L);

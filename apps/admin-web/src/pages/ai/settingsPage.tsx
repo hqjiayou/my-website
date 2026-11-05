@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Info, KeyRound, RefreshCw } from 'lucide-react'
+import { Info, KeyRound, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { agentApi } from '@/api/apps/agentApi'
 import { AdminPageHeader, CopyableText, FormDialog, StatusTag } from '@/components/admin'
 import {
   adminDangerGhostButtonClass,
@@ -28,6 +27,7 @@ import type {
 import { PERMISSION_CODES } from '@/types/rbac'
 import { modelIdFromSpec } from '@/utils/modelSpec'
 
+import { ChainPresetsCard } from './chainPresetsCard'
 import { EmbeddingRegistrationCard } from './embeddingRegistrationCard'
 import { ExperienceLessonsCard } from './experienceLessonsCard'
 import { McpServersCard } from './mcpServersCard'
@@ -38,7 +38,7 @@ type Draft = {
   modelSpec: string
   apiKey: string
   baseUrl: string
-  agentId: string
+  sourceAgentId: number | null
   embeddingSpec: string
   enabled: boolean
   defaultEntry: boolean
@@ -55,7 +55,7 @@ function emptyDraft(makeDefault: boolean): Draft {
     modelSpec: '',
     apiKey: '',
     baseUrl: '',
-    agentId: '',
+    sourceAgentId: null,
     embeddingSpec: '',
     enabled: true,
     defaultEntry: makeDefault,
@@ -66,26 +66,6 @@ function emptyDraft(makeDefault: boolean): Draft {
   }
 }
 
-/**
- * 生效链（与 Java selectionChain 同规则）：作用域预设为主用，其后同作用域其他启用入口、
- * 再全站其余启用入口（各组内默认在前、id 升序）。没有默认入口时整链不启用。
- */
-function computeChain(entries: AiModelEntry[], scopeAgentId: number | null): AiModelEntry[] {
-  const enabledIn = (scope: number | null) =>
-    entries
-      .filter((entry) => entry.enabled && (scope == null ? entry.agentId == null : entry.agentId === scope))
-      .sort((a, b) => Number(b.defaultEntry) - Number(a.defaultEntry) || a.id - b.id)
-  const scoped = scopeAgentId == null ? [] : enabledIn(scopeAgentId)
-  const global = enabledIn(null)
-  const primary = scoped.find((entry) => entry.defaultEntry) ?? global.find((entry) => entry.defaultEntry)
-  if (!primary) return []
-  return [
-    primary,
-    ...scoped.filter((entry) => entry.id !== primary.id),
-    ...global.filter((entry) => entry.id !== primary.id),
-  ]
-}
-
 function draftFromEntry(entry: AiModelEntry): Draft {
   return {
     id: entry.id,
@@ -93,7 +73,7 @@ function draftFromEntry(entry: AiModelEntry): Draft {
     modelSpec: entry.modelSpec,
     apiKey: '',
     baseUrl: entry.baseUrl ?? '',
-    agentId: entry.agentId == null ? '' : String(entry.agentId),
+    sourceAgentId: entry.sourceAgentId,
     embeddingSpec: entry.embeddingSpec ?? '',
     enabled: entry.enabled,
     defaultEntry: entry.defaultEntry,
@@ -123,57 +103,6 @@ function familyTile(modelSpec: string): { letter: string; className: string } {
   if (prefix === 'anthropic') return { letter: 'C', className: 'bg-[rgb(var(--chart-3)/.12)] text-chart-3' }
   if (prefix === 'azure') return { letter: 'A', className: 'bg-[rgb(var(--chart-1)/.12)] text-chart-1' }
   return { letter: 'M', className: 'bg-admin-surface-muted text-admin-muted' }
-}
-
-/** 组链预览按模式拆分的一段：同一作用域下该模式的生效链。 */
-function ModeChainSection({ mode, chain }: { mode: string; chain: AiModelEntry[] }) {
-  const { t } = useTranslation('aiAdmin')
-  return (
-    <div className="space-y-2">
-      <h4 className="flex items-center gap-2 text-xs font-semibold text-admin">
-        <span
-          className={cn(
-            'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
-            mode === 'CLI' ? 'bg-[rgb(var(--chart-4)/.12)] text-chart-4' : 'bg-[rgb(var(--chart-1)/.12)] text-chart-1',
-          )}
-        >
-          {mode}
-        </span>
-        {mode === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
-      </h4>
-      {chain.length === 0 ? (
-        <p className="text-sm text-admin-muted">{t('settings.chainModeEmpty')}</p>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          {chain.map((entry, index) => (
-            <div key={entry.id} className="flex items-center gap-2">
-              {index > 0 ? <ArrowRight className="h-3.5 w-3.5 shrink-0 text-admin-muted" aria-hidden /> : null}
-              <span
-                className={cn(
-                  'inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs',
-                  index === 0 ? 'border-primary/45 bg-primary/7 text-primary' : 'border-admin bg-admin-surface-muted text-admin',
-                )}
-              >
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
-                <span className="flex flex-col">
-                  <span className="flex items-center gap-1.5 font-semibold">
-                    {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
-                    <span className="text-[10px] font-bold uppercase tracking-wide opacity-75">
-                      {index === 0 ? t('settings.chainPrimary') : t('settings.chainFallback', { n: index })}
-                    </span>
-                  </span>
-                  <span className="text-[11px] font-normal text-admin-muted">
-                    {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
-                    {entry.agentId == null ? ` · ${t('settings.agentPlatform')}` : ''}
-                  </span>
-                </span>
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 const GATEWAY_KEY_STATUS_TONE: Record<GatewayKeyStatus, 'active' | 'danger' | 'warning'> = {
@@ -648,15 +577,10 @@ export function AiSettingsPage() {
   const queryClient = useQueryClient()
   const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
   const [draft, setDraft] = useState<Draft | null>(null)
-  const [chainScope, setChainScope] = useState('')
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['ai', 'model-entries'],
     queryFn: () => aiApi.listModelEntries(),
-  })
-  const sitesQuery = useQuery({
-    queryKey: ['sites', 'model-entry-options'],
-    queryFn: () => agentApi.listSites({ pageNum: 1, pageSize: 100 }),
   })
   const usageQuery = useQuery({
     queryKey: ['ai', 'proxy-services', 'usage'],
@@ -686,7 +610,6 @@ export function AiSettingsPage() {
         displayName: entry.displayName,
         modelSpec: entry.modelSpec,
         baseUrl: entry.baseUrl,
-        agentId: entry.agentId,
         embeddingSpec: entry.embeddingSpec,
         enabled: true,
         defaultEntry: true,
@@ -731,9 +654,6 @@ export function AiSettingsPage() {
   }
 
   const entries = data ?? []
-  const scopeAgentId = chainScope === '' ? null : Number(chainScope)
-  const keyChain = computeChain(entries.filter((entry) => (entry.mode ?? 'KEY') === 'KEY'), scopeAgentId)
-  const cliChain = computeChain(entries.filter((entry) => (entry.mode ?? 'KEY') === 'CLI'), scopeAgentId)
   const aliasTrimmed = draft?.alias.trim() ?? ''
   const aliasInvalid = aliasTrimmed !== '' && !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(aliasTrimmed.toLowerCase())
   const cliAccounts = (usageQuery.data?.accounts ?? []).filter(
@@ -759,7 +679,6 @@ export function AiSettingsPage() {
         draft.mode === 'CLI' ? modelIdFromSpec(draft.modelSpec).trim() || draft.displayName.trim() : draft.displayName.trim(),
       modelSpec: draft.mode === 'CLI' ? cliModelSpec(draft.modelSpec) : draft.modelSpec.trim(),
       baseUrl: draft.mode === 'CLI' ? usageQuery.data?.apiBaseUrl || draft.baseUrl.trim() || null : draft.baseUrl.trim() || null,
-      agentId: draft.agentId.trim() === '' ? null : Number(draft.agentId),
       embeddingSpec: draft.mode === 'CLI' ? null : draft.embeddingSpec.trim() || null,
       enabled: draft.enabled,
       defaultEntry: draft.defaultEntry,
@@ -868,28 +787,7 @@ export function AiSettingsPage() {
 
         <EmbeddingRegistrationCard />
 
-        <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-admin">{t('settings.chainTitle')}</h3>
-            <select
-              className={`${adminFieldClass} w-auto`}
-              value={chainScope}
-              onChange={(event) => setChainScope(event.target.value)}
-            >
-              <option value="">{t('settings.agentPlatform')}</option>
-              {(sitesQuery.data?.records ?? []).map((site) => (
-                <option key={site.id} value={site.id}>
-                  {site.agentName}
-                </option>
-              ))}
-            </select>
-          </div>
-          <p className="text-sm text-admin-muted">{t('settings.chainHint')}</p>
-          <div className="space-y-4">
-            <ModeChainSection mode="KEY" chain={keyChain} />
-            <ModeChainSection mode="CLI" chain={cliChain} />
-          </div>
-        </article>
+        <ChainPresetsCard />
 
         {draft ? (
           <form
@@ -1036,22 +934,11 @@ export function AiSettingsPage() {
                 <span className="mt-1 block text-xs text-danger-emphasis">{t('settings.aliasInvalid')}</span>
               ) : null}
             </label>
-            <label className="block text-sm text-admin">
-              {t('settings.site')}
-              <select
-                className={`${adminFieldClass} mt-1`}
-                value={draft.agentId}
-                disabled={!canUpdate}
-                onChange={(event) => setDraft({ ...draft, agentId: event.target.value })}
-              >
-                <option value="">{t('settings.agentPlatform')}</option>
-                {(sitesQuery.data?.records ?? []).map((site) => (
-                  <option key={site.id} value={site.id}>
-                    {site.agentName}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {draft.sourceAgentId != null ? (
+              <p className="text-sm text-admin-muted">
+                {t('settings.entryProvenanceNote', { id: draft.sourceAgentId })}
+              </p>
+            ) : null}
             <label className="block text-sm text-admin">
               {t('settings.mode')}
               <select

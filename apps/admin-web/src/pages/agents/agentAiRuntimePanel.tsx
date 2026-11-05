@@ -12,6 +12,7 @@ import { PERMISSION_CODES } from '@/types/rbac'
 
 import { modelIdFromSpec } from '@/utils/modelSpec'
 
+import { AgentAiChainPresetSection } from './agentAiChainPresetSection'
 import { SkillCatalogItem } from './agentAiSkillCatalog'
 
 const LIMIT_KEYS: Array<keyof AiRuntimeLimits> = [
@@ -363,6 +364,7 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
           {t('aiWorkspace.runtime.unreachable', { code: runtime.errorCode ?? 'SYSTEM_ERROR' })}
         </p>
         <McpSelectionSection agentId={agentId} fallbackServers={[]} />
+        <AgentAiChainPresetSection agentId={agentId} />
       </div>
     )
   }
@@ -495,6 +497,7 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
         </section>
       </div>
       <McpSelectionSection agentId={agentId} fallbackServers={status.mcpServers} />
+      <AgentAiChainPresetSection agentId={agentId} />
     </div>
   )
 }
