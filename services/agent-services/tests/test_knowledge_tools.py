@@ -17,14 +17,14 @@ _GUIDANCE_MARKER = "search_site_knowledge tool first"
 
 class _FakeRetrieval:
     def __init__(self, *, degraded: bool = False, fail: bool = False, partial: bool = False) -> None:
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[list[str], str]] = []
         self.kwargs: list[dict[str, object]] = []
         self.degraded = degraded
         self._fail = fail
         self._partial = partial
 
-    async def retrieve_chunks(self, *, agent_id: str, query: str, **kwargs: object) -> list[RetrievedChunk]:
-        self.calls.append((agent_id, query))
+    async def retrieve_chunks(self, *, base_ids: list[str], query: str, **kwargs: object) -> list[RetrievedChunk]:
+        self.calls.append((list(base_ids), query))
         self.kwargs.append(dict(kwargs))
         if self._fail:
             raise RuntimeError("boom")
@@ -73,10 +73,11 @@ async def _call_search(toolset: object, query: str) -> str:
 
 async def test_knowledge_tool_returns_formatted_chunks_with_sources() -> None:
     retrieval = _FakeRetrieval()
-    toolset = build_knowledge_toolset("42", retrieval)  # type: ignore[arg-type]
+    toolset = build_knowledge_toolset("42", retrieval, knowledge_base_ids=["42"])  # type: ignore[arg-type]
     result = await _call_search(toolset, "hours")
     assert result == "- [c1] KB-FACT (source: kb:1#2)"
-    assert retrieval.calls == [("42", "hours")]
+    # 分区键是上下文下发的空间集，不再是 agent_id 本身。
+    assert retrieval.calls == [(["42"], "hours")]
 
 
 async def test_knowledge_tool_reports_unavailable_without_retrieval() -> None:
@@ -90,6 +91,7 @@ async def test_knowledge_tool_returns_partial_hits_when_degraded() -> None:
         "42",
         _FakeRetrieval(degraded=True, partial=True),  # type: ignore[arg-type]
         collector=collector,
+        knowledge_base_ids=["42"],
     )
     assert await _call_search(toolset, "hours") == (
         "Search degraded: at least one embedding class failed. "
@@ -101,12 +103,12 @@ async def test_knowledge_tool_returns_partial_hits_when_degraded() -> None:
 
 
 async def test_knowledge_tool_reports_failure_when_degraded() -> None:
-    toolset = build_knowledge_toolset("42", _FakeRetrieval(degraded=True))  # type: ignore[arg-type]
+    toolset = build_knowledge_toolset("42", _FakeRetrieval(degraded=True), knowledge_base_ids=["42"])  # type: ignore[arg-type]
     assert await _call_search(toolset, "hours") == "Site knowledge search failed."
 
 
 async def test_knowledge_tool_reports_failure_when_retrieval_raises() -> None:
-    toolset = build_knowledge_toolset("42", _FakeRetrieval(fail=True))  # type: ignore[arg-type]
+    toolset = build_knowledge_toolset("42", _FakeRetrieval(fail=True), knowledge_base_ids=["42"])  # type: ignore[arg-type]
     assert await _call_search(toolset, "hours") == "Site knowledge search failed."
 
 
@@ -124,7 +126,7 @@ def test_prompt_parts_mention_knowledge_tool_only_when_available() -> None:
 
 async def test_knowledge_tool_records_hits_in_collector() -> None:
     collector = KnowledgeSearchCollector()
-    toolset = build_knowledge_toolset("42", _FakeRetrieval(), collector=collector)  # type: ignore[arg-type]
+    toolset = build_knowledge_toolset("42", _FakeRetrieval(), collector=collector, knowledge_base_ids=["42"])  # type: ignore[arg-type]
     await _call_search(toolset, "hours")
     await _call_search(toolset, "hours again")
     # 同一 (source, chunk) 去重；逐次摘要保留每次调用的命中情况。
@@ -139,7 +141,7 @@ async def test_knowledge_tool_records_hits_in_collector() -> None:
 
 async def test_knowledge_tool_marks_collector_degraded_on_failure() -> None:
     collector = KnowledgeSearchCollector()
-    toolset = build_knowledge_toolset("42", _FakeRetrieval(fail=True), collector=collector)  # type: ignore[arg-type]
+    toolset = build_knowledge_toolset("42", _FakeRetrieval(fail=True), collector=collector, knowledge_base_ids=["42"])  # type: ignore[arg-type]
     assert await _call_search(toolset, "hours") == "Site knowledge search failed."
     assert collector.degraded is True
     assert collector.chunks == []
@@ -154,6 +156,7 @@ async def test_knowledge_tool_passes_request_embedder_and_selection() -> None:
         retrieval,  # type: ignore[arg-type]
         embedder=embedder,  # type: ignore[arg-type]
         model_selection=selection,  # type: ignore[arg-type]
+        knowledge_base_ids=["42"],
     )
     await _call_search(toolset, "hours")
     assert retrieval.kwargs[0]["embedder"] is embedder

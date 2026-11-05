@@ -180,6 +180,9 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andReturn();
         long docId = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
         long conversationId = insertConversation(agentId, "hours?");
+        // 分区键已改 base（Issue #209 UoW-2）：删站点清索引按文档所属空间校验，先记下空间 id
+        Long docBaseId = knowledgeDocumentMapper.selectById(docId).getBaseId();
+        assertThat(docBaseId).isNotNull();
 
         doThrow(new RuntimeException("index down")).when(agentClient).deleteRetrievalDocument(any(), any());
 
@@ -194,7 +197,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         assertThat(messageMapper.selectCount(new LambdaQueryWrapper<AdminAiMessageEntity>()
                         .eq(AdminAiMessageEntity::getConversationId, conversationId)))
                 .isZero();
-        verify(agentClient).deleteRetrievalDocument(String.valueOf(agentId), "kb:" + docId);
+        verify(agentClient).deleteRetrievalDocument(String.valueOf(docBaseId), "kb:" + docId);
     }
 
     @Test

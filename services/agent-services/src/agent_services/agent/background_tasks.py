@@ -176,6 +176,7 @@ def build_background_toolset(
     embedder: EmbeddingClient | None = None,
     embedding_model: str | None = None,
     embedding_classes: list[EmbeddingClass] | None = None,
+    knowledge_base_ids: list[str] | None = None,
     registry: BackgroundTaskRegistry | None = None,
     max_concurrent: int = 2,
     timeout_seconds: float = 300,
@@ -192,6 +193,7 @@ def build_background_toolset(
         embedder=embedder,
         embedding_model=embedding_model,
         embedding_classes=embedding_classes,
+        knowledge_base_ids=knowledge_base_ids,
     )
     store = (
         registry

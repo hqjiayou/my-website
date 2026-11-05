@@ -29,8 +29,12 @@ import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.agent.dto.AgentAiAttachmentDto;
 import com.mywebsite.agent.dto.AgentAiChatRequestDto;
 import com.mywebsite.agent.dto.AgentAiModelModesDto;
+import com.mywebsite.agent.entity.AgentAiKnowledgeBaseEntity;
+import com.mywebsite.agent.entity.AgentAiKnowledgeBaseSubscriptionEntity;
 import com.mywebsite.agent.entity.AgentAiKnowledgeDocumentEntity;
 import com.mywebsite.agent.entity.AgentAiModelEntryEntity;
+import com.mywebsite.agent.mapper.AgentAiKnowledgeBaseMapper;
+import com.mywebsite.agent.mapper.AgentAiKnowledgeBaseSubscriptionMapper;
 import com.mywebsite.agent.mapper.AgentAiKnowledgeDocumentMapper;
 import com.mywebsite.agent.mapper.AgentAiModelEntryMapper;
 import com.mywebsite.agent.dto.AgentAiChatResponseDto;
@@ -199,6 +203,8 @@ public class AgentAiServiceImpl implements AgentAiService {
     private final AgentEmbeddingClassService embeddingClassService;
     private final AgentExperienceLessonService experienceLessonService;
     private final AgentMcpSelectionService mcpSelectionService;
+    private final AgentAiKnowledgeBaseMapper knowledgeBaseMapper;
+    private final AgentAiKnowledgeBaseSubscriptionMapper knowledgeSubscriptionMapper;
 
     public AgentAiServiceImpl(
             AgentClient agentClient,
@@ -215,7 +221,9 @@ public class AgentAiServiceImpl implements AgentAiService {
             AgentUsageService usageService,
             AgentEmbeddingClassService embeddingClassService,
             AgentExperienceLessonService experienceLessonService,
-            AgentMcpSelectionService mcpSelectionService) {
+            AgentMcpSelectionService mcpSelectionService,
+            AgentAiKnowledgeBaseMapper knowledgeBaseMapper,
+            AgentAiKnowledgeBaseSubscriptionMapper knowledgeSubscriptionMapper) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.modelEntryCipher = modelEntryCipher;
@@ -231,6 +239,8 @@ public class AgentAiServiceImpl implements AgentAiService {
         this.embeddingClassService = embeddingClassService;
         this.experienceLessonService = experienceLessonService;
         this.mcpSelectionService = mcpSelectionService;
+        this.knowledgeBaseMapper = knowledgeBaseMapper;
+        this.knowledgeSubscriptionMapper = knowledgeSubscriptionMapper;
     }
 
     @Override
@@ -309,7 +319,8 @@ public class AgentAiServiceImpl implements AgentAiService {
                     selection == null ? null : selection.embeddingSpec(),
                     selection == null ? null : selection.apiKey(),
                     selection == null ? null : selection.baseUrl(),
-                    AgentEmbeddingClassUtils.wire(embeddingClasses)));
+                    AgentEmbeddingClassUtils.wire(embeddingClasses),
+                    knowledgeBaseIds(agentId)));
             if (!result.degraded() && !result.hits().isEmpty()) {
                 List<AgentKnowledgeSearchResponseDto.Hit> hits = result.hits().stream()
                         .map(hit -> new AgentKnowledgeSearchResponseDto.Hit(
@@ -499,8 +510,36 @@ public class AgentAiServiceImpl implements AgentAiService {
                 // 正式对话不带试聊标记：preview=null，执行的卡片通道保持关闭。
                 null,
                 experienceLessons == null || experienceLessons.isEmpty() ? null : experienceLessons,
-                mcpServerNames);
+                mcpServerNames,
+                knowledgeBaseIds(agentId));
         return new BuiltChatRequest(request, links);
+    }
+
+    /**
+     * 可检索知识空间集的下发值（Issue #209 UoW-2）：该 agent 创建的空间 ∪ 订阅的
+     * 空间（订阅表含创建者行，按 base id 去重），字符串化 id。向量分区键已改 base，
+     * 执行层据此跨空间检索。失败隔离同经验条目/MCP 选择：查库失败只记日志、按
+     * 无空间继续（字段缺席），绝不拖垮对话主流程；无空间时同样返回 null 不带字段。
+     */
+    private List<String> knowledgeBaseIds(long agentId) {
+        try {
+            java.util.LinkedHashSet<Long> baseIds = new java.util.LinkedHashSet<>();
+            knowledgeBaseMapper
+                    .selectList(new LambdaQueryWrapper<AgentAiKnowledgeBaseEntity>()
+                            .eq(AgentAiKnowledgeBaseEntity::getCreatedByAgentId, agentId))
+                    .forEach(base -> baseIds.add(base.getId()));
+            knowledgeSubscriptionMapper
+                    .selectList(new LambdaQueryWrapper<AgentAiKnowledgeBaseSubscriptionEntity>()
+                            .eq(AgentAiKnowledgeBaseSubscriptionEntity::getAgentId, agentId))
+                    .forEach(subscription -> baseIds.add(subscription.getBaseId()));
+            if (baseIds.isEmpty()) {
+                return null;
+            }
+            return baseIds.stream().map(String::valueOf).toList();
+        } catch (RuntimeException ex) {
+            log.warn("knowledge base expansion failed; continuing without knowledge bases", ex);
+            return null;
+        }
     }
 
     /**

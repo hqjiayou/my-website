@@ -29,6 +29,7 @@ def build_execution_toolsets(
     settings: Settings,
     agent_id: str,
     *,
+    knowledge_base_ids: list[str] | None = None,
     todo_store: TodoStore,
     client: BusinessApiClient | None = None,
     model: Model | None = None,
@@ -74,10 +75,17 @@ def build_execution_toolsets(
                 model_selection=retrieval_model_selection,
                 collector=knowledge_collector,
                 client=java_client,
+                knowledge_base_ids=knowledge_base_ids,
             )
         )
         if tables_available:
-            toolsets.append(build_table_toolset(agent_id, retrieval, collector=knowledge_collector))
+            toolsets.append(
+                build_table_toolset(
+                    list(knowledge_base_ids or []),
+                    retrieval,
+                    collector=knowledge_collector,
+                )
+            )
     # 天气工具无条件注册：无定位时工具自身回错误文本，不靠注册与否表达可用性。
     # 天气卡与 render_chart 只在 preview 且调用方给了卡片收集器时启用（Issue #179）：
     # 正式对话的工具集与改动前逐字一致。
@@ -122,6 +130,7 @@ def build_execution_toolsets(
                 embedder=retrieval_embedder,
                 embedding_model=retrieval_embedding_model,
                 embedding_classes=retrieval_embedding_classes,
+                knowledge_base_ids=knowledge_base_ids,
                 max_per_run=settings.agent_subagent_max_per_run,
                 timeout_seconds=settings.agent_subagent_timeout_seconds,
                 max_requests=settings.agent_subagent_max_requests,
@@ -139,6 +148,7 @@ def build_execution_toolsets(
                     embedder=retrieval_embedder,
                     embedding_model=retrieval_embedding_model,
                     embedding_classes=retrieval_embedding_classes,
+                    knowledge_base_ids=knowledge_base_ids,
                     max_concurrent=settings.agent_background_task_max_concurrent,
                     timeout_seconds=settings.agent_background_task_timeout_seconds,
                     max_requests=settings.agent_subagent_max_requests,

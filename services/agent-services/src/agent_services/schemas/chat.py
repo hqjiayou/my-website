@@ -191,6 +191,12 @@ class ChatRequest(BaseModel):
     )
     business_api_base_url: str | None = Field(default=None, alias="businessApiBaseUrl", max_length=512)
     knowledge_context: list[str] | None = Field(default=None, alias="knowledgeContext", max_length=4)
+    # 本 agent 可检索的知识空间集（Issue #209 UoW-2）：Java 按订阅展开后下发，
+    # 是知识工具的分区键来源（取代以 agentId 作分区键）。缺席/为空＝本轮无空间
+    # 可查，知识搜索如实回无命中，不拿 agentId 冒充分区。展开口径由 Java 定。
+    knowledge_base_ids: list[str] | None = Field(
+        default=None, alias="knowledgeBaseIds", max_length=64
+    )
     memories: list[str] | None = Field(default=None, max_length=MAX_MEMORIES)
     memory_enabled: bool = Field(default=False, alias="memoryEnabled")
     # 已批准经验条目（Issue #184）：平台全局，正式对话与试聊都可带；组装为
@@ -231,6 +237,20 @@ class ChatRequest(BaseModel):
         cls, value: list[EmbeddingClassCredentials] | None
     ) -> list[EmbeddingClassCredentials] | None:
         return limit_embedding_class_specs(value)
+
+    @field_validator("knowledge_base_ids")
+    @classmethod
+    def normalize_knowledge_base_ids(cls, value: list[str] | None) -> list[str] | None:
+        if not value:
+            return None
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            base_id = item.strip()
+            if base_id and base_id not in seen:
+                seen.add(base_id)
+                normalized.append(base_id)
+        return normalized or None
 
     @field_validator("knowledge_context")
     @classmethod

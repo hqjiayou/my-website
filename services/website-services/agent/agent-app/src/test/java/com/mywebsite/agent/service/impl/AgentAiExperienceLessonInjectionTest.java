@@ -92,7 +92,9 @@ class AgentAiExperienceLessonInjectionTest {
                 Mockito.mock(AgentUsageService.class),
                 Mockito.mock(AgentEmbeddingClassService.class),
                 experienceLessonService,
-                Mockito.mock(com.mywebsite.agent.service.AgentMcpSelectionService.class));
+                Mockito.mock(com.mywebsite.agent.service.AgentMcpSelectionService.class),
+                Mockito.mock(com.mywebsite.agent.mapper.AgentAiKnowledgeBaseMapper.class),
+                Mockito.mock(com.mywebsite.agent.mapper.AgentAiKnowledgeBaseSubscriptionMapper.class));
         String subject = SubjectCodes.formatAgentUserSubject(200L);
         AuthContext.set(new AuthenticatedUser(TokenAudience.AGENT, subject, "u", 10L, Set.of()));
         when(rateLimitService.tryAcquire(10L, subject)).thenReturn(true);

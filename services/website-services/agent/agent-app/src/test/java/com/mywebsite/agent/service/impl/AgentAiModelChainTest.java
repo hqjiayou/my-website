@@ -100,7 +100,9 @@ class AgentAiModelChainTest {
                 org.mockito.Mockito.mock(AgentUsageService.class),
                 org.mockito.Mockito.mock(AgentEmbeddingClassService.class),
                 org.mockito.Mockito.mock(AgentExperienceLessonService.class),
-                org.mockito.Mockito.mock(AgentMcpSelectionService.class));
+                org.mockito.Mockito.mock(AgentMcpSelectionService.class),
+                org.mockito.Mockito.mock(com.mywebsite.agent.mapper.AgentAiKnowledgeBaseMapper.class),
+                org.mockito.Mockito.mock(com.mywebsite.agent.mapper.AgentAiKnowledgeBaseSubscriptionMapper.class));
         String subject = SubjectCodes.formatAgentUserSubject(200L);
         AuthContext.set(new AuthenticatedUser(TokenAudience.AGENT, subject, "u", 10L, Set.of()));
         when(rateLimitService.tryAcquire(10L, subject)).thenReturn(true);

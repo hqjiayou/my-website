@@ -509,6 +509,54 @@ class HttpAgentClientTest {
     }
 
     @Test
+    void deleteRetrievalDocumentsByBaseHitsBasePathEndpoint() throws IOException {
+        // 整空间清理（Issue #209 UoW-2）：DELETE /internal/v1/retrieval/bases/{baseId}
+        java.util.concurrent.atomic.AtomicReference<String> seenPath = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> seenMethod = new java.util.concurrent.atomic.AtomicReference<>();
+        server.createContext("/internal/v1/retrieval/bases", exchange -> {
+            seenPath.set(exchange.getRequestURI().getPath());
+            seenMethod.set(exchange.getRequestMethod());
+            write(exchange, 200, "{\"ok\":true,\"data\":null}");
+        });
+
+        client.deleteRetrievalDocumentsByBase("9");
+
+        assertThat(seenMethod.get()).isEqualTo("DELETE");
+        assertThat(seenPath.get()).isEqualTo("/internal/v1/retrieval/bases/9");
+    }
+
+    @Test
+    void listIndexedDocumentsParsesSourceIdsEnvelope() throws IOException {
+        // 已索引清单（Issue #209 UoW-2）：GET /retrieval/documents?baseId= → {ok, data:{baseId, sourceIds}}
+        java.util.concurrent.atomic.AtomicReference<String> seenQuery = new java.util.concurrent.atomic.AtomicReference<>();
+        server.createContext("/internal/v1/retrieval/documents", exchange -> {
+            seenQuery.set(exchange.getRequestURI().getQuery());
+            write(exchange, 200, "{\"ok\":true,\"data\":{\"baseId\":\"9\",\"sourceIds\":[\"kb:1\",\"kb:2\"]}}");
+        });
+
+        var documents = client.listIndexedDocuments("9");
+
+        assertThat(seenQuery.get()).isEqualTo("baseId=9");
+        assertThat(documents)
+                .extracting(com.mywebsite.agent.dto.AgentIndexedDocument::sourceId)
+                .containsExactly("kb:1", "kb:2");
+    }
+
+    @Test
+    void deleteRetrievalDocumentSendsBaseIdQueryParam() throws IOException {
+        // 单篇删除换键（Issue #209 UoW-2）：query 参数 agentId → baseId
+        java.util.concurrent.atomic.AtomicReference<String> seenQuery = new java.util.concurrent.atomic.AtomicReference<>();
+        server.createContext("/internal/v1/retrieval/documents", exchange -> {
+            seenQuery.set(exchange.getRequestURI().getQuery());
+            write(exchange, 200, "{\"ok\":true,\"data\":null}");
+        });
+
+        client.deleteRetrievalDocument("9", "kb:1");
+
+        assertThat(seenQuery.get()).isEqualTo("baseId=9&sourceId=kb%3A1");
+    }
+
+    @Test
     void prepareReembedMapsDimensionChangeRequired() throws IOException {
         AtomicInteger hits = new AtomicInteger();
         server.createContext("/internal/v1/retrieval/reembed/prepare", exchange -> {

@@ -328,10 +328,13 @@ async def _prepare_execution(
         SkillLoadCollector() if settings.agent_skills_self_select_enabled else None
     )
     retrieval = _retrieval_service_or_none(request)
-    tables_available = await structured_tables_available(retrieval, agent_id)
+    tables_available = await structured_tables_available(
+        retrieval, body.knowledge_base_ids or []
+    )
     toolsets = build_execution_toolsets(
         _business_settings(settings, body.business_api_base_url),
         agent_id,
+        knowledge_base_ids=body.knowledge_base_ids,
         todo_store=todo_store,
         model=model,
         retrieval=retrieval,
@@ -842,20 +845,20 @@ async def internal_chat_stream(request: Request, body: ChatRequest) -> Streaming
 async def upsert_retrieval_document(
     request: Request, body: RetrievalUpsertRequest
 ) -> dict[str, object]:
-    agent_id = body.agent_id.strip()
+    base_id = body.base_id.strip()
     source_id = body.source_id.strip()
-    if not agent_id or not source_id or not body.content.strip():
+    if not base_id or not source_id or not body.content.strip():
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
-            message="agentId, sourceId and content are required.",
+            message="baseId, sourceId and content are required.",
         )
     _raise_if_retrieval_not_configured(request)
     service = _require_retrieval_service(request)
     try:
         embedding_classes = _embedding_classes_for(request, body.embedding_classes)
         chunk_count = await service.upsert_document(
-            agent_id=agent_id,
+            base_id=base_id,
             source_id=source_id,
             title=body.title,
             content=body.content,
@@ -950,20 +953,20 @@ async def prepare_retrieval_reembed(
 
 @router.delete("/retrieval/documents")
 async def delete_retrieval_document(
-    request: Request, agentId: str, sourceId: str
+    request: Request, baseId: str, sourceId: str
 ) -> dict[str, object]:
-    agent_id = agentId.strip()
+    base_id = baseId.strip()
     source_id = sourceId.strip()
-    if not agent_id or not source_id:
+    if not base_id or not source_id:
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
-            message="agentId and sourceId are required.",
+            message="baseId and sourceId are required.",
         )
     _raise_if_retrieval_not_configured(request)
     service = _require_retrieval_service(request)
     try:
-        await service.delete_document(agent_id=agent_id, source_id=source_id)
+        await service.delete_document(base_id=base_id, source_id=source_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Retrieval index delete failed", exc_info=exc)
         raise InternalApiError(
@@ -975,10 +978,60 @@ async def delete_retrieval_document(
     return {"ok": True, "data": None}
 
 
+@router.delete("/retrieval/bases/{baseId}")
+async def delete_retrieval_base(request: Request, baseId: str) -> dict[str, object]:
+    """整空间清理：空间删除后 Java 调此端点清掉该空间的全部索引行。"""
+    base_id = baseId.strip()
+    if not base_id:
+        raise InternalApiError(
+            status_code=400,
+            error_code="BAD_REQUEST",
+            message="baseId is required.",
+        )
+    _raise_if_retrieval_not_configured(request)
+    service = _require_retrieval_service(request)
+    try:
+        await service.delete_base_documents(base_id=base_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Retrieval base delete failed", exc_info=exc)
+        raise InternalApiError(
+            status_code=503,
+            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
+            message=external_failure_message("Retrieval base delete failed", exc),
+            provider_status="BLOCKED",
+        ) from exc
+    return {"ok": True, "data": None}
+
+
+@router.get("/retrieval/documents")
+async def list_retrieval_documents(request: Request, baseId: str) -> dict[str, object]:
+    """该空间已索引的 source 清单，供 Java 存量对账（文档/块/spec 三数核对）。"""
+    base_id = baseId.strip()
+    if not base_id:
+        raise InternalApiError(
+            status_code=400,
+            error_code="BAD_REQUEST",
+            message="baseId is required.",
+        )
+    _raise_if_retrieval_not_configured(request)
+    service = _require_retrieval_service(request)
+    try:
+        source_ids = await service.list_indexed_documents(base_id=base_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Retrieval index list failed", exc_info=exc)
+        raise InternalApiError(
+            status_code=503,
+            error_code="EXTERNAL_DEPENDENCY_BLOCKED",
+            message=external_failure_message("Retrieval index list failed", exc),
+            provider_status="BLOCKED",
+        ) from exc
+    return {"ok": True, "data": {"baseId": base_id, "sourceIds": source_ids}}
+
+
 @router.post("/retrieval/search")
 async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> dict[str, object]:
     """内部知识检索。嵌入或向量库失败时沿用 retrieve_chunks 的 degraded，不回 500。"""
-    agent_id = body.agent_id.strip()
+    base_ids = body.base_ids
     query = body.query.strip()
     if not query:
         raise InternalApiError(
@@ -986,16 +1039,16 @@ async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> di
             error_code="BAD_REQUEST",
             message="query must not be blank.",
         )
-    if not agent_id:
+    if not base_ids:
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
-            message="agentId is required.",
+            message="baseIds is required.",
         )
     service = _require_retrieval_service(request)
     embedding_classes = _embedding_classes_for(request, body.embedding_classes)
     chunks = await service.retrieve_chunks(
-        agent_id=agent_id,
+        base_ids=base_ids,
         query=query,
         top_k=body.top_k,
         embedder=(
@@ -1014,6 +1067,7 @@ async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> di
                 chunk_index=chunk.chunk_index,
                 score=chunk.score,
                 content=chunk.content,
+                base_id=chunk.base_id,
             )
             for chunk in chunks
         ],
@@ -1024,4 +1078,8 @@ async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> di
     # 未重排时不写出默认 false，避免既有 {hits, degraded} 精确断言被改写。
     if not service.rerank_applied:
         dumped.pop("rerankApplied", None)
+    # 命中未带空间（旧数据/替身 store 未盖 base_id）时不写出空 baseId，同上口径。
+    for hit, chunk in zip(dumped["hits"], chunks, strict=True):
+        if not chunk.base_id:
+            hit.pop("baseId", None)
     return dumped

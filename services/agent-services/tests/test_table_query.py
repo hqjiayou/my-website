@@ -59,13 +59,13 @@ class _Loader:
     def __init__(self, sheets: list[StoredSheet]) -> None:
         self.sheets = sheets
 
-    async def load_structured_tables(self, agent_id: str) -> list[StoredSheet]:
-        assert agent_id == "1"
+    async def load_structured_tables(self, base_id: str) -> list[StoredSheet]:
+        assert base_id == "1"
         return self.sheets
 
 
 class _Boom:
-    async def has_structured_tables(self, agent_id: str) -> bool:
+    async def has_structured_tables(self, base_id: str) -> bool:
         raise RuntimeError("db down")
 
 
@@ -187,7 +187,7 @@ def test_named_document_without_rows_says_no_structured_data() -> None:
 def test_upsert_request_accepts_tables_and_omits_them() -> None:
     body = RetrievalUpsertRequest.model_validate(
         {
-            "agentId": "1",
+            "baseId": "1",
             "sourceId": "kb:14",
             "content": "alpha",
             "tables": [
@@ -203,7 +203,7 @@ def test_upsert_request_accepts_tables_and_omits_them() -> None:
     assert body.tables is not None
     assert body.tables[0].rows[0].row_number == 20
     omitted = RetrievalUpsertRequest.model_validate(
-        {"agentId": "1", "sourceId": "kb:14", "content": "alpha"}
+        {"baseId": "1", "sourceId": "kb:14", "content": "alpha"}
     )
     assert omitted.tables is None
 
@@ -212,14 +212,14 @@ async def test_upsert_with_tables_replaces_rows_for_source() -> None:
     store = FakeStore()
     service = RetrievalService(FakeEmbedder(), store)
     await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:14",
         title="勤務管理表2026",
         content="alpha facts",
         tables=[_index_table("10月"), _index_table("11月", "9:00")],
     )
     await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:14",
         title="勤務管理表2026",
         content="alpha facts",
@@ -235,7 +235,7 @@ async def test_upsert_without_tables_matches_plain_chunks_and_clears_rows() -> N
     store = FakeStore()
     service = RetrievalService(FakeEmbedder(), store)
     await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:14",
         title="t",
         content="alpha facts",
@@ -243,8 +243,8 @@ async def test_upsert_without_tables_matches_plain_chunks_and_clears_rows() -> N
     )
     plain_store = FakeStore()
     plain = RetrievalService(FakeEmbedder(), plain_store)
-    await plain.upsert_document(agent_id="1", source_id="kb:14", title="t", content="alpha facts")
-    await service.upsert_document(agent_id="1", source_id="kb:14", title="t", content="alpha facts")
+    await plain.upsert_document(base_id="1", source_id="kb:14", title="t", content="alpha facts")
+    await service.upsert_document(base_id="1", source_id="kb:14", title="t", content="alpha facts")
     assert store.docs[("1", "kb:14")] == plain_store.docs[("1", "kb:14")]
     assert store.sheets[("1", "kb:14")] == []
 
@@ -253,7 +253,7 @@ async def test_multi_class_upsert_replaces_sheet_rows_once() -> None:
     store = FakeStore()
     service = RetrievalService(None, store)
     await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:14",
         title="t",
         content="alpha facts",
@@ -287,13 +287,13 @@ def test_table_tool_registered_only_when_tables_available() -> None:
 
 
 async def test_structured_table_probe_failure_is_unavailable() -> None:
-    assert await structured_tables_available(None, "1") is False
-    assert await structured_tables_available(_Boom(), "1") is False
+    assert await structured_tables_available(None, ["1"]) is False
+    assert await structured_tables_available(_Boom(), ["1"]) is False
 
 
 async def test_table_tool_records_result_text() -> None:
     collector = KnowledgeSearchCollector()
-    toolset = build_table_toolset("1", _Loader([_sheet()]), collector=collector)
+    toolset = build_table_toolset(["1"], _Loader([_sheet()]), collector=collector)
     text = await _call(
         toolset,
         op="aggregate",
@@ -321,7 +321,7 @@ def test_aggregate_gate_still_replaces_number_absent_from_passages() -> None:
 
 async def test_table_total_is_kept_in_done_reply() -> None:
     collector = KnowledgeSearchCollector()
-    toolset = build_table_toolset("1", _Loader([_sheet()]), collector=collector)
+    toolset = build_table_toolset(["1"], _Loader([_sheet()]), collector=collector)
 
     def respond(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
         seen_tool = any(

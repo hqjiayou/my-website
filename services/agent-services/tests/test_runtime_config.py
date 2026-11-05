@@ -267,7 +267,7 @@ async def test_dimension_change_blocks_honestly_and_reembed_path_intact(monkeypa
     with pytest.raises(DimensionChangeRequired):
         await service.prepare_reembed()
     # 检索侧维度不匹配收敛成 degraded 空结果，不抛 500 噪声
-    chunks = await service.retrieve_chunks(agent_id="1", query="anything")
+    chunks = await service.retrieve_chunks(base_ids=["1"], query="anything")
     assert chunks == []
     assert service.degraded is True
 

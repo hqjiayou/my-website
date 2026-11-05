@@ -10,6 +10,7 @@ import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentExperienceExtractRequest;
 import com.mywebsite.agent.dto.AgentExperienceExtractResult;
+import com.mywebsite.agent.dto.AgentIndexedDocument;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentOcrImageRequest;
@@ -391,7 +392,7 @@ public class HttpAgentClient implements AgentClient {
     @Override
     public void upsertRetrievalDocument(AgentRetrievalDocument document) {
         if (document == null
-                || !StringUtils.hasText(document.agentId())
+                || !StringUtils.hasText(document.baseId())
                 || !StringUtils.hasText(document.sourceId())
                 || !StringUtils.hasText(document.content())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
@@ -492,16 +493,56 @@ public class HttpAgentClient implements AgentClient {
     }
 
     @Override
-    public void deleteRetrievalDocument(String agentId, String sourceId) {
-        if (!StringUtils.hasText(agentId) || !StringUtils.hasText(sourceId)) {
+    public void deleteRetrievalDocument(String baseId, String sourceId) {
+        if (!StringUtils.hasText(baseId) || !StringUtils.hasText(sourceId)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         ensureTokenConfigured();
-        String path = "/internal/v1/retrieval/documents?agentId="
-                + java.net.URLEncoder.encode(agentId, StandardCharsets.UTF_8)
+        String path = "/internal/v1/retrieval/documents?baseId="
+                + java.net.URLEncoder.encode(baseId, StandardCharsets.UTF_8)
                 + "&sourceId="
                 + java.net.URLEncoder.encode(sourceId, StandardCharsets.UTF_8);
         exchangeWithRetry("DELETE", path, null);
+    }
+
+    @Override
+    public void deleteRetrievalDocumentsByBase(String baseId) {
+        if (!StringUtils.hasText(baseId)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        ensureTokenConfigured();
+        // 整空间清理端点：DELETE /internal/v1/retrieval/bases/{baseId}
+        String path = "/internal/v1/retrieval/bases/"
+                + java.net.URLEncoder.encode(baseId, StandardCharsets.UTF_8);
+        exchangeWithRetry("DELETE", path, null);
+    }
+
+    @Override
+    public List<AgentIndexedDocument> listIndexedDocuments(String baseId) {
+        if (!StringUtils.hasText(baseId)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        ensureTokenConfigured();
+        String path = "/internal/v1/retrieval/documents?baseId="
+                + java.net.URLEncoder.encode(baseId, StandardCharsets.UTF_8);
+        JsonNode body = exchangeWithRetry("GET", path, null);
+        // 契约体是 {ok, data:{baseId, sourceIds:[...]}}：取 data（同 search 口径），
+        // 执行层只回 source 清单，embeddingClasses 留空集。
+        JsonNode payload = body.path("data").isObject() ? body.path("data") : body;
+        if (!payload.isObject()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+        JsonNode sourceIds = payload.get("sourceIds");
+        if (sourceIds == null || !sourceIds.isArray()) {
+            return List.of();
+        }
+        List<AgentIndexedDocument> documents = new ArrayList<>();
+        for (JsonNode entry : sourceIds) {
+            if (entry.isTextual() && StringUtils.hasText(entry.asText())) {
+                documents.add(new AgentIndexedDocument(entry.asText(), List.of()));
+            }
+        }
+        return List.copyOf(documents);
     }
 
     @Override

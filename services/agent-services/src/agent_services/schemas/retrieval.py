@@ -1,4 +1,8 @@
-"""agent_retrieval 派生索引同步契约（Java AgentRetrievalDocument 对应）。"""
+"""agent_retrieval 派生索引同步契约（Java AgentRetrievalDocument 对应）。
+
+分区键是知识空间 baseId（Issue #209 UoW-2 起取代 agentId）：文档只属一个
+空间、只写一份；检索请求带空间集 baseIds，跨空间由服务层按名次合并。
+"""
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -6,8 +10,10 @@ from agent_services.retrieval.embeddings import limit_embedding_class_specs
 from agent_services.retrieval.service import DEFAULT_TOP_K
 from agent_services.schemas.chat import EmbeddingClassCredentials, ModelSelection
 
-MAX_SITE_ID_LENGTH = 64
+MAX_BASE_ID_LENGTH = 64
 MAX_SOURCE_ID_LENGTH = 128
+# 一次检索覆盖的空间数上限。agent 订阅的空间远小于此，超限即请求形状不对。
+MAX_SEARCH_BASES = 64
 MAX_TITLE_LENGTH = 512
 # 与 Java 上传侧对齐：文件上限 10MB，抽取文本上限 300 万字符（10MB 纯文本的最坏情形）。
 MAX_CONTENT_LENGTH = 3_000_000
@@ -49,7 +55,7 @@ class RetrievalTable(BaseModel):
 
 
 class RetrievalUpsertRequest(BaseModel):
-    agent_id: str = Field(alias="agentId", max_length=MAX_SITE_ID_LENGTH)
+    base_id: str = Field(alias="baseId", max_length=MAX_BASE_ID_LENGTH)
     source_id: str = Field(alias="sourceId", max_length=MAX_SOURCE_ID_LENGTH)
     title: str = Field(default="", max_length=MAX_TITLE_LENGTH)
     content: str = Field(max_length=MAX_CONTENT_LENGTH)
@@ -83,7 +89,7 @@ class RetrievalSearchRequest(BaseModel):
     topK 缺省为 RetrievalService 的 DEFAULT_TOP_K；大于 20 时夹制到 20。
     """
 
-    agent_id: str = Field(alias="agentId", max_length=MAX_SITE_ID_LENGTH)
+    base_ids: list[str] = Field(alias="baseIds", max_length=MAX_SEARCH_BASES)
     query: str = Field(max_length=MAX_CONTENT_LENGTH)
     top_k: int = Field(default=DEFAULT_TOP_K, alias="topK")
     embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
@@ -96,6 +102,19 @@ class RetrievalSearchRequest(BaseModel):
     model_selection: ModelSelection | None = Field(default=None, alias="model")
 
     model_config = {"populate_by_name": True}
+
+    @field_validator("base_ids")
+    @classmethod
+    def normalize_base_ids(cls, value: list[str]) -> list[str]:
+        """去空白、去重、保序。空集是否拒绝由端点按旧 agentId 口径回 400。"""
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            base_id = item.strip()
+            if base_id and base_id not in seen:
+                seen.add(base_id)
+                normalized.append(base_id)
+        return normalized
 
     @field_validator("embedding_classes")
     @classmethod
@@ -119,6 +138,8 @@ class RetrievalSearchHit(BaseModel):
     chunk_index: int = Field(alias="chunkIndex")
     score: float
     content: str
+    # 命中所属知识空间。跨空间检索时调用方据此区分来源；旧数据缺省为空串。
+    base_id: str = Field(default="", alias="baseId")
 
     model_config = {"populate_by_name": True}
 

@@ -359,7 +359,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 })
                 .toList();
 
-        // Issue #203：同步问题表让链接分区滞后与待删残留在总览可见（此前只存在于日志）。
+        // Issue #203：同步问题表让待删残留在总览可见（此前只存在于日志）。
+        // Issue #209 UoW-2 后只剩空间分区的 DELETE tombstone；OP_UPSERT（链接分区
+        // 滞后）已退役、恒为 0，计数保留是为 DTO 形状不变（管理面收官在 UoW-5）。
         List<AdminAiKnowledgeRetrievalSyncIssueEntity> syncIssues = syncIssueMapper.selectList(
                 new LambdaQueryWrapper<AdminAiKnowledgeRetrievalSyncIssueEntity>());
         if (syncIssues == null) {
@@ -502,9 +504,16 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             throw new BusinessException(
                     ErrorCode.CONFLICT.getCode(), AdminAiKnowledgeMessageKeys.BASE_NOT_EMPTY);
         }
-        // 该库文档为零，订阅站点的分区里也没有它的文档，直接清订阅行即可
+        // 该库文档为零：清订阅行后整分区 best-effort 清扫一遍（Issue #209 UoW-2），
+        // 防逐篇删除失败等路径留下的孤儿块；失败只记日志——分区已无文档行、
+        // 且空间删除后不会再被任何 agent 的空间集展开到，残留不可达。
         subscriptionMapper.delete(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
                 .eq(AdminAiKnowledgeBaseSubscriptionEntity::getBaseId, baseId));
+        try {
+            agentClient.deleteRetrievalDocumentsByBase(String.valueOf(baseId));
+        } catch (RuntimeException ex) {
+            log.warn("KB base partition sweep failed (baseId={}); orphan chunks may linger", baseId, ex);
+        }
         baseMapper.deleteById(baseId);
     }
 
@@ -533,19 +542,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         subscription.setBaseId(baseId);
         subscription.setAgentId(targetAgentId);
         subscriptionMapper.insert(subscription);
-        // 扇出：该库现存 ACTIVE 文档同步进目标站点分区（失败记日志并落同步问题行，Issue #203）
-        for (AdminAiKnowledgeDocumentEntity document : activeDocumentsOfBase(baseId)) {
-            try {
-                upsertLinkPartition(document, targetAgentId);
-            } catch (RuntimeException ex) {
-                log.warn(
-                        "KB link fan-out upsert failed (baseId={}, targetAgentId={}, documentId={})",
-                        baseId,
-                        targetAgentId,
-                        document.getId(),
-                        ex);
-            }
-        }
+        // Issue #209 UoW-2：向量按空间单写，订阅不再触发索引扇出——目标 agent 的
+        // 可检索空间集展开时带上本空间即可命中既有向量，link 只写订阅行。
     }
 
     @Override
@@ -560,24 +558,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     ErrorCode.NOT_FOUND.getCode(), AdminAiKnowledgeMessageKeys.BASE_NOT_FOUND);
         }
         subscriptionMapper.deleteById(existing.getId());
-        for (AdminAiKnowledgeDocumentEntity document : activeDocumentsOfBase(baseId)) {
-            try {
-                deleteFromPartition(targetAgentId, sourceId(document.getId()));
-            } catch (RuntimeException ex) {
-                log.warn(
-                        "KB unlink fan-out delete failed (baseId={}, targetAgentId={}, documentId={})",
-                        baseId,
-                        targetAgentId,
-                        document.getId(),
-                        ex);
-            }
-        }
-    }
-
-    private List<AdminAiKnowledgeDocumentEntity> activeDocumentsOfBase(long baseId) {
-        return knowledgeMapper.selectList(new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
-                .eq(AdminAiKnowledgeDocumentEntity::getBaseId, baseId)
-                .eq(AdminAiKnowledgeDocumentEntity::getStatus, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE));
+        // Issue #209 UoW-2：解链不删索引——向量只存空间分区一份，其他订阅者仍要
+        // 命中；目标 agent 的空间集展开不再包含本空间，自然检索不到。
     }
 
     private Map<Long, String> agentNames() {
@@ -697,20 +679,13 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         subscriptionMapper.insert(subscription);
     }
 
-    /** 文档的索引分区集合：所有者站点（经 base 创建者推导） + 订阅该库的全部站点。 */
-    private List<Long> partitionAgentIds(AdminAiKnowledgeDocumentEntity entity) {
-        List<Long> targets = new ArrayList<>();
-        targets.add(ownerAgentId(entity));
-        if (entity.getBaseId() != null) {
-            for (AdminAiKnowledgeBaseSubscriptionEntity subscription :
-                    subscriptionMapper.selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
-                            .eq(AdminAiKnowledgeBaseSubscriptionEntity::getBaseId, entity.getBaseId()))) {
-                if (!targets.contains(subscription.getAgentId())) {
-                    targets.add(subscription.getAgentId());
-                }
-            }
-        }
-        return targets;
+    /**
+     * 文档所属空间的嵌入类集（Issue #209 UoW-2 过渡口径）：分区键已改 base，类集
+     * 过渡期取空间创建者的登记类集（与 UoW-1 的所有者推导同源）；UoW-3 把登记
+     * 本身迁到空间后，此处改按 base 解析、同步形状不变。
+     */
+    private List<AgentModelSelection> spaceClasses(AdminAiKnowledgeDocumentEntity entity) {
+        return registeredClasses(ownerAgentId(entity));
     }
 
     @Override
@@ -759,7 +734,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         if (deleted == 0) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
-        removeFromAllPartitions(entity);
+        removeFromSpacePartition(entity);
         removeOriginalObject(entity);
     }
 
@@ -803,12 +778,21 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             document.setDeletedAt(now);
             knowledgeMapper.updateById(document);
             knowledgeMapper.deleteById(document.getId());
-            removeFromAllPartitions(document);
+            removeFromSpacePartition(document);
         }
-        // 站点删除时，其名下知识库与订阅行一并清理（订阅行的目标站点分区已随文档移除处理）
+        // 站点删除时，其名下知识库与订阅行一并清理；每库再整分区清扫一遍兜底
+        // （逐篇删除失败的残留 tombstone 重试无文档可依时，分区清扫保证不留孤儿块）
         for (AdminAiKnowledgeBaseEntity base : bases) {
             subscriptionMapper.delete(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
                     .eq(AdminAiKnowledgeBaseSubscriptionEntity::getBaseId, base.getId()));
+            try {
+                agentClient.deleteRetrievalDocumentsByBase(String.valueOf(base.getId()));
+            } catch (RuntimeException ex) {
+                log.warn(
+                        "KB base partition sweep failed (baseId={}); orphan chunks may linger",
+                        base.getId(),
+                        ex);
+            }
             base.setDeletedAt(now);
             baseMapper.updateById(base);
             baseMapper.deleteById(base.getId());
@@ -821,26 +805,36 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     public AdminAiKnowledgeReembedResultDto reembedAll() {
         List<AdminAiKnowledgeDocumentEntity> documents = knowledgeMapper.selectList(
                 new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
-                        .orderByAsc(AdminAiKnowledgeDocumentEntity::getAgentId)
+                        .orderByAsc(AdminAiKnowledgeDocumentEntity::getBaseId)
                         .orderByAsc(AdminAiKnowledgeDocumentEntity::getId));
-        Map<Long, List<AdminAiKnowledgeDocumentEntity>> documentsBySite = new LinkedHashMap<>();
+        // 分组键为知识空间（Issue #209 UoW-2）：向量按 base 单写，重嵌按空间逐份进行；
+        // 无空间归属的存量文档没有分区可写，跳过（与同步路径的 PENDING 口径一致）。
+        Map<Long, List<AdminAiKnowledgeDocumentEntity>> documentsByBase = new LinkedHashMap<>();
         for (AdminAiKnowledgeDocumentEntity document : documents) {
-            // 分组键为所有者 agent（经 base 创建者推导，Issue #209 UoW-1；文档 agent_id 已停写）
-            Long ownerId = ownerAgentId(document);
-            if (ownerId == null || document.getId() == null) {
+            if (document.getBaseId() == null || document.getId() == null) {
                 continue;
             }
-            documentsBySite.computeIfAbsent(ownerId, ignored -> new ArrayList<>()).add(document);
+            documentsByBase.computeIfAbsent(document.getBaseId(), ignored -> new ArrayList<>()).add(document);
         }
-        if (documentsBySite.isEmpty()) {
+        if (documentsByBase.isEmpty()) {
             return new AdminAiKnowledgeReembedResultDto(0, 0, null, false, List.of(), REEMBED_SUCCESS);
         }
 
-        Map<Long, List<AgentModelSelection>> classesBySite = new LinkedHashMap<>();
+        // 空间 → 创建者（类集过渡口径按创建者登记取，见 spaceClasses）；创建者按空间缓存复用
+        Map<Long, Long> creatorByBase = new LinkedHashMap<>();
+        for (AdminAiKnowledgeBaseEntity base :
+                baseMapper.selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>())) {
+            creatorByBase.put(base.getId(), base.getCreatedByAgentId());
+        }
+        Map<Long, List<AgentModelSelection>> classesByCreator = new LinkedHashMap<>();
+        Map<Long, List<AgentModelSelection>> classesByBase = new LinkedHashMap<>();
         boolean multiClass = false;
-        for (Long agentId : documentsBySite.keySet()) {
-            List<AgentModelSelection> classes = registeredClasses(agentId);
-            classesBySite.put(agentId, classes);
+        for (Long baseId : documentsByBase.keySet()) {
+            Long creatorId = creatorByBase.get(baseId);
+            List<AgentModelSelection> classes = creatorId == null
+                    ? List.of()
+                    : classesByCreator.computeIfAbsent(creatorId, this::registeredClasses);
+            classesByBase.put(baseId, classes);
             if (classes.size() > 1) {
                 multiClass = true;
             }
@@ -849,20 +843,20 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         Integer dimensions = null;
         boolean recreatedSchema = false;
         // 多类的表由 upsert 按向量长度另建。confirm 重建只会 DROP 遗留 chunks，同维度的其它类会被清掉。
-        // 有站点登记了两类及以上时，整批都不走这条重建。
+        // 有空间登记了两类及以上时，整批都不走这条重建。
         if (!multiClass) {
-            Map<SelectionGroup, List<Long>> sitesBySelection = new LinkedHashMap<>();
-            for (Map.Entry<Long, List<AgentModelSelection>> site : classesBySite.entrySet()) {
-                AgentModelSelection selection = site.getValue().isEmpty() ? null : site.getValue().get(0);
-                sitesBySelection
+            Map<SelectionGroup, List<Long>> basesBySelection = new LinkedHashMap<>();
+            for (Map.Entry<Long, List<AgentModelSelection>> base : classesByBase.entrySet()) {
+                AgentModelSelection selection = base.getValue().isEmpty() ? null : base.getValue().get(0);
+                basesBySelection
                         .computeIfAbsent(new SelectionGroup(selection), ignored -> new ArrayList<>())
-                        .add(site.getKey());
+                        .add(base.getKey());
             }
-            Map<Long, Integer> dimensionsBySite = new LinkedHashMap<>();
+            Map<Long, Integer> dimensionsByBase = new LinkedHashMap<>();
             Integer columnDimensions = null;
             AgentModelSelection confirmSelection = null;
             boolean sawSelection = false;
-            for (Map.Entry<SelectionGroup, List<Long>> group : sitesBySelection.entrySet()) {
+            for (Map.Entry<SelectionGroup, List<Long>> group : basesBySelection.entrySet()) {
                 Probe probe = probeSelection(group.getKey().selection());
                 if (!sawSelection) {
                     confirmSelection = group.getKey().selection();
@@ -871,18 +865,21 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 if (probe.columnDimensions() != null) {
                     columnDimensions = probe.columnDimensions();
                 }
-                for (Long agentId : group.getValue()) {
-                    dimensionsBySite.put(agentId, probe.dimensions());
+                for (Long baseId : group.getValue()) {
+                    dimensionsByBase.put(baseId, probe.dimensions());
                 }
             }
-            if (new LinkedHashSet<>(dimensionsBySite.values()).size() > 1) {
+            if (new LinkedHashSet<>(dimensionsByBase.values()).size() > 1) {
+                // 冲突以空间创建者标注（维度由创建者的登记类集决定，对外 DTO 沿用 agentId 字段）
                 List<AdminAiKnowledgeReembedConflictDto> conflicts = new ArrayList<>();
-                for (Map.Entry<Long, Integer> entry : dimensionsBySite.entrySet()) {
-                    conflicts.add(new AdminAiKnowledgeReembedConflictDto(entry.getKey(), entry.getValue()));
+                for (Map.Entry<Long, Integer> entry : dimensionsByBase.entrySet()) {
+                    Long creatorId = creatorByBase.get(entry.getKey());
+                    conflicts.add(new AdminAiKnowledgeReembedConflictDto(
+                            creatorId == null ? entry.getKey() : creatorId, entry.getValue()));
                 }
                 throw new ReembedConflictException(conflicts);
             }
-            dimensions = dimensionsBySite.values().iterator().next();
+            dimensions = dimensionsByBase.values().iterator().next();
             if (columnDimensions == null || !columnDimensions.equals(dimensions)) {
                 AgentReembedPrepareResult recreated = agentClient.prepareReembed(confirmSelection, true);
                 dimensions = recreated.dimensions();
@@ -892,9 +889,10 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
         List<AdminAiKnowledgeReembedFailureDto> failed = new ArrayList<>();
         int attempted = 0;
-        for (Map.Entry<Long, List<AdminAiKnowledgeDocumentEntity>> agent : documentsBySite.entrySet()) {
-            List<AgentModelSelection> classes = classesBySite.get(agent.getKey());
-            for (AdminAiKnowledgeDocumentEntity document : agent.getValue()) {
+        for (Map.Entry<Long, List<AdminAiKnowledgeDocumentEntity>> base : documentsByBase.entrySet()) {
+            List<AgentModelSelection> classes = classesByBase.get(base.getKey());
+            Long creatorId = creatorByBase.get(base.getKey());
+            for (AdminAiKnowledgeDocumentEntity document : base.getValue()) {
                 if (!AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(document.getStatus())) {
                     continue;
                 }
@@ -905,27 +903,16 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                             document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null, classes);
                 } catch (RuntimeException ex) {
                     recordIndexOutcome(document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED, indexError(ex));
+                    // 失败以空间创建者标注（类集归属者；对外 DTO 沿用 agentId 字段，空间未知时以 base id 兜底）
                     failed.add(new AdminAiKnowledgeReembedFailureDto(
-                            agent.getKey(), sourceId(document.getId()), indexError(ex)));
-                    continue;
-                }
-                // 共享扇出：链接站点分区用各自的入口规格重嵌，失败计入 failed（以目标站点标注）
-                // 并落同步问题行待重试（Issue #203）
-                for (Long target : partitionAgentIds(document)) {
-                    if (target.equals(agent.getKey())) {
-                        continue;
-                    }
-                    try {
-                        upsertLinkPartition(document, target);
-                    } catch (RuntimeException ex) {
-                        failed.add(new AdminAiKnowledgeReembedFailureDto(
-                                target, sourceId(document.getId()), indexError(ex)));
-                    }
+                            creatorId == null ? base.getKey() : creatorId,
+                            sourceId(document.getId()),
+                            indexError(ex)));
                 }
             }
         }
         return new AdminAiKnowledgeReembedResultDto(
-                documentsBySite.size(),
+                documentsByBase.size(),
                 attempted,
                 dimensions,
                 recreatedSchema,
@@ -1016,8 +1003,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     /**
      * 派生索引 best-effort 同步：SoT 在 Java，索引允许滞后；
      * agent-services 未配置检索（BLOCKED）或临时不可用时不阻断 KB CRUD，只记录日志。
-     * 文档同步到全部目标分区（所有者 + 共享链接站点）；落库的 index_status 以所有者分区结果为准，
-     * 链接分区的失败只记日志（其健康在消费站点的实际检索中体现）。
+     * 文档只写其所属知识空间一个分区（Issue #209 UoW-2，分区键 base）；落库的
+     * index_status 即该空间分区的同步结果，订阅者经查询时展开空间集共享同一份向量。
      */
     private void syncDerivedIndex(AdminAiKnowledgeDocumentEntity entity) {
         syncDerivedIndex(entity, false, null);
@@ -1033,92 +1020,66 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
      */
     private void syncDerivedIndex(
             AdminAiKnowledgeDocumentEntity entity, boolean allowFillMissing, byte[] originalBytes) {
-        List<Long> targets = partitionAgentIds(entity);
+        if (entity.getBaseId() == null) {
+            // 无空间归属的存量文档没有分区可写：如实记 PENDING（未在索引中），不假装已同步。
+            log.warn(
+                    "KB derived index skipped: document has no knowledge base (documentId={})",
+                    entity.getId());
+            recordIndexOutcome(entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING, null);
+            return;
+        }
         DerivedIndexParts parts = derivedIndexParts(entity, originalBytes);
-        // 所有者经 base 创建者推导（Issue #209 UoW-1；文档 agent_id 已停写）
-        Long ownerId = ownerAgentId(entity);
         if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
-            List<AgentModelSelection> ownerClasses = registeredClasses(ownerId);
-            List<AgentModelSelection> toWrite = classesToWrite(entity, ownerClasses, allowFillMissing);
+            List<AgentModelSelection> spaceClasses = spaceClasses(entity);
+            List<AgentModelSelection> toWrite = classesToWrite(entity, spaceClasses, allowFillMissing);
             // Issue #202 UoW-2：只有 toWrite 就是完整登记类集时，Python 才可按差集清理
             // 已注销类的残留行；fill-missing 子集补写（真子集）时 complete=false，不清理。
             boolean classesComplete = Objects.equals(
                     AgentEmbeddingClassUtils.canonical(toWrite),
-                    AgentEmbeddingClassUtils.canonical(ownerClasses));
-            RuntimeException ownerFailure = null;
+                    AgentEmbeddingClassUtils.canonical(spaceClasses));
             try {
-                upsertDerivedIndexForSite(entity, ownerId, toWrite, parts, classesComplete);
+                upsertSpaceIndex(entity, toWrite, parts, classesComplete);
+                recordIndexOutcome(
+                        entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null, spaceClasses);
             } catch (RuntimeException ex) {
-                ownerFailure = ex;
-            }
-            for (Long target : targets) {
-                if (target.equals(ownerId)) {
-                    continue;
-                }
-                try {
-                    upsertLinkPartition(entity, target, parts);
-                } catch (RuntimeException ex) {
-                    log.warn(
-                            "KB fan-out sync failed (ownerAgentId={}, targetAgentId={}, documentId={});"
-                                    + " linked partition may lag",
-                            ownerId,
-                            target,
-                            entity.getId(),
-                            ex);
-                }
-            }
-            if (ownerFailure == null) {
-                recordIndexOutcome(
-                        entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED, null, ownerClasses);
-            } else {
                 log.warn(
-                        "KB derived index sync failed (agentId={}, documentId={}); index may lag",
-                        ownerId,
+                        "KB derived index sync failed (baseId={}, documentId={}); index may lag",
+                        entity.getBaseId(),
                         entity.getId(),
-                        ownerFailure);
+                        ex);
                 recordIndexOutcome(
-                        entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED, indexError(ownerFailure));
+                        entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED, indexError(ex));
             }
         } else {
-            for (Long target : targets) {
-                try {
-                    deleteFromPartition(target, sourceId(entity.getId()));
-                } catch (RuntimeException ex) {
-                    log.warn(
-                            "KB derived index delete failed (agentId={}, documentId={}); index may lag",
-                            target,
-                            entity.getId(),
-                            ex);
-                }
+            try {
+                deleteFromSpacePartition(entity);
+            } catch (RuntimeException ex) {
+                log.warn(
+                        "KB derived index delete failed (baseId={}, documentId={}); index may lag",
+                        entity.getBaseId(),
+                        entity.getId(),
+                        ex);
             }
             recordIndexOutcome(entity, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING, null);
         }
     }
 
-    /** 以目标站点已登记的嵌入类 upsert（完整类集，complete=true）。没有则不带凭证，由进程嵌入模型写入。不跟随对话主用入口。 */
-    private void upsertDerivedIndexForSite(
-            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, DerivedIndexParts parts) {
-        upsertDerivedIndexForSite(entity, targetAgentId, registeredClasses(targetAgentId), parts, true);
-    }
-
-    private void upsertDerivedIndexForSite(
+    /** 按空间单写派生索引（完整/子集类集由 classesComplete 标注，语义见 AgentRetrievalDocument）。 */
+    private void upsertSpaceIndex(
             AdminAiKnowledgeDocumentEntity entity,
-            long targetAgentId,
             List<AgentModelSelection> classes,
             DerivedIndexParts parts,
             boolean classesComplete) {
-        agentClient.upsertRetrievalDocument(
-                retrievalDocument(entity, targetAgentId, classes, parts, classesComplete));
-        // Issue #203 复评三审计：写入成功即作废同分区同文档的待删 tombstone——
+        agentClient.upsertRetrievalDocument(retrievalDocument(entity, classes, parts, classesComplete));
+        // Issue #203 复评三审计：写入成功即作废同空间同文档的待删 tombstone——
         // 否则文档停用期落下的 DELETE 行会在文档恢复 ACTIVE 并重写后被重试任务
         // 执行，把活向量删掉（文档 INDEXED 却检索不到）。
         clearSyncIssue(
-                targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE);
+                entity.getBaseId(), sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE);
     }
 
     private static AgentRetrievalDocument retrievalDocument(
             AdminAiKnowledgeDocumentEntity entity,
-            long targetAgentId,
             List<AgentModelSelection> classes,
             DerivedIndexParts parts,
             boolean classesComplete) {
@@ -1127,7 +1088,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         List<AgentRetrievalSegment> segments = parts == null ? null : parts.segments();
         List<AgentRetrievalTable> tables = parts == null ? null : parts.tables();
         return new AgentRetrievalDocument(
-                String.valueOf(targetAgentId),
+                String.valueOf(entity.getBaseId()),
                 sourceId(entity.getId()),
                 entity.getTitle(),
                 entity.getContent(),
@@ -1139,10 +1100,6 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 tables == null || tables.isEmpty() ? null : tables,
                 // false 时不写字段（NON_NULL 省略），与旧载荷逐字一致，旧版 Python 不受影响。
                 classesComplete ? Boolean.TRUE : null);
-    }
-
-    private void upsertDerivedIndexForSite(AdminAiKnowledgeDocumentEntity entity, long targetAgentId) {
-        upsertDerivedIndexForSite(entity, targetAgentId, derivedIndexParts(entity, null));
     }
 
     private List<AgentModelSelection> registeredClasses(long agentId) {
@@ -1203,52 +1160,65 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     /**
-     * 文档 {@code indexStatus == INDEXED} 且记下的类名与当前已登记的类不一致时为 stale。
-     * 新登记一类也算。非 INDEXED 文档恒为 false。按 agentId 缓存，供列表和总览复用。
+     * 文档 {@code indexStatus == INDEXED} 且记下的类名与当前空间类集不一致时为 stale。
+     * 新登记一类也算。非 INDEXED 文档恒为 false。判定按（空间,文档）键（Issue #209
+     * UoW-2）：类集取文档所属空间的当前类集；缓存按 baseId 键（同一空间的文档共用
+     * 一份），无空间的存量行以负的创建者 id 作键避免与 baseId 撞键。供列表和总览复用。
      */
     private boolean isIndexStale(
             AdminAiKnowledgeDocumentEntity entity, Map<Long, List<AgentModelSelection>> selectionCache) {
         if (!AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(entity.getIndexStatus())) {
             return false;
         }
+        Long ownerId = ownerAgentId(entity);
+        long cacheKey = entity.getBaseId() != null
+                ? entity.getBaseId()
+                : ownerId == null ? 0L : -ownerId;
         List<AgentModelSelection> current =
-                selectionCache.computeIfAbsent(ownerAgentId(entity), this::registeredClasses);
+                selectionCache.computeIfAbsent(cacheKey, key -> registeredClasses(ownerId));
         return !AgentEmbeddingClassUtils.matchesStored(entity.getIndexEmbeddingSpec(), current);
     }
 
-    private void removeFromDerivedIndex(long agentId, long documentId) {
+    /** 从文档所属空间分区移除（best-effort）：失败已在删除路径内落 tombstone 行，这里只记日志。 */
+    private void removeFromSpacePartition(AdminAiKnowledgeDocumentEntity entity) {
+        if (entity.getBaseId() == null) {
+            return;
+        }
         try {
-            deleteFromPartition(agentId, sourceId(documentId));
+            deleteFromSpacePartition(entity);
         } catch (RuntimeException ex) {
             log.warn(
-                    "KB derived index delete failed (agentId={}, documentId={}); index may lag",
-                    agentId,
-                    documentId,
+                    "KB derived index delete failed (baseId={}, documentId={}); index may lag",
+                    entity.getBaseId(),
+                    entity.getId(),
                     ex);
         }
     }
 
     // ------------------------------------------------------------------
-    // Issue #203：派生索引同步问题（落行＋定时重试），所有者分区不入表
+    // Issue #203：派生索引同步问题（落行＋定时重试）；Issue #209 UoW-2 换键为
+    // (base_id, source_id, op)，只剩空间分区的 DELETE tombstone（agent_id 留痕）
     // ------------------------------------------------------------------
 
     private static LambdaQueryWrapper<AdminAiKnowledgeRetrievalSyncIssueEntity> syncIssueKey(
-            long agentId, String sourceId, String op) {
+            Long baseId, String sourceId, String op) {
         return new LambdaQueryWrapper<AdminAiKnowledgeRetrievalSyncIssueEntity>()
-                .eq(AdminAiKnowledgeRetrievalSyncIssueEntity::getAgentId, agentId)
+                .eq(AdminAiKnowledgeRetrievalSyncIssueEntity::getBaseId, baseId)
                 .eq(AdminAiKnowledgeRetrievalSyncIssueEntity::getSourceId, sourceId)
                 .eq(AdminAiKnowledgeRetrievalSyncIssueEntity::getOp, op);
     }
 
-    /** 落/更新同步问题行。落行本身失败只记日志，不能掩盖原始同步结果。 */
-    private void recordSyncIssue(long agentId, String sourceId, String op, RuntimeException failure) {
+    /** 落/更新同步问题行（键为空间；agentId 只写空间创建者作留痕）。落行本身失败只记日志，不能掩盖原始同步结果。 */
+    private void recordSyncIssue(
+            Long baseId, Long agentId, String sourceId, String op, RuntimeException failure) {
         try {
             AdminAiKnowledgeRetrievalSyncIssueEntity existing =
-                    syncIssueMapper.selectOne(syncIssueKey(agentId, sourceId, op));
+                    syncIssueMapper.selectOne(syncIssueKey(baseId, sourceId, op));
             OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
             if (existing == null) {
                 AdminAiKnowledgeRetrievalSyncIssueEntity issue =
                         new AdminAiKnowledgeRetrievalSyncIssueEntity();
+                issue.setBaseId(baseId);
                 issue.setAgentId(agentId);
                 issue.setSourceId(sourceId);
                 issue.setOp(op);
@@ -1265,8 +1235,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             }
         } catch (RuntimeException recordFailure) {
             log.warn(
-                    "KB retrieval sync issue record failed (agentId={}, sourceId={}, op={})",
-                    agentId,
+                    "KB retrieval sync issue record failed (baseId={}, sourceId={}, op={})",
+                    baseId,
                     sourceId,
                     op,
                     recordFailure);
@@ -1274,61 +1244,44 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     /** 同步成功后清掉对应的问题行；清行失败只记日志。 */
-    private void clearSyncIssue(long agentId, String sourceId, String op) {
+    private void clearSyncIssue(Long baseId, String sourceId, String op) {
         try {
-            syncIssueMapper.delete(syncIssueKey(agentId, sourceId, op));
+            syncIssueMapper.delete(syncIssueKey(baseId, sourceId, op));
         } catch (RuntimeException clearFailure) {
             log.warn(
-                    "KB retrieval sync issue clear failed (agentId={}, sourceId={}, op={})",
-                    agentId,
+                    "KB retrieval sync issue clear failed (baseId={}, sourceId={}, op={})",
+                    baseId,
                     sourceId,
                     op,
                     clearFailure);
         }
     }
 
-    /** 链接分区扇出 upsert：成功清 op=UPSERT 问题行，失败落行并原样抛回（调用方维持原日志/计数语义）。 */
-    private void upsertLinkPartition(AdminAiKnowledgeDocumentEntity entity, long targetAgentId) {
+    /** 空间分区删除：成功清 op=DELETE 与 op=UPSERT 问题行（删除取代待同步），失败落 tombstone 行并原样抛回。 */
+    private void deleteFromSpacePartition(AdminAiKnowledgeDocumentEntity entity) {
+        Long baseId = entity.getBaseId();
+        String sourceId = sourceId(entity.getId());
         try {
-            upsertDerivedIndexForSite(entity, targetAgentId);
-            clearSyncIssue(
-                    targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT);
+            agentClient.deleteRetrievalDocument(String.valueOf(baseId), sourceId);
+            clearSyncIssue(baseId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE);
+            clearSyncIssue(baseId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT);
         } catch (RuntimeException ex) {
             recordSyncIssue(
-                    targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT, ex);
-            throw ex;
-        }
-    }
-
-    private void upsertLinkPartition(
-            AdminAiKnowledgeDocumentEntity entity, long targetAgentId, DerivedIndexParts parts) {
-        try {
-            upsertDerivedIndexForSite(entity, targetAgentId, parts);
-            clearSyncIssue(
-                    targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT);
-        } catch (RuntimeException ex) {
-            recordSyncIssue(
-                    targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT, ex);
-            throw ex;
-        }
-    }
-
-    /** 分区删除：成功清 op=DELETE 与 op=UPSERT 问题行（删除取代待同步），失败落 tombstone 行并原样抛回。 */
-    private void deleteFromPartition(long agentId, String sourceId) {
-        try {
-            agentClient.deleteRetrievalDocument(String.valueOf(agentId), sourceId);
-            clearSyncIssue(agentId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE);
-            clearSyncIssue(agentId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT);
-        } catch (RuntimeException ex) {
-            recordSyncIssue(agentId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE, ex);
+                    baseId,
+                    ownerAgentId(entity),
+                    sourceId,
+                    AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE,
+                    ex);
             throw ex;
         }
     }
 
     /**
-     * 定时重试同步问题行（Issue #203）：DELETE 重删、UPSERT 重同步链接分区。
-     * 已被业务变化取代的行（文档已删/已解链/非 ACTIVE/source 格式异常）直接作废删行；
-     * 重试再失败只累加 attempts，留下轮。单行失败不影响其它行。
+     * 定时重试同步问题行（Issue #203；键为空间，Issue #209 UoW-2）：DELETE 按
+     * (base, source) 重删。已被后续重写取代的 tombstone（文档恢复 ACTIVE 且仍属
+     * 该空间）直接作废删行；op=UPSERT 是已退役的链接分区记账（V58 存量全删、
+     * 新代码不再产生），偶见行直接作废。重试再失败只累加 attempts，留下轮。
+     * 单行失败不影响其它行。
      */
     @Override
     @Scheduled(fixedDelayString = "${admin.knowledge.sync-issue-fixed-delay-ms:900000}")
@@ -1343,19 +1296,16 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         for (AdminAiKnowledgeRetrievalSyncIssueEntity issue : issues) {
             try {
                 if (AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE.equals(issue.getOp())) {
-                    // 复评三审计第二层防护：落行后文档又恢复 ACTIVE 且仍属该分区时，
+                    // 复评三审计第二层防护：落行后文档又恢复 ACTIVE 且仍属该空间时，
                     // 这条 tombstone 已被后续重写取代，作废不执行（与 upsert 成功清行互为冗余）。
                     if (!deleteIssueSuperseded(issue)) {
                         agentClient.deleteRetrievalDocument(
-                                String.valueOf(issue.getAgentId()), issue.getSourceId());
+                                String.valueOf(issue.getBaseId()), issue.getSourceId());
                     }
                     syncIssueMapper.deleteById(issue.getId());
                 } else if (AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT.equals(issue.getOp())) {
-                    if (retryLinkPartitionUpsert(issue)) {
-                        syncIssueMapper.deleteById(issue.getId());
-                    } else {
-                        bumpSyncIssue(issue, null);
-                    }
+                    // 链接分区记账已退役：空间单写下没有待扇出的 upsert，行直接作废。
+                    syncIssueMapper.deleteById(issue.getId());
                 } else {
                     // 未知 op：留行待人工处理，只累加次数以便在总览/表里可见异常
                     bumpSyncIssue(issue, null);
@@ -1366,32 +1316,16 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
     }
 
-    /** tombstone 是否已被后续重写取代：文档存在、ACTIVE 且该分区仍在文档的目标分区内。 */
+    /** tombstone 是否已被后续重写取代：文档存在、ACTIVE 且仍属该空间（其活向量正应存在于该分区）。 */
     private boolean deleteIssueSuperseded(AdminAiKnowledgeRetrievalSyncIssueEntity issue) {
         Long documentId = parseSourceDocumentId(issue.getSourceId());
-        if (documentId == null) {
+        if (documentId == null || issue.getBaseId() == null) {
             return false;
         }
         AdminAiKnowledgeDocumentEntity document = knowledgeMapper.selectById(documentId);
         return document != null
                 && AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(document.getStatus())
-                && partitionAgentIds(document).contains(issue.getAgentId());
-    }
-
-    /** @return true 表示该行可以删（已同步成功，或已被业务变化取代）；false 表示文档暂不可同步，留下轮。 */
-    private boolean retryLinkPartitionUpsert(AdminAiKnowledgeRetrievalSyncIssueEntity issue) {
-        Long documentId = parseSourceDocumentId(issue.getSourceId());
-        if (documentId == null) {
-            return true;
-        }
-        AdminAiKnowledgeDocumentEntity document = knowledgeMapper.selectById(documentId);
-        if (document == null
-                || !AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(document.getStatus())
-                || !partitionAgentIds(document).contains(issue.getAgentId())) {
-            return true;
-        }
-        upsertDerivedIndexForSite(document, issue.getAgentId());
-        return true;
+                && issue.getBaseId().equals(document.getBaseId());
     }
 
     private void bumpSyncIssue(AdminAiKnowledgeRetrievalSyncIssueEntity issue, RuntimeException failure) {
@@ -1420,9 +1354,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     private void upsertDerivedIndex(AdminAiKnowledgeDocumentEntity entity, List<AgentModelSelection> classes) {
-        // reembedAll 传入的是该站完整登记类集，complete=true。目标分区为所有者（经 base 创建者推导）。
-        agentClient.upsertRetrievalDocument(retrievalDocument(
-                entity, ownerAgentId(entity), classes, derivedIndexParts(entity, null), true));
+        // reembedAll 传入的是该空间完整登记类集，complete=true。目标分区为文档所属空间。
+        upsertSpaceIndex(entity, classes, derivedIndexParts(entity, null), true);
     }
 
     /**
@@ -1540,13 +1473,6 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             return StringUtils.hasText(paged) ? paged : requested;
         } catch (ExtractionException ex) {
             return requested;
-        }
-    }
-
-    /** 从文档的全部目标分区移除（所有者 + 共享链接站点），逐个 best-effort。 */
-    private void removeFromAllPartitions(AdminAiKnowledgeDocumentEntity entity) {
-        for (Long target : partitionAgentIds(entity)) {
-            removeFromDerivedIndex(target, entity.getId());
         }
     }
 

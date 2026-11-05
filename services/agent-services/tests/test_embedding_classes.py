@@ -24,20 +24,20 @@ class FakeEmbedder:
 
 class FakeStore:
     async def upsert_document(
-        self, *, agent_id, source_id, title, chunks, embeddings, embedding_model: str = ""
+        self, *, base_id, source_id, title, chunks, embeddings, embedding_model: str = ""
     ) -> int:
         return len(chunks)
 
-    async def delete_document(self, *, agent_id, source_id) -> None:
+    async def delete_document(self, *, base_id, source_id) -> None:
         return None
 
     async def search(
-        self, *, agent_id, embedding, top_k, embedding_model: str = ""
+        self, *, base_id, embedding, top_k, embedding_model: str = ""
     ) -> list[RetrievedChunk]:
         return []
 
     async def search_lexical(
-        self, *, agent_id, tokens, limit, embedding_models=None
+        self, *, base_id, tokens, limit, embedding_models=None
     ) -> list[RetrievedChunk]:
         return []
 
@@ -118,7 +118,7 @@ def test_rank_merge_sums_places_and_ignores_cosine_values() -> None:
 
 
 def test_legacy_search_request_omits_embedding_classes() -> None:
-    body = RetrievalSearchRequest.model_validate({"agentId": "1", "query": "hours"})
+    body = RetrievalSearchRequest.model_validate({"baseIds": ["1"], "query": "hours"})
     assert body.embedding_classes is None
     chat = ChatRequest.model_validate({"agentId": "1", "message": "hi"})
     assert chat.embedding_classes is None
@@ -134,7 +134,7 @@ def test_embedding_class_cap_is_four_after_alias_dedup() -> None:
     ]
     # google 与 google-gla 是同一类，去重后仍是 4 类。
     kept = RetrievalSearchRequest.model_validate(
-        {"agentId": "1", "query": "q", "embeddingClasses": four}
+        {"baseIds": ["1"], "query": "q", "embeddingClasses": four}
     )
     assert kept.embedding_classes is not None
     assert len(kept.embedding_classes) == 4
@@ -143,7 +143,7 @@ def test_embedding_class_cap_is_four_after_alias_dedup() -> None:
     fifth = four + [{"embeddingSpec": "openai:one-more", "apiKey": "f"}]
     with pytest.raises(ValidationError):
         RetrievalSearchRequest.model_validate(
-            {"agentId": "1", "query": "q", "embeddingClasses": fifth}
+            {"baseIds": ["1"], "query": "q", "embeddingClasses": fifth}
         )
 
 
@@ -153,7 +153,7 @@ def test_search_endpoint_rejects_more_than_four_classes() -> None:
     response = _search_client(service).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"agentId": "1", "query": "q", "embeddingClasses": classes},
+        json={"baseIds": ["1"], "query": "q", "embeddingClasses": classes},
     )
     assert response.status_code == 400
     assert response.json()["errorCode"] == "BAD_REQUEST"
@@ -183,13 +183,13 @@ class _ClassStore(FakeStore):
         self.lexical_calls = 0
 
     async def search(
-        self, *, agent_id, embedding, top_k, embedding_model: str = ""
+        self, *, base_id, embedding, top_k, embedding_model: str = ""
     ) -> list[RetrievedChunk]:
         self.models.append(embedding_model)
         return list(self.hits.get(embedding_model, []))
 
     async def search_lexical(
-        self, *, agent_id, tokens, limit, embedding_models=None
+        self, *, base_id, tokens, limit, embedding_models=None
     ) -> list[RetrievedChunk]:
         self.lexical_calls += 1
         return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.0)]
@@ -226,7 +226,7 @@ async def test_two_classes_merge_by_rank_then_rerank() -> None:
         rerank_cutoff=False,
     )
     hits = await service.search(
-        agent_id="1",
+        base_ids=["1"],
         query="q",
         top_k=1,
         embedding_classes=[
@@ -256,7 +256,7 @@ async def test_relative_trim_stays_inside_each_class() -> None:
     )
     service = RetrievalService(None, store, min_score=0, score_ratio_floor=0.7, rerank_enabled=False)
     hits = await service.retrieve_chunks(
-        agent_id="1",
+        base_ids=["1"],
         query="q",
         top_k=4,
         embedding_classes=_classes(
@@ -284,7 +284,7 @@ async def test_rank_score_is_not_passed_through_absolute_threshold() -> None:
         None, store, min_score=0.35, score_ratio_floor=0.7, rerank_enabled=False
     )
     hits = await service.retrieve_chunks(
-        agent_id="1",
+        base_ids=["1"],
         query="q",
         top_k=4,
         embedding_classes=_classes(
@@ -298,18 +298,18 @@ async def test_rank_score_is_not_passed_through_absolute_threshold() -> None:
 async def test_one_class_keeps_current_cosine_and_coverage_score() -> None:
     class Both(FakeStore):
         async def search(
-            self, *, agent_id, embedding, top_k, embedding_model: str = ""
+            self, *, base_id, embedding, top_k, embedding_model: str = ""
         ) -> list[RetrievedChunk]:
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.4)]
 
         async def search_lexical(
-            self, *, agent_id, tokens, limit, embedding_models=None
+            self, *, base_id, tokens, limit, embedding_models=None
         ) -> list[RetrievedChunk]:
             return [RetrievedChunk("kb:code", 0, "model XJ-900 specs", 0.0)]
 
     service = RetrievalService(None, Both(), rerank_enabled=False)
     hits = await service.search(
-        agent_id="7",
+        base_ids=["7"],
         query="XJ-900",
         top_k=4,
         embedding_classes=_classes(("openai:a", _ClassEmbedder(0.1))),
@@ -322,7 +322,7 @@ async def test_one_class_embed_failure_falls_back_to_lexical_and_degrades() -> N
     store = _ClassStore({})
     service = RetrievalService(None, store, rerank_enabled=False)
     hits = await service.retrieve_chunks(
-        agent_id="7",
+        base_ids=["7"],
         query="XJ-900",
         embedding_classes=_classes(("openai:a", _ClassEmbedder(0.1, fail=True))),
     )
@@ -335,7 +335,7 @@ async def test_partial_class_failure_keeps_other_classes_and_lexical() -> None:
     store = _ClassStore({"openai:a": [RetrievedChunk("kb:vec", 0, "vector hit", 0.8)]})
     service = RetrievalService(None, store, min_score=0, score_ratio_floor=0, rerank_enabled=False)
     hits = await service.retrieve_chunks(
-        agent_id="7",
+        base_ids=["7"],
         query="XJ-900",
         top_k=4,
         embedding_classes=_classes(
@@ -353,7 +353,7 @@ async def test_all_class_embed_failures_fall_back_to_lexical() -> None:
     store = _ClassStore({"openai:a": [RetrievedChunk("kb:vec", 0, "vector hit", 0.8)]})
     service = RetrievalService(None, store, rerank_enabled=False)
     hits = await service.retrieve_chunks(
-        agent_id="7",
+        base_ids=["7"],
         query="XJ-900",
         embedding_classes=_classes(
             ("openai:a", _ClassEmbedder(0.1, fail=True)),
@@ -372,23 +372,23 @@ async def test_upsert_of_one_class_does_not_remove_another() -> None:
             self.kept: dict[tuple[str, str, str], list[str]] = {}
 
         async def upsert_document(
-            self, *, agent_id, source_id, title, chunks, embeddings, embedding_model: str = ""
+            self, *, base_id, source_id, title, chunks, embeddings, embedding_model: str = ""
         ) -> int:
             assert embeddings
-            self.kept[(agent_id, source_id, embedding_model)] = list(chunks)
+            self.kept[(base_id, source_id, embedding_model)] = list(chunks)
             return len(chunks)
 
     store = Memory()
     service = RetrievalService(None, store)
     await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:1",
         title="t",
         content="alpha facts",
         embedding_classes=_classes(("openai:a", _ClassEmbedder(0.1))),
     )
     await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:1",
         title="t",
         content="alpha facts",
@@ -407,15 +407,15 @@ class _PruningStore(FakeStore):
         self.prune_calls: list[list[str]] = []
 
     async def upsert_document(
-        self, *, agent_id, source_id, title, chunks, embeddings, embedding_model: str = ""
+        self, *, base_id, source_id, title, chunks, embeddings, embedding_model: str = ""
     ) -> int:
-        self.kept[(agent_id, source_id, embedding_model)] = list(chunks)
+        self.kept[(base_id, source_id, embedding_model)] = list(chunks)
         return len(chunks)
 
-    async def prune_document_classes(self, *, agent_id, source_id, keep_models) -> None:
+    async def prune_document_classes(self, *, base_id, source_id, keep_models) -> None:
         self.prune_calls.append(list(keep_models))
         keep = set(keep_models)
-        for key in [k for k in self.kept if k[0] == agent_id and k[1] == source_id]:
+        for key in [k for k in self.kept if k[0] == base_id and k[1] == source_id]:
             if key[2] not in keep:
                 del self.kept[key]
 
@@ -425,7 +425,7 @@ async def test_complete_upsert_prunes_deregistered_class_rows() -> None:
     store = _PruningStore()
     service = RetrievalService(None, store)
     await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:1",
         title="t",
         content="alpha facts",
@@ -437,7 +437,7 @@ async def test_complete_upsert_prunes_deregistered_class_rows() -> None:
     assert ("1", "kb:1", "openai:b") in store.kept
     # 类 B 被注销：以仅 A 的完整类集改正文重写，B 的旧行必须消失。
     await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:1",
         title="t",
         content="alpha facts revised",
@@ -454,14 +454,14 @@ async def test_subset_upsert_without_complete_flag_never_prunes() -> None:
     store = _PruningStore()
     service = RetrievalService(None, store)
     await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:1",
         title="t",
         content="alpha facts",
         embedding_classes=_classes(("openai:a", _ClassEmbedder(0.1))),
     )
     await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:1",
         title="t",
         content="alpha facts",
@@ -507,7 +507,7 @@ def test_search_endpoint_uses_each_registered_class(monkeypatch: pytest.MonkeyPa
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
         json={
-            "agentId": "1",
+            "baseIds": ["1"],
             "query": "q",
             "topK": 2,
             "embeddingClasses": [
@@ -546,7 +546,7 @@ def test_legacy_single_embedding_request_still_searches_one_class(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
         json={
-            "agentId": "1",
+            "baseIds": ["1"],
             "query": "q",
             "embeddingSpec": "openai:text-embedding-3-small",
             "apiKey": "sk-old",
@@ -610,12 +610,12 @@ async def test_lexical_search_receives_only_the_requested_classes() -> None:
             self.lexical_models: list[str] | None = None
 
         async def search(
-            self, *, agent_id, embedding, top_k, embedding_model: str = ""
+            self, *, base_id, embedding, top_k, embedding_model: str = ""
         ) -> list[RetrievedChunk]:
             return []
 
         async def search_lexical(
-            self, *, agent_id, tokens, limit, embedding_models=None
+            self, *, base_id, tokens, limit, embedding_models=None
         ) -> list[RetrievedChunk]:
             self.lexical_models = list(embedding_models or [])
             return []
@@ -623,7 +623,7 @@ async def test_lexical_search_receives_only_the_requested_classes() -> None:
     store = Recording()
     service = RetrievalService(None, store, rerank_enabled=False)
     await service.search(
-        agent_id="7",
+        base_ids=["7"],
         query="XJ-900",
         embedding_classes=_classes(
             ("openai:a", _ClassEmbedder(0.1)),

@@ -33,12 +33,12 @@ from agent_services.schemas.stream import AgentStreamEventType
 
 class _FakeRetrieval:
     def __init__(self, content: str = "RESEARCH-FACT") -> None:
-        self.calls: list[tuple[str, str]] = []
+        self.calls: list[tuple[list[str], str]] = []
         self.degraded = False
         self._content = content
 
-    async def retrieve_chunks(self, *, agent_id: str, query: str, **_kwargs: object) -> list[RetrievedChunk]:
-        self.calls.append((agent_id, query))
+    async def retrieve_chunks(self, *, base_ids: list[str], query: str, **_kwargs: object) -> list[RetrievedChunk]:
+        self.calls.append((list(base_ids), query))
         return [RetrievedChunk(source_id="kb:1", chunk_index=2, content=self._content, score=0.9)]
 
 
@@ -94,7 +94,7 @@ async def test_delegate_returns_research_conclusion_to_the_parent() -> None:
         return ModelResponse(parts=[TextPart("answer RESEARCH-FACT")])
 
     model = FunctionModel(respond)
-    toolset = build_delegate_tool(model, agent_id="42", retrieval=retrieval)  # type: ignore[arg-type]
+    toolset = build_delegate_tool(model, agent_id="42", retrieval=retrieval, knowledge_base_ids=["42"])  # type: ignore[arg-type]
     outcome = await run_chat(
         model,
         agent_id="42",
@@ -105,7 +105,7 @@ async def test_delegate_returns_research_conclusion_to_the_parent() -> None:
     assert isinstance(outcome, ChatReply)
     assert "RESEARCH-FACT" in outcome.reply
     assert outcome.tools == [{"name": "delegate_task", "ok": True}]
-    assert retrieval.calls == [("42", "hours")]
+    assert retrieval.calls == [(["42"], "hours")]
     assert {"search_site_knowledge"} in seen_tools
     assert all("delegate_task" not in names or "search_site_knowledge" not in names for names in seen_tools)
 

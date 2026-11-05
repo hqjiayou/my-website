@@ -100,11 +100,11 @@ class _RecordingStore(FakeStore):
         self.locations = None
         self.seen_chunks: list[str] = []
 
-    async def upsert_document(self, *, agent_id, source_id, title, chunks, embeddings, embedding_model="", locations=None):
+    async def upsert_document(self, *, base_id, source_id, title, chunks, embeddings, embedding_model="", locations=None):
         self.seen_chunks = list(chunks)
         self.locations = locations
         return await super().upsert_document(
-            agent_id=agent_id,
+            base_id=base_id,
             source_id=source_id,
             title=title,
             chunks=chunks,
@@ -115,7 +115,7 @@ class _RecordingStore(FakeStore):
 
 async def test_upsert_without_segments_matches_plain_split() -> None:
     service, store = _service()
-    count = await service.upsert_document(agent_id="1", source_id="kb:1", title="t", content="alpha facts")
+    count = await service.upsert_document(base_id="1", source_id="kb:1", title="t", content="alpha facts")
     assert count == 1
     assert store.docs[("1", "kb:1")] == ["alpha facts"]
 
@@ -124,7 +124,7 @@ async def test_upsert_segments_split_inside_each_segment() -> None:
     store = _RecordingStore()
     service = RetrievalService(FakeEmbedder(), store)
     count = await service.upsert_document(
-        agent_id="1",
+        base_id="1",
         source_id="kb:1",
         title="考勤",
         content="this whole document is not what gets indexed",
