@@ -1,5 +1,7 @@
 package com.mywebsite.admin.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 
@@ -22,10 +24,12 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
     private String description;
     /** V8：选用模板；可空。 */
     private Long templateId;
-    /** V60：引用的 AI 配置预设（#211）；可空。 */
+    /** V60：引用的 AI 配置预设（#211）；可空。null 即清除引用，须 ALWAYS 否则 updateById 跳过空值。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Long configPresetId;
 
-    /** V63：引用的对话链预设（Issue #210 UoW-7）；可空，未引用时对话链为空。 */
+    /** V63：引用的对话链预设（Issue #210 UoW-7）；可空，未引用时对话链为空。null 即清除引用，须 ALWAYS 否则 updateById 跳过空值。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Long chainPresetId;
 
     public String getAgentCode() {

@@ -520,10 +520,10 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                         .param("agentType", "GYOSEISHOSHI"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath(
-                                "$.data.records[?(@.agentCode == '%s' && @.agentKind == 'SITE'"
+                                ("$.data.records[?(@.agentCode == '%s' && @.agentKind == 'SITE'"
                                         + " && @.subscriptionCount == 2"
                                         + " && @.chainPresetId == 920011 && @.chainPresetName == '链甲'"
-                                        + " && @.configPresetId == 920012 && @.configPresetName == '预设乙')]"
+                                        + " && @.configPresetId == 920012 && @.configPresetName == '预设乙')]")
                                         .formatted(agentCode))
                         .exists());
     }
