@@ -215,7 +215,7 @@ class GatewayV1MvcTest extends AbstractAgentSpringBootTest {
                     "openai:gpt-4o-primary",
                     "k-primary",
                     "http://127.0.0.1:" + primaryPort,
-                    30L,
+                    null,
                     true,
                     "primary-alias");
             insertModelEntry(
@@ -223,7 +223,7 @@ class GatewayV1MvcTest extends AbstractAgentSpringBootTest {
                     "openai:gpt-4o-fallback",
                     "k-fallback",
                     "http://127.0.0.1:" + fallbackServer.getAddress().getPort(),
-                    30L,
+                    null,
                     true,
                     null);
 
