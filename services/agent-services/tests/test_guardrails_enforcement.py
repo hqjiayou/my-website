@@ -174,6 +174,29 @@ def test_r5_valid_numbers_sources() -> None:
     assert _valid_cite_numbers(None, None, prefetch) is None
 
 
+def test_r5_truncated_citation_numbers_are_not_valid() -> None:
+    """Issue #202 UoW-1：超过 CITATION_LIMIT 被截断的编号不算合法。
+
+    collector 累积 6 个片段，分数最低的 [c2] 被 citation_sources 截断——
+    正文引用 [c2] 时必须被剥离（citations 数组里没有它的条目），其余保留。
+    """
+    collector = KnowledgeSearchCollector()
+    scores = [0.9, 0.01, 0.8, 0.7, 0.6, 0.5]
+    chunks = [
+        RetrievedChunk(f"kb:{index}", 0, f"片段{index}", score)
+        for index, score in enumerate(scores, start=1)
+    ]
+    collector.record("q", chunks)
+    valid = _valid_cite_numbers(collector, None, None)
+    assert valid == {1, 3, 4, 5, 6}
+    text, stripped, has_valid = sanitize_citation_labels(
+        "低分片段 [c2] 与高分片段 [c1]。", valid
+    )
+    assert text == "低分片段 与高分片段 [c1]。"
+    assert stripped == 1
+    assert has_valid is True
+
+
 # --- R10：系统提示泄露 ----------------------------------------------------------
 
 _PLATFORM = (

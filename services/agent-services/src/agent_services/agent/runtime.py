@@ -468,19 +468,21 @@ def _valid_cite_numbers(
     retrieval_context: list[str] | None,
     retrieval_chunks: list[RetrievedChunk] | None,
 ) -> set[int] | None:
-    """本轮已分配的引用编号集；本轮根本没有编号来源时返回 None（不动作）。
+    """本轮最终交付的引用编号集；本轮根本没有编号来源时返回 None（不动作）。
 
-    编号单一来源与 reply_citations 同口径：collector 累积分配的编号 ∪
-    预取注入（retrieval_context 非空时）的片段编号。
+    与 reply_citations 严格同源（Issue #202 UoW-1）：合法集不是「已分配的
+    全部编号」，而是 citation_sources 对同一批合并片段实际交付的条目编号——
+    超过 CITATION_LIMIT 被按分数截断掉的编号不在交付之列，其 [cN] 标签
+    必须被剥离，否则前端拿到没有条目的悬空引用。
     """
     if collector is None and not (retrieval_context and retrieval_chunks):
         return None
-    valid: set[int] = set()
-    if collector is not None:
-        valid.update(chunk.cite for chunk in collector.chunks if chunk.cite is not None)
+    merged: list[RetrievedChunk] = []
     if retrieval_context and retrieval_chunks:
-        valid.update(chunk.cite for chunk in retrieval_chunks if chunk.cite is not None)
-    return valid
+        merged.extend(retrieval_chunks)
+    if collector is not None:
+        merged.extend(collector.chunks)
+    return {int(entry["cite"]) for entry in citation_sources(merged)}
 
 
 def sanitize_citation_labels(

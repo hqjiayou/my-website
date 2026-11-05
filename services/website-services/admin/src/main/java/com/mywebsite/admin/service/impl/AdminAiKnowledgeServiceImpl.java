@@ -934,9 +934,14 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
             List<AgentModelSelection> ownerClasses = registeredClasses(entity.getAgentId());
             List<AgentModelSelection> toWrite = classesToWrite(entity, ownerClasses, allowFillMissing);
+            // Issue #202 UoW-2：只有 toWrite 就是完整登记类集时，Python 才可按差集清理
+            // 已注销类的残留行；fill-missing 子集补写（真子集）时 complete=false，不清理。
+            boolean classesComplete = Objects.equals(
+                    AgentEmbeddingClassUtils.canonical(toWrite),
+                    AgentEmbeddingClassUtils.canonical(ownerClasses));
             RuntimeException ownerFailure = null;
             try {
-                upsertDerivedIndexForSite(entity, entity.getAgentId(), toWrite, parts);
+                upsertDerivedIndexForSite(entity, entity.getAgentId(), toWrite, parts, classesComplete);
             } catch (RuntimeException ex) {
                 ownerFailure = ex;
             }
@@ -984,25 +989,28 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
     }
 
-    /** 以目标站点已登记的嵌入类 upsert。没有则不带凭证，由进程嵌入模型写入。不跟随对话主用入口。 */
+    /** 以目标站点已登记的嵌入类 upsert（完整类集，complete=true）。没有则不带凭证，由进程嵌入模型写入。不跟随对话主用入口。 */
     private void upsertDerivedIndexForSite(
             AdminAiKnowledgeDocumentEntity entity, long targetAgentId, DerivedIndexParts parts) {
-        upsertDerivedIndexForSite(entity, targetAgentId, registeredClasses(targetAgentId), parts);
+        upsertDerivedIndexForSite(entity, targetAgentId, registeredClasses(targetAgentId), parts, true);
     }
 
     private void upsertDerivedIndexForSite(
             AdminAiKnowledgeDocumentEntity entity,
             long targetAgentId,
             List<AgentModelSelection> classes,
-            DerivedIndexParts parts) {
-        agentClient.upsertRetrievalDocument(retrievalDocument(entity, targetAgentId, classes, parts));
+            DerivedIndexParts parts,
+            boolean classesComplete) {
+        agentClient.upsertRetrievalDocument(
+                retrievalDocument(entity, targetAgentId, classes, parts, classesComplete));
     }
 
     private static AgentRetrievalDocument retrievalDocument(
             AdminAiKnowledgeDocumentEntity entity,
             long targetAgentId,
             List<AgentModelSelection> classes,
-            DerivedIndexParts parts) {
+            DerivedIndexParts parts,
+            boolean classesComplete) {
         List<AgentModelSelection> registered = classes == null ? List.of() : classes;
         AgentModelSelection first = registered.isEmpty() ? null : registered.get(0);
         List<AgentRetrievalSegment> segments = parts == null ? null : parts.segments();
@@ -1017,7 +1025,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 first == null ? null : first.baseUrl(),
                 AgentEmbeddingClassUtils.wire(registered),
                 segments == null || segments.isEmpty() ? null : segments,
-                tables == null || tables.isEmpty() ? null : tables);
+                tables == null || tables.isEmpty() ? null : tables,
+                // false 时不写字段（NON_NULL 省略），与旧载荷逐字一致，旧版 Python 不受影响。
+                classesComplete ? Boolean.TRUE : null);
     }
 
     private void upsertDerivedIndexForSite(AdminAiKnowledgeDocumentEntity entity, long targetAgentId) {
@@ -1107,8 +1117,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     private void upsertDerivedIndex(AdminAiKnowledgeDocumentEntity entity, List<AgentModelSelection> classes) {
+        // reembedAll 传入的是该站完整登记类集，complete=true。
         agentClient.upsertRetrievalDocument(retrievalDocument(
-                entity, entity.getAgentId(), classes, derivedIndexParts(entity, null)));
+                entity, entity.getAgentId(), classes, derivedIndexParts(entity, null), true));
     }
 
     /**
