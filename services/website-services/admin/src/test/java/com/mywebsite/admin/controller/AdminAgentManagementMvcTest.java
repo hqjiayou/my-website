@@ -94,7 +94,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.description").value("desc"));
 
         String updateBody = MAPPER.writeValueAsString(
-                new AdminAgentUpdateRequest("Demo Agent Renamed", "SALON", null, "updated", 0));
+                new AdminAgentUpdateRequest("Demo Agent Renamed", "SALON", null, "updated", null, 0));
         mockMvc.perform(put("/api/admin/agents/" + id)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
@@ -162,7 +162,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminAgentUpdateRequest("First", "CLINIC", null, null, 0))))
+                                new AdminAgentUpdateRequest("First", "CLINIC", null, null, null, 0))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.version").value(1));
 
@@ -170,7 +170,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminAgentUpdateRequest("Stale", "CLINIC", null, null, 0))))
+                                new AdminAgentUpdateRequest("Stale", "CLINIC", null, null, null, 0))))
                 .andExpect(status().isConflict());
     }
 

@@ -133,7 +133,7 @@ class AgentAiModelChainTest {
         conversation.setAgentId(10L);
         conversation.setAgentUserId(200L);
         when(conversationService.prepare(10L, 200L, null))
-                .thenReturn(new ChatPreparation(conversation, List.of(), null, List.of()));
+                .thenReturn(new ChatPreparation(conversation, List.of(), null, List.of(), null));
         when(memoryService.recentContents(10L, 200L)).thenReturn(List.of());
         // 主用解密失败的用例里通用 stub 会被专用 stub 盖住，放宽避免 strict stub 误报
         lenient()

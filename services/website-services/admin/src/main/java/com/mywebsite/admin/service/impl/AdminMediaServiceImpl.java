@@ -11,9 +11,12 @@ import com.mywebsite.admin.dto.AdminMediaDtos.AdminMediaListQuery;
 import com.mywebsite.admin.dto.AdminMediaDtos.AdminMediaPreviewDto;
 import com.mywebsite.admin.entity.AdminContentEntity;
 import com.mywebsite.admin.entity.AdminMediaEntity;
+import com.mywebsite.admin.entity.AdminMediaReferenceEntity;
 import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminContentMapper;
 import com.mywebsite.admin.mapper.AdminMediaMapper;
+import com.mywebsite.admin.mapper.AdminMediaMapper.AdminMediaListRow;
+import com.mywebsite.admin.mapper.AdminMediaReferenceMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.properties.AdminMediaProperties;
 import com.mywebsite.admin.service.AdminMediaService;
@@ -50,6 +53,7 @@ public class AdminMediaServiceImpl implements AdminMediaService {
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("MM");
 
     private final AdminMediaMapper adminMediaMapper;
+    private final AdminMediaReferenceMapper adminMediaReferenceMapper;
     private final AdminAgentMapper adminAgentMapper;
     private final AdminContentMapper adminContentMapper;
     private final ObjectStorageService objectStorageService;
@@ -58,12 +62,14 @@ public class AdminMediaServiceImpl implements AdminMediaService {
 
     public AdminMediaServiceImpl(
             AdminMediaMapper adminMediaMapper,
+            AdminMediaReferenceMapper adminMediaReferenceMapper,
             AdminAgentMapper adminAgentMapper,
             AdminContentMapper adminContentMapper,
             ObjectStorageService objectStorageService,
             StorageProperties storageProperties,
             AdminMediaProperties mediaProperties) {
         this.adminMediaMapper = adminMediaMapper;
+        this.adminMediaReferenceMapper = adminMediaReferenceMapper;
         this.adminAgentMapper = adminAgentMapper;
         this.adminContentMapper = adminContentMapper;
         this.objectStorageService = objectStorageService;
@@ -80,16 +86,24 @@ public class AdminMediaServiceImpl implements AdminMediaService {
         int pageSize = query != null && query.pageSize() != null
                 ? Math.min(query.pageSize(), AdminMediaConstants.MAX_PAGE_SIZE)
                 : AdminMediaConstants.DEFAULT_PAGE_SIZE;
+        String contentTypePrefix = query != null && StringUtils.hasText(query.contentTypePrefix())
+                ? query.contentTypePrefix().trim()
+                : null;
+        String view = query != null && StringUtils.hasText(query.view())
+                ? query.view().trim()
+                : AdminMediaConstants.VIEW_LIBRARY;
 
-        LambdaQueryWrapper<AdminMediaEntity> wrapper = new LambdaQueryWrapper<AdminMediaEntity>()
-                .eq(AdminMediaEntity::getAgentId, agentId)
-                .orderByDesc(AdminMediaEntity::getId);
-        if (query != null && StringUtils.hasText(query.contentTypePrefix())) {
-            wrapper.likeRight(AdminMediaEntity::getContentType, query.contentTypePrefix().trim());
+        Page<AdminMediaListRow> page;
+        if (AdminMediaConstants.VIEW_LIBRARY.equals(view)) {
+            page = adminMediaMapper.selectLibraryPage(
+                    new Page<>(pageNum, pageSize), agentId, contentTypePrefix);
+        } else if (AdminMediaConstants.VIEW_PLATFORM.equals(view)) {
+            page = adminMediaMapper.selectPlatformPage(
+                    new Page<>(pageNum, pageSize), agentId, contentTypePrefix);
+        } else {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST.getCode(), AdminMediaMessageKeys.MEDIA_VIEW_INVALID);
         }
-
-        Page<AdminMediaEntity> page =
-                adminMediaMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         return new PageResult<>(
                 page.getRecords().stream().map(this::toListItem).toList(),
                 page.getTotal(),
@@ -100,7 +114,7 @@ public class AdminMediaServiceImpl implements AdminMediaService {
     @Override
     public AdminMediaDetailDto getMedia(long agentId, long mediaId) {
         requireSite(agentId);
-        return toDetail(requireMediaInSite(agentId, mediaId));
+        return toDetail(requireVisibleMedia(agentId, mediaId));
     }
 
     /**
@@ -165,7 +179,7 @@ public class AdminMediaServiceImpl implements AdminMediaService {
     @Override
     public AdminMediaPreviewDto preview(long agentId, long mediaId) {
         requireSite(agentId);
-        AdminMediaEntity media = requireMediaInSite(agentId, mediaId);
+        AdminMediaEntity media = requireVisibleMedia(agentId, mediaId);
         if (!AdminMediaConstants.STATUS_READY.equals(media.getStatus())) {
             throw new BusinessException(
                     ErrorCode.BAD_REQUEST.getCode(), AdminMediaMessageKeys.MEDIA_NOT_READY);
@@ -174,6 +188,66 @@ public class AdminMediaServiceImpl implements AdminMediaService {
         String url = objectStorageService.presignedGet(media.getBucket(), media.getObjectKey(), ttl);
         OffsetDateTime expiresAt = OffsetDateTime.now(ZoneOffset.UTC).plus(ttl);
         return new AdminMediaPreviewDto(media.getId(), url, expiresAt);
+    }
+
+    @Override
+    @Transactional
+    public void referenceMedia(long agentId, long mediaId) {
+        requireSite(agentId);
+        AdminMediaEntity media = adminMediaMapper.selectById(mediaId);
+        if (media == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminMediaMessageKeys.MEDIA_NOT_FOUND);
+        }
+        if (Long.valueOf(agentId).equals(media.getAgentId())) {
+            return; // 来源站本人：幂等无操作
+        }
+        if (!AdminMediaConstants.SCOPE_PLATFORM.equals(media.getScope())) {
+            // AGENT 私有且非来源站：统一 404，不泄露归属
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminMediaMessageKeys.MEDIA_NOT_FOUND);
+        }
+        if (countReference(mediaId, agentId) > 0) {
+            return; // 已引用：幂等成功
+        }
+        AdminMediaReferenceEntity reference = new AdminMediaReferenceEntity();
+        reference.setMediaId(mediaId);
+        reference.setAgentId(agentId);
+        adminMediaReferenceMapper.insert(reference);
+    }
+
+    @Override
+    @Transactional
+    public void unreferenceMedia(long agentId, long mediaId) {
+        requireSite(agentId);
+        AdminMediaEntity media = adminMediaMapper.selectById(mediaId);
+        if (media == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminMediaMessageKeys.MEDIA_NOT_FOUND);
+        }
+        if (Long.valueOf(agentId).equals(media.getAgentId())) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST.getCode(), AdminMediaMessageKeys.MEDIA_REFERENCE_OWN_FILE);
+        }
+        int deleted = adminMediaReferenceMapper.delete(
+                new LambdaQueryWrapper<AdminMediaReferenceEntity>()
+                        .eq(AdminMediaReferenceEntity::getMediaId, mediaId)
+                        .eq(AdminMediaReferenceEntity::getAgentId, agentId));
+        if (deleted == 0) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminMediaMessageKeys.MEDIA_NOT_FOUND);
+        }
+    }
+
+    @Override
+    @Transactional
+    public AdminMediaDetailDto updateScope(long agentId, long mediaId, String scope) {
+        requireSite(agentId);
+        // 仅来源站可改：他人（含引用站/平台可见站）统一 404
+        AdminMediaEntity media = requireMediaInSite(agentId, mediaId);
+        if (scope == null || !AdminMediaConstants.ALLOWED_SCOPES.contains(scope)) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST.getCode(), AdminMediaMessageKeys.MEDIA_SCOPE_INVALID);
+        }
+        media.setScope(scope);
+        adminMediaMapper.updateById(media);
+        return toDetail(media);
     }
 
     @Override
@@ -187,6 +261,13 @@ public class AdminMediaServiceImpl implements AdminMediaService {
         if (contentRefs > 0) {
             throw new BusinessException(
                     ErrorCode.CONFLICT.getCode(), AdminMediaMessageKeys.MEDIA_REFERENCED_BY_CONTENT);
+        }
+        long agentRefs = adminMediaReferenceMapper.selectCount(
+                new LambdaQueryWrapper<AdminMediaReferenceEntity>()
+                        .eq(AdminMediaReferenceEntity::getMediaId, mediaId));
+        if (agentRefs > 0) {
+            throw new BusinessException(
+                    ErrorCode.CONFLICT.getCode(), AdminMediaMessageKeys.MEDIA_REFERENCED_BY_AGENTS);
         }
         media.setDeletedAt(OffsetDateTime.now(ZoneOffset.UTC));
         adminMediaMapper.updateById(media);
@@ -203,6 +284,14 @@ public class AdminMediaServiceImpl implements AdminMediaService {
     public void softDeleteByAgentId(long agentId) {
         List<AdminMediaEntity> mediaList = adminMediaMapper.selectList(
                 new LambdaQueryWrapper<AdminMediaEntity>().eq(AdminMediaEntity::getAgentId, agentId));
+        // 级联清引用行：指向本站文件的引用（死站文件不得永久阻塞/悬挂）与本站发出的引用，两向都清
+        if (!mediaList.isEmpty()) {
+            adminMediaReferenceMapper.deleteByMediaIds(
+                    mediaList.stream().map(AdminMediaEntity::getId).toList());
+        }
+        adminMediaReferenceMapper.delete(
+                new LambdaQueryWrapper<AdminMediaReferenceEntity>()
+                        .eq(AdminMediaReferenceEntity::getAgentId, agentId));
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         for (AdminMediaEntity media : mediaList) {
             media.setDeletedAt(now);
@@ -248,6 +337,30 @@ public class AdminMediaServiceImpl implements AdminMediaService {
             throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminMediaMessageKeys.MEDIA_NOT_FOUND);
         }
         return media;
+    }
+
+    /**
+     * 可见规则（平台化）：来源站本人 ∨ scope=PLATFORM ∨ 本站已引用，任一成立即可见；
+     * 不可见与不存在统一 404，避免泄露归属。
+     */
+    private AdminMediaEntity requireVisibleMedia(long agentId, long mediaId) {
+        AdminMediaEntity media = adminMediaMapper.selectById(mediaId);
+        if (media == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminMediaMessageKeys.MEDIA_NOT_FOUND);
+        }
+        if (Long.valueOf(agentId).equals(media.getAgentId())
+                || AdminMediaConstants.SCOPE_PLATFORM.equals(media.getScope())
+                || countReference(mediaId, agentId) > 0) {
+            return media;
+        }
+        throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminMediaMessageKeys.MEDIA_NOT_FOUND);
+    }
+
+    private long countReference(long mediaId, long agentId) {
+        return adminMediaReferenceMapper.selectCount(
+                new LambdaQueryWrapper<AdminMediaReferenceEntity>()
+                        .eq(AdminMediaReferenceEntity::getMediaId, mediaId)
+                        .eq(AdminMediaReferenceEntity::getAgentId, agentId));
     }
 
     private String requireBucket() {
@@ -402,20 +515,25 @@ public class AdminMediaServiceImpl implements AdminMediaService {
         }
     }
 
-    private AdminMediaListItemDto toListItem(AdminMediaEntity entity) {
+    private AdminMediaListItemDto toListItem(AdminMediaListRow row) {
         return new AdminMediaListItemDto(
-                entity.getId(),
-                entity.getAgentId(),
-                entity.getOriginalFilename(),
-                entity.getContentType(),
-                entity.getExtension(),
-                entity.getFileSize(),
-                entity.getStatus(),
-                entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                row.id(),
+                row.agentId(),
+                row.originalFilename(),
+                row.contentType(),
+                row.extension(),
+                row.fileSize(),
+                row.status(),
+                row.scope(),
+                row.referenced(),
+                row.createdAt(),
+                row.updatedAt());
     }
 
     private AdminMediaDetailDto toDetail(AdminMediaEntity entity) {
+        long referenceCount = adminMediaReferenceMapper.selectCount(
+                new LambdaQueryWrapper<AdminMediaReferenceEntity>()
+                        .eq(AdminMediaReferenceEntity::getMediaId, entity.getId()));
         return new AdminMediaDetailDto(
                 entity.getId(),
                 entity.getAgentId(),
@@ -426,6 +544,8 @@ public class AdminMediaServiceImpl implements AdminMediaService {
                 entity.getSha256(),
                 entity.getVisibility(),
                 entity.getStatus(),
+                entity.getScope(),
+                referenceCount,
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
     }

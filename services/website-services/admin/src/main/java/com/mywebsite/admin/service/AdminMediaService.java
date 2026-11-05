@@ -17,6 +17,15 @@ public interface AdminMediaService {
 
     AdminMediaPreviewDto preview(long agentId, long mediaId);
 
+    /** 为本站建跨站引用：文件须经 PLATFORM 对本站可见；来源站本人与重复引用均为幂等成功。 */
+    void referenceMedia(long agentId, long mediaId);
+
+    /** 删本站引用：来源站本人 400、无引用 404。 */
+    void unreferenceMedia(long agentId, long mediaId);
+
+    /** 改可见范围：仅来源站可改，非法值 400。 */
+    AdminMediaDetailDto updateScope(long agentId, long mediaId, String scope);
+
     void deleteMedia(long agentId, long mediaId);
 
     /** 站点软删联动：软删该站点全部媒体（对象由 orphan 任务清理）。 */

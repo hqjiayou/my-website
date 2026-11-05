@@ -2,6 +2,7 @@ package com.mywebsite.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -20,14 +21,16 @@ import com.mywebsite.agent.dto.AgentAiMessageDto;
 import com.mywebsite.agent.dto.AgentAiSearchHitDto;
 import com.mywebsite.agent.dto.AgentAiShareDto;
 import com.mywebsite.agent.dto.AgentAiSharedConversationDto;
+import com.mywebsite.agent.entity.AgentAiConfigPresetEntity;
 import com.mywebsite.agent.entity.AgentAiConversationEntity;
 import com.mywebsite.agent.entity.AgentAiConversationShareEntity;
 import com.mywebsite.agent.entity.AgentAiMessageEntity;
-import com.mywebsite.agent.entity.AgentAiPromptProfileEntity;
+import com.mywebsite.agent.entity.AgentEntity;
+import com.mywebsite.agent.mapper.AgentAiConfigPresetMapper;
 import com.mywebsite.agent.mapper.AgentAiConversationMapper;
 import com.mywebsite.agent.mapper.AgentAiConversationShareMapper;
 import com.mywebsite.agent.mapper.AgentAiMessageMapper;
-import com.mywebsite.agent.mapper.AgentAiPromptProfileMapper;
+import com.mywebsite.agent.mapper.AgentMapper;
 import com.mywebsite.agent.service.AgentAiConversationService;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
@@ -72,19 +75,22 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
 
     private final AgentAiConversationMapper conversationMapper;
     private final AgentAiMessageMapper messageMapper;
-    private final AgentAiPromptProfileMapper promptProfileMapper;
+    private final AgentMapper agentMapper;
+    private final AgentAiConfigPresetMapper configPresetMapper;
     private final AgentAiConversationShareMapper shareMapper;
     private final ObjectMapper objectMapper;
 
     public AgentAiConversationServiceImpl(
             AgentAiConversationMapper conversationMapper,
             AgentAiMessageMapper messageMapper,
-            AgentAiPromptProfileMapper promptProfileMapper,
+            AgentMapper agentMapper,
+            AgentAiConfigPresetMapper configPresetMapper,
             AgentAiConversationShareMapper shareMapper,
             ObjectMapper objectMapper) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
-        this.promptProfileMapper = promptProfileMapper;
+        this.agentMapper = agentMapper;
+        this.configPresetMapper = configPresetMapper;
         this.shareMapper = shareMapper;
         this.objectMapper = objectMapper;
     }
@@ -102,7 +108,13 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
             conversation.setAgentUserId(agentUserId);
             history = List.of();
         }
-        return new ChatPreparation(conversation, history, loadPromptProfile(agentId), readTodos(conversation));
+        AgentAiConfigPresetEntity preset = resolveConfigPreset(agentId);
+        return new ChatPreparation(
+                conversation,
+                history,
+                toPromptProfile(preset),
+                readTodos(conversation),
+                presetSkillIds(preset));
     }
 
     @Override
@@ -551,16 +563,59 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
         }
     }
 
-    private AgentPromptProfile loadPromptProfile(long agentId) {
-        AgentAiPromptProfileEntity profile = promptProfileMapper.selectOne(
-                new LambdaQueryWrapper<AgentAiPromptProfileEntity>()
-                        .eq(AgentAiPromptProfileEntity::getAgentId, agentId)
-                        .last("LIMIT 1"));
-        if (profile == null) {
+    private static AgentPromptProfile toPromptProfile(AgentAiConfigPresetEntity preset) {
+        if (preset == null) {
             return null;
         }
-        Double temperature = profile.getTemperature() == null ? null : profile.getTemperature().doubleValue();
-        return new AgentPromptProfile(profile.getSystemPrompt(), temperature);
+        Double temperature = preset.getTemperature() == null ? null : preset.getTemperature().doubleValue();
+        return new AgentPromptProfile(preset.getSystemPrompt(), temperature);
+    }
+
+    /**
+     * 预设默认 skill 集（Issue #211 UoW-9）：{@code default_skill_ids} 是有序 JSON
+     * 数组文本，解析后原序透传——未知 id 不在 Java 侧过滤，处置政策只有一个点
+     * （Python {@code agent_skills_unknown_policy}）。无预设、空集或脏 JSON 一律
+     * 返回 null：请求 skills 字段缺席，Python env 默认兜底逐字不变；脏 JSON 记
+     * warn，不拖垮对话主流程。
+     */
+    private List<String> presetSkillIds(AgentAiConfigPresetEntity preset) {
+        if (preset == null || !StringUtils.hasText(preset.getDefaultSkillIds())) {
+            return null;
+        }
+        try {
+            List<String> parsed = objectMapper.readValue(
+                    preset.getDefaultSkillIds(), new TypeReference<List<String>>() {});
+            List<String> skills = parsed.stream().filter(Objects::nonNull).toList();
+            return skills.isEmpty() ? null : List.copyOf(skills);
+        } catch (JsonProcessingException ex) {
+            log.warn(
+                    "config preset {} has malformed default_skill_ids, treated as no preset skills",
+                    preset.getId(),
+                    ex);
+            return null;
+        }
+    }
+
+    /**
+     * 配置预设解析（Issue #211 UoW-8）：agent → {@code config_preset_id} → 预设行。
+     * 回退口径定死：agent 无引用（含 agent 行不存在）返回 null、不记日志——这是
+     * 未配置的常态，与旧「无 profile 返回 null」逐字一致；引用悬空或预设已软删
+     * （{@code @TableLogic} 下 selectById 同样查不到）属异常态，返回 null 并记
+     * warn。旧表 {@code agent_ai_prompt_profile} 自本单起停读。
+     */
+    private AgentAiConfigPresetEntity resolveConfigPreset(long agentId) {
+        AgentEntity agent = agentMapper.selectById(agentId);
+        if (agent == null || agent.getConfigPresetId() == null) {
+            return null;
+        }
+        AgentAiConfigPresetEntity preset = configPresetMapper.selectById(agent.getConfigPresetId());
+        if (preset == null) {
+            log.warn(
+                    "agent {} references config preset {} which is missing or deleted; falling back to no profile",
+                    agentId,
+                    agent.getConfigPresetId());
+        }
+        return preset;
     }
 
     private List<AgentTodoItem> readTodos(AgentAiConversationEntity conversation) {

@@ -110,7 +110,7 @@ class AgentAiExperienceLessonInjectionTest {
         conversation.setAgentId(10L);
         conversation.setAgentUserId(200L);
         when(conversationService.prepare(10L, 200L, null))
-                .thenReturn(new ChatPreparation(conversation, List.of(), null, List.of()));
+                .thenReturn(new ChatPreparation(conversation, List.of(), null, List.of(), null));
         when(agentClient.chat(any()))
                 .thenReturn(new AgentChatResponse(
                         "reply", "77", "LIVE", List.of(), AgentRunMeta.EMPTY, List.of(), List.of()));

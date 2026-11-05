@@ -20,6 +20,8 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
     private String description;
     /** V8：选用模板；可空。 */
     private Long templateId;
+    /** V60：引用的 AI 配置预设（#211）；可空。 */
+    private Long configPresetId;
 
     /** V63：引用的对话链预设（Issue #210 UoW-7）；可空，未引用时对话链为空。 */
     private Long chainPresetId;
@@ -86,5 +88,13 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
 
     public void setChainPresetId(Long chainPresetId) {
         this.chainPresetId = chainPresetId;
+    }
+
+    public Long getConfigPresetId() {
+        return configPresetId;
+    }
+
+    public void setConfigPresetId(Long configPresetId) {
+        this.configPresetId = configPresetId;
     }
 }

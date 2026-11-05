@@ -15,7 +15,7 @@ import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
-import com.mywebsite.admin.service.AdminAiPromptService;
+
 import com.mywebsite.admin.service.AdminAppearanceService;
 import com.mywebsite.admin.service.AdminContentService;
 import com.mywebsite.admin.service.AdminMediaService;
@@ -45,7 +45,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     private final AdminAppearanceService adminAppearanceService;
     private final AdminMediaService adminMediaService;
     private final AdminContentService adminContentService;
-    private final AdminAiPromptService adminAiPromptService;
     private final AdminAiKnowledgeService adminAiKnowledgeService;
     private final AdminAiConversationService adminAiConversationService;
     private final AgentUserMapper agentUserMapper;
@@ -57,7 +56,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
             AdminAppearanceService adminAppearanceService,
             AdminMediaService adminMediaService,
             AdminContentService adminContentService,
-            AdminAiPromptService adminAiPromptService,
             AdminAiKnowledgeService adminAiKnowledgeService,
             AdminAiConversationService adminAiConversationService,
             AgentUserMapper agentUserMapper,
@@ -67,7 +65,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         this.adminAppearanceService = adminAppearanceService;
         this.adminMediaService = adminMediaService;
         this.adminContentService = adminContentService;
-        this.adminAiPromptService = adminAiPromptService;
         this.adminAiKnowledgeService = adminAiKnowledgeService;
         this.adminAiConversationService = adminAiConversationService;
         this.agentUserMapper = agentUserMapper;
@@ -154,6 +151,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         }
         agent.setDefaultDomain(blankToNull(request.defaultDomain()));
         agent.setDescription(blankToNull(request.description()));
+        agent.setConfigPresetId(request.configPresetId());
         agent.setVersion(request.version());
         int updated = adminAgentMapper.updateById(agent);
         if (updated == 0) {
@@ -170,7 +168,9 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         adminAppearanceService.softDeleteByAgentId(id);
         adminContentService.softDeleteByAgentId(id);
         adminMediaService.softDeleteByAgentId(id);
-        adminAiPromptService.softDeleteByAgentId(id);
+        // #211 UoW-8 起不再级联 Prompt 配置：旧 profile 表停写（退役另行），
+        // 配置预设是多 agent 共享资源、绝不随单个 agent 删除；本 agent 只清引用
+        // （下方 setConfigPresetId(null)），引用它的其他 agent 不受影响。
         adminAiKnowledgeService.softDeleteByAgentId(id);
         adminAiConversationService.softDeleteByAgentId(id);
         // 级联补全（#141 UoW-2）：成员关系、用户长期记忆、会话分享，漏删会残留成员行。
@@ -194,6 +194,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
                                 .eq(AgentAiConversationShareEntity::getAgentId, id)),
                 conversationShareMapper,
                 now);
+        agent.setConfigPresetId(null);
         agent.setDeletedAt(now);
         adminAgentMapper.updateById(agent);
         int deleted = adminAgentMapper.deleteById(id);
@@ -278,6 +279,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
                 entity.getStatus(),
                 entity.getDefaultDomain(),
                 entity.getDescription(),
+                entity.getConfigPresetId(),
                 entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
