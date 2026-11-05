@@ -35,6 +35,11 @@ _TRUNCATED = "[... truncated]"
 # 超限时取 lesson_no 最新（最大）的条目至上限内，截断事实记 warning，不静默。
 _EXPERIENCE_MAX_ITEMS = 10
 _EXPERIENCE_MAX_CHARS = 2_000
+# 整份 system prompt 的软告警阈值（Issue #205）：各段硬帽合计 27,000 字元
+# （平台三文件 3×4,000＋skills 12,000＋经验 2,000＋历史摘要 1,000），再给
+# 站点 Prompt / catalog / 工具清单留约 13,000 的合理余量。超过只记 warning，
+# 不截断、不改变组装结果——总量膨胀先有观测，是否立硬帽等真实读数再定。
+_PROMPT_WARN_CHARS = 40_000
 _HARNESS_ROOT = Path(__file__).resolve().parents[3] / "harness"
 
 
@@ -161,6 +166,12 @@ def assemble_harness(
             experience_lessons, enabled=experience_lessons_enabled
         ),
     )
+    if len(system_prompt) > _PROMPT_WARN_CHARS:
+        logger.warning(
+            "assembled system prompt is %d chars, above the %d soft warning threshold",
+            len(system_prompt),
+            _PROMPT_WARN_CHARS,
+        )
     return RequestHarness(
         system_prompt=system_prompt,
         user_message=user_message,

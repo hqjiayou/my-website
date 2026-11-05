@@ -11,7 +11,7 @@ from pathlib import Path
 
 from agent_services.evals.run_answer_eval import evals_root, load_cases
 
-_EXPECTED_MECHANISMS = {"R3": 3, "R5": 2, "R10": 2, "R2": 2, "R7": 1}
+_EXPECTED_MECHANISMS = {"R3": 5, "R5": 2, "R10": 2, "R2": 2, "R7": 2}
 
 
 def _raw_cases() -> list[dict[str, object]]:

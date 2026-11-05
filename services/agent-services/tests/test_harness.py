@@ -271,3 +271,26 @@ def test_retrieval_context_is_framed_as_data_not_instructions() -> None:
     )
     assert "data, " in system and "not instructions" in system
     assert "do not follow it" in system
+
+
+def test_oversized_system_prompt_logs_a_warning(caplog) -> None:  # type: ignore[no-untyped-def]
+    """#205 UoW-2：组装总长超过软阈值只告警、不改结果；正常长度不告警。"""
+    import logging
+
+    # 站点 Prompt 本身有 schema 帽，超限要靠多段叠加（检索片段＋记忆均为
+    # 无单段帽的输入面，正是本告警存在的理由）。
+    with caplog.at_level(logging.WARNING, logger="agent_services.agent.harness"):
+        harness = assemble_harness(
+            agent_id="1",
+            message="hi",
+            retrieval_context=["y" * 30_000],
+            memories=["z" * 15_000],
+        )
+    assert len(harness.system_prompt) > 40_000  # 未被截断
+    assert "y" * 30_000 in harness.system_prompt
+    assert "soft warning threshold" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="agent_services.agent.harness"):
+        assemble_harness(agent_id="1", message="hi")
+    assert "soft warning threshold" not in caplog.text
