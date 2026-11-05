@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { agentApi } from '@/api/apps/agentApi'
 import { AdminPageHeader, CopyableText, FormDialog, StatusTag } from '@/components/admin'
 import {
   adminDangerGhostButtonClass,
@@ -38,7 +37,7 @@ type Draft = {
   modelSpec: string
   apiKey: string
   baseUrl: string
-  agentId: string
+  sourceAgentId: number | null
   embeddingSpec: string
   enabled: boolean
   defaultEntry: boolean
@@ -55,7 +54,7 @@ function emptyDraft(makeDefault: boolean): Draft {
     modelSpec: '',
     apiKey: '',
     baseUrl: '',
-    agentId: '',
+    sourceAgentId: null,
     embeddingSpec: '',
     enabled: true,
     defaultEntry: makeDefault,
@@ -67,22 +66,25 @@ function emptyDraft(makeDefault: boolean): Draft {
 }
 
 /**
- * 生效链（与 Java selectionChain 同规则）：作用域预设为主用，其后同作用域其他启用入口、
- * 再全站其余启用入口（各组内默认在前、id 升序）。没有默认入口时整链不启用。
+ * 生效链（与 Java selectionChain 同规则）：入口平台化后只有一条平台链——带来源标注的
+ * 入口（原专属）为优先层、平台原生入口为平台层（各层内默认在前、id 升序）；
+ * 主用是优先层第一个默认入口，否则平台层第一个默认。没有默认入口时整链不启用。
  */
-function computeChain(entries: AiModelEntry[], scopeAgentId: number | null): AiModelEntry[] {
-  const enabledIn = (scope: number | null) =>
+function computeChain(entries: AiModelEntry[]): AiModelEntry[] {
+  const enabledIn = (provenanceMarked: boolean) =>
     entries
-      .filter((entry) => entry.enabled && (scope == null ? entry.agentId == null : entry.agentId === scope))
+      .filter(
+        (entry) => entry.enabled && (provenanceMarked ? entry.sourceAgentId != null : entry.sourceAgentId == null),
+      )
       .sort((a, b) => Number(b.defaultEntry) - Number(a.defaultEntry) || a.id - b.id)
-  const scoped = scopeAgentId == null ? [] : enabledIn(scopeAgentId)
-  const global = enabledIn(null)
-  const primary = scoped.find((entry) => entry.defaultEntry) ?? global.find((entry) => entry.defaultEntry)
+  const provenance = enabledIn(true)
+  const platform = enabledIn(false)
+  const primary = provenance.find((entry) => entry.defaultEntry) ?? platform.find((entry) => entry.defaultEntry)
   if (!primary) return []
   return [
     primary,
-    ...scoped.filter((entry) => entry.id !== primary.id),
-    ...global.filter((entry) => entry.id !== primary.id),
+    ...provenance.filter((entry) => entry.id !== primary.id),
+    ...platform.filter((entry) => entry.id !== primary.id),
   ]
 }
 
@@ -93,7 +95,7 @@ function draftFromEntry(entry: AiModelEntry): Draft {
     modelSpec: entry.modelSpec,
     apiKey: '',
     baseUrl: entry.baseUrl ?? '',
-    agentId: entry.agentId == null ? '' : String(entry.agentId),
+    sourceAgentId: entry.sourceAgentId,
     embeddingSpec: entry.embeddingSpec ?? '',
     enabled: entry.enabled,
     defaultEntry: entry.defaultEntry,
@@ -125,7 +127,7 @@ function familyTile(modelSpec: string): { letter: string; className: string } {
   return { letter: 'M', className: 'bg-admin-surface-muted text-admin-muted' }
 }
 
-/** 组链预览按模式拆分的一段：同一作用域下该模式的生效链。 */
+/** 组链预览按模式拆分的一段：平台链在该模式下的生效段。 */
 function ModeChainSection({ mode, chain }: { mode: string; chain: AiModelEntry[] }) {
   const { t } = useTranslation('aiAdmin')
   return (
@@ -164,7 +166,7 @@ function ModeChainSection({ mode, chain }: { mode: string; chain: AiModelEntry[]
                   </span>
                   <span className="text-[11px] font-normal text-admin-muted">
                     {mode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
-                    {entry.agentId == null ? ` · ${t('settings.agentPlatform')}` : ''}
+                    {entry.sourceAgentId != null ? ` · ${t('settings.entryProvenance')}` : ''}
                   </span>
                 </span>
               </span>
@@ -648,15 +650,10 @@ export function AiSettingsPage() {
   const queryClient = useQueryClient()
   const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
   const [draft, setDraft] = useState<Draft | null>(null)
-  const [chainScope, setChainScope] = useState('')
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['ai', 'model-entries'],
     queryFn: () => aiApi.listModelEntries(),
-  })
-  const sitesQuery = useQuery({
-    queryKey: ['sites', 'model-entry-options'],
-    queryFn: () => agentApi.listSites({ pageNum: 1, pageSize: 100 }),
   })
   const usageQuery = useQuery({
     queryKey: ['ai', 'proxy-services', 'usage'],
@@ -686,7 +683,6 @@ export function AiSettingsPage() {
         displayName: entry.displayName,
         modelSpec: entry.modelSpec,
         baseUrl: entry.baseUrl,
-        agentId: entry.agentId,
         embeddingSpec: entry.embeddingSpec,
         enabled: true,
         defaultEntry: true,
@@ -731,9 +727,8 @@ export function AiSettingsPage() {
   }
 
   const entries = data ?? []
-  const scopeAgentId = chainScope === '' ? null : Number(chainScope)
-  const keyChain = computeChain(entries.filter((entry) => (entry.mode ?? 'KEY') === 'KEY'), scopeAgentId)
-  const cliChain = computeChain(entries.filter((entry) => (entry.mode ?? 'KEY') === 'CLI'), scopeAgentId)
+  const keyChain = computeChain(entries.filter((entry) => (entry.mode ?? 'KEY') === 'KEY'))
+  const cliChain = computeChain(entries.filter((entry) => (entry.mode ?? 'KEY') === 'CLI'))
   const aliasTrimmed = draft?.alias.trim() ?? ''
   const aliasInvalid = aliasTrimmed !== '' && !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(aliasTrimmed.toLowerCase())
   const cliAccounts = (usageQuery.data?.accounts ?? []).filter(
@@ -759,7 +754,6 @@ export function AiSettingsPage() {
         draft.mode === 'CLI' ? modelIdFromSpec(draft.modelSpec).trim() || draft.displayName.trim() : draft.displayName.trim(),
       modelSpec: draft.mode === 'CLI' ? cliModelSpec(draft.modelSpec) : draft.modelSpec.trim(),
       baseUrl: draft.mode === 'CLI' ? usageQuery.data?.apiBaseUrl || draft.baseUrl.trim() || null : draft.baseUrl.trim() || null,
-      agentId: draft.agentId.trim() === '' ? null : Number(draft.agentId),
       embeddingSpec: draft.mode === 'CLI' ? null : draft.embeddingSpec.trim() || null,
       enabled: draft.enabled,
       defaultEntry: draft.defaultEntry,
@@ -869,21 +863,7 @@ export function AiSettingsPage() {
         <EmbeddingRegistrationCard />
 
         <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-admin">{t('settings.chainTitle')}</h3>
-            <select
-              className={`${adminFieldClass} w-auto`}
-              value={chainScope}
-              onChange={(event) => setChainScope(event.target.value)}
-            >
-              <option value="">{t('settings.agentPlatform')}</option>
-              {(sitesQuery.data?.records ?? []).map((site) => (
-                <option key={site.id} value={site.id}>
-                  {site.agentName}
-                </option>
-              ))}
-            </select>
-          </div>
+          <h3 className="text-sm font-semibold text-admin">{t('settings.chainTitle')}</h3>
           <p className="text-sm text-admin-muted">{t('settings.chainHint')}</p>
           <div className="space-y-4">
             <ModeChainSection mode="KEY" chain={keyChain} />
@@ -1036,22 +1016,11 @@ export function AiSettingsPage() {
                 <span className="mt-1 block text-xs text-danger-emphasis">{t('settings.aliasInvalid')}</span>
               ) : null}
             </label>
-            <label className="block text-sm text-admin">
-              {t('settings.site')}
-              <select
-                className={`${adminFieldClass} mt-1`}
-                value={draft.agentId}
-                disabled={!canUpdate}
-                onChange={(event) => setDraft({ ...draft, agentId: event.target.value })}
-              >
-                <option value="">{t('settings.agentPlatform')}</option>
-                {(sitesQuery.data?.records ?? []).map((site) => (
-                  <option key={site.id} value={site.id}>
-                    {site.agentName}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {draft.sourceAgentId != null ? (
+              <p className="text-sm text-admin-muted">
+                {t('settings.entryProvenanceNote', { id: draft.sourceAgentId })}
+              </p>
+            ) : null}
             <label className="block text-sm text-admin">
               {t('settings.mode')}
               <select

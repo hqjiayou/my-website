@@ -51,15 +51,19 @@ public final class ModelChainResolver {
     }
 
     /**
-     * 生效链：先按 {@code mode} 过滤（null 表示整链、不过滤）；主用＝站点作用域
-     * 第一个默认入口，否则全站第一个默认；主用不存在或其凭证组装不出（无 spec／
-     * 无 key）时整链为空——备援不得越过坏主用顶上（ADR-0004）；其后依次是同站
-     * 其余、全站其余（保持输入顺序），凭证组装不出的备援跳过。
+     * 生效链：先按 {@code mode} 过滤（null 表示整链、不过滤）；主用＝优先层
+     * 第一个默认入口，否则平台层第一个默认；主用不存在或其凭证组装不出（无 spec／
+     * 无 key）时整链为空——备援不得越过坏主用顶上（ADR-0004）；其后依次是优先层
+     * 其余、平台层其余（保持输入顺序），凭证组装不出的备援跳过。
+     *
+     * <p>两层的划分自 Issue #210 UoW-6 起按入口来源：优先层＝带来源标注的入口
+     * （平台化前为 agent 专属），平台层＝平台原生入口；与改造前的「专属层 → 全站层」
+     * 一一对应。网关 /v1 不走这里（见类注释）。
      */
     public static List<ResolvedLink> resolveChain(
-            List<EntrySnapshot> agentScope, List<EntrySnapshot> globalScope, String mode) {
-        List<EntrySnapshot> agentEntries = filterMode(agentScope, mode);
-        List<EntrySnapshot> globalEntries = filterMode(globalScope, mode);
+            List<EntrySnapshot> priorityScope, List<EntrySnapshot> platformScope, String mode) {
+        List<EntrySnapshot> agentEntries = filterMode(priorityScope, mode);
+        List<EntrySnapshot> globalEntries = filterMode(platformScope, mode);
         EntrySnapshot primary = firstDefault(agentEntries);
         if (primary == null) {
             primary = firstDefault(globalEntries);

@@ -96,7 +96,8 @@ export interface AiModelEntry {
   apiKeyConfigured: boolean
   apiKeyHint: string
   baseUrl: string | null
-  agentId: number | null
+  /** 来源标注：平台化前所属 agent id（Issue #210 UoW-6）；平台原生入口为 null。原 agentId 作用域已退役。 */
+  sourceAgentId: number | null
   embeddingSpec: string | null
   enabled: boolean
   defaultEntry: boolean
@@ -113,7 +114,6 @@ export interface AiModelEntryWriteInput {
   modelSpec: string
   apiKey?: string
   baseUrl?: string | null
-  agentId?: number | null
   embeddingSpec?: string | null
   enabled: boolean
   defaultEntry: boolean

@@ -232,7 +232,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
@@ -275,7 +274,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
@@ -323,7 +321,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
@@ -391,7 +388,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
@@ -441,7 +437,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
@@ -641,7 +636,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         cliEntry.put("displayName", "CLI default");
         cliEntry.put("modelSpec", "openai:muse-wonder-1.0");
         cliEntry.put("apiKey", "client-key");
-        cliEntry.put("agentId", agentId);
         cliEntry.put("mode", "CLI");
         cliEntry.put("enabled", true);
         cliEntry.put("defaultEntry", true);
@@ -821,7 +815,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         agentEntry.put("displayName", "Agent Gemini");
         agentEntry.put("modelSpec", "google:gemini-3-flash-preview");
         agentEntry.put("apiKey", "agent-secret-key");
-        agentEntry.put("agentId", agentId);
         agentEntry.put("enabled", true);
         agentEntry.put("defaultEntry", true);
         mockMvc.perform(post("/api/admin/ai/model-entries")
@@ -829,24 +822,26 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(agentEntry)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.agentId").value((int) agentId))
+                .andExpect(jsonPath("$.data.sourceAgentId").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.defaultEntry").value(true));
         MvcResult scoped = mockMvc.perform(get("/api/admin/ai/model-entries")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andReturn();
-        boolean platformDefaultRemains = false;
-        boolean agentDefault = false;
+        boolean previousDefaultRemains = false;
+        boolean newDefault = false;
         for (var item : MAPPER.readTree(scoped.getResponse().getContentAsString()).path("data")) {
             if ("OpenAI".equals(item.path("displayName").asText())) {
-                platformDefaultRemains = item.path("defaultEntry").asBoolean();
+                previousDefaultRemains = item.path("defaultEntry").asBoolean();
             }
             if ("Agent Gemini".equals(item.path("displayName").asText())) {
-                agentDefault = item.path("defaultEntry").asBoolean();
+                newDefault = item.path("defaultEntry").asBoolean();
             }
         }
-        assertThat(platformDefaultRemains).isTrue();
-        assertThat(agentDefault).isTrue();
+        // 入口平台化（#210 UoW-6）：写入不再带 agent 作用域，新入口同为平台原生，
+        // 同模式默认互斥——先前默认（OpenAI）被清，新默认（Agent Gemini）成立。
+        assertThat(previousDefaultRemains).isFalse();
+        assertThat(newDefault).isTrue();
         for (var item : MAPPER.readTree(scoped.getResponse().getContentAsString()).path("data")) {
             mockMvc.perform(delete("/api/admin/ai/model-entries/" + item.path("id").asLong())
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -1070,7 +1065,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         entry.put("displayName", name);
         entry.put("modelSpec", spec);
         entry.put("apiKey", "sk-" + name);
-        entry.put("agentId", agentId);
         entry.put("mode", "KEY");
         entry.put("enabled", true);
         entry.put("defaultEntry", defaultEntry);

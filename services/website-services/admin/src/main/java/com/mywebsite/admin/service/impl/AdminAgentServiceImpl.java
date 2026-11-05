@@ -15,7 +15,6 @@ import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
-import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiPromptService;
 import com.mywebsite.admin.service.AdminAppearanceService;
 import com.mywebsite.admin.service.AdminContentService;
@@ -49,7 +48,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     private final AdminAiPromptService adminAiPromptService;
     private final AdminAiKnowledgeService adminAiKnowledgeService;
     private final AdminAiConversationService adminAiConversationService;
-    private final AdminAiModelEntryService adminAiModelEntryService;
     private final AgentUserMapper agentUserMapper;
     private final AgentUserMemoryMapper agentUserMemoryMapper;
     private final AgentAiConversationShareMapper conversationShareMapper;
@@ -62,7 +60,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
             AdminAiPromptService adminAiPromptService,
             AdminAiKnowledgeService adminAiKnowledgeService,
             AdminAiConversationService adminAiConversationService,
-            AdminAiModelEntryService adminAiModelEntryService,
             AgentUserMapper agentUserMapper,
             AgentUserMemoryMapper agentUserMemoryMapper,
             AgentAiConversationShareMapper conversationShareMapper) {
@@ -73,7 +70,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         this.adminAiPromptService = adminAiPromptService;
         this.adminAiKnowledgeService = adminAiKnowledgeService;
         this.adminAiConversationService = adminAiConversationService;
-        this.adminAiModelEntryService = adminAiModelEntryService;
         this.agentUserMapper = agentUserMapper;
         this.agentUserMemoryMapper = agentUserMemoryMapper;
         this.conversationShareMapper = conversationShareMapper;
@@ -177,9 +173,10 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         adminAiPromptService.softDeleteByAgentId(id);
         adminAiKnowledgeService.softDeleteByAgentId(id);
         adminAiConversationService.softDeleteByAgentId(id);
-        // 级联补全（#141 UoW-2）：模型入口（含密文 key）、成员关系、用户长期记忆、会话分享，
-        // 漏删会残留密文 Key 与成员行。四路同走既有软删口径（deleted_at＋@TableLogic）。
-        adminAiModelEntryService.softDeleteByAgentId(id);
+        // 级联补全（#141 UoW-2）：成员关系、用户长期记忆、会话分享，漏删会残留成员行。
+        // 三路同走既有软删口径（deleted_at＋@TableLogic）。
+        // 模型入口已平台化（#210 UoW-6）：入口是平台资源、不归 agent 所有，删 agent
+        // 不再级联软删入口（原 #141 的入口一路随之退役），来源标注留痕不随删。
         softDeleteAll(
                 agentUserMapper.selectList(
                         new LambdaQueryWrapper<AgentUserEntity>().eq(AgentUserEntity::getAgentId, id)),

@@ -47,7 +47,11 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** 站点对话带入的入口生效链：与 admin selectionChain 同规则（站预设主用，其后同站其他、全站其余）。 */
+/**
+ * 站点对话带入的入口生效链：与 admin selectionChain 同规则。入口平台化后
+ * （Issue #210 UoW-6）为平台链：来源标注层主用，其后同层其他、平台原生其余；
+ * 夹具的第二参数是来源标注（原所属 agent，null 为平台原生）。
+ */
 @ExtendWith(MockitoExtension.class)
 class AgentAiModelChainTest {
 
@@ -130,10 +134,10 @@ class AgentAiModelChainTest {
         AuthContext.clear();
     }
 
-    private static AgentAiModelEntryEntity entry(long id, Long agentId, String spec, boolean isDefault) {
+    private static AgentAiModelEntryEntity entry(long id, Long sourceAgentId, String spec, boolean isDefault) {
         AgentAiModelEntryEntity entry = new AgentAiModelEntryEntity();
         entry.setId(id);
-        entry.setAgentId(agentId);
+        entry.setSourceAgentId(sourceAgentId);
         entry.setModelSpec(spec);
         entry.setApiKey("enc:key-" + id);
         entry.setEnabled(true);
@@ -142,8 +146,8 @@ class AgentAiModelChainTest {
     }
 
     private static AgentAiModelEntryEntity entry(
-            long id, Long agentId, String spec, boolean isDefault, String mode) {
-        AgentAiModelEntryEntity entry = entry(id, agentId, spec, isDefault);
+            long id, Long sourceAgentId, String spec, boolean isDefault, String mode) {
+        AgentAiModelEntryEntity entry = entry(id, sourceAgentId, spec, isDefault);
         entry.setMode(mode);
         return entry;
     }

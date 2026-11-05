@@ -308,7 +308,7 @@ export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
                   {candidates.map((entry) => (
                     <option key={entry.id} value={entry.id}>
                       {entry.displayName} · {entry.embeddingSpec}
-                      {entry.agentId != null && entry.agentId !== agentId
+                      {entry.sourceAgentId != null && entry.sourceAgentId !== agentId
                         ? ` · ${t('settings.embeddingRegistration.boundOther')}`
                         : ''}
                     </option>

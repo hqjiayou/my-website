@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS agent_model_entry (
     api_key             TEXT NOT NULL,
     base_url            VARCHAR(512),
     agent_id             BIGINT,
+    source_agent_id      BIGINT,
     embedding_spec      VARCHAR(256),
     enabled             BOOLEAN NOT NULL DEFAULT TRUE,
     is_default          BOOLEAN NOT NULL DEFAULT FALSE,

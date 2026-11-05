@@ -740,7 +740,6 @@ function ApiKeyColumn() {
         modelSpec: modelSpec.trim(),
         apiKey: apiKey.trim(),
         baseUrl: baseUrl.trim() || null,
-        agentId: null,
         embeddingSpec: null,
         enabled: true,
         defaultEntry: false,
@@ -823,7 +822,9 @@ function ApiKeyColumn() {
                 <dt className="text-admin-muted">{t('proxyServices.keyBaseUrl')}</dt>
                 <dd className="break-all font-medium text-admin">{selected.baseUrl || '—'}</dd>
                 <dt className="text-admin-muted">{t('proxyServices.keyUse')}</dt>
-                <dd className="font-medium text-admin">{labelFor(selected.agentId)}</dd>
+                <dd className="font-medium text-admin">
+                  {selected.sourceAgentId != null ? labelFor(selected.sourceAgentId) : t('proxyServices.keyPlatform')}
+                </dd>
               </dl>
               {canUpdate ? (
                 <div className="mt-6 flex justify-end">

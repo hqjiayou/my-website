@@ -742,8 +742,10 @@ public class AgentAiServiceImpl implements AgentAiService {
     /**
      * 生效链：规则在 agent-core 的 {@code ModelChainResolver}（Issue #132，与 admin
      * {@code AdminAiModelEntryServiceImpl.selectionChain} 共用同一份实现，不再两处手写）。
-     * 首元是主用（站点默认，否则全站默认），主用坏掉整链为空（ADR-0004）；
+     * 入口平台化后（Issue #210 UoW-6）链是平台链、与对话所属 agent 无关：
+     * 首元是主用（来源标注层默认，否则平台原生默认），主用坏掉整链为空（ADR-0004）；
      * mode 非空时先按模式过滤（备援封闭在模式内）；为空时即整链。
+     * {@code agentId} 参数保留待 UoW-7 链预设引用时收口。
      */
     private List<AgentModelSelection> loadModelChain(long agentId, String mode) {
         return loadModelChainLinks(agentId, mode).stream().map(ChainLink::selection).toList();
@@ -751,8 +753,8 @@ public class AgentAiServiceImpl implements AgentAiService {
 
     private List<ChainLink> loadModelChainLinks(long agentId, String mode) {
         return ModelChainResolver.resolveChain(
-                        snapshots(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, agentId)),
-                        snapshots(AgentModelChainUtils.enabledModelEntries(modelEntryMapper, null)),
+                        snapshots(AgentModelChainUtils.enabledEntriesByProvenance(modelEntryMapper, true)),
+                        snapshots(AgentModelChainUtils.enabledEntriesByProvenance(modelEntryMapper, false)),
                         mode)
                 .stream()
                 .map(link -> new ChainLink(link.id(), link.displayName(), link.selection()))

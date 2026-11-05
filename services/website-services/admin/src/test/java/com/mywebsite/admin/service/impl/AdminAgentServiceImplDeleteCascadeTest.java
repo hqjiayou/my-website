@@ -9,7 +9,6 @@ import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
-import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiPromptService;
 import com.mywebsite.admin.service.AdminAppearanceService;
 import com.mywebsite.admin.service.AdminContentService;
@@ -28,9 +27,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 删站级联完整性（#141 UoW-2）：deleteSite 须覆盖全部十路软删——原六路领域服务、
- * 模型入口服务，以及 agent-core 三张表（成员／用户记忆／会话分享）逐行软删。
- * 端到端逐表断言见 AdminAgentManagementMvcTest.deleteSiteCascadesToModelEntriesUsersMemoriesAndShares。
+ * 删站级联完整性（#141 UoW-2）：deleteSite 须覆盖全部九路软删——六路领域服务，
+ * 以及 agent-core 三张表（成员／用户记忆／会话分享）逐行软删。模型入口一路已随
+ * 入口平台化退役（#210 UoW-6：入口是平台资源，删站不级联），本类钉住其不再被调用。
+ * 端到端逐表断言见 AdminAgentManagementMvcTest.deleteSiteCascadesToUsersMemoriesAndShares。
  */
 @ExtendWith(MockitoExtension.class)
 class AdminAgentServiceImplDeleteCascadeTest {
@@ -42,7 +42,6 @@ class AdminAgentServiceImplDeleteCascadeTest {
     @Mock private AdminAiPromptService adminAiPromptService;
     @Mock private AdminAiKnowledgeService adminAiKnowledgeService;
     @Mock private AdminAiConversationService adminAiConversationService;
-    @Mock private AdminAiModelEntryService adminAiModelEntryService;
     @Mock private AgentUserMapper agentUserMapper;
     @Mock private AgentUserMemoryMapper agentUserMemoryMapper;
     @Mock private AgentAiConversationShareMapper conversationShareMapper;
@@ -59,14 +58,13 @@ class AdminAgentServiceImplDeleteCascadeTest {
                 adminAiPromptService,
                 adminAiKnowledgeService,
                 adminAiConversationService,
-                adminAiModelEntryService,
                 agentUserMapper,
                 agentUserMemoryMapper,
                 conversationShareMapper);
     }
 
     @Test
-    void deleteSiteCascadesAcrossAllTenPaths() {
+    void deleteSiteCascadesAcrossAllNinePaths() {
         AdminAgentEntity agent = new AdminAgentEntity();
         agent.setId(7L);
         when(adminAgentMapper.selectById(7L)).thenReturn(agent);
@@ -93,7 +91,6 @@ class AdminAgentServiceImplDeleteCascadeTest {
         verify(adminAiPromptService).softDeleteByAgentId(7L);
         verify(adminAiKnowledgeService).softDeleteByAgentId(7L);
         verify(adminAiConversationService).softDeleteByAgentId(7L);
-        verify(adminAiModelEntryService).softDeleteByAgentId(7L);
 
         assertThat(member.getDeletedAt()).isNotNull();
         assertThat(memory.getDeletedAt()).isNotNull();
