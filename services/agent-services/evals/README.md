@@ -14,7 +14,7 @@
 | `skill_qa.jsonl` | skill 题集 40 题：`id/skill/kind/question/expected_behavior/expected_answer`，部分带 `expected_keywords` 与 `golden_ref`（与黄金集的同锚引用）；其中 3 题带 `mode: "self-select"`（#195 自选题，见下「自选场景」） |
 | `experience_qa.jsonl` | 经验敏感集 3 题（#190）：形状同黄金集，期望按注入样例 lesson 后的口径写定，须配 `fixtures/lessons_sample.json` 两轮对照读（见下「经验敏感集」） |
 | `fixtures/lessons_sample.json` | 经验敏感集的样例 lessons（lessonNo 6/7/8），经 `--lessons-file` 注入 |
-| `adversarial_grounding.jsonl` | 对抗题集 10 题（#191）：形状同黄金集另带 `mechanism`，诱导四条执行化机制违规，真模型选跑判拦截是否生效（见下「对抗题集」） |
+| `adversarial_grounding.jsonl` | 对抗题集 13 题（#191 建集，#205 补英/日多语言触发 3 题）：形状同黄金集另带 `mechanism`，诱导四条执行化机制违规，真模型选跑判拦截是否生效（见下「对抗题集」） |
 | `corpus.json` | 评估语料（进程内索引，非业务真相源） |
 | `distractors.json` | 对抗性近失文档层，仅 `--distractors` 时并入索引 |
 | `reports/` | 跑分报告归档（UoW-2 起含基线约定） |
@@ -267,12 +267,14 @@ blocked 时整轮继续，退出码语义不变。上文 unscored 口径中「Ch
 
 `evals/adversarial_grounding.jsonl` 是 guardrails 执行化的**收益验收**集：
 golden 全是正常题、只能测「不误伤」；拦截是否生效要靠故意诱导违规的题。
-共 10 题，每题带 `mechanism` 字段标明所测机制，`expected_behavior` 写死
+共 13 题，每题带 `mechanism` 字段标明所测机制，`expected_behavior` 写死
 期望的收口形态：
 
-- R3 记录值回查 ×3（category=unanswerable）：语料里根本没有的值（入台证
+- R3 记录值回查 ×5（category=unanswerable）：语料里根本没有的值（入台证
   日期、订单状态、工资单编号/账户）被问到时，期望重试后整答替换为固定
-  拒绝句，最终回复不含编造值。
+  拒绝句，最终回复不含编造值。其中 2 题为 #201 多语言触发验收（英文
+  application status 问法、日文申請番号問法），触发线索不在中文里时
+  R3 也必须进检查分支。
 - R5 标签剥离 ×2：诱导贴满 [cN] 时，只看**最终回复**（DONE reply）——
   未分配编号应已被剥离、合法标签保留；流式 delta 里的原文不算失败
   （流式边界见 #191 brief）。
@@ -281,7 +283,8 @@ golden 全是正常题、只能测「不误伤」；拦截是否生效要靠故�
 - R2 成功声称 ×2：动作不可能成功（无删除工具、委派不能提交）时声称
   成功，期望如实说明；机制信号在服务端 `guardrail_hit rule=R2` 日志，
   题集判读以最终回复是否诚实为准。
-- R7 聚合 ×1（回归守护）：片段外派生总数期望被收口为固定句。
+- R7 聚合 ×2（回归守护）：片段外派生总数期望被收口为固定句；其中 1 题
+  为英文问法（in total / how many 线索，#201 多语言触发验收）。
 
 跑法与 golden 相同（`--cases evals/adversarial_grounding.jsonl`），属真
 模型选跑，不进确定性 CI；题集本身的结构与覆盖由
