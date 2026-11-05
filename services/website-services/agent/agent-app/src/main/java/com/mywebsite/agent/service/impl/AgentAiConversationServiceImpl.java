@@ -20,14 +20,16 @@ import com.mywebsite.agent.dto.AgentAiMessageDto;
 import com.mywebsite.agent.dto.AgentAiSearchHitDto;
 import com.mywebsite.agent.dto.AgentAiShareDto;
 import com.mywebsite.agent.dto.AgentAiSharedConversationDto;
+import com.mywebsite.agent.entity.AgentAiConfigPresetEntity;
 import com.mywebsite.agent.entity.AgentAiConversationEntity;
 import com.mywebsite.agent.entity.AgentAiConversationShareEntity;
 import com.mywebsite.agent.entity.AgentAiMessageEntity;
-import com.mywebsite.agent.entity.AgentAiPromptProfileEntity;
+import com.mywebsite.agent.entity.AgentEntity;
+import com.mywebsite.agent.mapper.AgentAiConfigPresetMapper;
 import com.mywebsite.agent.mapper.AgentAiConversationMapper;
 import com.mywebsite.agent.mapper.AgentAiConversationShareMapper;
 import com.mywebsite.agent.mapper.AgentAiMessageMapper;
-import com.mywebsite.agent.mapper.AgentAiPromptProfileMapper;
+import com.mywebsite.agent.mapper.AgentMapper;
 import com.mywebsite.agent.service.AgentAiConversationService;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
@@ -72,19 +74,22 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
 
     private final AgentAiConversationMapper conversationMapper;
     private final AgentAiMessageMapper messageMapper;
-    private final AgentAiPromptProfileMapper promptProfileMapper;
+    private final AgentMapper agentMapper;
+    private final AgentAiConfigPresetMapper configPresetMapper;
     private final AgentAiConversationShareMapper shareMapper;
     private final ObjectMapper objectMapper;
 
     public AgentAiConversationServiceImpl(
             AgentAiConversationMapper conversationMapper,
             AgentAiMessageMapper messageMapper,
-            AgentAiPromptProfileMapper promptProfileMapper,
+            AgentMapper agentMapper,
+            AgentAiConfigPresetMapper configPresetMapper,
             AgentAiConversationShareMapper shareMapper,
             ObjectMapper objectMapper) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
-        this.promptProfileMapper = promptProfileMapper;
+        this.agentMapper = agentMapper;
+        this.configPresetMapper = configPresetMapper;
         this.shareMapper = shareMapper;
         this.objectMapper = objectMapper;
     }
@@ -552,15 +557,34 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
     }
 
     private AgentPromptProfile loadPromptProfile(long agentId) {
-        AgentAiPromptProfileEntity profile = promptProfileMapper.selectOne(
-                new LambdaQueryWrapper<AgentAiPromptProfileEntity>()
-                        .eq(AgentAiPromptProfileEntity::getAgentId, agentId)
-                        .last("LIMIT 1"));
-        if (profile == null) {
+        AgentAiConfigPresetEntity preset = resolveConfigPreset(agentId);
+        if (preset == null) {
             return null;
         }
-        Double temperature = profile.getTemperature() == null ? null : profile.getTemperature().doubleValue();
-        return new AgentPromptProfile(profile.getSystemPrompt(), temperature);
+        Double temperature = preset.getTemperature() == null ? null : preset.getTemperature().doubleValue();
+        return new AgentPromptProfile(preset.getSystemPrompt(), temperature);
+    }
+
+    /**
+     * 配置预设解析（Issue #211 UoW-8）：agent → {@code config_preset_id} → 预设行。
+     * 回退口径定死：agent 无引用（含 agent 行不存在）返回 null、不记日志——这是
+     * 未配置的常态，与旧「无 profile 返回 null」逐字一致；引用悬空或预设已软删
+     * （{@code @TableLogic} 下 selectById 同样查不到）属异常态，返回 null 并记
+     * warn。旧表 {@code agent_ai_prompt_profile} 自本单起停读。
+     */
+    private AgentAiConfigPresetEntity resolveConfigPreset(long agentId) {
+        AgentEntity agent = agentMapper.selectById(agentId);
+        if (agent == null || agent.getConfigPresetId() == null) {
+            return null;
+        }
+        AgentAiConfigPresetEntity preset = configPresetMapper.selectById(agent.getConfigPresetId());
+        if (preset == null) {
+            log.warn(
+                    "agent {} references config preset {} which is missing or deleted; falling back to no profile",
+                    agentId,
+                    agent.getConfigPresetId());
+        }
+        return preset;
     }
 
     private List<AgentTodoItem> readTodos(AgentAiConversationEntity conversation) {

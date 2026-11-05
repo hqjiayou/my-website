@@ -24,9 +24,10 @@ import com.mywebsite.agent.mapper.AgentAiConversationShareMapper;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import com.mywebsite.agent.mapper.AgentAiConfigPresetMapper;
 import com.mywebsite.agent.mapper.AgentAiConversationMapper;
 import com.mywebsite.agent.mapper.AgentAiMessageMapper;
-import com.mywebsite.agent.mapper.AgentAiPromptProfileMapper;
+import com.mywebsite.agent.mapper.AgentMapper;
 import com.mywebsite.agent.service.impl.AgentAiConversationServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,7 +47,10 @@ class AgentAiConversationManageTest {
     private AgentAiMessageMapper messageMapper;
 
     @Mock
-    private AgentAiPromptProfileMapper promptProfileMapper;
+    private AgentMapper agentMapper;
+
+    @Mock
+    private AgentAiConfigPresetMapper configPresetMapper;
 
     @Mock
     private AgentAiConversationShareMapper shareMapper;
@@ -56,7 +60,12 @@ class AgentAiConversationManageTest {
     @BeforeEach
     void setUp() {
         service = new AgentAiConversationServiceImpl(
-                conversationMapper, messageMapper, promptProfileMapper, shareMapper, new ObjectMapper());
+                conversationMapper,
+                messageMapper,
+                agentMapper,
+                configPresetMapper,
+                shareMapper,
+                new ObjectMapper());
     }
 
     @Test
