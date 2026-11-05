@@ -14,7 +14,9 @@ import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.agent.entity.AgentEmbeddingClassEntity;
+import com.mywebsite.agent.entity.AgentEmbeddingClassMaterializationEntity;
 import com.mywebsite.agent.mapper.AgentEmbeddingClassMapper;
+import com.mywebsite.agent.mapper.AgentEmbeddingClassMaterializationMapper;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import java.util.ArrayList;
@@ -40,6 +42,8 @@ class AdminEmbeddingRegistrationServiceImplTest {
     private final List<AgentEmbeddingClassEntity> store = new ArrayList<>();
     private final AtomicLong idSeq = new AtomicLong(100);
     private final Map<Long, AdminAiModelEntryEntity> entries = new HashMap<>();
+    private final java.util.Set<String> markerStore = new java.util.HashSet<>();
+    private final java.util.concurrent.atomic.AtomicInteger markerInserts = new java.util.concurrent.atomic.AtomicInteger();
 
     private AdminEmbeddingRegistrationServiceImpl service;
 
@@ -100,7 +104,28 @@ class AdminEmbeddingRegistrationServiceImplTest {
         });
 
         service = new AdminEmbeddingRegistrationServiceImpl(
-                registrationMapper, modelEntryMapper, knowledgeBaseMapper);
+                registrationMapper, modelEntryMapper, knowledgeBaseMapper, materializationMapper());
+    }
+
+    /** 物化 marker 的内存假实现：selectById 查集合、insert 落集合并计数（验幂等）。 */
+    private AgentEmbeddingClassMaterializationMapper materializationMapper() {
+        AgentEmbeddingClassMaterializationMapper mapper = mock(AgentEmbeddingClassMaterializationMapper.class);
+        when(mapper.selectById(any())).thenAnswer(invocation -> {
+            String scopeKey = invocation.getArgument(0);
+            if (!markerStore.contains(scopeKey)) {
+                return null;
+            }
+            AgentEmbeddingClassMaterializationEntity marker = new AgentEmbeddingClassMaterializationEntity();
+            marker.setScopeKey(scopeKey);
+            return marker;
+        });
+        when(mapper.insert(any(AgentEmbeddingClassMaterializationEntity.class))).thenAnswer(invocation -> {
+            AgentEmbeddingClassMaterializationEntity marker = invocation.getArgument(0);
+            markerStore.add(marker.getScopeKey());
+            markerInserts.incrementAndGet();
+            return 1;
+        });
+        return mapper;
     }
 
     private AdminAiModelEntryEntity entry(long id, String mode, String embeddingSpec) {
@@ -246,7 +271,8 @@ class AdminEmbeddingRegistrationServiceImplTest {
         AdminEmbeddingRegistrationServiceImpl strictService = new AdminEmbeddingRegistrationServiceImpl(
                 mock(AgentEmbeddingClassMapper.class),
                 mock(AdminAiModelEntryMapper.class),
-                emptyBaseMapper);
+                emptyBaseMapper,
+                mock(AgentEmbeddingClassMaterializationMapper.class));
         assertThatThrownBy(() -> strictService.listRegistrations(404L))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
@@ -255,6 +281,27 @@ class AdminEmbeddingRegistrationServiceImplTest {
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
+    }
+
+    @Test
+    void replaceBackfillsMaterializationMarkerOncePerScope() {
+        // 解耦深审 M-1：保存成功即落该 scope 的物化 marker，消费侧首次读不再
+        // 追加推算胜者；重复保存不重复 insert（先查后插幂等）。
+        entry(1L, "KEY", "openai:a");
+        entry(2L, "KEY", "openai:b");
+
+        service.replaceRegistrations(7L, save(1L));
+        assertThat(markerStore).containsExactly("SPACE:7");
+        assertThat(markerInserts).hasValue(1);
+
+        service.replaceRegistrations(7L, save(2L));
+        assertThat(markerStore).containsExactly("SPACE:7");
+        assertThat(markerInserts).hasValue(1);
+
+        // 全站 scope 用 GLOBAL 键；整表清空的保存同样落 marker（防删空后推算复活）。
+        service.replaceRegistrations(null, new AdminEmbeddingClassSaveRequest(List.of()));
+        assertThat(markerStore).containsExactlyInAnyOrder("SPACE:7", "GLOBAL");
+        assertThat(markerInserts).hasValue(2);
     }
 
     @Test

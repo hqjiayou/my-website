@@ -20,6 +20,8 @@ public final class AdminAiKnowledgeMessageKeys {
     public static final String BASE_IS_DEFAULT = "admin.ai.kb.base.is.default";
     public static final String BASE_ALREADY_LINKED = "admin.ai.kb.base.already.linked";
     public static final String BASE_LINK_SELF = "admin.ai.kb.base.link.self";
+    /** 解除创建者自身订阅被拒：创建者行是空间归属锚点，且 link 侧拒自链、无从补回。 */
+    public static final String BASE_UNLINK_CREATOR = "admin.ai.kb.base.unlink.creator";
 
     private AdminAiKnowledgeMessageKeys() {}
 }

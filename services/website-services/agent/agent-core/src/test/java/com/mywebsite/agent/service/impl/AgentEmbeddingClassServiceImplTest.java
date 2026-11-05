@@ -347,6 +347,31 @@ class AgentEmbeddingClassServiceImplTest {
                 .containsExactly("SPACE:999");
     }
 
+    @Test
+    void existingRegistrationsWithoutMarkerAreNotPollutedByMaterialization() {
+        // 解耦深审 M-1：管理面先行保存登记行但 marker 未落时，首次读只能补
+        // marker——不得把旧推算胜者追加进人工登记（类集会被污染、sort_order 撞序）。
+        when(materializationMapper.selectById(any())).thenReturn(null);
+        // 两 scope 都有现存登记行（含被禁用的行也算，查询不按 enabled 过滤）。
+        when(registrationMapper.selectCount(any())).thenReturn(1L);
+        List<AgentEmbeddingClassMaterializationEntity> insertedMarkers = captureMarkerInserts();
+        givenEntries(Map.of(1L, entry(1, 10L, "google:chat", "google:embed-saved")));
+        when(registrationMapper.selectList(any()))
+                .thenReturn(List.of(row(101, 901L, 1L, 0)))
+                .thenReturn(List.of());
+
+        List<AgentModelSelection> classes = service.embeddingClassesForSpace(901L);
+
+        assertThat(classes).extracting(AgentModelSelection::embeddingSpec)
+                .containsExactly("google:embed-saved");
+        // 不追加任何登记行、不扫入口推算；两 scope 只补 marker。
+        verify(registrationMapper, never()).insert(any(AgentEmbeddingClassEntity.class));
+        verify(modelEntryMapper, never()).selectList(any());
+        assertThat(insertedMarkers)
+                .extracting(AgentEmbeddingClassMaterializationEntity::getScopeKey)
+                .containsExactly("SPACE:901", "GLOBAL");
+    }
+
     // ------------------------------------------------------------------
     // 夹具
     // ------------------------------------------------------------------

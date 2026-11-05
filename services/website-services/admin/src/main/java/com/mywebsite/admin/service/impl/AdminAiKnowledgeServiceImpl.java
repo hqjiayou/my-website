@@ -174,7 +174,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     @Override
     public AdminAiKnowledgeDetailDto getDocument(long agentId, long documentId) {
         requireSite(agentId);
-        AdminAiKnowledgeDocumentEntity entity = requireDocumentInSite(agentId, documentId);
+        AdminAiKnowledgeDocumentEntity entity = requireDocumentVisible(agentId, documentId);
         return toDetail(entity, isIndexStale(entity, new LinkedHashMap<>()));
     }
 
@@ -395,14 +395,23 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
      * 若先重建后清扫，清扫会把 id 相撞的真空间分区一并删掉；先清扫时被误删的
      * 相撞分区则在重建步骤按空间补回。每步失败只影响局部：清扫/统计取数失败
      * 只记日志，单篇同步失败沿现行机制落 FAILED 并计入报告，不中断整体。
+     * 清扫与残留检查的键集合含已软删 agent（其旧分区同样可能是孤儿）。
      */
     @Override
     public AdminAiKnowledgeRebuildReportDto rebuildAllSpaces() {
-        List<Long> agentIds = adminAgentMapper.selectList(new LambdaQueryWrapper<AdminAgentEntity>())
+        // 键集合＝现存 agent ∪ 已软删 agent：旧分区键即 agent id，已删 agent 的
+        // 分区同样要清扫（步骤一）与查残留（步骤三），否则其孤儿分区既不清、
+        // 也不进对账报告（解耦深审）。已删 id 经 Mapper 直查（绕 @TableLogic）。
+        List<Long> agentIds = new ArrayList<>();
+        adminAgentMapper.selectList(new LambdaQueryWrapper<AdminAgentEntity>())
                 .stream()
                 .map(AdminAgentEntity::getId)
                 .filter(Objects::nonNull)
-                .toList();
+                .forEach(agentIds::add);
+        adminAgentMapper.selectDeletedAgentIds().stream()
+                .filter(Objects::nonNull)
+                .filter(id -> !agentIds.contains(id))
+                .forEach(agentIds::add);
 
         // 步骤一：旧分区清扫（旧分区键即 agent id，best-effort，失败只记日志）
         for (Long agentId : agentIds) {
@@ -427,6 +436,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         long totalChunks = 0;
         long totalSpecs = 0;
         long totalSyncFailures = 0;
+        long chunksUnknownSpaces = 0;
         for (AdminAiKnowledgeBaseEntity base : bases) {
             List<AdminAiKnowledgeDocumentEntity> documents = knowledgeMapper.selectList(
                     new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
@@ -456,6 +466,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 indexedSources = stats.sourceIds().size();
                 chunks = stats.chunkCount();
             } catch (RuntimeException ex) {
+                // 块数未知单独计数进报告：汇总 totalChunks 对该空间按 0 计是低报，
+                // 读报告须能分辨「真为 0」与「取不到」（解耦深审）。
+                chunksUnknownSpaces++;
                 log.warn(
                         "KB rebuild partition stats failed (baseId={}); report carries -1",
                         base.getId(),
@@ -493,7 +506,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 totalChunks,
                 totalSpecs,
                 totalSyncFailures,
-                List.copyOf(residues));
+                List.copyOf(residues),
+                chunksUnknownSpaces);
     }
 
     @Override
@@ -659,6 +673,15 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         if (existing == null) {
             throw new BusinessException(
                     ErrorCode.NOT_FOUND.getCode(), AdminAiKnowledgeMessageKeys.BASE_NOT_FOUND);
+        }
+        // 创建者守卫（解耦深审）：创建者订阅行是空间归属的锚点，前台弹层只是禁用、
+        // 服务端须同样拒绝——删掉后 linkBase 拒自链、无 API 可补回，且列表订阅数
+        // 与「创建∪订阅」的可达口径分叉。空间本身不存在时无从判创建者，不拦
+        // （订阅行存在而空间不在属数据异常，照旧删除清理）。
+        AdminAiKnowledgeBaseEntity base = baseMapper.selectById(baseId);
+        if (base != null && Long.valueOf(targetAgentId).equals(base.getCreatedByAgentId())) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.BASE_UNLINK_CREATOR);
         }
         subscriptionMapper.deleteById(existing.getId());
         // Issue #209 UoW-2：解链不删索引——向量只存空间分区一份，其他订阅者仍要
@@ -1639,6 +1662,28 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         if (document == null || !Long.valueOf(agentId).equals(ownerAgentId(document))) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
+        return document;
+    }
+
+    /**
+     * 详情读口径（解耦深审）：所有者之外，文档所在空间的订阅者也可读——与
+     * {@code originalFileUrl} 对非所有者走 {@code requireVisibleBase} 的口径
+     * 一致（此前详情走所有者口径、原档却可下，订阅者点详情 404 自相矛盾）。
+     * 写路径（update/delete/reindex 等）仍走 {@link #requireDocumentInSite}。
+     * 不存在/不可见统一 404，不泄露归属。
+     */
+    private AdminAiKnowledgeDocumentEntity requireDocumentVisible(long agentId, long documentId) {
+        AdminAiKnowledgeDocumentEntity document = knowledgeMapper.selectById(documentId);
+        if (document == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        if (Long.valueOf(agentId).equals(ownerAgentId(document))) {
+            return document;
+        }
+        if (document.getBaseId() == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        requireVisibleBase(agentId, document.getBaseId());
         return document;
     }
 

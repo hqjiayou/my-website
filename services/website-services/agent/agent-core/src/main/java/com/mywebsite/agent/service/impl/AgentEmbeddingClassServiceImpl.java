@@ -101,12 +101,25 @@ public class AgentEmbeddingClassServiceImpl implements AgentEmbeddingClassServic
      * 与随后的读取同事务。marker 已存在则什么都不做——登记行（含被人工
      * 删空的状态）就是唯一真相源。胜者推算经 {@code winnersSupplier} 惰性
      * 求值：marker 已在时不扫入口、不解密，与 #126 原实现的短路口径一致。
+     *
+     * <p>marker 不在但登记行已存在（管理面先行保存过登记、marker 未及落下）
+     * 时同样不动登记行：只补 marker。否则首次读会把推算胜者追加进人工登记，
+     * 污染类集（解耦深审 M-1）。注意「人工删空」后行数为 0、与从未登记不可
+     * 区分——那种情形仍走推算物化，但管理面保存路径会同步落 marker（见
+     * admin 侧 {@code replaceRegistrations}），删空后 marker 已在、不会走到这里。
      */
     private void ensureMaterialized(
             String scopeKey,
             java.util.function.Supplier<List<AgentAiModelEntryEntity>> winnersSupplier,
             Long rowBaseId) {
         if (materializationMapper.selectById(scopeKey) != null) {
+            return;
+        }
+        if (hasRegistrationRows(rowBaseId)) {
+            insertMarker(scopeKey);
+            log.info(
+                    "embedding classes already registered scope={}; marker backfilled without materialization",
+                    scopeKey);
             return;
         }
         List<AgentAiModelEntryEntity> winners = winnersSupplier.get();
@@ -118,14 +131,30 @@ public class AgentEmbeddingClassServiceImpl implements AgentEmbeddingClassServic
             row.setSortOrder(i);
             registrationMapper.insert(row);
         }
-        AgentEmbeddingClassMaterializationEntity marker = new AgentEmbeddingClassMaterializationEntity();
-        marker.setScopeKey(scopeKey);
-        marker.setMaterializedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        materializationMapper.insert(marker);
+        insertMarker(scopeKey);
         log.info(
                 "embedding classes materialized scope={} classes={}",
                 scopeKey,
                 winners.stream().map(AgentAiModelEntryEntity::getId).toList());
+    }
+
+    /** 该 scope 现存未软删登记行数（不分启用与否：人工登记过即以登记行为准）。 */
+    private boolean hasRegistrationRows(Long baseId) {
+        LambdaQueryWrapper<AgentEmbeddingClassEntity> query = new LambdaQueryWrapper<>();
+        if (baseId == null) {
+            query.isNull(AgentEmbeddingClassEntity::getBaseId);
+        } else {
+            query.eq(AgentEmbeddingClassEntity::getBaseId, baseId);
+        }
+        Long count = registrationMapper.selectCount(query);
+        return count != null && count > 0;
+    }
+
+    private void insertMarker(String scopeKey) {
+        AgentEmbeddingClassMaterializationEntity marker = new AgentEmbeddingClassMaterializationEntity();
+        marker.setScopeKey(scopeKey);
+        marker.setMaterializedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        materializationMapper.insert(marker);
     }
 
     /**
