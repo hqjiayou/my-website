@@ -32,7 +32,13 @@ public enum ErrorCode {
      * 503；检索配置缺项（如 RETRIEVAL_DATABASE_URL）。索引失败时 message 参数列出缺的键。
      * 不是外部依赖故障，不得收成 {@link #EXTERNAL_DEPENDENCY_BLOCKED}。
      */
-    RETRIEVAL_NOT_CONFIGURED(1010, "common.error.retrieval-not-configured");
+    RETRIEVAL_NOT_CONFIGURED(1010, "common.error.retrieval-not-configured"),
+    /**
+     * 400；调用方点名的模式（CLI / KEY）在该 agent 上没有可用入口（该模式链为空）。
+     * 备援封闭在模式内：不得跨模式补链，也不得把这一失败吞成其他口径（如内容为空）。
+     * message 参数 {0} 为模式名。
+     */
+    MODE_NO_AVAILABLE_ENTRY(1011, "common.error.mode-no-available-entry");
 
     private final int code;
 

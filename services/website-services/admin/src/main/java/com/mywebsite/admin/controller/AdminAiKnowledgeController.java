@@ -202,8 +202,12 @@ public class AdminAiKnowledgeController {
             @PathVariable long agentId,
             @RequestPart("file") MultipartFile file,
             @RequestParam(value = "title", required = false) String title,
-            @RequestParam(value = "baseId", required = false) Long baseId) {
-        UploadPayload payload = toUploadPayload(agentId, file, title, baseId);
+            @RequestParam(value = "baseId", required = false) Long baseId,
+            @RequestParam(value = "mode", required = false) String mode) {
+        // mode 必填（Issue #208 UoW-M1）：图片/扫描 PDF 的转写只走所选模式的链；
+        // 纯文本文件不调模型，参数照收但不校验链。
+        String resolvedMode = requireUploadMode(mode);
+        UploadPayload payload = toUploadPayload(agentId, file, title, baseId, resolvedMode);
         return ResponseEntity.ok(new HttpMessageBody<>(
                 ResponseMessages.SUCCESS,
                 adminAiKnowledgeService.createUploadedDocument(agentId, payload.request(), payload.meta())));
@@ -215,7 +219,10 @@ public class AdminAiKnowledgeController {
     public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveResultDto>> uploadArchive(
             @PathVariable long agentId,
             @RequestPart("file") MultipartFile file,
-            @RequestParam(value = "baseId", required = false) Long baseId) {
+            @RequestParam(value = "baseId", required = false) Long baseId,
+            @RequestParam(value = "mode", required = false) String mode) {
+        // mode 是请求级参数：先整单校验，非法时整批拒绝，不落成逐条失败（Issue #208 UoW-M1）。
+        String resolvedMode = requireUploadMode(mode);
         if (file == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_REQUIRED);
         }
@@ -257,7 +264,8 @@ public class AdminAiKnowledgeController {
                     break;
                 }
                 try {
-                    UploadPayload payload = toUploadPayload(agentId, entryName, entryBytes, null, baseId);
+                    UploadPayload payload =
+                            toUploadPayload(agentId, entryName, entryBytes, null, baseId, resolvedMode);
                     documents.add(adminAiKnowledgeService.createUploadedDocument(
                             agentId, payload.request(), payload.meta()));
                 } catch (BusinessException ex) {
@@ -286,18 +294,32 @@ public class AdminAiKnowledgeController {
     private record UploadPayload(
             AdminAiKnowledgeCreateRequest request, AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta meta) {}
 
-    private UploadPayload toUploadPayload(long agentId, MultipartFile file, String titleOverride, Long baseId) {
+    /** 上传 mode 必填校验：缺失/非法一律参数错误，不静默缺省（与服务层转写的校验同口径）。 */
+    private static String requireUploadMode(String mode) {
+        if (!StringUtils.hasText(mode)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.MODE_INVALID);
+        }
+        String value = mode.trim().toUpperCase(Locale.ROOT);
+        if (!value.equals("CLI") && !value.equals("KEY")) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.MODE_INVALID);
+        }
+        return value;
+    }
+
+    private UploadPayload toUploadPayload(
+            long agentId, MultipartFile file, String titleOverride, Long baseId, String mode) {
         if (file == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_REQUIRED);
         }
         if (file.getSize() > MAX_UPLOAD_BYTES) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_SIZE);
         }
-        return toUploadPayload(agentId, baseName(file.getOriginalFilename()), readBytes(file), titleOverride, baseId);
+        return toUploadPayload(
+                agentId, baseName(file.getOriginalFilename()), readBytes(file), titleOverride, baseId, mode);
     }
 
     private UploadPayload toUploadPayload(
-            long agentId, String filename, byte[] bytes, String titleOverride, Long baseId) {
+            long agentId, String filename, byte[] bytes, String titleOverride, Long baseId, String mode) {
         String extension = extensionOf(filename);
         if (!SUPPORTED_EXTENSIONS.contains(extension)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.FILE_TYPE);
@@ -307,15 +329,20 @@ public class AdminAiKnowledgeController {
         }
         String content;
         if (IMAGE_EXTENSIONS.contains(extension)) {
-            // 图片没有文本层可抽：直接经站点生效模型链视觉转写；为空按 FILE_EMPTY 拒绝。
+            // 图片没有文本层可抽：直接经所选模式的模型链视觉转写。无入口/调用失败由服务层
+            // 分列抛出（MODE_NO_AVAILABLE_ENTRY / FILE_TRANSCRIBE_FAILED）；只有转写结果
+            // 本身为空才落到下面的 FILE_EMPTY。
             content =
                     adminAiKnowledgeService.transcribeImage(
-                            agentId, bytes, CONTENT_TYPES.getOrDefault(extension, "application/octet-stream"));
+                            agentId,
+                            mode,
+                            bytes,
+                            CONTENT_TYPES.getOrDefault(extension, "application/octet-stream"));
         } else {
             content = convertContent(extension, bytes);
             if (!StringUtils.hasText(content) && "pdf".equals(extension)) {
-                // 扫描版 PDF 无文本层：经站点生效模型链转写；仍为空才按 FILE_EMPTY 拒绝。
-                content = adminAiKnowledgeService.transcribeScannedPdf(agentId, bytes);
+                // 扫描版 PDF 无文本层：经所选模式的模型链转写；失败口径同图片。
+                content = adminAiKnowledgeService.transcribeScannedPdf(agentId, mode, bytes);
             }
         }
         if (!StringUtils.hasText(content)) {

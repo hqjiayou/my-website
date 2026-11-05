@@ -858,25 +858,53 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     /**
-     * OCR 转写链的模式口径（Issue #145 F4a）：先 KEY 链、空了才 CLI 链。
-     * 不再用不分模式的整链——双模式各有默认时整链排序只剩 id 序，烧哪边的
-     * 配额不可预测。转写是后台批处理，直连 Key 可预测优先，代理兜底。
+     * 上传转写的 mode 必填校验（Issue #208 UoW-M1）：与试聊不同，上传不做缺省采纳——
+     * 缺失/非法一律参数错误。返回归一化后的 {@code CLI} / {@code KEY}。
      */
-    private List<AgentModelSelection> ocrChain(long agentId) {
-        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, "KEY");
-        return chain.isEmpty() ? modelEntryService.selectionChain(agentId, "CLI") : chain;
+    static String requireUploadMode(String mode) {
+        if (!StringUtils.hasText(mode)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.MODE_INVALID);
+        }
+        String value = mode.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!value.equals("CLI") && !value.equals("KEY")) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.MODE_INVALID);
+        }
+        return value;
+    }
+
+    /**
+     * 所选模式的转写链：只调 {@code selectionChain(agentId, mode)}，备援封闭在模式内。
+     * 该模式无可用入口时抛 {@code MODE_NO_AVAILABLE_ENTRY}，不跨模式补链（Issue #208 UoW-M1，
+     * 取代 #145 F4a 的 ocrChain 先 KEY 后 CLI 口径）。
+     */
+    private List<AgentModelSelection> transcriptionChain(long agentId, String mode) {
+        List<AgentModelSelection> chain = modelEntryService.selectionChain(agentId, mode);
+        if (chain.isEmpty()) {
+            log.info("KB OCR skipped for agent {}: mode {} has no usable model entry", agentId, mode);
+            throw new BusinessException(ErrorCode.MODE_NO_AVAILABLE_ENTRY, mode);
+        }
+        return chain;
+    }
+
+    /** 模型调用失败的统一出口：文案带失败性质（异常信息截断），细节全量留在日志。 */
+    private static BusinessException transcriptionFailed(RuntimeException ex) {
+        String nature = StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : ex.getClass().getSimpleName();
+        if (nature.length() > 200) {
+            nature = nature.substring(0, 200);
+        }
+        return new BusinessException(
+                ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode(),
+                AdminAiKnowledgeMessageKeys.FILE_TRANSCRIBE_FAILED,
+                nature);
     }
 
     @Override
-    public String transcribeScannedPdf(long agentId, byte[] pdfBytes) {
+    public String transcribeScannedPdf(long agentId, String mode, byte[] pdfBytes) {
+        String resolvedMode = requireUploadMode(mode);
         if (pdfBytes == null || pdfBytes.length == 0) {
             return "";
         }
-        List<AgentModelSelection> chain = ocrChain(agentId);
-        if (chain.isEmpty()) {
-            log.info("KB OCR skipped for agent {}: no usable model entry chain", agentId);
-            return "";
-        }
+        List<AgentModelSelection> chain = transcriptionChain(agentId, resolvedMode);
         try {
             AgentOcrPdfResult result =
                     agentClient.ocrPdf(
@@ -886,27 +914,25 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                                     java.util.Base64.getEncoder().encodeToString(pdfBytes)));
             String text = result == null || result.text() == null ? "" : result.text().trim();
             log.info(
-                    "KB OCR for agent {} via {} produced {} chars",
+                    "KB OCR for agent {} mode {} via {} produced {} chars",
                     agentId,
+                    resolvedMode,
                     result == null ? null : result.modelSpec(),
                     text.length());
             return text;
         } catch (RuntimeException ex) {
-            log.warn("KB OCR failed for agent {}: {}", agentId, ex.getMessage());
-            return "";
+            log.warn("KB OCR failed for agent {} mode {}: {}", agentId, resolvedMode, ex.getMessage(), ex);
+            throw transcriptionFailed(ex);
         }
     }
 
     @Override
-    public String transcribeImage(long agentId, byte[] imageBytes, String mediaType) {
+    public String transcribeImage(long agentId, String mode, byte[] imageBytes, String mediaType) {
+        String resolvedMode = requireUploadMode(mode);
         if (imageBytes == null || imageBytes.length == 0 || mediaType == null || mediaType.isBlank()) {
             return "";
         }
-        List<AgentModelSelection> chain = ocrChain(agentId);
-        if (chain.isEmpty()) {
-            log.info("KB image OCR skipped for agent {}: no usable model entry chain", agentId);
-            return "";
-        }
+        List<AgentModelSelection> chain = transcriptionChain(agentId, resolvedMode);
         try {
             AgentOcrPdfResult result =
                     agentClient.ocrImage(
@@ -917,14 +943,16 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                                     mediaType));
             String text = result == null || result.text() == null ? "" : result.text().trim();
             log.info(
-                    "KB image OCR for agent {} via {} produced {} chars",
+                    "KB image OCR for agent {} mode {} via {} produced {} chars",
                     agentId,
+                    resolvedMode,
                     result == null ? null : result.modelSpec(),
                     text.length());
             return text;
         } catch (RuntimeException ex) {
-            log.warn("KB image OCR failed for agent {}: {}", agentId, ex.getMessage());
-            return "";
+            log.warn(
+                    "KB image OCR failed for agent {} mode {}: {}", agentId, resolvedMode, ex.getMessage(), ex);
+            throw transcriptionFailed(ex);
         }
     }
 

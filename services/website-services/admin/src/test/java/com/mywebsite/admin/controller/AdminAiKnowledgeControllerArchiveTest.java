@@ -52,7 +52,7 @@ class AdminAiKnowledgeControllerArchiveTest {
         MockMultipartFile file = new MockMultipartFile("file", "bundle.zip", "application/zip", zip);
 
         ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveResultDto>> response =
-                controller.uploadArchive(7L, file, null);
+                controller.uploadArchive(7L, file, null, "KEY");
 
         AdminAiKnowledgeDtos.AdminAiKnowledgeArchiveResultDto result = response.getBody().data();
         assertThat(result.createdCount()).isEqualTo(1);
@@ -68,7 +68,38 @@ class AdminAiKnowledgeControllerArchiveTest {
                 new AdminAiKnowledgeController(mock(AdminAiKnowledgeService.class));
         MockMultipartFile file = new MockMultipartFile(
                 "file", "notes.md", "text/markdown", "# hi".getBytes(StandardCharsets.UTF_8));
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> controller.uploadArchive(7L, file, null))
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> controller.uploadArchive(7L, file, null, "CLI"))
                 .isInstanceOf(com.mywebsite.common.exception.BusinessException.class);
+    }
+
+    @Test
+    void archiveRejectsMissingOrInvalidModeBeforeAnyImport() throws Exception {
+        AdminAiKnowledgeService service = mock(AdminAiKnowledgeService.class);
+        AdminAiKnowledgeController controller = new AdminAiKnowledgeController(service);
+        byte[] zip = zipOf(new String[] {"docs/readme.md", "# 标题\n正文"});
+        MockMultipartFile file = new MockMultipartFile("file", "bundle.zip", "application/zip", zip);
+
+        for (String bad : new String[] {null, "", "AUTO"}) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(
+                            () -> controller.uploadArchive(7L, file, null, bad))
+                    .isInstanceOfSatisfying(
+                            com.mywebsite.common.exception.BusinessException.class,
+                            ex -> assertThat(ex.getMessageKey()).isEqualTo("admin.ai.kb.mode.invalid"));
+        }
+        org.mockito.Mockito.verify(service, org.mockito.Mockito.never())
+                .createUploadedDocument(org.mockito.ArgumentMatchers.anyLong(), any(), any());
+    }
+
+    @Test
+    void singleUploadRejectsMissingMode() {
+        AdminAiKnowledgeController controller =
+                new AdminAiKnowledgeController(mock(AdminAiKnowledgeService.class));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "notes.md", "text/markdown", "# hi".getBytes(StandardCharsets.UTF_8));
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> controller.upload(7L, file, null, null, null))
+                .isInstanceOfSatisfying(
+                        com.mywebsite.common.exception.BusinessException.class,
+                        ex -> assertThat(ex.getMessageKey()).isEqualTo("admin.ai.kb.mode.invalid"));
     }
 }

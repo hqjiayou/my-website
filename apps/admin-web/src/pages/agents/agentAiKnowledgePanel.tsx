@@ -105,6 +105,35 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([])
   const [uploadBusy, setUploadBusy] = useState(false)
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  // 上传转写模式（Issue #208）：缺省判定与试聊同源——打开上传框时不带 mode 查
+  // preview/model，服务端按「有 CLI 默认入口先 CLI、否则 KEY」判定；用户手动切换后不再覆盖。
+  const [uploadMode, setUploadMode] = useState<'CLI' | 'KEY'>('CLI')
+  const [uploadModeChosen, setUploadModeChosen] = useState(false)
+  const uploadModelQuery = useQuery({
+    queryKey: ['sites', agentId, 'ai', 'preview', 'model', 'default'],
+    queryFn: () => aiApi.getPreviewModel(agentId),
+    enabled: uploadOpen,
+  })
+  const [adoptedUploadDefault, setAdoptedUploadDefault] = useState<{
+    agentId: number
+    mode: 'CLI' | 'KEY'
+  } | null>(null)
+  if (
+    uploadOpen &&
+    !uploadModeChosen &&
+    uploadModelQuery.data &&
+    (adoptedUploadDefault == null ||
+      adoptedUploadDefault.agentId !== agentId ||
+      adoptedUploadDefault.mode !== uploadModelQuery.data.mode)
+  ) {
+    setAdoptedUploadDefault({ agentId, mode: uploadModelQuery.data.mode })
+    setUploadMode(uploadModelQuery.data.mode)
+  }
+
+  const chooseUploadMode = (next: 'CLI' | 'KEY') => {
+    setUploadMode(next)
+    setUploadModeChosen(true)
+  }
   const [selectedBaseId, setSelectedBaseId] = useState<number | null>(null)
   const [newBaseName, setNewBaseName] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -216,6 +245,8 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
     if (uploadBusy) return
     setUploadOpen(false)
     setUploadItems([])
+    // 下次打开重新按服务端缺省判定采纳模式
+    setUploadModeChosen(false)
   }, [uploadBusy])
 
   function onPickUploadFile(event: ChangeEvent<HTMLInputElement>) {
@@ -256,7 +287,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             : undefined
         try {
           if (knowledgeFileExtension(item.file.name) === 'zip') {
-            const result = await aiApi.uploadKnowledgeArchive(agentId, item.file, writableBaseId)
+            const result = await aiApi.uploadKnowledgeArchive(agentId, item.file, uploadMode, writableBaseId)
             let zipIndexed = 0
             let zipFailed = 0
             for (const detail of result.documents) {
@@ -292,6 +323,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             const detail = await aiApi.uploadKnowledgeDocument(
               agentId,
               item.file,
+              uploadMode,
               singleTitle,
               writableBaseId,
             )
@@ -763,6 +795,30 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           <form className="flex min-h-0 flex-col gap-4" onSubmit={onUploadSubmit}>
             <p className="text-xs leading-relaxed text-muted-foreground">
               {t('aiWorkspace.knowledge.uploadHint')}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                {t('aiWorkspace.knowledge.uploadModeLabel')}
+              </span>
+              {(['CLI', 'KEY'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={uploadMode === value}
+                  disabled={uploadBusy}
+                  className={
+                    uploadMode === value
+                      ? 'rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground'
+                      : 'rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground'
+                  }
+                  onClick={() => chooseUploadMode(value)}
+                >
+                  {value === 'CLI' ? t('aiWorkspace.preview.modeCli') : t('aiWorkspace.preview.modeKey')}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {t('aiWorkspace.knowledge.uploadTranscribeHint')}
             </p>
             <input
               ref={uploadInputRef}

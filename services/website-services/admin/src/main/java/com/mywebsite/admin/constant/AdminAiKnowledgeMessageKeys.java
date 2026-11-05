@@ -7,6 +7,10 @@ public final class AdminAiKnowledgeMessageKeys {
     public static final String FILE_SIZE = "admin.ai.kb.file.size";
     public static final String FILE_ENCODING = "admin.ai.kb.file.encoding";
     public static final String FILE_EMPTY = "admin.ai.kb.file.empty";
+    /** 上传 mode 必填且只能是 CLI / KEY（Issue #208 UoW-M1）。 */
+    public static final String MODE_INVALID = "admin.ai.kb.mode.invalid";
+    /** 模型转写调用失败（供应商/调用层），{0} 为失败性质；与「无入口」「返回空」分列。 */
+    public static final String FILE_TRANSCRIBE_FAILED = "admin.ai.kb.file.transcribe.failed";
     public static final String FILE_DUPLICATE = "admin.ai.kb.file.duplicate";
     public static final String FILE_STORAGE_FAILED = "admin.ai.kb.file.storage.failed";
     public static final String FILE_ORIGINAL_MISSING = "admin.ai.kb.file.original.missing";
