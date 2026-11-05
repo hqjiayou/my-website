@@ -23,10 +23,10 @@ import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedFailu
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReembedResultDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUpdateRequest;
 import com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity;
-import com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity;
+import com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity;
-import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseLinkMapper;
+import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeRetrievalSyncIssueMapper;
@@ -95,7 +95,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     private final ObjectStorageService objectStorageService;
     private final StorageProperties storageProperties;
     private final AdminAiKnowledgeBaseMapper baseMapper;
-    private final AdminAiKnowledgeBaseLinkMapper linkMapper;
+    private final AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper;
     private final ExecutorService adminAiStreamExecutor;
     private final AdminAiKnowledgeRetrievalSyncIssueMapper syncIssueMapper;
 
@@ -107,7 +107,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             ObjectStorageService objectStorageService,
             StorageProperties storageProperties,
             AdminAiKnowledgeBaseMapper baseMapper,
-            AdminAiKnowledgeBaseLinkMapper linkMapper,
+            AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper,
             ExecutorService adminAiStreamExecutor,
             AdminAiKnowledgeRetrievalSyncIssueMapper syncIssueMapper) {
         this.knowledgeMapper = knowledgeMapper;
@@ -117,7 +117,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         this.objectStorageService = objectStorageService;
         this.storageProperties = storageProperties;
         this.baseMapper = baseMapper;
-        this.linkMapper = linkMapper;
+        this.subscriptionMapper = subscriptionMapper;
         this.adminAiStreamExecutor = adminAiStreamExecutor;
         this.syncIssueMapper = syncIssueMapper;
     }
@@ -140,7 +140,21 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             requireVisibleBase(agentId, query.baseId());
             wrapper.eq(AdminAiKnowledgeDocumentEntity::getBaseId, query.baseId());
         } else {
-            wrapper.eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId);
+            // 未指定库：本站创建的空间下的文档。文档 agent_id 已停写（Issue #209 UoW-1），
+            // 所有者经 base 创建者推导；or 条件兜住未挂 base 的历史行（其 agent_id 仍是创建者）。
+            List<Long> ownedBaseIds = baseMapper
+                    .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
+                            .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId))
+                    .stream()
+                    .map(AdminAiKnowledgeBaseEntity::getId)
+                    .toList();
+            if (ownedBaseIds.isEmpty()) {
+                wrapper.eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId);
+            } else {
+                wrapper.and(w -> w.in(AdminAiKnowledgeDocumentEntity::getBaseId, ownedBaseIds)
+                        .or()
+                        .eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId));
+            }
         }
         if (query != null && StringUtils.hasText(query.status())) {
             requireStatus(query.status());
@@ -171,7 +185,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     public AdminAiKnowledgeDetailDto createDocument(long agentId, AdminAiKnowledgeCreateRequest request) {
         requireSite(agentId);
         AdminAiKnowledgeDocumentEntity entity = new AdminAiKnowledgeDocumentEntity();
-        entity.setAgentId(agentId);
+        // 文档 agent_id 已停写（Issue #209 UoW-1）：所有者经所属 base 的创建者推导。
         entity.setBaseId(resolveWritableBaseId(agentId, request.baseId()));
         entity.setTitle(request.title().trim());
         entity.setContent(request.content());
@@ -189,16 +203,21 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     public AdminAiKnowledgeDetailDto createUploadedDocument(
             long agentId, AdminAiKnowledgeCreateRequest request, AdminAiKnowledgeUploadMeta meta) {
         requireSite(agentId);
-        AdminAiKnowledgeDocumentEntity duplicate = knowledgeMapper.selectOne(
-                new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
-                        .eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId)
-                        .eq(AdminAiKnowledgeDocumentEntity::getSha256, meta.sha256()));
+        // 去重口径（Issue #209 UoW-1）：文档 agent_id 已停写，改按创建者空间集＋sha256 查——
+        // 文档行只存在于创建者空间，与旧 agent 全域去重等价；无自有空间时必无重复，跳过查询。
+        List<Long> createdBaseIds = createdBaseIds(agentId);
+        AdminAiKnowledgeDocumentEntity duplicate = createdBaseIds.isEmpty()
+                ? null
+                : knowledgeMapper.selectOne(
+                        new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
+                                .in(AdminAiKnowledgeDocumentEntity::getBaseId, createdBaseIds)
+                                .eq(AdminAiKnowledgeDocumentEntity::getSha256, meta.sha256()));
         if (duplicate != null) {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAiKnowledgeMessageKeys.FILE_DUPLICATE);
         }
 
         AdminAiKnowledgeDocumentEntity entity = new AdminAiKnowledgeDocumentEntity();
-        entity.setAgentId(agentId);
+        // 文档 agent_id 已停写（Issue #209 UoW-1）：所有者经所属 base 的创建者推导。
         entity.setBaseId(resolveWritableBaseId(agentId, request.baseId()));
         entity.setTitle(request.title().trim());
         entity.setContent(storedUploadContent(request.content(), meta));
@@ -249,7 +268,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             try {
                 AdminAiKnowledgeDocumentEntity current = knowledgeMapper.selectById(documentId);
                 if (current == null
-                        || !Objects.equals(current.getAgentId(), agentId)
+                        || !Objects.equals(ownerAgentId(current), agentId)
                         || !AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(current.getStatus())) {
                     return;
                 }
@@ -297,7 +316,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
         Map<Long, List<AdminAiKnowledgeDocumentEntity>> bySite = new LinkedHashMap<>();
         for (AdminAiKnowledgeDocumentEntity doc : documents) {
-            bySite.computeIfAbsent(doc.getAgentId(), key -> new ArrayList<>()).add(doc);
+            bySite.computeIfAbsent(ownerAgentId(doc), key -> new ArrayList<>()).add(doc);
         }
         List<AdminAiKnowledgeAgentStatDto> agentStats = new ArrayList<>();
         for (Map.Entry<Long, List<AdminAiKnowledgeDocumentEntity>> entry : bySite.entrySet()) {
@@ -328,13 +347,16 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     return right.compareTo(left);
                 })
                 .limit(10)
-                .map(doc -> new AdminAiKnowledgeFailureDto(
-                        doc.getId(),
-                        doc.getAgentId(),
-                        agentNames.get(doc.getAgentId()),
-                        doc.getTitle(),
-                        doc.getIndexError(),
-                        doc.getUpdatedAt()))
+                .map(doc -> {
+                    Long ownerId = ownerAgentId(doc);
+                    return new AdminAiKnowledgeFailureDto(
+                            doc.getId(),
+                            ownerId,
+                            agentNames.get(ownerId),
+                            doc.getTitle(),
+                            doc.getIndexError(),
+                            doc.getUpdatedAt());
+                })
                 .toList();
 
         // Issue #203：同步问题表让链接分区滞后与待删残留在总览可见（此前只存在于日志）。
@@ -396,7 +418,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         if (entity == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
-        if (!Long.valueOf(agentId).equals(entity.getAgentId())) {
+        if (!Long.valueOf(agentId).equals(ownerAgentId(entity))) {
             // 非所有者：仅当文档所在知识库共享给本站时可见
             if (entity.getBaseId() == null) {
                 throw new BusinessException(ErrorCode.NOT_FOUND);
@@ -419,14 +441,19 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         requireSite(agentId);
         List<AdminAiKnowledgeBaseEntity> visible = new ArrayList<>();
         visible.addAll(baseMapper.selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
-                .eq(AdminAiKnowledgeBaseEntity::getAgentId, agentId)
+                .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId)
                 .orderByAsc(AdminAiKnowledgeBaseEntity::getId)));
-        List<AdminAiKnowledgeBaseLinkEntity> links = linkMapper.selectList(
-                new LambdaQueryWrapper<AdminAiKnowledgeBaseLinkEntity>()
-                        .eq(AdminAiKnowledgeBaseLinkEntity::getAgentId, agentId));
-        for (AdminAiKnowledgeBaseLinkEntity link : links) {
-            AdminAiKnowledgeBaseEntity base = baseMapper.selectById(link.getBaseId());
-            if (base != null) {
+        // 订阅表含创建者行（V57 回填）：自建空间已在上一步列入，按 base id 去重避免重复出现
+        Set<Long> seenBaseIds = new LinkedHashSet<>();
+        for (AdminAiKnowledgeBaseEntity base : visible) {
+            seenBaseIds.add(base.getId());
+        }
+        List<AdminAiKnowledgeBaseSubscriptionEntity> subscriptions = subscriptionMapper.selectList(
+                new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                        .eq(AdminAiKnowledgeBaseSubscriptionEntity::getAgentId, agentId));
+        for (AdminAiKnowledgeBaseSubscriptionEntity subscription : subscriptions) {
+            AdminAiKnowledgeBaseEntity base = baseMapper.selectById(subscription.getBaseId());
+            if (base != null && seenBaseIds.add(base.getId())) {
                 visible.add(base);
             }
         }
@@ -439,10 +466,10 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         Map<Long, String> agentNames = agentNames();
         return baseMapper
                 .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
-                        .orderByAsc(AdminAiKnowledgeBaseEntity::getAgentId)
+                        .orderByAsc(AdminAiKnowledgeBaseEntity::getCreatedByAgentId)
                         .orderByAsc(AdminAiKnowledgeBaseEntity::getId))
                 .stream()
-                .map(base -> toBaseDto(base, base.getAgentId(), agentNames))
+                .map(base -> toBaseDto(base, base.getCreatedByAgentId(), agentNames))
                 .toList();
     }
 
@@ -451,11 +478,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     public AdminAiKnowledgeBaseDto createBase(long agentId, AdminAiKnowledgeBaseCreateRequest request) {
         requireSite(agentId);
         AdminAiKnowledgeBaseEntity base = new AdminAiKnowledgeBaseEntity();
-        base.setAgentId(agentId);
+        base.setCreatedByAgentId(agentId);
         base.setName(request.name().trim());
         base.setIsDefault(false);
         base.setStatus(AdminAiKnowledgeBaseEntity.STATUS_ACTIVE);
         baseMapper.insert(base);
+        insertCreatorSubscription(base);
         return toBaseDto(baseMapper.selectById(base.getId()), agentId, agentNames());
     }
 
@@ -474,9 +502,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             throw new BusinessException(
                     ErrorCode.CONFLICT.getCode(), AdminAiKnowledgeMessageKeys.BASE_NOT_EMPTY);
         }
-        // 该库文档为零，链接站点的分区里也没有它的文档，直接清链接行即可
-        linkMapper.delete(new LambdaQueryWrapper<AdminAiKnowledgeBaseLinkEntity>()
-                .eq(AdminAiKnowledgeBaseLinkEntity::getBaseId, baseId));
+        // 该库文档为零，订阅站点的分区里也没有它的文档，直接清订阅行即可
+        subscriptionMapper.delete(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                .eq(AdminAiKnowledgeBaseSubscriptionEntity::getBaseId, baseId));
         baseMapper.deleteById(baseId);
     }
 
@@ -489,22 +517,22 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     ErrorCode.NOT_FOUND.getCode(), AdminAiKnowledgeMessageKeys.BASE_NOT_FOUND);
         }
         requireSite(targetAgentId);
-        if (Long.valueOf(targetAgentId).equals(base.getAgentId())) {
+        if (Long.valueOf(targetAgentId).equals(base.getCreatedByAgentId())) {
             throw new BusinessException(
                     ErrorCode.BAD_REQUEST.getCode(), AdminAiKnowledgeMessageKeys.BASE_LINK_SELF);
         }
-        AdminAiKnowledgeBaseLinkEntity existing = linkMapper.selectOne(
-                new LambdaQueryWrapper<AdminAiKnowledgeBaseLinkEntity>()
-                        .eq(AdminAiKnowledgeBaseLinkEntity::getBaseId, baseId)
-                        .eq(AdminAiKnowledgeBaseLinkEntity::getAgentId, targetAgentId));
+        AdminAiKnowledgeBaseSubscriptionEntity existing = subscriptionMapper.selectOne(
+                new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                        .eq(AdminAiKnowledgeBaseSubscriptionEntity::getBaseId, baseId)
+                        .eq(AdminAiKnowledgeBaseSubscriptionEntity::getAgentId, targetAgentId));
         if (existing != null) {
             throw new BusinessException(
                     ErrorCode.CONFLICT.getCode(), AdminAiKnowledgeMessageKeys.BASE_ALREADY_LINKED);
         }
-        AdminAiKnowledgeBaseLinkEntity link = new AdminAiKnowledgeBaseLinkEntity();
-        link.setBaseId(baseId);
-        link.setAgentId(targetAgentId);
-        linkMapper.insert(link);
+        AdminAiKnowledgeBaseSubscriptionEntity subscription = new AdminAiKnowledgeBaseSubscriptionEntity();
+        subscription.setBaseId(baseId);
+        subscription.setAgentId(targetAgentId);
+        subscriptionMapper.insert(subscription);
         // 扇出：该库现存 ACTIVE 文档同步进目标站点分区（失败记日志并落同步问题行，Issue #203）
         for (AdminAiKnowledgeDocumentEntity document : activeDocumentsOfBase(baseId)) {
             try {
@@ -523,15 +551,15 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     @Override
     @Transactional
     public void unlinkBase(long baseId, long targetAgentId) {
-        AdminAiKnowledgeBaseLinkEntity existing = linkMapper.selectOne(
-                new LambdaQueryWrapper<AdminAiKnowledgeBaseLinkEntity>()
-                        .eq(AdminAiKnowledgeBaseLinkEntity::getBaseId, baseId)
-                        .eq(AdminAiKnowledgeBaseLinkEntity::getAgentId, targetAgentId));
+        AdminAiKnowledgeBaseSubscriptionEntity existing = subscriptionMapper.selectOne(
+                new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                        .eq(AdminAiKnowledgeBaseSubscriptionEntity::getBaseId, baseId)
+                        .eq(AdminAiKnowledgeBaseSubscriptionEntity::getAgentId, targetAgentId));
         if (existing == null) {
             throw new BusinessException(
                     ErrorCode.NOT_FOUND.getCode(), AdminAiKnowledgeMessageKeys.BASE_NOT_FOUND);
         }
-        linkMapper.deleteById(existing.getId());
+        subscriptionMapper.deleteById(existing.getId());
         for (AdminAiKnowledgeDocumentEntity document : activeDocumentsOfBase(baseId)) {
             try {
                 deleteFromPartition(targetAgentId, sourceId(document.getId()));
@@ -564,19 +592,21 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             AdminAiKnowledgeBaseEntity base, long viewerAgentId, Map<Long, String> agentNames) {
         long count = knowledgeMapper.selectCount(new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
                 .eq(AdminAiKnowledgeDocumentEntity::getBaseId, base.getId()));
-        List<Long> linkedAgentIds = linkMapper
-                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseLinkEntity>()
-                        .eq(AdminAiKnowledgeBaseLinkEntity::getBaseId, base.getId()))
+        // 订阅表含创建者行（V57 回填）：linkedAgentIds 沿用旧口径（仅其他订阅者），排除创建者本人
+        List<Long> linkedAgentIds = subscriptionMapper
+                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                        .eq(AdminAiKnowledgeBaseSubscriptionEntity::getBaseId, base.getId()))
                 .stream()
-                .map(AdminAiKnowledgeBaseLinkEntity::getAgentId)
+                .map(AdminAiKnowledgeBaseSubscriptionEntity::getAgentId)
+                .filter(agentId -> !Objects.equals(agentId, base.getCreatedByAgentId()))
                 .toList();
         return new AdminAiKnowledgeBaseDto(
                 base.getId(),
-                base.getAgentId(),
-                agentNames.get(base.getAgentId()),
+                base.getCreatedByAgentId(),
+                agentNames.get(base.getCreatedByAgentId()),
                 base.getName(),
                 Boolean.TRUE.equals(base.getIsDefault()),
-                Long.valueOf(viewerAgentId).equals(base.getAgentId()),
+                Long.valueOf(viewerAgentId).equals(base.getCreatedByAgentId()),
                 count,
                 linkedAgentIds,
                 base.getCreatedAt(),
@@ -590,23 +620,24 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
         AdminAiKnowledgeBaseEntity defaultBase = baseMapper.selectOne(
                 new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
-                        .eq(AdminAiKnowledgeBaseEntity::getAgentId, agentId)
+                        .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId)
                         .eq(AdminAiKnowledgeBaseEntity::getIsDefault, true));
         if (defaultBase != null) {
             return defaultBase.getId();
         }
         AdminAiKnowledgeBaseEntity created = new AdminAiKnowledgeBaseEntity();
-        created.setAgentId(agentId);
+        created.setCreatedByAgentId(agentId);
         created.setName("默认知识库");
         created.setIsDefault(true);
         created.setStatus(AdminAiKnowledgeBaseEntity.STATUS_ACTIVE);
         baseMapper.insert(created);
+        insertCreatorSubscription(created);
         return created.getId();
     }
 
     private AdminAiKnowledgeBaseEntity requireOwnedBase(long agentId, long baseId) {
         AdminAiKnowledgeBaseEntity base = baseMapper.selectById(baseId);
-        if (base == null || !Long.valueOf(agentId).equals(base.getAgentId())) {
+        if (base == null || !Long.valueOf(agentId).equals(base.getCreatedByAgentId())) {
             throw new BusinessException(
                     ErrorCode.NOT_FOUND.getCode(), AdminAiKnowledgeMessageKeys.BASE_NOT_FOUND);
         }
@@ -619,30 +650,63 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             throw new BusinessException(
                     ErrorCode.NOT_FOUND.getCode(), AdminAiKnowledgeMessageKeys.BASE_NOT_FOUND);
         }
-        if (Long.valueOf(agentId).equals(base.getAgentId())) {
+        if (Long.valueOf(agentId).equals(base.getCreatedByAgentId())) {
             return base;
         }
-        AdminAiKnowledgeBaseLinkEntity link = linkMapper.selectOne(
-                new LambdaQueryWrapper<AdminAiKnowledgeBaseLinkEntity>()
-                        .eq(AdminAiKnowledgeBaseLinkEntity::getBaseId, baseId)
-                        .eq(AdminAiKnowledgeBaseLinkEntity::getAgentId, agentId));
-        if (link == null) {
+        AdminAiKnowledgeBaseSubscriptionEntity subscription = subscriptionMapper.selectOne(
+                new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                        .eq(AdminAiKnowledgeBaseSubscriptionEntity::getBaseId, baseId)
+                        .eq(AdminAiKnowledgeBaseSubscriptionEntity::getAgentId, agentId));
+        if (subscription == null) {
             throw new BusinessException(
                     ErrorCode.NOT_FOUND.getCode(), AdminAiKnowledgeMessageKeys.BASE_NOT_FOUND);
         }
         return base;
     }
 
-    /** 文档的索引分区集合：所有者站点 + 该库被链接到的全部站点。 */
+    /**
+     * 文档的「所有者 agent」推导（Issue #209 UoW-1）：文档 agent_id 已停写，所有者一律经所属
+     * base 的创建者（createdByAgentId）推导；文档未挂 base 或 base 不存在时回退存量文档行上的
+     * agent_id（过渡期回退，待文档 agent_id 删列后随列一并移除）。
+     */
+    private Long ownerAgentId(AdminAiKnowledgeDocumentEntity entity) {
+        if (entity.getBaseId() != null) {
+            AdminAiKnowledgeBaseEntity base = baseMapper.selectById(entity.getBaseId());
+            if (base != null && base.getCreatedByAgentId() != null) {
+                return base.getCreatedByAgentId();
+            }
+        }
+        return entity.getAgentId();
+    }
+
+    /** 该 agent 创建的空间 id 集：文档行只存在于创建者空间，空间口径查询以此展开。 */
+    private List<Long> createdBaseIds(long agentId) {
+        return baseMapper
+                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
+                        .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId))
+                .stream()
+                .map(AdminAiKnowledgeBaseEntity::getId)
+                .toList();
+    }
+
+    /** 新建空间同步落创建者订阅行，与 V57 存量回填口径一致（DTO 的 linkedAgentIds 排除创建者，前台无感）。 */
+    private void insertCreatorSubscription(AdminAiKnowledgeBaseEntity base) {
+        AdminAiKnowledgeBaseSubscriptionEntity subscription = new AdminAiKnowledgeBaseSubscriptionEntity();
+        subscription.setBaseId(base.getId());
+        subscription.setAgentId(base.getCreatedByAgentId());
+        subscriptionMapper.insert(subscription);
+    }
+
+    /** 文档的索引分区集合：所有者站点（经 base 创建者推导） + 订阅该库的全部站点。 */
     private List<Long> partitionAgentIds(AdminAiKnowledgeDocumentEntity entity) {
         List<Long> targets = new ArrayList<>();
-        targets.add(entity.getAgentId());
+        targets.add(ownerAgentId(entity));
         if (entity.getBaseId() != null) {
-            for (AdminAiKnowledgeBaseLinkEntity link :
-                    linkMapper.selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseLinkEntity>()
-                            .eq(AdminAiKnowledgeBaseLinkEntity::getBaseId, entity.getBaseId()))) {
-                if (!targets.contains(link.getAgentId())) {
-                    targets.add(link.getAgentId());
+            for (AdminAiKnowledgeBaseSubscriptionEntity subscription :
+                    subscriptionMapper.selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                            .eq(AdminAiKnowledgeBaseSubscriptionEntity::getBaseId, entity.getBaseId()))) {
+                if (!targets.contains(subscription.getAgentId())) {
+                    targets.add(subscription.getAgentId());
                 }
             }
         }
@@ -718,9 +782,22 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     @Override
     @Transactional
     public void softDeleteByAgentId(long agentId) {
-        List<AdminAiKnowledgeDocumentEntity> documents = knowledgeMapper.selectList(
-                new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
-                        .eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId));
+        // 文档经 base 创建者推导归属（Issue #209 UoW-1）：先取该 agent 创建的全部空间，
+        // 再按空间取文档；文档 agent_id 已停写，or 条件兜住未挂 base 的历史行。
+        List<AdminAiKnowledgeBaseEntity> bases = baseMapper.selectList(
+                new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
+                        .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId));
+        List<Long> ownedBaseIds = bases.stream().map(AdminAiKnowledgeBaseEntity::getId).toList();
+        LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity> documentWrapper =
+                new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>();
+        if (ownedBaseIds.isEmpty()) {
+            documentWrapper.eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId);
+        } else {
+            documentWrapper.and(w -> w.in(AdminAiKnowledgeDocumentEntity::getBaseId, ownedBaseIds)
+                    .or()
+                    .eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId));
+        }
+        List<AdminAiKnowledgeDocumentEntity> documents = knowledgeMapper.selectList(documentWrapper);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         for (AdminAiKnowledgeDocumentEntity document : documents) {
             document.setDeletedAt(now);
@@ -728,19 +805,16 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             knowledgeMapper.deleteById(document.getId());
             removeFromAllPartitions(document);
         }
-        // 站点删除时，其名下知识库与共享链接一并清理（链接行的目标站点分区已随文档移除处理）
-        List<AdminAiKnowledgeBaseEntity> bases = baseMapper.selectList(
-                new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
-                        .eq(AdminAiKnowledgeBaseEntity::getAgentId, agentId));
+        // 站点删除时，其名下知识库与订阅行一并清理（订阅行的目标站点分区已随文档移除处理）
         for (AdminAiKnowledgeBaseEntity base : bases) {
-            linkMapper.delete(new LambdaQueryWrapper<AdminAiKnowledgeBaseLinkEntity>()
-                    .eq(AdminAiKnowledgeBaseLinkEntity::getBaseId, base.getId()));
+            subscriptionMapper.delete(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                    .eq(AdminAiKnowledgeBaseSubscriptionEntity::getBaseId, base.getId()));
             base.setDeletedAt(now);
             baseMapper.updateById(base);
             baseMapper.deleteById(base.getId());
         }
-        linkMapper.delete(new LambdaQueryWrapper<AdminAiKnowledgeBaseLinkEntity>()
-                .eq(AdminAiKnowledgeBaseLinkEntity::getAgentId, agentId));
+        subscriptionMapper.delete(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                .eq(AdminAiKnowledgeBaseSubscriptionEntity::getAgentId, agentId));
     }
 
     @Override
@@ -751,10 +825,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                         .orderByAsc(AdminAiKnowledgeDocumentEntity::getId));
         Map<Long, List<AdminAiKnowledgeDocumentEntity>> documentsBySite = new LinkedHashMap<>();
         for (AdminAiKnowledgeDocumentEntity document : documents) {
-            if (document.getAgentId() == null || document.getId() == null) {
+            // 分组键为所有者 agent（经 base 创建者推导，Issue #209 UoW-1；文档 agent_id 已停写）
+            Long ownerId = ownerAgentId(document);
+            if (ownerId == null || document.getId() == null) {
                 continue;
             }
-            documentsBySite.computeIfAbsent(document.getAgentId(), ignored -> new ArrayList<>()).add(document);
+            documentsBySite.computeIfAbsent(ownerId, ignored -> new ArrayList<>()).add(document);
         }
         if (documentsBySite.isEmpty()) {
             return new AdminAiKnowledgeReembedResultDto(0, 0, null, false, List.of(), REEMBED_SUCCESS);
@@ -830,13 +906,13 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 } catch (RuntimeException ex) {
                     recordIndexOutcome(document, AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED, indexError(ex));
                     failed.add(new AdminAiKnowledgeReembedFailureDto(
-                            document.getAgentId(), sourceId(document.getId()), indexError(ex)));
+                            agent.getKey(), sourceId(document.getId()), indexError(ex)));
                     continue;
                 }
                 // 共享扇出：链接站点分区用各自的入口规格重嵌，失败计入 failed（以目标站点标注）
                 // 并落同步问题行待重试（Issue #203）
                 for (Long target : partitionAgentIds(document)) {
-                    if (target.equals(document.getAgentId())) {
+                    if (target.equals(agent.getKey())) {
                         continue;
                     }
                     try {
@@ -959,8 +1035,10 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             AdminAiKnowledgeDocumentEntity entity, boolean allowFillMissing, byte[] originalBytes) {
         List<Long> targets = partitionAgentIds(entity);
         DerivedIndexParts parts = derivedIndexParts(entity, originalBytes);
+        // 所有者经 base 创建者推导（Issue #209 UoW-1；文档 agent_id 已停写）
+        Long ownerId = ownerAgentId(entity);
         if (AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(entity.getStatus())) {
-            List<AgentModelSelection> ownerClasses = registeredClasses(entity.getAgentId());
+            List<AgentModelSelection> ownerClasses = registeredClasses(ownerId);
             List<AgentModelSelection> toWrite = classesToWrite(entity, ownerClasses, allowFillMissing);
             // Issue #202 UoW-2：只有 toWrite 就是完整登记类集时，Python 才可按差集清理
             // 已注销类的残留行；fill-missing 子集补写（真子集）时 complete=false，不清理。
@@ -969,12 +1047,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     AgentEmbeddingClassUtils.canonical(ownerClasses));
             RuntimeException ownerFailure = null;
             try {
-                upsertDerivedIndexForSite(entity, entity.getAgentId(), toWrite, parts, classesComplete);
+                upsertDerivedIndexForSite(entity, ownerId, toWrite, parts, classesComplete);
             } catch (RuntimeException ex) {
                 ownerFailure = ex;
             }
             for (Long target : targets) {
-                if (target.equals(entity.getAgentId())) {
+                if (target.equals(ownerId)) {
                     continue;
                 }
                 try {
@@ -983,7 +1061,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                     log.warn(
                             "KB fan-out sync failed (ownerAgentId={}, targetAgentId={}, documentId={});"
                                     + " linked partition may lag",
-                            entity.getAgentId(),
+                            ownerId,
                             target,
                             entity.getId(),
                             ex);
@@ -995,7 +1073,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             } else {
                 log.warn(
                         "KB derived index sync failed (agentId={}, documentId={}); index may lag",
-                        entity.getAgentId(),
+                        ownerId,
                         entity.getId(),
                         ownerFailure);
                 recordIndexOutcome(
@@ -1133,7 +1211,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         if (!AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(entity.getIndexStatus())) {
             return false;
         }
-        List<AgentModelSelection> current = selectionCache.computeIfAbsent(entity.getAgentId(), this::registeredClasses);
+        List<AgentModelSelection> current =
+                selectionCache.computeIfAbsent(ownerAgentId(entity), this::registeredClasses);
         return !AgentEmbeddingClassUtils.matchesStored(entity.getIndexEmbeddingSpec(), current);
     }
 
@@ -1341,9 +1420,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     private void upsertDerivedIndex(AdminAiKnowledgeDocumentEntity entity, List<AgentModelSelection> classes) {
-        // reembedAll 传入的是该站完整登记类集，complete=true。
+        // reembedAll 传入的是该站完整登记类集，complete=true。目标分区为所有者（经 base 创建者推导）。
         agentClient.upsertRetrievalDocument(retrievalDocument(
-                entity, entity.getAgentId(), classes, derivedIndexParts(entity, null), true));
+                entity, ownerAgentId(entity), classes, derivedIndexParts(entity, null), true));
     }
 
     /**
@@ -1500,8 +1579,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
     private AdminAiKnowledgeDocumentEntity requireDocumentInSite(long agentId, long documentId) {
         AdminAiKnowledgeDocumentEntity document = knowledgeMapper.selectById(documentId);
-        // 跨站或不存在统一 404，避免泄露归属
-        if (document == null || !Long.valueOf(agentId).equals(document.getAgentId())) {
+        // 跨站或不存在统一 404，避免泄露归属；归属经 base 创建者推导（文档 agent_id 已停写）
+        if (document == null || !Long.valueOf(agentId).equals(ownerAgentId(document))) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         return document;
@@ -1513,13 +1592,15 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
     }
 
-    private static AdminAiKnowledgeListItemDto toListItem(
+    private AdminAiKnowledgeListItemDto toListItem(
             AdminAiKnowledgeDocumentEntity entity, long viewerAgentId, boolean indexStale) {
+        // DTO 的 agentId/owned 沿用所有者口径：所有者经 base 创建者推导（文档 agent_id 已停写）
+        Long ownerId = ownerAgentId(entity);
         return new AdminAiKnowledgeListItemDto(
                 entity.getId(),
-                entity.getAgentId(),
+                ownerId,
                 entity.getBaseId(),
-                Long.valueOf(viewerAgentId).equals(entity.getAgentId()),
+                Long.valueOf(viewerAgentId).equals(ownerId),
                 entity.getTitle(),
                 entity.getStatus(),
                 entity.getIndexStatus(),
@@ -1537,10 +1618,10 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 formulaCount(entity));
     }
 
-    private static AdminAiKnowledgeDetailDto toDetail(AdminAiKnowledgeDocumentEntity entity, boolean indexStale) {
+    private AdminAiKnowledgeDetailDto toDetail(AdminAiKnowledgeDocumentEntity entity, boolean indexStale) {
         return new AdminAiKnowledgeDetailDto(
                 entity.getId(),
-                entity.getAgentId(),
+                ownerAgentId(entity),
                 entity.getBaseId(),
                 true,
                 entity.getTitle(),

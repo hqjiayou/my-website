@@ -73,7 +73,7 @@ class AdminAiKnowledgeServiceImplTest {
     private com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper baseMapper;
 
     @Mock
-    private com.mywebsite.admin.mapper.AdminAiKnowledgeBaseLinkMapper linkMapper;
+    private com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper;
 
     @Mock
     private com.mywebsite.admin.mapper.AdminAiKnowledgeRetrievalSyncIssueMapper syncIssueMapper;
@@ -96,7 +96,7 @@ class AdminAiKnowledgeServiceImplTest {
                 objectStorageService,
                 new com.mywebsite.infra.properties.StorageProperties(),
                 baseMapper,
-                linkMapper,
+                subscriptionMapper,
                 adminAiStreamExecutor,
                 syncIssueMapper);
     }
@@ -284,12 +284,12 @@ class AdminAiKnowledgeServiceImplTest {
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         base.setId(5L);
-        base.setAgentId(1L);
+        base.setCreatedByAgentId(1L);
         when(baseMapper.selectById(5L)).thenReturn(base);
         com.mywebsite.admin.entity.AdminAgentEntity targetSite = new com.mywebsite.admin.entity.AdminAgentEntity();
         targetSite.setId(2L);
         when(adminAgentMapper.selectById(2L)).thenReturn(targetSite);
-        when(linkMapper.selectOne(any())).thenReturn(null);
+        when(subscriptionMapper.selectOne(any())).thenReturn(null);
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(doc));
         when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of());
         doThrow(new RuntimeException("python down")).when(agentClient).upsertRetrievalDocument(any());
@@ -306,10 +306,10 @@ class AdminAiKnowledgeServiceImplTest {
 
     @Test
     void unlinkBaseDeleteFailureRecordsTombstone() {
-        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
-                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity();
         link.setId(7L);
-        when(linkMapper.selectOne(any())).thenReturn(link);
+        when(subscriptionMapper.selectOne(any())).thenReturn(link);
         when(knowledgeMapper.selectList(any()))
                 .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
         doThrow(new RuntimeException("python down"))
@@ -386,11 +386,11 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         doc.setBaseId(5L);
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
-                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity();
         link.setBaseId(5L);
         link.setAgentId(2L);
-        when(linkMapper.selectList(any())).thenReturn(List.of(link));
+        when(subscriptionMapper.selectList(any())).thenReturn(List.of(link));
 
         service.retryRetrievalSyncIssues();
 
@@ -404,12 +404,12 @@ class AdminAiKnowledgeServiceImplTest {
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         base.setId(5L);
-        base.setAgentId(1L);
+        base.setCreatedByAgentId(1L);
         when(baseMapper.selectById(5L)).thenReturn(base);
         com.mywebsite.admin.entity.AdminAgentEntity targetSite = new com.mywebsite.admin.entity.AdminAgentEntity();
         targetSite.setId(2L);
         when(adminAgentMapper.selectById(2L)).thenReturn(targetSite);
-        when(linkMapper.selectOne(any())).thenReturn(null);
+        when(subscriptionMapper.selectOne(any())).thenReturn(null);
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(doc));
         when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of());
 
@@ -421,10 +421,10 @@ class AdminAiKnowledgeServiceImplTest {
 
     @Test
     void unlinkBaseSuccessClearsDeleteAndUpsertIssues() {
-        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
-                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity();
         link.setId(7L);
-        when(linkMapper.selectOne(any())).thenReturn(link);
+        when(subscriptionMapper.selectOne(any())).thenReturn(link);
         when(knowledgeMapper.selectList(any()))
                 .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
 
@@ -484,12 +484,12 @@ class AdminAiKnowledgeServiceImplTest {
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         base.setId(9L);
-        base.setAgentId(1L);
+        base.setCreatedByAgentId(1L);
         when(baseMapper.selectById(9L)).thenReturn(base);
         com.mywebsite.admin.entity.AdminAgentEntity target = new com.mywebsite.admin.entity.AdminAgentEntity();
         target.setId(2L);
         when(adminAgentMapper.selectById(2L)).thenReturn(target);
-        when(linkMapper.selectOne(any())).thenReturn(null);
+        when(subscriptionMapper.selectOne(any())).thenReturn(null);
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         doc.setBaseId(9L);
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(doc));
@@ -497,7 +497,7 @@ class AdminAiKnowledgeServiceImplTest {
 
         service.linkBase(9L, 2L);
 
-        verify(linkMapper).insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity.class));
+        verify(subscriptionMapper).insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity.class));
         var captor = org.mockito.ArgumentCaptor.forClass(AgentRetrievalDocument.class);
         verify(agentClient).upsertRetrievalDocument(captor.capture());
         assertThat(captor.getValue().agentId()).isEqualTo("2");
@@ -508,7 +508,7 @@ class AdminAiKnowledgeServiceImplTest {
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity defaultBase =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         defaultBase.setId(9L);
-        defaultBase.setAgentId(1L);
+        defaultBase.setCreatedByAgentId(1L);
         defaultBase.setIsDefault(true);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(baseMapper.selectOne(any())).thenReturn(defaultBase);
@@ -521,11 +521,11 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity saved = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         saved.setBaseId(9L);
         when(knowledgeMapper.selectById(any())).thenReturn(saved);
-        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
-                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity();
         link.setBaseId(9L);
         link.setAgentId(3L);
-        when(linkMapper.selectList(any())).thenReturn(List.of(link));
+        when(subscriptionMapper.selectList(any())).thenReturn(List.of(link));
         when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
         when(modelEntryService.embeddingClasses(3L)).thenReturn(List.of(selection("openai:embed-a")));
         when(knowledgeMapper.update(any(), any())).thenReturn(1);
@@ -542,11 +542,215 @@ class AdminAiKnowledgeServiceImplTest {
     }
 
     @Test
+    void createDocumentStopsWritingDocumentAgentIdAndDerivesOwnerFromBase() {
+        // Issue #209 UoW-1：建档停写 document.agentId；所有者经 base 创建者推导（DTO/分区口径不变）
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity defaultBase =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        defaultBase.setId(9L);
+        defaultBase.setCreatedByAgentId(1L);
+        defaultBase.setIsDefault(true);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(baseMapper.selectOne(any())).thenReturn(defaultBase);
+        when(baseMapper.selectById(9L)).thenReturn(defaultBase);
+        when(knowledgeMapper.insert(any(AdminAiKnowledgeDocumentEntity.class)))
+                .thenAnswer(invocation -> {
+                    AdminAiKnowledgeDocumentEntity inserted = invocation.getArgument(0);
+                    inserted.setId(11L);
+                    return 1;
+                });
+        AdminAiKnowledgeDocumentEntity saved = new AdminAiKnowledgeDocumentEntity();
+        saved.setId(11L);
+        saved.setBaseId(9L);
+        saved.setTitle("t");
+        saved.setContent("c");
+        saved.setStatus(AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        when(knowledgeMapper.selectById(any())).thenReturn(saved);
+        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(knowledgeMapper.update(any(), any())).thenReturn(1);
+
+        var detail = service.createDocument(
+                1L,
+                new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest("t", "c"));
+
+        ArgumentCaptor<AdminAiKnowledgeDocumentEntity> insertedCaptor =
+                ArgumentCaptor.forClass(AdminAiKnowledgeDocumentEntity.class);
+        verify(knowledgeMapper).insert(insertedCaptor.capture());
+        assertThat(insertedCaptor.getValue().getAgentId()).isNull();
+        assertThat(insertedCaptor.getValue().getBaseId()).isEqualTo(9L);
+        assertThat(detail.agentId()).isEqualTo(1L);
+        assertThat(detail.owned()).isTrue();
+        var captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getValue().agentId()).isEqualTo("1");
+    }
+
+    @Test
+    void ownerIsDerivedFromBaseCreatorNotDocumentAgentId() {
+        // base 在时一律以创建者为准：存量行 agent_id 与创建者不一致也不认（回退仅限 base 缺失）
+        AdminAiKnowledgeDocumentEntity doc = document(999L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setBaseId(5L);
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(5L);
+        base.setCreatedByAgentId(1L);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(baseMapper.selectById(5L)).thenReturn(base);
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+
+        var detail = service.reindexDocument(1L, 11L);
+
+        assertThat(detail.agentId()).isEqualTo(1L);
+        var captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getValue().agentId()).isEqualTo("1");
+    }
+
+    private static com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity subscription(
+            long baseId, long agentId) {
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity subscription =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity();
+        subscription.setBaseId(baseId);
+        subscription.setAgentId(agentId);
+        return subscription;
+    }
+
+    @Test
+    void baseDtoLinkedAgentIdsExcludeCreatorSubscriptionRow() {
+        // V57 回填后订阅表含创建者行：DTO 的 linkedAgentIds 沿用旧口径（仅其他订阅者），须排除创建者本人
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(5L);
+        base.setCreatedByAgentId(1L);
+        base.setName("kb");
+        when(baseMapper.selectList(any())).thenReturn(List.of(base));
+        when(knowledgeMapper.selectCount(any())).thenReturn(0L);
+        when(subscriptionMapper.selectList(any()))
+                .thenReturn(List.of(subscription(5L, 1L), subscription(5L, 3L)));
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of());
+
+        var dtos = service.listAllBases();
+
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.getFirst().agentId()).isEqualTo(1L);
+        assertThat(dtos.getFirst().linkedAgentIds()).containsExactly(3L);
+    }
+
+    @Test
+    void createUploadedDocumentRejectsDuplicateShaWithinCreatorSpaces() {
+        // Issue #209 UoW-1 补修：文档 agent_id 停写后，上传去重改按创建者空间集＋sha256——
+        // 既有文档 agentId=null 也须命中同 sha 并抛 CONFLICT，不得再按 document.agentId 查。
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(9L);
+        base.setCreatedByAgentId(1L);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(baseMapper.selectList(any())).thenReturn(List.of(base));
+        AdminAiKnowledgeDocumentEntity existing = new AdminAiKnowledgeDocumentEntity();
+        existing.setId(5L);
+        existing.setBaseId(9L);
+        existing.setSha256("sha-dup");
+        assertThat(existing.getAgentId()).isNull();
+        when(knowledgeMapper.selectOne(any())).thenReturn(existing);
+        var meta = new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta(
+                "a.md", "md", "text/markdown", 3L, "sha-dup", "abc".getBytes(StandardCharsets.UTF_8));
+        var request = new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest(
+                "t", "abc", null);
+
+        assertThatThrownBy(() -> service.createUploadedDocument(1L, request, meta))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode()));
+        verify(knowledgeMapper, never()).insert(any(AdminAiKnowledgeDocumentEntity.class));
+    }
+
+    @Test
+    void createUploadedDocumentSkipsDuplicateQueryWhenAgentCreatesNoBase() {
+        // 无自有空间时必无重复：跳过文档去重查询，未指定库时懒创建默认库并同步落创建者订阅行
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(baseMapper.selectList(any())).thenReturn(List.of());
+        when(baseMapper.selectOne(any())).thenReturn(null);
+        when(baseMapper.insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity.class)))
+                .thenAnswer(invocation -> {
+                    com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity inserted = invocation.getArgument(0);
+                    inserted.setId(9L);
+                    return 1;
+                });
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity createdBase =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        createdBase.setId(9L);
+        createdBase.setCreatedByAgentId(1L);
+        createdBase.setIsDefault(true);
+        when(baseMapper.selectById(9L)).thenReturn(createdBase);
+        when(knowledgeMapper.insert(any(AdminAiKnowledgeDocumentEntity.class)))
+                .thenAnswer(invocation -> {
+                    AdminAiKnowledgeDocumentEntity inserted = invocation.getArgument(0);
+                    inserted.setId(77L);
+                    return 1;
+                });
+        AdminAiKnowledgeDocumentEntity saved = new AdminAiKnowledgeDocumentEntity();
+        saved.setId(77L);
+        saved.setBaseId(9L);
+        saved.setTitle("t");
+        saved.setContent("abc");
+        saved.setStatus(AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        saved.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING);
+        when(knowledgeMapper.selectById(77L)).thenReturn(saved);
+        var meta = new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta(
+                "a.md", "md", "text/markdown", 3L, "sha-new", "abc".getBytes(StandardCharsets.UTF_8));
+        var request = new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest(
+                "t", "abc", null);
+
+        var detail = service.createUploadedDocument(1L, request, meta);
+
+        assertThat(detail.id()).isEqualTo(77L);
+        verify(knowledgeMapper, never()).selectOne(any());
+        ArgumentCaptor<com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity> captor =
+                ArgumentCaptor.forClass(com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity.class);
+        verify(subscriptionMapper).insert(captor.capture());
+        assertThat(captor.getValue().getBaseId()).isEqualTo(9L);
+        assertThat(captor.getValue().getAgentId()).isEqualTo(1L);
+    }
+
+    @Test
+    void createBaseInsertsCreatorSubscriptionRowExcludedFromLinkedAgentIds() {
+        // Issue #209 UoW-1 补修：新建空间同步落创建者订阅行（与 V57 回填同口径）；
+        // DTO 的 linkedAgentIds 仍排除创建者本人，前台无感。
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of());
+        when(baseMapper.insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity.class)))
+                .thenAnswer(invocation -> {
+                    com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity inserted = invocation.getArgument(0);
+                    inserted.setId(9L);
+                    return 1;
+                });
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity created =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        created.setId(9L);
+        created.setCreatedByAgentId(1L);
+        created.setName("kb");
+        when(baseMapper.selectById(9L)).thenReturn(created);
+        when(knowledgeMapper.selectCount(any())).thenReturn(0L);
+        when(subscriptionMapper.selectList(any())).thenReturn(List.of(subscription(9L, 1L)));
+
+        var dto = service.createBase(
+                1L, new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeBaseCreateRequest("kb"));
+
+        ArgumentCaptor<com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity> captor =
+                ArgumentCaptor.forClass(com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity.class);
+        verify(subscriptionMapper).insert(captor.capture());
+        assertThat(captor.getValue().getBaseId()).isEqualTo(9L);
+        assertThat(captor.getValue().getAgentId()).isEqualTo(1L);
+        assertThat(dto.agentId()).isEqualTo(1L);
+        assertThat(dto.linkedAgentIds()).isEmpty();
+    }
+
+    @Test
     void deleteBaseRejectsNonEmptyBase() {
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         base.setId(9L);
-        base.setAgentId(1L);
+        base.setCreatedByAgentId(1L);
         base.setIsDefault(false);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(baseMapper.selectById(9L)).thenReturn(base);

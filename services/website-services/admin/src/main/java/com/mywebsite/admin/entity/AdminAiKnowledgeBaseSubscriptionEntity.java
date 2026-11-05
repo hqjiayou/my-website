@@ -6,9 +6,9 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import java.io.Serializable;
 import java.time.OffsetDateTime;
 
-/** 知识库共享链接（纯关系行，删除即真删，不走软删）。 */
-@TableName("agent_ai_knowledge_base_link")
-public class AdminAiKnowledgeBaseLinkEntity implements Serializable {
+/** 知识空间订阅（纯关系行，删除即真删，不走软删）：一行表示一个 agent 订阅了一个知识空间。 */
+@TableName("agent_ai_knowledge_base_subscription")
+public class AdminAiKnowledgeBaseSubscriptionEntity implements Serializable {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;

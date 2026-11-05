@@ -11,8 +11,10 @@ import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpReadyDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionUpdateRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
+import com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
 import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
+import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminAiPromptProfileMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
@@ -71,6 +73,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     private final AdminAgentMapper adminAgentMapper;
     private final AdminAiPromptProfileMapper promptProfileMapper;
     private final AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper;
+    private final AdminAiKnowledgeBaseMapper knowledgeBaseMapper;
     private final AdminAiModelEntryService modelEntryService;
     private final LocalizedMessageService localizedMessageService;
     private final ExecutorService adminAiStreamExecutor;
@@ -86,6 +89,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             AdminAgentMapper adminAgentMapper,
             AdminAiPromptProfileMapper promptProfileMapper,
             AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper,
+            AdminAiKnowledgeBaseMapper knowledgeBaseMapper,
             AdminAiModelEntryService modelEntryService,
             LocalizedMessageService localizedMessageService,
             ExecutorService adminAiStreamExecutor,
@@ -99,6 +103,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         this.adminAgentMapper = adminAgentMapper;
         this.promptProfileMapper = promptProfileMapper;
         this.knowledgeDocumentMapper = knowledgeDocumentMapper;
+        this.knowledgeBaseMapper = knowledgeBaseMapper;
         this.modelEntryService = modelEntryService;
         this.localizedMessageService = localizedMessageService;
         this.adminAiStreamExecutor = adminAiStreamExecutor;
@@ -355,9 +360,20 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             return null;
         }
         String needle = trimmed;
+        // 文档 agent_id 已停写（Issue #209 UoW-1）：按该 agent 创建的空间集查文档——
+        // 只含自有空间、不含订阅文档，与旧 agent_id 口径等价；无自有空间时无片段。
+        List<Long> ownBaseIds = knowledgeBaseMapper
+                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
+                        .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId))
+                .stream()
+                .map(AdminAiKnowledgeBaseEntity::getId)
+                .toList();
+        if (ownBaseIds.isEmpty()) {
+            return null;
+        }
         List<String> snippets = knowledgeDocumentMapper
                 .selectList(new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
-                        .eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId)
+                        .in(AdminAiKnowledgeDocumentEntity::getBaseId, ownBaseIds)
                         .eq(AdminAiKnowledgeDocumentEntity::getStatus, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)
                         .and(wrapper -> wrapper
                                 .like(AdminAiKnowledgeDocumentEntity::getTitle, needle)
