@@ -1,20 +1,5 @@
 /** 对齐 Admin AI Prompt / KB / Conversation / Preview DTO（FORCE REAL）。 */
 
-export interface AiPromptProfile {
-  id: number | null
-  agentId: number
-  systemPrompt: string | null
-  temperature: number | null
-  version: number | null
-  updatedAt: string | null
-}
-
-export interface UpdateAiPromptProfileInput {
-  systemPrompt?: string | null
-  temperature?: number | null
-  version?: number | null
-}
-
 /** proxy-services 进程状态。不含管理密钥与客户端 key。 */
 export interface ProxyServicesStatus {
   name: string

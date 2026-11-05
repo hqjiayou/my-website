@@ -117,9 +117,9 @@ export function AgentOverviewPage() {
     queryFn: () => aiApi.listPreviewSkills(site.id),
     enabled: canPrompt && runtimeQuery.data?.reachable === true,
   })
-  const promptQuery = useQuery({
-    queryKey: ['sites', site.id, 'ai', 'prompt'],
-    queryFn: () => aiApi.getPromptProfile(site.id),
+  const presetsQuery = useQuery({
+    queryKey: ['ai', 'config-presets'],
+    queryFn: () => aiApi.listConfigPresets(),
     enabled: canPrompt,
   })
   const knowledgeQuery = useQuery({
@@ -167,21 +167,31 @@ export function AgentOverviewPage() {
     <p className="text-sm font-semibold leading-5 text-admin">{modelValue}</p>
   )
 
-  const promptConfigured = promptQuery.data?.id != null
-  const promptValue = !canPrompt || promptQuery.isPending
+  // #213 UoW-D：Prompt 卡改读配置预设引用（旧 prompt-profile 端点已退役）。
+  const promptConfigured = site.configPresetId != null
+  const currentPreset =
+    site.configPresetId == null
+      ? undefined
+      : (presetsQuery.data ?? []).find((preset) => preset.id === site.configPresetId)
+  const promptValue = !canPrompt || presetsQuery.isPending
     ? unavailable
     : promptConfigured
       ? t('agentOverview.prompt.configured')
       : t('agentOverview.prompt.notConfigured')
   const promptBadge =
-    canPrompt && !promptQuery.isPending ? (
+    canPrompt && !presetsQuery.isPending ? (
       <StatusTag status={promptConfigured ? SITE_STATUS.ACTIVE : SITE_STATUS.DISABLED} label={promptValue} />
     ) : undefined
-  const promptSummary = promptQuery.data?.systemPrompt?.trim() || null
-  const promptValueNode = promptSummary ? (
-    <blockquote className="line-clamp-2 border-l-[3px] border-[rgb(var(--primary)/.35)] pl-2.5 text-xs leading-relaxed text-admin-muted">
-      {promptSummary}
-    </blockquote>
+  const promptSummary = currentPreset?.systemPrompt?.trim() || null
+  const promptValueNode = promptConfigured ? (
+    <div className="space-y-1.5">
+      <p className="text-sm font-semibold leading-5 text-admin">{currentPreset?.name ?? promptValue}</p>
+      {promptSummary ? (
+        <blockquote className="line-clamp-2 border-l-[3px] border-[rgb(var(--primary)/.35)] pl-2.5 text-xs leading-relaxed text-admin-muted">
+          {promptSummary}
+        </blockquote>
+      ) : null}
+    </div>
   ) : (
     <p className="text-sm font-semibold leading-5 text-admin">{promptValue}</p>
   )

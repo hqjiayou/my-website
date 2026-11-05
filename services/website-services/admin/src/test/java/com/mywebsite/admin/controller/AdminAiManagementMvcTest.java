@@ -119,29 +119,6 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     }
 
     @Test
-    void promptProfileGetEmptyThenUpsert() throws Exception {
-        String token = tokenFor(500L);
-        long agentId = createSite(token);
-
-        mockMvc.perform(get("/api/admin/agents/" + agentId + "/ai/prompt-profile")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").doesNotExist())
-                .andExpect(jsonPath("$.data.agentId").value((int) agentId));
-
-        ObjectNode body = MAPPER.createObjectNode();
-        body.put("systemPrompt", "You are a shop assistant.");
-        body.put("temperature", 0.2);
-        mockMvc.perform(put("/api/admin/agents/" + agentId + "/ai/prompt-profile")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(body)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.systemPrompt").value("You are a shop assistant."))
-                .andExpect(jsonPath("$.data.temperature").value(0.2));
-    }
-
-    @Test
     void knowledgeCrudAndCrossSite404() throws Exception {
         String token = tokenFor(500L);
         long agentA = createSite(token);
@@ -170,14 +147,12 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         String token = tokenFor(500L);
         long agentId = createSite(token);
 
-        ObjectNode prompt = MAPPER.createObjectNode();
-        prompt.put("systemPrompt", "shop");
-        prompt.put("temperature", 0.2);
-        mockMvc.perform(put("/api/admin/agents/" + agentId + "/ai/prompt-profile")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(prompt)))
-                .andExpect(status().isOk());
+        // 旧 prompt-profile 管理端点已退役（Issue #213 UoW-D）：遗留行改经 Mapper 直插造数。
+        AdminAiPromptProfileEntity legacyProfile = new AdminAiPromptProfileEntity();
+        legacyProfile.setAgentId(agentId);
+        legacyProfile.setSystemPrompt("shop");
+        legacyProfile.setTemperature(new java.math.BigDecimal("0.2"));
+        promptProfileMapper.insert(legacyProfile);
 
         // Issue #211：给该 agent 挂一个共享配置预设，删 agent 后预设须存活。
         AdminAiConfigPresetEntity preset = new AdminAiConfigPresetEntity();

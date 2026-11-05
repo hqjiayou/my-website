@@ -5,15 +5,15 @@ import { useOutletContext } from 'react-router-dom'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
+import { AgentAiConfigPresetPanel } from './agentAiConfigPresetPanel'
 import { AgentAiConversationsPanel } from './agentAiConversationsPanel'
 import { AgentAiKnowledgePanel } from './agentAiKnowledgePanel'
 import { AgentAiPreviewChat } from './agentAiPreviewChat'
-import { AgentAiPromptPanel } from './agentAiPromptPanel'
 import { AgentAiRuntimePanel } from './agentAiRuntimePanel'
 import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
 
-/** 需要占满视口剩余高度的面板（预览 / 对话记录 / Prompt 编辑）。 */
-const FILL_HEIGHT_PANELS = new Set(['agentPreview', 'agentConversations', 'agentPrompt', 'agentKnowledge'])
+/** 需要占满视口剩余高度的面板（预览 / 对话记录）。 */
+const FILL_HEIGHT_PANELS = new Set(['agentPreview', 'agentConversations', 'agentKnowledge'])
 
 /**
  * Agent 一级页：原 AgentAiPage 的五个子页签提升为工作台一级路由后的挂载壳。
@@ -52,7 +52,11 @@ function agentPanelPage(
   }
 }
 
-export const AgentPromptPage = agentPanelPage('agentPrompt', PERMISSION_CODES.aiPromptRead, AgentAiPromptPanel)
+export const AgentPromptPage = agentPanelPage(
+  'agentPrompt',
+  PERMISSION_CODES.aiPromptRead,
+  AgentAiConfigPresetPanel,
+)
 export const AgentKnowledgePage = agentPanelPage(
   'agentKnowledge',
   PERMISSION_CODES.aiKbList,

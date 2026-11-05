@@ -49,7 +49,6 @@ import type {
   ProxyServicesLoginStatus,
   ProxyServicesStatus,
   ProxyServicesUsage,
-  AiPromptProfile,
   AiMcpReady,
   AiRuntime,
   CreateAiKnowledgeInput,
@@ -57,7 +56,6 @@ import type {
   GatewayAccessKeyIssueInput,
   GatewayAccessKeyIssueResponse,
   UpdateAiKnowledgeInput,
-  UpdateAiPromptProfileInput,
 } from '@/types/ai'
 import { ApiError } from '@/utils/http/apiError'
 import { httpClient } from '@/utils/http/axios'
@@ -380,21 +378,6 @@ export const aiApi = {
       .post<HttpMessageBody<GatewayAccessKey>, Record<string, never>>(
         `/admin/ai/gateway-access-keys/${id}/revoke`,
         {},
-      )
-      .then(unwrapData)
-  },
-
-  getPromptProfile(agentId: number): Promise<AiPromptProfile> {
-    return httpClient
-      .get<HttpMessageBody<AiPromptProfile>>(`${aiBase(agentId)}/prompt-profile`)
-      .then(unwrapData)
-  },
-
-  upsertPromptProfile(agentId: number, input: UpdateAiPromptProfileInput): Promise<AiPromptProfile> {
-    return httpClient
-      .put<HttpMessageBody<AiPromptProfile>, UpdateAiPromptProfileInput>(
-        `${aiBase(agentId)}/prompt-profile`,
-        input,
       )
       .then(unwrapData)
   },
