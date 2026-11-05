@@ -17,6 +17,8 @@ public final class AdminMediaDtos {
             String extension,
             Long fileSize,
             String status,
+            String scope,
+            boolean referenced,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {}
 
@@ -30,11 +32,23 @@ public final class AdminMediaDtos {
             String sha256,
             String visibility,
             String status,
+            String scope,
+            long referenceCount,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {}
 
     public record AdminMediaPreviewDto(Long id, String previewUrl, OffsetDateTime expiresAt) {}
 
     public record AdminMediaListQuery(
-            @Min(1) Integer pageNum, @Min(1) @Max(100) Integer pageSize, String contentTypePrefix) {}
+            @Min(1) Integer pageNum,
+            @Min(1) @Max(100) Integer pageSize,
+            String contentTypePrefix,
+            String view) {
+
+        public AdminMediaListQuery(Integer pageNum, Integer pageSize, String contentTypePrefix) {
+            this(pageNum, pageSize, contentTypePrefix, null);
+        }
+    }
+
+    public record AdminMediaScopeRequest(String scope) {}
 }

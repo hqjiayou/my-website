@@ -4,6 +4,7 @@ import com.mywebsite.admin.dto.AdminMediaDtos.AdminMediaDetailDto;
 import com.mywebsite.admin.dto.AdminMediaDtos.AdminMediaListItemDto;
 import com.mywebsite.admin.dto.AdminMediaDtos.AdminMediaListQuery;
 import com.mywebsite.admin.dto.AdminMediaDtos.AdminMediaPreviewDto;
+import com.mywebsite.admin.dto.AdminMediaDtos.AdminMediaScopeRequest;
 import com.mywebsite.admin.service.AdminMediaService;
 import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.api.ResponseMessages;
@@ -18,6 +19,8 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -38,14 +41,15 @@ public class AdminMediaController {
 
     @GetMapping
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:list')")
-    @Operation(summary = "站点媒体分页列表")
+    @Operation(summary = "媒体分页列表（view=library 本站库默认 / platform 平台库）")
     public ResponseEntity<HttpMessageBody<PageResult<AdminMediaListItemDto>>> list(
             @PathVariable long agentId,
             @RequestParam(required = false) Integer pageNum,
             @RequestParam(required = false) Integer pageSize,
-            @RequestParam(required = false) String contentTypePrefix) {
-        PageResult<AdminMediaListItemDto> data =
-                adminMediaService.listMedia(agentId, new AdminMediaListQuery(pageNum, pageSize, contentTypePrefix));
+            @RequestParam(required = false) String contentTypePrefix,
+            @RequestParam(required = false) String view) {
+        PageResult<AdminMediaListItemDto> data = adminMediaService.listMedia(
+                agentId, new AdminMediaListQuery(pageNum, pageSize, contentTypePrefix, view));
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, data));
     }
 
@@ -74,6 +78,36 @@ public class AdminMediaController {
             @PathVariable long agentId, @PathVariable("id") long id) {
         return ResponseEntity.ok(
                 new HttpMessageBody<>(ResponseMessages.SUCCESS, adminMediaService.preview(agentId, id)));
+    }
+
+    @PostMapping("/{id}/reference")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:list')")
+    @Operation(summary = "引用平台媒体到本站（引用不复制对象；幂等）")
+    public ResponseEntity<HttpMessageBody<Void>> reference(
+            @PathVariable long agentId, @PathVariable("id") long id) {
+        adminMediaService.referenceMedia(agentId, id);
+        return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
+    }
+
+    @DeleteMapping("/{id}/reference")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:list')")
+    @Operation(summary = "取消本站对该媒体的引用")
+    public ResponseEntity<HttpMessageBody<Void>> unreference(
+            @PathVariable long agentId, @PathVariable("id") long id) {
+        adminMediaService.unreferenceMedia(agentId, id);
+        return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
+    }
+
+    @PutMapping("/{id}/scope")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:media:list')")
+    @Operation(summary = "设置媒体可见范围（仅来源站；AGENT / PLATFORM）")
+    public ResponseEntity<HttpMessageBody<AdminMediaDetailDto>> setScope(
+            @PathVariable long agentId,
+            @PathVariable("id") long id,
+            @RequestBody AdminMediaScopeRequest request) {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS,
+                adminMediaService.updateScope(agentId, id, request != null ? request.scope() : null)));
     }
 
     @DeleteMapping("/{id}")

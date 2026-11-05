@@ -351,6 +351,16 @@ export default {
   filesManagement: {
     description: 'Manage media assets for this site (jpeg / png / webp / pdf).',
     empty: 'No media files yet',
+    views: {
+      library: 'Site Library',
+      platform: 'Platform Library',
+    },
+    scope: {
+      platform: 'Platform-visible',
+    },
+    source: {
+      fromAgent: 'Source agent #{{agentId}}',
+    },
     columns: {
       filename: 'Filename',
       contentType: 'Type',
@@ -369,6 +379,10 @@ export default {
       uploading: 'Uploading…',
       preview: 'Preview',
       delete: 'Delete',
+      reference: 'Reference',
+      unreference: 'Unreference',
+      setScopePlatform: 'Make platform-visible',
+      setScopeAgent: 'Revoke platform visibility',
     },
     hints: {
       whitelist: 'Allowed types: jpeg, png, webp, pdf.',
@@ -380,6 +394,9 @@ export default {
       confirmDelete: 'Delete “{{name}}”?',
       invalidType: 'Unsupported file type. Only jpeg / png / webp / pdf are allowed.',
       previewFailed: 'Failed to get preview URL',
+      referenced: 'Referenced into this site library',
+      unreferenced: 'Reference removed',
+      scopeUpdated: 'Visibility scope updated',
     },
   },
   contentManagement: {

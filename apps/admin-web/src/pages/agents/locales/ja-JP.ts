@@ -351,6 +351,16 @@ export default {
   filesManagement: {
     description: 'このサイトのメディア（jpeg / png / webp / pdf）を管理します。',
     empty: 'メディアファイルがありません',
+    views: {
+      library: 'サイトライブラリ',
+      platform: 'プラットフォームライブラリ',
+    },
+    scope: {
+      platform: 'プラットフォーム公開',
+    },
+    source: {
+      fromAgent: '参照元サイト #{{agentId}}',
+    },
     columns: {
       filename: 'ファイル名',
       contentType: 'タイプ',
@@ -369,6 +379,10 @@ export default {
       uploading: 'アップロード中…',
       preview: 'プレビュー',
       delete: '削除',
+      reference: '参照する',
+      unreference: '参照を解除',
+      setScopePlatform: 'プラットフォームに公開',
+      setScopeAgent: '公開を取り消す',
     },
     hints: {
       whitelist: '対応形式：jpeg、png、webp、pdf。',
@@ -380,6 +394,9 @@ export default {
       confirmDelete: '「{{name}}」を削除しますか？',
       invalidType: '未対応のファイル形式です。jpeg / png / webp / pdf のみ許可されています。',
       previewFailed: 'プレビュー URL を取得できませんでした',
+      referenced: 'このサイトのライブラリに参照しました',
+      unreferenced: '参照を解除しました',
+      scopeUpdated: '公開範囲を更新しました',
     },
   },
   contentManagement: {

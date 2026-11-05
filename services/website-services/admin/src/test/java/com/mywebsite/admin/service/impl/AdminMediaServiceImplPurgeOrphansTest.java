@@ -15,6 +15,7 @@ import com.mywebsite.admin.constant.AdminMediaConstants;
 import com.mywebsite.admin.entity.AdminMediaEntity;
 import com.mywebsite.admin.mapper.AdminContentMapper;
 import com.mywebsite.admin.mapper.AdminMediaMapper;
+import com.mywebsite.admin.mapper.AdminMediaReferenceMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.properties.AdminMediaProperties;
 import com.mywebsite.infra.properties.StorageProperties;
@@ -42,6 +43,9 @@ class AdminMediaServiceImplPurgeOrphansTest {
     private AdminMediaMapper adminMediaMapper;
 
     @Mock
+    private AdminMediaReferenceMapper adminMediaReferenceMapper;
+
+    @Mock
     private AdminAgentMapper adminAgentMapper;
 
     @Mock
@@ -63,6 +67,7 @@ class AdminMediaServiceImplPurgeOrphansTest {
         storageProperties.setBucket("test");
         service = new AdminMediaServiceImpl(
                 adminMediaMapper,
+                adminMediaReferenceMapper,
                 adminAgentMapper,
                 adminContentMapper,
                 objectStorageService,

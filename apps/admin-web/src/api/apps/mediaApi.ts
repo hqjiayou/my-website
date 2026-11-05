@@ -7,6 +7,7 @@ import type {
   MediaListItem,
   MediaListQuery,
   MediaPreview,
+  MediaScope,
 } from '@/types/media'
 import type { PageResult } from '@/types/site'
 import type { HttpMessageBody } from '@/types/rbac'
@@ -42,6 +43,7 @@ export const mediaApi = {
       pageNum: query.pageNum ?? 1,
       pageSize: query.pageSize ?? 20,
       contentTypePrefix: query.contentTypePrefix,
+      view: query.view,
     })
     return httpClient
       .get<HttpMessageBody<PageResult<MediaListItem>>>(`${mediaBase(agentId)}${qs}`)
@@ -75,19 +77,45 @@ export const mediaApi = {
       .delete<HttpMessageBody<null>>(`${mediaBase(agentId)}/${id}`)
       .then(unwrapVoid)
   },
+
+  /** 引用平台媒体到本站（不复制对象；幂等）。 */
+  referenceMedia(agentId: number, id: number): Promise<void> {
+    return httpClient
+      .post<HttpMessageBody<null>, Record<string, never>>(`${mediaBase(agentId)}/${id}/reference`, {})
+      .then(unwrapVoid)
+  },
+
+  /** 取消本站对该媒体的引用。 */
+  unreferenceMedia(agentId: number, id: number): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null>>(`${mediaBase(agentId)}/${id}/reference`)
+      .then(unwrapVoid)
+  },
+
+  /** 设置可见范围（仅来源站）：AGENT / PLATFORM。 */
+  setMediaScope(agentId: number, id: number, scope: MediaScope): Promise<MediaDetail> {
+    return httpClient
+      .put<HttpMessageBody<MediaDetail>, { scope: MediaScope }>(`${mediaBase(agentId)}/${id}/scope`, {
+        scope,
+      })
+      .then(unwrapData)
+  },
 }
 
 export type {
   MediaDetail,
   MediaListItem,
   MediaListQuery,
+  MediaListView,
   MediaPreview,
+  MediaScope,
   MediaStatus,
 } from '@/types/media'
 
 export {
   MEDIA_ACCEPT,
   MEDIA_ALLOWED_CONTENT_TYPES,
+  MEDIA_SCOPE,
   MEDIA_STATUS,
   MEDIA_STATUS_VALUES,
 } from '@/types/media'
