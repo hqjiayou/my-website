@@ -99,12 +99,15 @@ class AgentAiPresetSkillsInjectionTest {
                 Mockito.mock(AgentUsageService.class),
                 Mockito.mock(AgentEmbeddingClassService.class),
                 Mockito.mock(AgentExperienceLessonService.class),
-                Mockito.mock(AgentMcpSelectionService.class));
+                Mockito.mock(AgentMcpSelectionService.class),
+                Mockito.mock(KnowledgeSpaceResolver.class));
         String subject = SubjectCodes.formatAgentUserSubject(200L);
         AuthContext.set(new AuthenticatedUser(TokenAudience.AGENT, subject, "u", 10L, Set.of()));
         when(rateLimitService.tryAcquire(10L, subject)).thenReturn(true);
         when(localizedMessageService.currentLanguageTag()).thenReturn("zh-Hant-TW");
-        when(knowledgeDocumentMapper.selectList(any())).thenReturn(List.of());
+        // #209 合并适配：知识片段改空间集口径后，本测试的解析器替身回空集、文档查询不再触发，此 stub 改 lenient。
+        org.mockito.Mockito.lenient()
+                .when(knowledgeDocumentMapper.selectList(any())).thenReturn(List.of());
         when(memoryService.recentContents(10L, 200L)).thenReturn(List.of());
         // 同 AgentAiModelChainTest 口径：解密放宽为剥 "enc:" 前缀，否则入口被过滤、链为空。
         org.mockito.Mockito.lenient()
