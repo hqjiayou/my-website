@@ -25,8 +25,12 @@ ALTER TABLE agent_embedding_class
 -- 旧 scope 索引先删：唯一索引按 (COALESCE(agent_id, 0), entry_id) 判重，扇出
 -- 插入的行尚未写回 scope 列（agent_id/base_id 皆空），同一 entry 扇出到多个
 -- 空间会先互相撞唯一键；新索引在删列后按 base_id 口径重建。
-DROP INDEX uk_agent_embedding_class_scope_entry;
-DROP INDEX idx_agent_embedding_class_scope;
+-- 修复（2026-11-06，CI PG 合约实锤）：V48 建表时只建了 idx_agent_embedding_class_scope，
+-- 从未建过 uk_agent_embedding_class_scope_entry；新鲜链上 DROP 会直接报错致整条
+-- V61 失败。本版尚未在任何库成功执行过（首次真实应用即合约测试），就地改 IF EXISTS
+-- 是唯一正确修法，不另立修补迁移。
+DROP INDEX IF EXISTS uk_agent_embedding_class_scope_entry;
+DROP INDEX IF EXISTS idx_agent_embedding_class_scope;
 
 INSERT INTO agent_embedding_class (
     base_id, entry_id, enabled, sort_order,
