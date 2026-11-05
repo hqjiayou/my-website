@@ -1,18 +1,39 @@
 export default {
   list: {
     title: 'エージェント',
-    description: 'エージェントごとに設定は一つ。開いて対話・知識・基本情報を直します。',
+    description: 'タイプと3種の関連を一覧表示。関連は行内で直接変更でき、対話・知識・基本情報はワークスペースで調整します。',
     createSite: '新規',
     empty: 'エージェントがありません',
     permissionHint: 'ボタン表示は permissions で制御され、最終権限はバックエンドが判断します。',
     columns: {
       agentName: '名前',
       agentType: '種類',
+      agentKind: 'タイプ',
+      associations: '関連',
       industry: '業種',
       domain: 'デフォルトドメイン',
       status: 'ステータス',
       updatedAt: '更新日時',
       actions: '操作',
+    },
+    kind: {
+      SITE: 'サイト型',
+      AI_ONLY: 'AI専用',
+    },
+    associations: {
+      subscriptions: '購読スペース',
+      chainPreset: 'チェーン',
+      configPreset: '設定プリセット',
+      none: '未参照',
+      manageSubscriptions: '購読管理',
+    },
+    subscriptions: {
+      title: '購読管理',
+      hint: 'チェックで購読、解除で購読解除、即時反映されます。所有スペースは作成者行のため解除できません。',
+      empty: '知識スペースがありません',
+      own: '所有',
+      owner: '作成者 {{name}}',
+      documents: '{{count}} 件',
     },
     filters: {
       allStatus: 'すべてのステータス',
@@ -33,6 +54,11 @@ export default {
       statusUpdated: '状態を更新しました',
       deleted: '削除しました',
       confirmDelete: '「{{name}}」を削除しますか？',
+      kindUpdated: 'タイプを更新しました',
+      chainPresetUpdated: 'チェーンプリセット参照を更新しました',
+      configPresetUpdated: '設定プリセット参照を更新しました',
+      subscribed: '購読しました',
+      unsubscribed: '購読を解除しました',
     },
   },
   create: {

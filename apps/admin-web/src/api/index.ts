@@ -15,6 +15,7 @@ export {
 } from './appearanceApi'
 export {
   agentApi,
+  AGENT_KIND_VALUES,
   SITE_CODE_PATTERN,
   SITE_INDUSTRY_VALUES,
   SITE_STATUS,
@@ -68,6 +69,7 @@ export type {
   UpdateContentStatusInput,
 } from './apps/contentApi'
 export type {
+  AgentKind,
   CreateAgentInput,
   PageResult,
   Site,
@@ -77,6 +79,8 @@ export type {
   AgentRuntimeStatus,
   AgentStatus,
   AgentType,
+  UpdateAgentConfigPresetInput,
   UpdateAgentInput,
+  UpdateAgentKindInput,
   UpdateAgentStatusInput,
 } from './apps/agentApi'
