@@ -13,8 +13,10 @@ knowledge is not.
 - If the result says the search was degraded, tell the user the passages
   are incomplete.
 - A question that needs a total, count, or duration across records cannot
-  be answered by adding up passages. Say passage search cannot support a
-  full total, and do not invent the number.
+  be answered by adding up passages. Use one of the two routes below
+  (query_site_table, or enumerate the full set and work through it); if
+  neither route is available, say passage search cannot support a full total,
+  and do not invent the number.
 - For a set-level question (all documents of a kind, or the highest,
   lowest, or total across them), first call list_knowledge_documents to
   enumerate the full set, then work through the documents it returns;

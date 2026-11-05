@@ -262,6 +262,8 @@ def reply_citations(
 
 
 # 记录类问句：没查到就不许给出具体值。能力边界题（能否读数据库）不在这张表里。
+# 英文用短语而非单词，避免 "order" 命中 "in order to" 这类误触发；
+# 比对时两边都 casefold，英文大小写不敏感（中文/日文不受影响）。
 _RECORD_CUES = (
     "编号",
     "編號",
@@ -281,9 +283,47 @@ _RECORD_CUES = (
     "入台證",
     "状态",
     "狀態",
+    "application number",
+    "application status",
+    "my application",
+    "order number",
+    "order status",
+    "my order",
+    "certificate number",
+    "booking reference",
+    "employee id",
+    "attendance record",
+    "working hours",
+    "番号",
+    "申請",
+    "注文",
+    "金額",
+    "出勤",
+    "勤怠",
+    "状態",
+    "証明書",
 )
 # 「统计」覆盖黄金题「10 月考勤统计」；其余是定稿列出的汇总说法。
-_AGGREGATE_CUES = ("多久", "多少", "合计", "合計", "一共", "统计", "統計")
+# 英文同理用短语（"in total" / "total of"），不用单独的 "total"（会命中 "totally"）。
+_AGGREGATE_CUES = (
+    "多久",
+    "多少",
+    "合计",
+    "合計",
+    "一共",
+    "统计",
+    "統計",
+    "in total",
+    "total of",
+    "how many",
+    "how much",
+    "総計",
+    "何人",
+    "何件",
+    "何時間",
+    "何日",
+    "何回",
+)
 _STATUS_CUES = (
     "待送件",
     "已送件",
@@ -430,11 +470,13 @@ def _unsupported_record_value(reply: str, corpus: str) -> bool:
 
 
 def _is_record_question(message: str) -> bool:
-    return any(cue in message for cue in _RECORD_CUES)
+    folded = message.casefold()
+    return any(cue.casefold() in folded for cue in _RECORD_CUES)
 
 
 def _is_aggregate_question(message: str) -> bool:
-    return any(cue in message for cue in _AGGREGATE_CUES)
+    folded = message.casefold()
+    return any(cue.casefold() in folded for cue in _AGGREGATE_CUES)
 
 
 def _has_record_value(reply: str) -> bool:
@@ -569,6 +611,8 @@ _FIRST_PARTY_TOOLS = frozenset(
         "get_background_task",
         "list_background_tasks",
         "cancel_background_task",
+        "load_skill",
+        "read_skill_reference",
     }
 )
 # 动作类：todo 变更与委派/后台派发。纯读工具失败已有各自诚实口径，不在此列。

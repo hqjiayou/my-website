@@ -16,8 +16,11 @@ from agent_services.agent.knowledge_tools import (
     build_knowledge_toolset,
 )
 from agent_services.agent.runtime import (
+    _FIRST_PARTY_TOOLS,
     ChatReply,
     RunBudget,
+    _is_aggregate_question,
+    _is_record_question,
     _valid_cite_numbers,
     detect_prompt_leak,
     plan_search_grounding,
@@ -501,3 +504,106 @@ async def test_stream_done_reply_leak_is_replaced() -> None:
     # 流式边界：delta 已发出的原文不撤回（brief 明示），但 DONE 最终文本被替换。
     assert done.data["reply"] == _LEAK_ZH
     assert "citations" not in done.data
+
+
+# --- #201：R3/聚合多语言触发、一方工具清单对账 ---------------------------------
+
+
+def test_r3_english_record_question_fabricated_value_refused() -> None:
+    action, reply = _plan(
+        "What is my application number and what is its status?",
+        "Your application number is A123456 and the status is approved.",
+        None,
+    )
+    assert action == "refuse"
+    assert "A123456" not in reply
+
+
+def test_r3_japanese_record_question_fabricated_value_refused() -> None:
+    action, reply = _plan(
+        "私の申請番号と状態を教えてください",
+        "申請番号は A123456 で、状態は approved です。",
+        None,
+    )
+    assert action == "refuse"
+    assert "A123456" not in reply
+
+
+def test_r3_english_grounded_value_is_kept() -> None:
+    collector = KnowledgeSearchCollector()
+    collector.record(
+        "application number",
+        [RetrievedChunk("kb:1", 0, "Application A123456, status: approved.", 0.9)],
+    )
+    action, reply = _plan(
+        "What is my application number?",
+        "Your application number is A123456 and the status is approved.",
+        collector,
+    )
+    assert action == "keep"
+    assert "A123456" in reply
+
+
+def test_aggregate_english_unsupported_number_is_flagged() -> None:
+    action, _reply = _plan(
+        "How many hours did I work in total in October?",
+        "You worked 173 hours in total.",
+        None,
+    )
+    assert action == "aggregate"
+
+
+def test_aggregate_japanese_unsupported_number_is_flagged() -> None:
+    action, _reply = _plan(
+        "10月に合計何時間働きましたか",
+        "173時間働きました。",
+        None,
+    )
+    assert action == "aggregate"
+
+
+def test_english_cues_do_not_misfire_on_common_phrases() -> None:
+    # "in order to" 不得触发记录类（线索用短语不用单词的原因）。
+    assert not _is_record_question("In order to submit the form, what should I prepare?")
+    # "totally" 不得触发聚合类。
+    assert not _is_aggregate_question("I totally agree, what is the wifi password?")
+
+
+def test_first_party_tools_cover_factory_registered_tools(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """对账（#201）：toolset_factory 全开形态下注册的一方工具名，必须全在
+    runtime 的 _FIRST_PARTY_TOOLS 里；新工具漏登记时这条会红。"""
+    from conftest import make_settings
+
+    from agent_services.agent.skill_tools import SkillLoadCollector
+    from agent_services.agent.toolset_factory import build_execution_toolsets
+    from agent_services.agent.visualization import VisualizationCollector
+
+    (tmp_path / "demo").mkdir()
+    (tmp_path / "demo" / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: Use for tests.\n---\n\nBody.\n", encoding="utf-8"
+    )
+    settings = make_settings(business_api_base_url="http://java-internal")
+    toolsets = build_execution_toolsets(
+        settings,
+        "9",
+        todo_store=TodoStore(),
+        model=FunctionModel(lambda messages, info: ModelResponse(parts=[TextPart("ok")])),
+        retrieval=object(),  # type: ignore[arg-type]
+        tables_available=True,
+        preview=True,
+        visualization_collector=VisualizationCollector(),
+        skills_dir=str(tmp_path),
+        skill_load_collector=SkillLoadCollector(),
+    )
+    names: set[str] = set()
+    for toolset in toolsets:
+        tools = getattr(toolset, "tools", None)
+        if isinstance(tools, dict):
+            for key, tool in tools.items():
+                raw = getattr(tool, "name", None) or key
+                if isinstance(raw, str):
+                    names.add(raw)
+    # 防空转：本单补的两工具必须真的在注册面里出现过。
+    assert "load_skill" in names
+    assert "read_skill_reference" in names
+    assert names <= _FIRST_PARTY_TOOLS
