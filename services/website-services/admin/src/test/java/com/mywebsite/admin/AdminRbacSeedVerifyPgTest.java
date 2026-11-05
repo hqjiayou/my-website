@@ -91,7 +91,10 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-model:read",
             "admin:ai-model:update",
             "admin:menu:ai.proxyservices",
-            "admin:menu:ai.usage");
+            "admin:menu:ai.usage",
+            "admin:menu:ai.modelentries",
+            "admin:menu:ai.chainpresets",
+            "admin:menu:ai.configpresets");
 
     /**
      * 不硬编码总数：运行时统计 infra 迁移目录（{@code classpath:db/migration}，与本类
@@ -99,7 +102,7 @@ class AdminRbacSeedVerifyPgTest {
      */
     private static final int EXPECTED_FLYWAY_VERSION_COUNT = countFlywayMigrationFiles();
 
-    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 56;
+    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 59; // V66 平台区菜单新增 3 条
 
     private static int countFlywayMigrationFiles() {
         Resource[] resources;
