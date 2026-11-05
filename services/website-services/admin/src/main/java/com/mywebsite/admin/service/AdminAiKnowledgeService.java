@@ -81,6 +81,13 @@ public interface AdminAiKnowledgeService {
     /** 知识中心总览：全平台文档/索引健康/原档用量聚合 + 分站点统计 + 最近失败。 */
     AdminAiKnowledgeDtos.AdminAiKnowledgeOverviewDto knowledgeOverview();
 
+    /**
+     * 存量迁移收官（Issue #209 UoW-5）：先按旧 agent id 逐个清扫遗留向量分区，
+     * 再按知识空间全量重建索引，最后返回文档/块/spec 三数对账报告（含旧分区
+     * 残留检查）。部署后 Flyway 跑完调用一次；重复调用安全（再清扫再重建）。
+     */
+    AdminAiKnowledgeDtos.AdminAiKnowledgeRebuildReportDto rebuildAllSpaces();
+
     /** Issue #203：定时重试派生索引同步问题行（tombstone 删除与链接分区同步）。 */
     void retryRetrievalSyncIssues();
 
@@ -99,9 +106,9 @@ public interface AdminAiKnowledgeService {
     /** 删除知识库：默认库不可删、非空不可删（先移走/删除其文档）。 */
     void deleteBase(long agentId, long baseId);
 
-    /** 把知识库共享链接给目标站点，并把其 ACTIVE 文档扇出同步到目标分区。 */
+    /** 把知识库共享（订阅）给目标站点：只写订阅行，向量按空间单写不扇出（Issue #209 UoW-2）。 */
     void linkBase(long baseId, long targetAgentId);
 
-    /** 取消共享链接，并把该库文档从目标分区移除。 */
+    /** 取消共享（订阅）：只删订阅行，不动空间分区向量（Issue #209 UoW-2）。 */
     void unlinkBase(long baseId, long targetAgentId);
 }

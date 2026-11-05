@@ -33,33 +33,65 @@ class AgentInternalKnowledgeDocumentsMvcTest extends AbstractAgentSpringBootTest
     private long janPayslipId;
     private long febPayslipId;
 
+    /** 本站（agent 10）自有空间。 */
+    private static final long OWN_BASE_ID = 100L;
+
+    /** 他站（agent 11）创建、本站订阅的空间。 */
+    private static final long SUBSCRIBED_BASE_ID = 200L;
+
+    /** 他站创建、本站不可达的空间。 */
+    private static final long FOREIGN_BASE_ID = 300L;
+
     @BeforeEach
     void setUp() {
         jdbcTemplate.update("DELETE FROM agent_ai_knowledge_document");
+        jdbcTemplate.update("DELETE FROM agent_ai_knowledge_base_subscription");
+        jdbcTemplate.update("DELETE FROM agent_ai_knowledge_base");
         jdbcTemplate.update("DELETE FROM agent");
         jdbcTemplate.update(
                 "INSERT INTO agent (id, agent_name, agent_type, status) VALUES (10, 'Test Agent', 'PERSONAL', 'ACTIVE')");
         jdbcTemplate.update(
                 "INSERT INTO agent (id, agent_name, agent_type, status) VALUES (11, 'Other Agent', 'PERSONAL', 'ACTIVE')");
+        insertBase(OWN_BASE_ID, 10L, "本站空间");
+        insertBase(SUBSCRIBED_BASE_ID, 11L, "他站共享空间");
+        insertBase(FOREIGN_BASE_ID, 11L, "他站未订阅空间");
+        // 订阅行：创建者行随空间同在（V57 回填口径），200 另有本站的订阅行。
+        insertSubscription(OWN_BASE_ID, 10L);
+        insertSubscription(SUBSCRIBED_BASE_ID, 11L);
+        insertSubscription(SUBSCRIBED_BASE_ID, 10L);
+        insertSubscription(FOREIGN_BASE_ID, 11L);
+        // 文档 agent_id 一律 NULL：UoW-1 停写后的新文档形状，可见性只看 base_id。
         janPayslipId = insertDocument(
-                10L, "2026年1月工资单", "正文-1月", "ACTIVE", "xlsx", "payslip-2026-01.xlsx", "INDEXED",
+                OWN_BASE_ID, "2026年1月工资单", "正文-1月", "ACTIVE", "xlsx", "payslip-2026-01.xlsx", "INDEXED",
                 OffsetDateTime.of(2026, 2, 1, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
         febPayslipId = insertDocument(
-                10L, "2026年2月工资单", "正文-2月", "ACTIVE", "xlsx", "payslip-2026-02.xlsx", "INDEXED",
+                OWN_BASE_ID, "2026年2月工资单", "正文-2月", "ACTIVE", "xlsx", "payslip-2026-02.xlsx", "INDEXED",
                 OffsetDateTime.of(2026, 3, 1, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
         insertDocument(
-                10L, "员工手册", "正文-手册", "ACTIVE", "pdf", "handbook.pdf", "PENDING",
+                OWN_BASE_ID, "员工手册", "正文-手册", "ACTIVE", "pdf", "handbook.pdf", "PENDING",
                 OffsetDateTime.of(2026, 1, 10, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
         insertDocument(
-                10L, "2025年12月工资单", "不应可见", "DISABLED", "xlsx", "payslip-2025-12.xlsx", "PENDING",
+                OWN_BASE_ID, "2025年12月工资单", "不应可见", "DISABLED", "xlsx", "payslip-2025-12.xlsx", "PENDING",
                 OffsetDateTime.of(2026, 1, 1, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
         insertDocument(
-                11L, "他站工资单", "不应可见", "ACTIVE", "xlsx", "other.xlsx", "INDEXED",
+                FOREIGN_BASE_ID, "他站工资单", "不应可见", "ACTIVE", "xlsx", "other.xlsx", "INDEXED",
                 OffsetDateTime.of(2026, 2, 15, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
     }
 
+    private void insertBase(long baseId, long createdByAgentId, String name) {
+        jdbcTemplate.update(
+                "INSERT INTO agent_ai_knowledge_base (id, created_by_agent_id, name, status) VALUES (?, ?, ?, 'ACTIVE')",
+                baseId, createdByAgentId, name);
+    }
+
+    private void insertSubscription(long baseId, long agentId) {
+        jdbcTemplate.update(
+                "INSERT INTO agent_ai_knowledge_base_subscription (base_id, agent_id) VALUES (?, ?)",
+                baseId, agentId);
+    }
+
     private long insertDocument(
-            long agentId,
+            long baseId,
             String title,
             String content,
             String status,
@@ -69,9 +101,9 @@ class AgentInternalKnowledgeDocumentsMvcTest extends AbstractAgentSpringBootTest
             OffsetDateTime createdAt) {
         jdbcTemplate.update(
                 "INSERT INTO agent_ai_knowledge_document"
-                        + " (agent_id, title, content, status, source_format, original_filename, index_status, created_at)"
+                        + " (base_id, title, content, status, source_format, original_filename, index_status, created_at)"
                         + " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                agentId, title, content, status, sourceFormat, originalFilename, indexStatus, createdAt);
+                baseId, title, content, status, sourceFormat, originalFilename, indexStatus, createdAt);
         return jdbcTemplate.queryForObject(
                 "SELECT id FROM agent_ai_knowledge_document WHERE title = ?", Long.class, title);
     }
@@ -95,6 +127,7 @@ class AgentInternalKnowledgeDocumentsMvcTest extends AbstractAgentSpringBootTest
                 .andExpect(jsonPath("$.data.items[1].title").value("2026年1月工资单"))
                 .andExpect(jsonPath("$.data.items[1].id").value(janPayslipId))
                 .andExpect(jsonPath("$.data.items[1].sourceId").value("kb:" + janPayslipId))
+                .andExpect(jsonPath("$.data.items[1].baseId").value(OWN_BASE_ID))
                 .andExpect(jsonPath("$.data.items[1].sourceFormat").value("xlsx"))
                 .andExpect(jsonPath("$.data.items[1].originalFilename").value("payslip-2026-01.xlsx"))
                 .andExpect(jsonPath("$.data.items[1].indexStatus").value("INDEXED"))
@@ -151,6 +184,33 @@ class AgentInternalKnowledgeDocumentsMvcTest extends AbstractAgentSpringBootTest
                 .andExpect(jsonPath("$.data.truncated").value(false))
                 .andExpect(jsonPath("$.data.items.length()").value(1))
                 .andExpect(jsonPath("$.data.items[0].title").value("2026年2月工资单"));
+    }
+
+    @Test
+    void subscribedSpaceDocumentsAreListedWithTheirBaseId() throws Exception {
+        // 订阅空间里的新文档（agent_id 为 NULL）：按 base 归属应可见，条目带 baseId 可溯。
+        insertDocument(
+                SUBSCRIBED_BASE_ID, "共享空间文档", "正文-共享", "ACTIVE", "md", "shared.md", "INDEXED",
+                OffsetDateTime.of(2026, 2, 10, 10, 0, 0, 0, ZoneOffset.ofHours(9)));
+        mockMvc.perform(get(PATH)
+                        .param("keyword", "共享空间")
+                        .header(AgentHttpHeaders.INTERNAL_SERVICE_TOKEN, TEST_AGENT_INTERNAL_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].title").value("共享空间文档"))
+                .andExpect(jsonPath("$.data.items[0].baseId").value(SUBSCRIBED_BASE_ID));
+    }
+
+    @Test
+    void agentWithoutAnySpaceSeesEmptyList() throws Exception {
+        jdbcTemplate.update(
+                "INSERT INTO agent (id, agent_name, agent_type, status) VALUES (12, 'Empty Agent', 'PERSONAL', 'ACTIVE')");
+        mockMvc.perform(get("/internal/agent/v1/agents/12/knowledge-documents")
+                        .header(AgentHttpHeaders.INTERNAL_SERVICE_TOKEN, TEST_AGENT_INTERNAL_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(0))
+                .andExpect(jsonPath("$.data.items.length()").value(0))
+                .andExpect(jsonPath("$.data.truncated").value(false));
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentExperienceExtractRequest;
 import com.mywebsite.agent.dto.AgentExperienceExtractResult;
+import com.mywebsite.agent.dto.AgentIndexedDocument;
 import com.mywebsite.agent.dto.AgentMcpReady;
 import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentOcrImageRequest;
@@ -19,6 +20,7 @@ import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentReembedPrepareRequest;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
+import com.mywebsite.agent.dto.AgentRetrievalPartitionStats;
 import com.mywebsite.agent.dto.AgentRetrievalHit;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
 import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
@@ -391,7 +393,7 @@ public class HttpAgentClient implements AgentClient {
     @Override
     public void upsertRetrievalDocument(AgentRetrievalDocument document) {
         if (document == null
-                || !StringUtils.hasText(document.agentId())
+                || !StringUtils.hasText(document.baseId())
                 || !StringUtils.hasText(document.sourceId())
                 || !StringUtils.hasText(document.content())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
@@ -492,21 +494,69 @@ public class HttpAgentClient implements AgentClient {
     }
 
     @Override
-    public void deleteRetrievalDocument(String agentId, String sourceId) {
-        if (!StringUtils.hasText(agentId) || !StringUtils.hasText(sourceId)) {
+    public void deleteRetrievalDocument(String baseId, String sourceId) {
+        if (!StringUtils.hasText(baseId) || !StringUtils.hasText(sourceId)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         ensureTokenConfigured();
-        String path = "/internal/v1/retrieval/documents?agentId="
-                + java.net.URLEncoder.encode(agentId, StandardCharsets.UTF_8)
+        String path = "/internal/v1/retrieval/documents?baseId="
+                + java.net.URLEncoder.encode(baseId, StandardCharsets.UTF_8)
                 + "&sourceId="
                 + java.net.URLEncoder.encode(sourceId, StandardCharsets.UTF_8);
         exchangeWithRetry("DELETE", path, null);
     }
 
     @Override
+    public void deleteRetrievalDocumentsByBase(String baseId) {
+        if (!StringUtils.hasText(baseId)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        ensureTokenConfigured();
+        // 整空间清理端点：DELETE /internal/v1/retrieval/bases/{baseId}
+        String path = "/internal/v1/retrieval/bases/"
+                + java.net.URLEncoder.encode(baseId, StandardCharsets.UTF_8);
+        exchangeWithRetry("DELETE", path, null);
+    }
+
+    @Override
+    public List<AgentIndexedDocument> listIndexedDocuments(String baseId) {
+        return retrievalPartitionStats(baseId).sourceIds().stream()
+                .map(sourceId -> new AgentIndexedDocument(sourceId, List.of()))
+                .toList();
+    }
+
+    @Override
+    public AgentRetrievalPartitionStats retrievalPartitionStats(String baseId) {
+        if (!StringUtils.hasText(baseId)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        ensureTokenConfigured();
+        String path = "/internal/v1/retrieval/documents?baseId="
+                + java.net.URLEncoder.encode(baseId, StandardCharsets.UTF_8);
+        JsonNode body = exchangeWithRetry("GET", path, null);
+        // 契约体是 {ok, data:{baseId, sourceIds:[...], chunkCount}}：取 data（同 search 口径）。
+        JsonNode payload = body.path("data").isObject() ? body.path("data") : body;
+        if (!payload.isObject()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR);
+        }
+        List<String> sourceIds = new ArrayList<>();
+        JsonNode sourceIdNodes = payload.get("sourceIds");
+        if (sourceIdNodes != null && sourceIdNodes.isArray()) {
+            for (JsonNode entry : sourceIdNodes) {
+                if (entry.isTextual() && StringUtils.hasText(entry.asText())) {
+                    sourceIds.add(entry.asText());
+                }
+            }
+        }
+        return new AgentRetrievalPartitionStats(
+                payload.path("baseId").asText(baseId),
+                sourceIds,
+                payload.path("chunkCount").asLong(0));
+    }
+
+    @Override
     public AgentRetrievalSearchResult searchRetrieval(AgentRetrievalSearchRequest request) {
-        if (request == null || !StringUtils.hasText(request.agentId()) || !StringUtils.hasText(request.query())) {
+        if (request == null || !StringUtils.hasText(request.query())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         ensureTokenConfigured();

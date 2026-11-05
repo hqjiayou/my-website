@@ -1,11 +1,11 @@
 package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.mywebsite.admin.constant.AdminAgentMessageKeys;
+import com.mywebsite.admin.constant.AdminAiKnowledgeMessageKeys;
 import com.mywebsite.admin.dto.AdminEmbeddingClassDtos.AdminEmbeddingClassDto;
 import com.mywebsite.admin.dto.AdminEmbeddingClassDtos.AdminEmbeddingClassSaveRequest;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
-import com.mywebsite.admin.mapper.AdminAgentMapper;
+import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.admin.service.AdminEmbeddingRegistrationService;
 import com.mywebsite.agent.entity.AgentEmbeddingClassEntity;
@@ -39,22 +39,22 @@ public class AdminEmbeddingRegistrationServiceImpl implements AdminEmbeddingRegi
 
     private final AgentEmbeddingClassMapper registrationMapper;
     private final AdminAiModelEntryMapper modelEntryMapper;
-    private final AdminAgentMapper adminAgentMapper;
+    private final AdminAiKnowledgeBaseMapper knowledgeBaseMapper;
 
     public AdminEmbeddingRegistrationServiceImpl(
             AgentEmbeddingClassMapper registrationMapper,
             AdminAiModelEntryMapper modelEntryMapper,
-            AdminAgentMapper adminAgentMapper) {
+            AdminAiKnowledgeBaseMapper knowledgeBaseMapper) {
         this.registrationMapper = registrationMapper;
         this.modelEntryMapper = modelEntryMapper;
-        this.adminAgentMapper = adminAgentMapper;
+        this.knowledgeBaseMapper = knowledgeBaseMapper;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<AdminEmbeddingClassDto> listRegistrations(Long agentId) {
-        requireAgentIfPresent(agentId);
-        List<AgentEmbeddingClassEntity> rows = selectScopeRows(agentId);
+    public List<AdminEmbeddingClassDto> listRegistrations(Long baseId) {
+        requireBaseIfPresent(baseId);
+        List<AgentEmbeddingClassEntity> rows = selectScopeRows(baseId);
         Map<Long, AdminAiModelEntryEntity> entriesById = loadEntries(rows);
         return rows.stream().map(row -> toDto(row, entriesById.get(row.getEntryId()))).toList();
     }
@@ -62,8 +62,8 @@ public class AdminEmbeddingRegistrationServiceImpl implements AdminEmbeddingRegi
     @Override
     @Transactional
     public List<AdminEmbeddingClassDto> replaceRegistrations(
-            Long agentId, AdminEmbeddingClassSaveRequest request) {
-        requireAgentIfPresent(agentId);
+            Long baseId, AdminEmbeddingClassSaveRequest request) {
+        requireBaseIfPresent(baseId);
         List<AdminEmbeddingClassSaveRequest.Item> items =
                 request == null || request.items() == null ? List.of() : request.items();
         if (items.size() > AgentEmbeddingClassUtils.MAX_EMBEDDING_CLASSES) {
@@ -96,20 +96,20 @@ public class AdminEmbeddingRegistrationServiceImpl implements AdminEmbeddingRegi
 
         // 整表替换：旧行逐行软删（与删 agent 级联同一口径），新行按数组序写 sort_order。
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        for (AgentEmbeddingClassEntity old : selectScopeRows(agentId)) {
+        for (AgentEmbeddingClassEntity old : selectScopeRows(baseId)) {
             old.setDeletedAt(now);
             registrationMapper.updateById(old);
             registrationMapper.deleteById(old.getId());
         }
         for (int i = 0; i < items.size(); i++) {
             AgentEmbeddingClassEntity row = new AgentEmbeddingClassEntity();
-            row.setAgentId(agentId);
+            row.setBaseId(baseId);
             row.setEntryId(items.get(i).entryId());
             row.setEnabled(items.get(i).enabled() == null || items.get(i).enabled());
             row.setSortOrder(i);
             registrationMapper.insert(row);
         }
-        return listRegistrations(agentId);
+        return listRegistrations(baseId);
     }
 
     /** 登记资格：只有 mode=KEY 且 embeddingSpec 非空的入口能成为嵌入类（CLI 入口的 spec 保存时已清空）。 */
@@ -122,12 +122,12 @@ public class AdminEmbeddingRegistrationServiceImpl implements AdminEmbeddingRegi
         }
     }
 
-    private List<AgentEmbeddingClassEntity> selectScopeRows(Long agentId) {
+    private List<AgentEmbeddingClassEntity> selectScopeRows(Long baseId) {
         LambdaQueryWrapper<AgentEmbeddingClassEntity> query = new LambdaQueryWrapper<>();
-        if (agentId == null) {
-            query.isNull(AgentEmbeddingClassEntity::getAgentId);
+        if (baseId == null) {
+            query.isNull(AgentEmbeddingClassEntity::getBaseId);
         } else {
-            query.eq(AgentEmbeddingClassEntity::getAgentId, agentId);
+            query.eq(AgentEmbeddingClassEntity::getBaseId, baseId);
         }
         query.orderByAsc(AgentEmbeddingClassEntity::getSortOrder).orderByAsc(AgentEmbeddingClassEntity::getId);
         return registrationMapper.selectList(query);
@@ -151,7 +151,7 @@ public class AdminEmbeddingRegistrationServiceImpl implements AdminEmbeddingRegi
         String spec = entry == null ? null : entry.getEmbeddingSpec();
         return new AdminEmbeddingClassDto(
                 row.getId(),
-                row.getAgentId(),
+                row.getBaseId(),
                 row.getEntryId(),
                 entry == null ? null : entry.getDisplayName(),
                 spec,
@@ -160,12 +160,13 @@ public class AdminEmbeddingRegistrationServiceImpl implements AdminEmbeddingRegi
                 row.getSortOrder() == null ? 0 : row.getSortOrder());
     }
 
-    private void requireAgentIfPresent(Long agentId) {
-        if (agentId == null) {
+    private void requireBaseIfPresent(Long baseId) {
+        if (baseId == null) {
             return;
         }
-        if (adminAgentMapper.selectById(agentId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND.getCode(), AdminAgentMessageKeys.AGENT_NOT_FOUND);
+        if (knowledgeBaseMapper.selectById(baseId) == null) {
+            throw new BusinessException(
+                    ErrorCode.NOT_FOUND.getCode(), AdminAiKnowledgeMessageKeys.BASE_NOT_FOUND);
         }
     }
 }

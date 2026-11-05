@@ -161,7 +161,7 @@ public class AdminAiKnowledgeController {
 
     @PostMapping("/api/admin/ai/knowledge-bases/{baseId}/links/{targetAgentId}")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
-    @Operation(summary = "把知识库共享给目标站点（文档扇出同步）")
+    @Operation(summary = "把知识库共享（订阅）给目标站点")
     public ResponseEntity<HttpMessageBody<Void>> linkBase(
             @PathVariable long baseId, @PathVariable long targetAgentId) {
         adminAiKnowledgeService.linkBase(baseId, targetAgentId);
@@ -170,7 +170,7 @@ public class AdminAiKnowledgeController {
 
     @DeleteMapping("/api/admin/ai/knowledge-bases/{baseId}/links/{targetAgentId}")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
-    @Operation(summary = "取消知识库对目标站点的共享（文档从其分区移除）")
+    @Operation(summary = "取消知识库对目标站点的共享（订阅）")
     public ResponseEntity<HttpMessageBody<Void>> unlinkBase(
             @PathVariable long baseId, @PathVariable long targetAgentId) {
         adminAiKnowledgeService.unlinkBase(baseId, targetAgentId);
@@ -476,5 +476,14 @@ public class AdminAiKnowledgeController {
                     .body(new AdminAiKnowledgeReembedConflictResponse(
                             "各站点的 embedding 维度不一致，未改动任何向量数据。", ex.conflicts()));
         }
+    }
+
+    @PostMapping("/api/admin/ai/knowledge/rebuild-all-spaces")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-kb:list')")
+    @Operation(summary = "存量迁移收官：清扫旧 agent 分区、按知识空间全量重建索引并回对账报告")
+    public ResponseEntity<HttpMessageBody<AdminAiKnowledgeDtos.AdminAiKnowledgeRebuildReportDto>>
+            rebuildAllSpaces() {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiKnowledgeService.rebuildAllSpaces()));
     }
 }

@@ -1,6 +1,8 @@
 """向量存储：agent_retrieval schema（pgvector）。
 
-所有查询强制携带 agent_id 过滤——多租户隔离是硬约束，不允许全库检索。
+所有查询强制携带 base_id 过滤——分区键是知识空间（Issue #209 UoW-2 起由
+agent_id 换为 base_id），空间隔离是硬约束，不允许全库检索。文档只属一个
+空间、只写一份；agent 经订阅使用哪些空间由 Java 侧展开后下发。
 """
 
 from __future__ import annotations
@@ -55,12 +57,17 @@ class RetrievedChunk:
     location: ChunkLocation | None = None
     # collector 累积顺序（1 起）。分数截断不得改写这个编号。
     cite: int | None = None
+    # 命中所属知识空间（分区键）。store 查询时盖上；手工构造的片段缺省为空。
+    base_id: str = ""
 
     def with_score(self, score: float) -> RetrievedChunk:
         return replace(self, score=score)
 
     def with_cite(self, cite: int) -> RetrievedChunk:
         return replace(self, cite=cite)
+
+    def with_base_id(self, base_id: str) -> RetrievedChunk:
+        return replace(self, base_id=base_id)
 
 
 CITATION_LIMIT = 5
@@ -178,6 +185,8 @@ def citation_sources(
             "chunkIndex": item.chunk_index,
             "score": item.score,
         }
+        if item.base_id:
+            entry["baseId"] = item.base_id
         if item.title:
             entry["title"] = item.title
         if item.location is not None and item.location.to_api():
@@ -237,7 +246,7 @@ def create_sheet_rows_table_sql() -> str:
     """结构化行与 chunks 一样由 store 在首次使用时建表，不走 Flyway。"""
     return (
         f"CREATE TABLE IF NOT EXISTS {SHEET_ROWS_TABLE} ("
-        "agent_id TEXT NOT NULL, "
+        "base_id TEXT NOT NULL, "
         "source_id TEXT NOT NULL, "
         "title TEXT NOT NULL, "
         "sheet TEXT NOT NULL, "
@@ -246,7 +255,7 @@ def create_sheet_rows_table_sql() -> str:
         "row_number INTEGER NOT NULL, "
         "cells JSONB NOT NULL, "
         "truncated BOOLEAN NOT NULL DEFAULT FALSE, "
-        "PRIMARY KEY (agent_id, source_id, sheet, row_number))"
+        "PRIMARY KEY (base_id, source_id, sheet, row_number))"
     )
 
 
@@ -264,7 +273,7 @@ def create_class_table_sql(table: str, dimensions: int) -> str:
     return (
         f"CREATE TABLE IF NOT EXISTS {qualified} ("
         "id BIGSERIAL PRIMARY KEY, "
-        "agent_id TEXT NOT NULL, "
+        "base_id TEXT NOT NULL, "
         "source_id TEXT NOT NULL, "
         "chunk_index INTEGER NOT NULL, "
         "content TEXT NOT NULL, "
@@ -283,7 +292,7 @@ def class_row_delete_sql(table: str, *, include_legacy_nulls: bool = False) -> s
     else:
         predicate = "embedding_model = $3"
     return (
-        f"DELETE FROM {qualified} WHERE agent_id = $1 AND source_id = $2 AND {predicate}"
+        f"DELETE FROM {qualified} WHERE base_id = $1 AND source_id = $2 AND {predicate}"
     )
 
 
@@ -295,13 +304,27 @@ def prune_delete_sql(table: str) -> str:
     """
     qualified = qualified_chunks_table(table)
     return (
-        f"DELETE FROM {qualified} WHERE agent_id = $1 AND source_id = $2 "
+        f"DELETE FROM {qualified} WHERE base_id = $1 AND source_id = $2 "
         "AND NOT (embedding_model = ANY($3::text[]))"
     )
 
 
 def _class_index_names(table: str) -> tuple[str, str]:
     """遗留表沿用原来的索引名。新维度表用自己的名字，避免和 chunks 冲突。"""
+    qualified_chunks_table(table)
+    if table == "chunks":
+        return (
+            "idx_agent_retrieval_chunks_base_source",
+            "idx_agent_retrieval_chunks_embedding_hnsw",
+        )
+    return (
+        f"idx_agent_retrieval_{table}_base_source",
+        f"idx_agent_retrieval_{table}_embedding_hnsw",
+    )
+
+
+def _legacy_agent_index_names(table: str) -> tuple[str, str]:
+    """换键前（agent_id 时代）的分区索引名，迁移改名时用。新库不会出现。"""
     qualified_chunks_table(table)
     if table == "chunks":
         return (
@@ -325,7 +348,7 @@ def vector_search_sql(table: str, *, include_legacy_nulls: bool = False) -> str:
         "SELECT source_id, chunk_index, content, metadata, "
         "1 - (embedding <=> $2::vector) AS score "
         f"FROM {qualified} "
-        f"WHERE agent_id = $1 AND {predicate} "
+        f"WHERE base_id = $1 AND {predicate} "
         "ORDER BY embedding <=> $2::vector LIMIT $4"
     )
 
@@ -337,20 +360,20 @@ def like_literal_pattern(token: str) -> str:
 
 
 def lexical_search_statement(
-    agent_id: str,
+    base_id: str,
     tokens: list[str],
     limit: int,
     table: str = "chunks",
     embedding_models: list[str] | None = None,
     include_legacy_nulls: bool = False,
 ) -> tuple[str, list[object]]:
-    """词法 SQL 只按调用方 agent_id 过滤，token 和模型名只进绑定参数。
+    """词法 SQL 只按调用方 base_id（空间）过滤，token 和模型名只进绑定参数。
 
     LIMIT 之前按命中 token 数降序，同分再按 source_id、chunk_index。
     否则更宽的短 token 会占满候选窗口，把型号整段命中挤掉。
     embedding_models 给出时只查这些类；未给出时保持旧的整表字面查询。
     """
-    arguments: list[object] = [agent_id]
+    arguments: list[object] = [base_id]
     clauses: list[str] = []
     for token in tokens:
         arguments.append(like_literal_pattern(token))
@@ -375,7 +398,7 @@ def lexical_search_statement(
         "SELECT source_id, chunk_index, content, metadata, "
         f"({rank_expr})::float8 AS score "
         f"FROM {qualified_chunks_table(table)} "
-        f"WHERE agent_id = $1 AND ({' OR '.join(clauses)}){model_sql} "
+        f"WHERE base_id = $1 AND ({' OR '.join(clauses)}){model_sql} "
         f"ORDER BY ({rank_expr}) DESC, source_id, chunk_index "
         f"LIMIT ${len(arguments)}"
     )
@@ -407,7 +430,7 @@ class RetrievalStore(Protocol):
     async def upsert_document(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         source_id: str,
         title: str,
         chunks: list[str],
@@ -416,29 +439,35 @@ class RetrievalStore(Protocol):
         locations: list[ChunkLocation | None] | None = None,
     ) -> int: ...
 
-    async def delete_document(self, *, agent_id: str, source_id: str) -> None: ...
+    async def delete_document(self, *, base_id: str, source_id: str) -> None: ...
+
+    async def delete_base(self, *, base_id: str) -> None: ...
+
+    async def list_indexed_source_ids(self, *, base_id: str) -> list[str]: ...
+
+    async def count_chunks(self, *, base_id: str) -> int: ...
 
     async def prune_document_classes(
-        self, *, agent_id: str, source_id: str, keep_models: list[str]
+        self, *, base_id: str, source_id: str, keep_models: list[str]
     ) -> None: ...
 
     async def replace_sheet_rows(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         source_id: str,
         title: str,
         tables: Sequence[object],
     ) -> None: ...
 
-    async def has_structured_tables(self, *, agent_id: str) -> bool: ...
+    async def has_structured_tables(self, *, base_id: str) -> bool: ...
 
-    async def load_structured_tables(self, *, agent_id: str) -> list[object]: ...
+    async def load_structured_tables(self, *, base_id: str) -> list[object]: ...
 
     async def search(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         embedding: list[float],
         top_k: int,
         embedding_model: str = "",
@@ -447,7 +476,7 @@ class RetrievalStore(Protocol):
     async def search_lexical(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         tokens: list[str],
         limit: int,
         embedding_models: list[str] | None = None,
@@ -504,8 +533,10 @@ class PgVectorRetrievalStore:
         assert self._pool is not None
         async with self._pool.acquire() as conn:
             await self._install_vector_extension(conn)
-            # 连接池这条路径也会建索引。旧库租户列还叫 site_id 时，必须先改名，否则索引语句找不到 agent_id。
+            # 连接池这条路径也会建索引。旧库租户列还叫 site_id 时，必须先改名，否则索引语句找不到列。
             await self._rename_legacy_agent_column(conn)
+            # 分区键换代（Issue #209 UoW-2）：存量 agent_id 列改名 base_id 后再建表/索引。
+            await self._rename_partition_columns(conn)
             await self._create_chunks(conn, self._dimensions)
 
     @staticmethod
@@ -526,7 +557,7 @@ class PgVectorRetrievalStore:
         source_index, vector_index = _class_index_names(table)
         await conn.execute(
             f"CREATE INDEX IF NOT EXISTS {source_index} "
-            f"ON {qualified} (agent_id, source_id)"
+            f"ON {qualified} (base_id, source_id)"
         )
         if hnsw_index_allowed(dimensions):
             await conn.execute(
@@ -602,6 +633,17 @@ class PgVectorRetrievalStore:
         return typmod
 
     @staticmethod
+    async def _column_exists(conn, table: str, column: str) -> bool:
+        found = await conn.fetchval(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = 'agent_retrieval' AND table_name = $1 "
+            "AND column_name = $2",
+            table,
+            column,
+        )
+        return found is not None
+
+    @staticmethod
     async def _rename_legacy_agent_column(conn) -> None:
         """存量库列名迁移：chunks 表的租户列旧名 site_id → agent_id。
         幂等：仅当旧列存在且新列不存在时才改名；新库无此列直接跳过。"""
@@ -627,6 +669,46 @@ class PgVectorRetrievalStore:
             "RENAME TO idx_agent_retrieval_chunks_agent_source"
         )
 
+    async def _rename_partition_columns(self, conn) -> None:
+        """分区键换代（Issue #209 UoW-2）：存量表 agent_id 列改名 base_id。
+
+        幂等：仅当 agent_id 存在且 base_id 不存在时改名；新库直接跳过。
+        PG 的 RENAME COLUMN 会让唯一索引/主键自动跟随新列名（索引名不变），
+        故只需再把分区索引名显式改到 base 口径，与 site_id→agent_id 那次同法。
+        覆盖全部类表（chunks＋chunks_dN）与 sheet_rows（其主键随列改名跟随）。
+        """
+        tables = await self._list_class_tables(conn)
+        for table in tables:
+            if not await self._column_exists(conn, table, "agent_id"):
+                continue
+            if await self._column_exists(conn, table, "base_id"):
+                continue
+            qualified = qualified_chunks_table(table)
+            await conn.execute(
+                f"ALTER TABLE {qualified} RENAME COLUMN agent_id TO base_id"
+            )
+            legacy_source, _legacy_hnsw = _legacy_agent_index_names(table)
+            source_index, _hnsw_index = _class_index_names(table)
+            await conn.execute(
+                f"ALTER INDEX IF EXISTS agent_retrieval.{legacy_source} "
+                f"RENAME TO {source_index}"
+            )
+        # sheet_rows 不在 chunks 表名白名单内，存在性直接查目录，不走 _table_exists。
+        sheet_rows_exists = await conn.fetchval(
+            "SELECT 1 FROM pg_catalog.pg_class c "
+            "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'agent_retrieval' AND c.relname = 'sheet_rows' "
+            "AND c.relkind = 'r'"
+        )
+        if (
+            sheet_rows_exists is not None
+            and await self._column_exists(conn, "sheet_rows", "agent_id")
+            and not await self._column_exists(conn, "sheet_rows", "base_id")
+        ):
+            await conn.execute(
+                f"ALTER TABLE {SHEET_ROWS_TABLE} RENAME COLUMN agent_id TO base_id"
+            )
+
     async def ensure_schema(self, dimensions: int) -> None:
         """表不存在时按给定维度建表与索引。成功后更新 self._dimensions。"""
         dimensions = _positive_dimensions(dimensions)
@@ -634,6 +716,7 @@ class PgVectorRetrievalStore:
         try:
             await self._install_vector_extension(conn)
             await self._rename_legacy_agent_column(conn)
+            await self._rename_partition_columns(conn)
             await self._create_chunks(conn, dimensions)
             self._dimensions = dimensions
         finally:
@@ -664,7 +747,7 @@ class PgVectorRetrievalStore:
     async def upsert_document(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         source_id: str,
         title: str,
         chunks: list[str],
@@ -682,17 +765,17 @@ class PgVectorRetrievalStore:
         include_nulls = table == "chunks" and model == self._legacy_embedding_model
         pool = await self._get_pool()
         async with pool.acquire() as conn, conn.transaction():
-            # 同一文件的删除与插入都在这个事务里。锁键是 agent_id:source_id 的 64-bit hash，
+            # 同一文件的删除与插入都在这个事务里。锁键是 base_id:source_id 的 64-bit hash，
             # 只串行化这一份文件；事务提交或回滚时 pg_advisory_xact_lock 自动释放，其它 source 不互相阻塞。
             # 本机单测没有 pgvector，不会执行到这里。
             await conn.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-                f"{agent_id}:{source_id}",
+                f"{base_id}:{source_id}",
             )
             await self._create_chunks(conn, dimensions, table)
             await conn.execute(
                 class_row_delete_sql(table, include_legacy_nulls=include_nulls),
-                agent_id,
+                base_id,
                 source_id,
                 model,
             )
@@ -700,9 +783,9 @@ class PgVectorRetrievalStore:
                 location = None if locations is None or index >= len(locations) else locations[index]
                 await conn.execute(
                     f"INSERT INTO {qualified} "
-                    "(agent_id, source_id, chunk_index, content, embedding, embedding_model, metadata) "
+                    "(base_id, source_id, chunk_index, content, embedding, embedding_model, metadata) "
                     "VALUES ($1, $2, $3, $4, $5::vector, $6, $7::jsonb)",
-                    agent_id,
+                    base_id,
                     source_id,
                     index,
                     content,
@@ -715,7 +798,7 @@ class PgVectorRetrievalStore:
     async def replace_sheet_rows(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         source_id: str,
         title: str,
         tables: Sequence[object],
@@ -726,15 +809,15 @@ class PgVectorRetrievalStore:
             await conn.execute("CREATE SCHEMA IF NOT EXISTS agent_retrieval")
             await conn.execute(create_sheet_rows_table_sql())
             await conn.execute(
-                f"DELETE FROM {SHEET_ROWS_TABLE} WHERE agent_id = $1 AND source_id = $2",
-                agent_id,
+                f"DELETE FROM {SHEET_ROWS_TABLE} WHERE base_id = $1 AND source_id = $2",
+                base_id,
                 source_id,
             )
             for table in tables:
-                await self._insert_sheet(conn, agent_id, source_id, title, table)
+                await self._insert_sheet(conn, base_id, source_id, title, table)
 
     @staticmethod
-    async def _insert_sheet(conn, agent_id: str, source_id: str, title: str, table: object) -> None:
+    async def _insert_sheet(conn, base_id: str, source_id: str, title: str, table: object) -> None:
         sheet = str(getattr(table, "sheet", "") or "")
         header_row = int(getattr(table, "header_row", 0) or 0)
         headers = ["" if cell is None else str(cell) for cell in (getattr(table, "headers", None) or [])]
@@ -743,9 +826,9 @@ class PgVectorRetrievalStore:
         if not data_rows:
             await conn.execute(
                 f"INSERT INTO {SHEET_ROWS_TABLE} "
-                "(agent_id, source_id, title, sheet, header_row, header, row_number, cells, truncated) "
+                "(base_id, source_id, title, sheet, header_row, header, row_number, cells, truncated) "
                 "VALUES ($1, $2, $3, $4, $5, $6::jsonb, 0, '[]'::jsonb, $7)",
-                agent_id,
+                base_id,
                 source_id,
                 title,
                 sheet,
@@ -758,9 +841,9 @@ class PgVectorRetrievalStore:
             cells = ["" if cell is None else str(cell) for cell in (getattr(row, "cells", None) or [])]
             await conn.execute(
                 f"INSERT INTO {SHEET_ROWS_TABLE} "
-                "(agent_id, source_id, title, sheet, header_row, header, row_number, cells, truncated) "
+                "(base_id, source_id, title, sheet, header_row, header, row_number, cells, truncated) "
                 "VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $9)",
-                agent_id,
+                base_id,
                 source_id,
                 title,
                 sheet,
@@ -771,18 +854,18 @@ class PgVectorRetrievalStore:
                 truncated,
             )
 
-    async def has_structured_tables(self, *, agent_id: str) -> bool:
+    async def has_structured_tables(self, *, base_id: str) -> bool:
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             if await conn.fetchval("SELECT to_regclass($1)", SHEET_ROWS_TABLE) is None:
                 return False
             found = await conn.fetchval(
-                f"SELECT 1 FROM {SHEET_ROWS_TABLE} WHERE agent_id = $1 LIMIT 1",
-                agent_id,
+                f"SELECT 1 FROM {SHEET_ROWS_TABLE} WHERE base_id = $1 LIMIT 1",
+                base_id,
             )
         return found is not None
 
-    async def load_structured_tables(self, *, agent_id: str) -> list[object]:
+    async def load_structured_tables(self, *, base_id: str) -> list[object]:
         from agent_services.retrieval.tables import StoredSheet
 
         pool = await self._get_pool()
@@ -791,9 +874,9 @@ class PgVectorRetrievalStore:
                 return []
             records = await conn.fetch(
                 "SELECT source_id, title, sheet, header_row, header, row_number, cells, truncated "
-                f"FROM {SHEET_ROWS_TABLE} WHERE agent_id = $1 "
+                f"FROM {SHEET_ROWS_TABLE} WHERE base_id = $1 "
                 "ORDER BY source_id, sheet, row_number",
-                agent_id,
+                base_id,
             )
         grouped: dict[tuple[str, str], dict[str, object]] = {}
         order: list[tuple[str, str]] = []
@@ -833,7 +916,7 @@ class PgVectorRetrievalStore:
             )
         return loaded
 
-    async def delete_document(self, *, agent_id: str, source_id: str) -> None:
+    async def delete_document(self, *, base_id: str, source_id: str) -> None:
         """删文档时清掉每一类里的这份。新增一类不会走到这里。"""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
@@ -841,36 +924,94 @@ class PgVectorRetrievalStore:
             for table in tables:
                 qualified = qualified_chunks_table(table)
                 await conn.execute(
-                    f"DELETE FROM {qualified} WHERE agent_id = $1 AND source_id = $2",
-                    agent_id,
+                    f"DELETE FROM {qualified} WHERE base_id = $1 AND source_id = $2",
+                    base_id,
                     source_id,
                 )
             if await conn.fetchval("SELECT to_regclass($1)", SHEET_ROWS_TABLE) is not None:
                 await conn.execute(
-                    f"DELETE FROM {SHEET_ROWS_TABLE} WHERE agent_id = $1 AND source_id = $2",
-                    agent_id,
+                    f"DELETE FROM {SHEET_ROWS_TABLE} WHERE base_id = $1 AND source_id = $2",
+                    base_id,
                     source_id,
                 )
 
+    async def delete_base(self, *, base_id: str) -> None:
+        """整空间清理：删掉该空间在每一类表与结构化行里的全部行。"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            tables = await self._list_class_tables(conn)
+            for table in tables:
+                qualified = qualified_chunks_table(table)
+                await conn.execute(
+                    f"DELETE FROM {qualified} WHERE base_id = $1",
+                    base_id,
+                )
+            if await conn.fetchval("SELECT to_regclass($1)", SHEET_ROWS_TABLE) is not None:
+                await conn.execute(
+                    f"DELETE FROM {SHEET_ROWS_TABLE} WHERE base_id = $1",
+                    base_id,
+                )
+
+    async def list_indexed_source_ids(self, *, base_id: str) -> list[str]:
+        """该空间已索引的 source 全集（类表与结构化行的并集），供存量对账。"""
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            found: set[str] = set()
+            tables = await self._list_class_tables(conn)
+            for table in tables:
+                qualified = qualified_chunks_table(table)
+                rows = await conn.fetch(
+                    f"SELECT DISTINCT source_id FROM {qualified} WHERE base_id = $1",
+                    base_id,
+                )
+                found.update(str(row["source_id"]) for row in rows)
+            if await conn.fetchval("SELECT to_regclass($1)", SHEET_ROWS_TABLE) is not None:
+                rows = await conn.fetch(
+                    f"SELECT DISTINCT source_id FROM {SHEET_ROWS_TABLE} WHERE base_id = $1",
+                    base_id,
+                )
+                found.update(str(row["source_id"]) for row in rows)
+        return sorted(found)
+
+    async def count_chunks(self, *, base_id: str) -> int:
+        """该空间在全部嵌入类表中的块行总数，供存量对账（文档/块/spec 三数）。
+
+        只数 chunks 类表：sheet_rows 是结构化行、不是块，不计入（与
+        list_indexed_source_ids 把结构化行并入 source 集的口径刻意不同）。
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            total = 0
+            tables = await self._list_class_tables(conn)
+            for table in tables:
+                qualified = qualified_chunks_table(table)
+                count = await conn.fetchval(
+                    f"SELECT COUNT(*) FROM {qualified} WHERE base_id = $1",
+                    base_id,
+                )
+                total += int(count or 0)
+        return total
+
     async def prune_document_classes(
-        self, *, agent_id: str, source_id: str, keep_models: list[str]
+        self, *, base_id: str, source_id: str, keep_models: list[str]
     ) -> None:
         """删掉本档在所有类表中、不属于 keep_models 的行（已注销类的残留）。
 
         只删 chunks 类表，不动 sheet_rows（结构化行与嵌入类无关）。
         keep 名单先经 embedding_class_name 规范化，与写入时的类键同口径。
+        清理键是（空间, 文档）：另一空间的同源文档不受影响。
         """
         keep = [embedding_class_name(model) for model in keep_models]
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             tables = await self._list_class_tables(conn)
             for table in tables:
-                await conn.execute(prune_delete_sql(table), agent_id, source_id, keep)
+                await conn.execute(prune_delete_sql(table), base_id, source_id, keep)
 
     async def search(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         embedding: list[float],
         top_k: int,
         embedding_model: str = "",
@@ -895,22 +1036,22 @@ class PgVectorRetrievalStore:
                 )
             rows = await conn.fetch(
                 vector_search_sql(table, include_legacy_nulls=include_nulls),
-                agent_id,
+                base_id,
                 self._vector_literal(embedding, dimensions=dimensions),
                 model,
                 top_k,
             )
-        return [_chunk_from_record(row) for row in rows]
+        return [_chunk_from_record(row).with_base_id(base_id) for row in rows]
 
     async def search_lexical(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         tokens: list[str],
         limit: int,
         embedding_models: list[str] | None = None,
     ) -> list[RetrievedChunk]:
-        """按调用方 agent_id 做字面量子串匹配。只查这次检索登记的嵌入类。
+        """按调用方 base_id（空间）做字面量子串匹配。只查这次检索登记的嵌入类。
 
         分数先用命中 token 数，好让多张类表能按同一把尺子合并；服务层再改成覆盖率。
         """
@@ -934,7 +1075,7 @@ class PgVectorRetrievalStore:
                     and self._legacy_embedding_model in models
                 )
                 sql, arguments = lexical_search_statement(
-                    agent_id,
+                    base_id,
                     tokens,
                     limit,
                     table,
@@ -943,7 +1084,10 @@ class PgVectorRetrievalStore:
                 )
                 rows = await conn.fetch(sql, *arguments)
                 groups.append([_chunk_from_record(row) for row in rows])
-        return merge_lexical_candidates(groups, limit=limit)
+        return [
+            chunk.with_base_id(base_id)
+            for chunk in merge_lexical_candidates(groups, limit=limit)
+        ]
 
     async def close(self) -> None:
         async with self._pool_lock:

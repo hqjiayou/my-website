@@ -141,6 +141,7 @@ def build_research_agent(
     embedder: EmbeddingClient | None = None,
     embedding_model: str | None = None,
     embedding_classes: list[EmbeddingClass] | None = None,
+    knowledge_base_ids: list[str] | None = None,
 ) -> Agent[None, str]:
     """只有知识搜索的子 agent。没有 delegate_task、业务工具、MCP 或 Todo。"""
     return Agent(
@@ -153,6 +154,7 @@ def build_research_agent(
                 embedder=embedder,
                 embedding_model=embedding_model,
                 embedding_classes=embedding_classes,
+                knowledge_base_ids=knowledge_base_ids,
             )
         ],
     )
@@ -166,6 +168,7 @@ def build_delegate_tool(
     embedder: EmbeddingClient | None = None,
     embedding_model: str | None = None,
     embedding_classes: list[EmbeddingClass] | None = None,
+    knowledge_base_ids: list[str] | None = None,
     max_per_run: int = 4,
     timeout_seconds: float = 60,
     max_requests: int = 6,
@@ -178,6 +181,7 @@ def build_delegate_tool(
         embedder=embedder,
         embedding_model=embedding_model,
         embedding_classes=embedding_classes,
+        knowledge_base_ids=knowledge_base_ids,
     )
     budget = _DelegationBudget(max_per_run=max_per_run, max_requests=max_requests)
     toolset = _DelegateToolset()

@@ -20,8 +20,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 嵌入类登记（Issue #126 UoW-1）。读写均挂 ai-model:read——与模型入口写口的
- * 现行执法口径一致（kou 2026-11-03 拍板，区别于运行配置的 update）。
+ * 嵌入类登记（Issue #126 UoW-1；scope 于 Issue #209 UoW-3 改知识空间）。
+ * 读写均挂 ai-model:read——与模型入口写口的现行执法口径一致
+ * （kou 2026-11-03 拍板，区别于运行配置的 update）。
  * 登记行只引用模型入口，响应不含任何 key。
  */
 @RestController
@@ -38,20 +39,20 @@ public class AdminAiEmbeddingClassController {
 
     @GetMapping
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
-    @Operation(summary = "某 scope 的嵌入类登记（agentId 缺省＝全站 scope），附从入口解析的 spec 与类键")
+    @Operation(summary = "某 scope 的嵌入类登记（baseId 缺省＝全站 scope），附从入口解析的 spec 与类键")
     public ResponseEntity<HttpMessageBody<List<AdminEmbeddingClassDto>>> list(
-            @RequestParam(name = "agentId", required = false) Long agentId) {
+            @RequestParam(name = "baseId", required = false) Long baseId) {
         return ResponseEntity.ok(new HttpMessageBody<>(
-                ResponseMessages.SUCCESS, registrationService.listRegistrations(agentId)));
+                ResponseMessages.SUCCESS, registrationService.listRegistrations(baseId)));
     }
 
     @PutMapping
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
     @Operation(summary = "整表保存嵌入类登记：有序 entry 清单整体替换该 scope（数组序＝优先级，上限 4 类）")
     public ResponseEntity<HttpMessageBody<List<AdminEmbeddingClassDto>>> replace(
-            @RequestParam(name = "agentId", required = false) Long agentId,
+            @RequestParam(name = "baseId", required = false) Long baseId,
             @Valid @RequestBody AdminEmbeddingClassSaveRequest request) {
         return ResponseEntity.ok(new HttpMessageBody<>(
-                ResponseMessages.SUCCESS, registrationService.replaceRegistrations(agentId, request)));
+                ResponseMessages.SUCCESS, registrationService.replaceRegistrations(baseId, request)));
     }
 }

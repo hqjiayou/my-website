@@ -16,6 +16,7 @@ import com.mywebsite.agent.mapper.AgentContentMapper;
 import com.mywebsite.agent.mapper.AgentMapper;
 import com.mywebsite.agent.service.AgentInternalService;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -33,14 +34,17 @@ public class AgentInternalServiceImpl implements AgentInternalService {
     private final AgentMapper agentMapper;
     private final AgentContentMapper agentContentMapper;
     private final AgentAiKnowledgeDocumentMapper knowledgeDocumentMapper;
+    private final KnowledgeSpaceResolver knowledgeSpaceResolver;
 
     public AgentInternalServiceImpl(
             AgentMapper agentMapper,
             AgentContentMapper agentContentMapper,
-            AgentAiKnowledgeDocumentMapper knowledgeDocumentMapper) {
+            AgentAiKnowledgeDocumentMapper knowledgeDocumentMapper,
+            KnowledgeSpaceResolver knowledgeSpaceResolver) {
         this.agentMapper = agentMapper;
         this.agentContentMapper = agentContentMapper;
         this.knowledgeDocumentMapper = knowledgeDocumentMapper;
+        this.knowledgeSpaceResolver = knowledgeSpaceResolver;
     }
 
     @Override
@@ -79,13 +83,18 @@ public class AgentInternalServiceImpl implements AgentInternalService {
         requireSite(agentId);
         int effectiveLimit = Math.min(Math.max(limit, 1), MAX_KNOWLEDGE_DOCUMENT_LIMIT);
         int effectiveOffset = Math.max(offset, 0);
+        // 枚举范围 = 该 agent 可达空间集（创建∪订阅，Issue #209 UoW-4 定稿）：
+        // 文档 agent_id 已停写（UoW-1），按 document.baseId 归属过滤；空间集为空
+        // 时结果为空集（过滤里以不可能命中的 id 兜底，保证 total/items 同口径）。
+        List<Long> baseIds = knowledgeSpaceResolver.reachableBaseIds(agentId);
         long total = knowledgeDocumentMapper.selectCount(
-                knowledgeDocumentFilter(agentId, keyword, format, createdFrom, createdTo));
+                knowledgeDocumentFilter(baseIds, keyword, format, createdFrom, createdTo));
         LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity> wrapper =
-                knowledgeDocumentFilter(agentId, keyword, format, createdFrom, createdTo)
+                knowledgeDocumentFilter(baseIds, keyword, format, createdFrom, createdTo)
                         // 只取元数据列，正文 content 不进枚举查询。
                         .select(
                                 AgentAiKnowledgeDocumentEntity::getId,
+                                AgentAiKnowledgeDocumentEntity::getBaseId,
                                 AgentAiKnowledgeDocumentEntity::getTitle,
                                 AgentAiKnowledgeDocumentEntity::getSourceFormat,
                                 AgentAiKnowledgeDocumentEntity::getOriginalFilename,
@@ -99,6 +108,7 @@ public class AgentInternalServiceImpl implements AgentInternalService {
                 .map(doc -> new AgentKnowledgeDocumentItemDto(
                         doc.getId(),
                         "kb:" + doc.getId(),
+                        doc.getBaseId(),
                         doc.getTitle(),
                         doc.getSourceFormat(),
                         doc.getOriginalFilename(),
@@ -112,11 +122,16 @@ public class AgentInternalServiceImpl implements AgentInternalService {
 
     /** 枚举与计数共用同一套过滤条件，保证 total 与 items 口径一致。 */
     private static LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity> knowledgeDocumentFilter(
-            long agentId, String keyword, String format, OffsetDateTime createdFrom, OffsetDateTime createdTo) {
+            List<Long> baseIds, String keyword, String format, OffsetDateTime createdFrom, OffsetDateTime createdTo) {
         LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity> wrapper =
                 new LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity>()
-                        .eq(AgentAiKnowledgeDocumentEntity::getAgentId, agentId)
                         .eq(AgentAiKnowledgeDocumentEntity::getStatus, AgentAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        if (baseIds.isEmpty()) {
+            // 无可达空间：以不可能命中的 id 兜底为空集（IN 空集在部分数据库上非法）。
+            wrapper.eq(AgentAiKnowledgeDocumentEntity::getId, -1L);
+        } else {
+            wrapper.in(AgentAiKnowledgeDocumentEntity::getBaseId, baseIds);
+        }
         if (StringUtils.hasText(keyword)) {
             wrapper.like(AgentAiKnowledgeDocumentEntity::getTitle, keyword.trim());
         }

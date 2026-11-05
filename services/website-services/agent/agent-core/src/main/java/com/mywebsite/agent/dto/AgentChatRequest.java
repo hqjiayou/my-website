@@ -46,7 +46,11 @@ public record AgentChatRequest(
         // （INHERIT，用全局启用集）、空列表＝本 agent 不用 MCP（OFF）、
         // 非空＝只用这些 server 名（CUSTOM，与全局启用集取交集）。
         // 只带名字不带条目本体：密钥不随每轮请求过通道。
-        List<String> mcpServerNames) {
+        List<String> mcpServerNames,
+        // 本 agent 可检索的知识空间 id 集（Issue #209 UoW-2）：创建的空间∪订阅的
+        // 空间，字符串化 id。向量分区键已改 base，执行层据此跨空间检索；
+        // null＝不带（无空间或展开失败降级），NON_NULL 下报文与旧版一致。
+        List<String> knowledgeBaseIds) {
 
     /** 兼容不带 timezone 的构造点。缺省时执行层回退 UTC。 */
     public AgentChatRequest(
@@ -91,6 +95,7 @@ public record AgentChatRequest(
                 embeddingApiKey,
                 embeddingBaseUrl,
                 embeddingClasses,
+                null,
                 null,
                 null,
                 null,

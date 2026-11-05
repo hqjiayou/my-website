@@ -34,7 +34,7 @@ from agent_services.evals.scoring import (
     retrieval_hit,
     score_case,
 )
-from agent_services.retrieval.service import query_terms
+from agent_services.retrieval.service import RetrievalSpace, query_terms
 
 
 def test_retrieval_hit_positive_and_negative() -> None:
@@ -337,7 +337,9 @@ async def test_golden_retrieval_hits_expected_sources_only() -> None:
     service = await build_eval_index(corpus)
     try:
         for case in cases:
-            chunks = await service.retrieve_chunks(agent_id=EVAL_SITE_ID, query=case.question)
+            chunks = await service.retrieve_chunks(
+                spaces=[RetrievalSpace(EVAL_SITE_ID)], query=case.question
+            )
             found = {chunk.source_id for chunk in chunks}
             if case.category == "unanswerable":
                 assert found == set(), (case.id, found)

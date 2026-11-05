@@ -16,7 +16,11 @@ from agent_services.retrieval import runtime_config
 from agent_services.retrieval.runtime_config import (
     sync_runtime_config_from_business_api,
 )
-from agent_services.retrieval.service import DimensionChangeRequired, RetrievalService
+from agent_services.retrieval.service import (
+    DimensionChangeRequired,
+    RetrievalService,
+    RetrievalSpace,
+)
 
 PUSH_URL = "/internal/v1/config/retrieval"
 HEALTH_URL = "/internal/v1/health"
@@ -267,7 +271,7 @@ async def test_dimension_change_blocks_honestly_and_reembed_path_intact(monkeypa
     with pytest.raises(DimensionChangeRequired):
         await service.prepare_reembed()
     # 检索侧维度不匹配收敛成 degraded 空结果，不抛 500 噪声
-    chunks = await service.retrieve_chunks(agent_id="1", query="anything")
+    chunks = await service.retrieve_chunks(spaces=[RetrievalSpace("1")], query="anything")
     assert chunks == []
     assert service.degraded is True
 

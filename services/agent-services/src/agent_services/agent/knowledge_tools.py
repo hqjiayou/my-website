@@ -17,7 +17,11 @@ from dataclasses import dataclass, field
 from pydantic_ai.toolsets import FunctionToolset
 
 from agent_services.retrieval.embeddings import EmbeddingClient
-from agent_services.retrieval.service import EmbeddingClass, RetrievalService
+from agent_services.retrieval.service import (
+    EmbeddingClass,
+    RetrievalService,
+    RetrievalSpace,
+)
 from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.chat import ModelSelection
 from agent_services.tools.business_api import BusinessApiClient, BusinessApiError
@@ -90,7 +94,7 @@ class KnowledgeSearchCollector:
     searches: list[dict[str, object]] = field(default_factory=list)
     passages: list[str] = field(default_factory=list)
     degraded: bool = False
-    _cites: dict[tuple[str, int], int] = field(default_factory=dict)
+    _cites: dict[tuple[str, str, int], int] = field(default_factory=dict)
 
     def record_passage(self, text: str) -> None:
         """表格工具等非检索片段的原文。只进语料，不进 citations。"""
@@ -99,10 +103,14 @@ class KnowledgeSearchCollector:
             self.passages.append(cleaned)
 
     def record(self, query: str, chunks: list[RetrievedChunk]) -> list[tuple[int, RetrievedChunk]]:
-        """按累积顺序分配 [cN]。同一片段再次命中沿用原编号，不按分数重排。"""
+        """按累积顺序分配 [cN]。同一片段再次命中沿用原编号，不按分数重排。
+
+        去重键带 base_id：跨空间检索时同名片段按空间区分（文档只属一个空间，
+        正常不会撞键，带上是防御）。
+        """
         numbered: list[tuple[int, RetrievedChunk]] = []
         for chunk in chunks:
-            key = (chunk.source_id, chunk.chunk_index)
+            key = (chunk.base_id, chunk.source_id, chunk.chunk_index)
             cite = self._cites.get(key)
             if cite is None:
                 cite = len(self.chunks) + 1
@@ -140,7 +148,17 @@ def build_knowledge_toolset(
     model_selection: ModelSelection | None = None,
     collector: KnowledgeSearchCollector | None = None,
     client: BusinessApiClient | None = None,
+    knowledge_base_ids: list[str] | None = None,
 ) -> FunctionToolset:
+    # 分区键是知识空间集（Issue #209 UoW-2）：由请求上下文（Java 按订阅展开）
+    # 下发；agent_id 只作会话/业务通道标识，不再作检索分区。缺省空集＝无空间可查。
+    # 类集按空间走（UoW-3）：工具上下文只有空间 id 集与一份请求级类集（chat
+    # 契约未变、无从按空间区分），组装时把该类集挂到每个空间；调用方未传类集
+    # 时每空间类集为空，检索落进程默认类（与空间未登记同口径）。
+    spaces = [
+        RetrievalSpace(base_id=base_id, embedding_classes=embedding_classes)
+        for base_id in (knowledge_base_ids or [])
+    ]
     toolset = FunctionToolset()
 
     @toolset.tool_plain(name=SEARCH_TOOL_NAME)
@@ -159,11 +177,10 @@ def build_knowledge_toolset(
             return "Site knowledge search is unavailable."
         try:
             chunks = await retrieval.retrieve_chunks(
-                agent_id=agent_id,
+                spaces=spaces,
                 query=cleaned,
                 embedder=embedder,
                 embedding_model=embedding_model,
-                embedding_classes=embedding_classes,
                 model_selection=model_selection,
             )
         except Exception as exc:  # noqa: BLE001 — 检索失败不让本轮 run 失败

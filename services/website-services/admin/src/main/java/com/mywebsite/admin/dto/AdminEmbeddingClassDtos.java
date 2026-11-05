@@ -9,15 +9,16 @@ public final class AdminEmbeddingClassDtos {
     private AdminEmbeddingClassDtos() {}
 
     /**
-     * 一行登记的视图（Issue #126 UoW-1）：登记行本身只存 entry 引用，
-     * {@code embeddingSpec} 与 {@code className}（规范化类键）是读时从被引用入口
-     * 解析出来的展示字段，不落登记表。被引用入口已被删除时
+     * 一行登记的视图（Issue #126 UoW-1；scope 于 Issue #209 UoW-3 改知识空间）：
+     * 登记行本身只存 entry 引用，{@code embeddingSpec} 与 {@code className}
+     * （规范化类键）是读时从被引用入口解析出来的展示字段，不落登记表。
+     * {@code baseId} 为 null＝全站 scope（平台默认）。被引用入口已被删除时
      * {@code entryDisplayName}/{@code embeddingSpec}/{@code className} 为 null，
      * 登记行仍如实返回，供页面提示清理。
      */
     public record AdminEmbeddingClassDto(
             Long id,
-            Long agentId,
+            Long baseId,
             Long entryId,
             String entryDisplayName,
             String embeddingSpec,

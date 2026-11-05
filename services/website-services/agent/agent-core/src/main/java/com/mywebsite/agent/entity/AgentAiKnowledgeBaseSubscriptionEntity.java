@@ -1,4 +1,4 @@
-package com.mywebsite.admin.entity;
+package com.mywebsite.agent.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -6,9 +6,13 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import java.io.Serializable;
 import java.time.OffsetDateTime;
 
-/** 知识库共享链接（纯关系行，删除即真删，不走软删）。 */
-@TableName("agent_ai_knowledge_base_link")
-public class AdminAiKnowledgeBaseLinkEntity implements Serializable {
+/**
+ * 知识空间订阅（表 {@code agent_ai_knowledge_base_subscription}，纯关系行）。
+ * 站点侧只读最小映射（写入在 admin）：一行表示一个 agent 订阅了一个知识空间，
+ * 与 admin {@code AdminAiKnowledgeBaseSubscriptionEntity} 同表双映射（Issue #209 UoW-2）。
+ */
+@TableName("agent_ai_knowledge_base_subscription")
+public class AgentAiKnowledgeBaseSubscriptionEntity implements Serializable {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;

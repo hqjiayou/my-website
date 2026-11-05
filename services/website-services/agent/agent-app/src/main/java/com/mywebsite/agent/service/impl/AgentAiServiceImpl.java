@@ -13,6 +13,7 @@ import com.mywebsite.agent.dto.AgentChatResponse;
 import com.mywebsite.agent.dto.AgentCitation;
 import com.mywebsite.agent.dto.AgentExperienceLessonItem;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
+import com.mywebsite.agent.dto.AgentRetrievalSearchSpace;
 import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentTodoItem;
@@ -199,6 +200,7 @@ public class AgentAiServiceImpl implements AgentAiService {
     private final AgentEmbeddingClassService embeddingClassService;
     private final AgentExperienceLessonService experienceLessonService;
     private final AgentMcpSelectionService mcpSelectionService;
+    private final KnowledgeSpaceResolver knowledgeSpaceResolver;
 
     public AgentAiServiceImpl(
             AgentClient agentClient,
@@ -215,7 +217,8 @@ public class AgentAiServiceImpl implements AgentAiService {
             AgentUsageService usageService,
             AgentEmbeddingClassService embeddingClassService,
             AgentExperienceLessonService experienceLessonService,
-            AgentMcpSelectionService mcpSelectionService) {
+            AgentMcpSelectionService mcpSelectionService,
+            KnowledgeSpaceResolver knowledgeSpaceResolver) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.modelEntryCipher = modelEntryCipher;
@@ -231,6 +234,7 @@ public class AgentAiServiceImpl implements AgentAiService {
         this.embeddingClassService = embeddingClassService;
         this.experienceLessonService = experienceLessonService;
         this.mcpSelectionService = mcpSelectionService;
+        this.knowledgeSpaceResolver = knowledgeSpaceResolver;
     }
 
     @Override
@@ -300,16 +304,25 @@ public class AgentAiServiceImpl implements AgentAiService {
         }
         boolean vectorDegraded = false;
         try {
-            List<AgentModelSelection> embeddingClasses = embeddingClasses(agentId);
-            AgentModelSelection selection = embeddingClasses.isEmpty() ? null : embeddingClasses.get(0);
+            // 按空间分别组装（Issue #209 UoW-3）：每个可检索空间带自己登记的类集，
+            // 执行层按空间用类查本空间分区；顶层凭证取首个有类空间的首类作回退。
+            List<AgentRetrievalSearchSpace> spaces = new ArrayList<>();
+            AgentModelSelection selection = null;
+            for (Long baseId : knowledgeBaseIdValues(agentId)) {
+                List<AgentModelSelection> spaceClasses = embeddingClassesForSpace(baseId);
+                if (selection == null && !spaceClasses.isEmpty()) {
+                    selection = spaceClasses.get(0);
+                }
+                spaces.add(new AgentRetrievalSearchSpace(
+                        String.valueOf(baseId), AgentEmbeddingClassUtils.wire(spaceClasses)));
+            }
             AgentRetrievalSearchResult result = agentClient.searchRetrieval(new AgentRetrievalSearchRequest(
-                    String.valueOf(agentId),
                     query,
                     clampTopK(request.topK()),
                     selection == null ? null : selection.embeddingSpec(),
                     selection == null ? null : selection.apiKey(),
                     selection == null ? null : selection.baseUrl(),
-                    AgentEmbeddingClassUtils.wire(embeddingClasses)));
+                    spaces.isEmpty() ? null : List.copyOf(spaces)));
             if (!result.degraded() && !result.hits().isEmpty()) {
                 List<AgentKnowledgeSearchResponseDto.Hit> hits = result.hits().stream()
                         .map(hit -> new AgentKnowledgeSearchResponseDto.Hit(
@@ -335,13 +348,20 @@ public class AgentAiServiceImpl implements AgentAiService {
     public List<com.mywebsite.agent.dto.AgentKnowledgeDocumentDtos.ListItem> listKnowledgeDocuments(long agentId) {
         AuthenticatedUser user = requireAgentMember(agentId);
         requireAgentUserId(user);
+        // 文档可见性按空间集（Issue #209 UoW-4）：document.agentId 已停写（UoW-1），
+        // 改按所属空间 ∈ 该 agent 可达空间集（创建∪订阅）——与检索覆盖面一致；
+        // 无可达空间时为空列表（IN 空集不发查询，直接返回）。
+        List<Long> baseIds = knowledgeBaseIdValues(agentId);
+        if (baseIds.isEmpty()) {
+            return List.of();
+        }
         return knowledgeDocumentMapper
                 .selectList(new LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity>()
                         .select(
                                 AgentAiKnowledgeDocumentEntity::getId,
                                 AgentAiKnowledgeDocumentEntity::getTitle,
                                 AgentAiKnowledgeDocumentEntity::getUpdatedAt)
-                        .eq(AgentAiKnowledgeDocumentEntity::getAgentId, agentId)
+                        .in(AgentAiKnowledgeDocumentEntity::getBaseId, baseIds)
                         .eq(AgentAiKnowledgeDocumentEntity::getStatus, AgentAiKnowledgeDocumentEntity.STATUS_ACTIVE)
                         .orderByDesc(AgentAiKnowledgeDocumentEntity::getUpdatedAt)
                         .orderByDesc(AgentAiKnowledgeDocumentEntity::getId))
@@ -356,11 +376,16 @@ public class AgentAiServiceImpl implements AgentAiService {
             long agentId, long documentId) {
         AuthenticatedUser user = requireAgentMember(agentId);
         requireAgentUserId(user);
-        AgentAiKnowledgeDocumentEntity doc = knowledgeDocumentMapper.selectOne(
-                new LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity>()
-                        .eq(AgentAiKnowledgeDocumentEntity::getId, documentId)
-                        .eq(AgentAiKnowledgeDocumentEntity::getAgentId, agentId)
-                        .eq(AgentAiKnowledgeDocumentEntity::getStatus, AgentAiKnowledgeDocumentEntity.STATUS_ACTIVE));
+        // 同列表口径（Issue #209 UoW-4）：文档所属空间须在该 agent 可达空间集内，
+        // 否则与不存在同等对待（NOT_FOUND，不泄露他空间文档存在性）。
+        List<Long> baseIds = knowledgeBaseIdValues(agentId);
+        AgentAiKnowledgeDocumentEntity doc = baseIds.isEmpty()
+                ? null
+                : knowledgeDocumentMapper.selectOne(
+                        new LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity>()
+                                .eq(AgentAiKnowledgeDocumentEntity::getId, documentId)
+                                .in(AgentAiKnowledgeDocumentEntity::getBaseId, baseIds)
+                                .eq(AgentAiKnowledgeDocumentEntity::getStatus, AgentAiKnowledgeDocumentEntity.STATUS_ACTIVE));
         if (doc == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
@@ -468,7 +493,7 @@ public class AgentAiServiceImpl implements AgentAiService {
             // 执行层让进程环境模型顶替作答（Issue #145 F1，ADR-0004）。
             throw new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED);
         }
-        List<AgentModelSelection> embeddingClasses = embeddingClasses(agentId);
+        List<AgentModelSelection> embeddingClasses = embeddingClassesForChat(agentId);
         AgentModelSelection embedding = embeddingClasses.isEmpty() ? null : embeddingClasses.get(0);
         AgentChatRequest request = new AgentChatRequest(
                 String.valueOf(agentId),
@@ -501,8 +526,30 @@ public class AgentAiServiceImpl implements AgentAiService {
                 // 正式对话不带试聊标记：preview=null，执行的卡片通道保持关闭。
                 null,
                 experienceLessons == null || experienceLessons.isEmpty() ? null : experienceLessons,
-                mcpServerNames);
+                mcpServerNames,
+                knowledgeBaseIds(agentId));
         return new BuiltChatRequest(request, links);
+    }
+
+    /**
+     * 可检索知识空间集的下发值（Issue #209 UoW-2）：字符串化 id。向量分区键已改
+     * base，执行层据此跨空间检索；无空间时返回 null 不带字段（与旧版报文同形）。
+     */
+    private List<String> knowledgeBaseIds(long agentId) {
+        List<Long> baseIds = knowledgeBaseIdValues(agentId);
+        if (baseIds.isEmpty()) {
+            return null;
+        }
+        return baseIds.stream().map(String::valueOf).toList();
+    }
+
+    /**
+     * 可检索空间集的 Long 形态：展开口径（创建∪订阅、去重保序）与失败隔离统一在
+     * {@link KnowledgeSpaceResolver}（UoW-4 抽共用，文档枚举/回退过滤同吃一份）。
+     * 检索请求的按空间组装（UoW-3）与聊天类集并集都用这份展开。
+     */
+    private List<Long> knowledgeBaseIdValues(long agentId) {
+        return knowledgeSpaceResolver.reachableBaseIds(agentId);
     }
 
     /**
@@ -616,22 +663,37 @@ public class AgentAiServiceImpl implements AgentAiService {
         return StringUtils.hasText(configured) ? configured.trim() : null;
     }
 
+    /**
+     * 字面回退的共用过滤（Issue #209 UoW-4）：文档所属空间 ∈ 该 agent 可达空间集
+     * （创建∪订阅，与主检索路径的覆盖面拉齐——主路径自链接分区时代即含订阅文档，
+     * 本回退此前只按 document.agentId 搜自有文档、且停写后命不中新文档，属既有
+     * 不对称，本步一并纠正）。空间集为空集时调用方直接短路、不发查询。
+     */
+    private static LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity> textMatchWrapper(
+            List<Long> baseIds, String needle) {
+        return new LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity>()
+                .in(AgentAiKnowledgeDocumentEntity::getBaseId, baseIds)
+                .eq(AgentAiKnowledgeDocumentEntity::getStatus, AgentAiKnowledgeDocumentEntity.STATUS_ACTIVE)
+                .and(wrapper -> wrapper
+                        .like(AgentAiKnowledgeDocumentEntity::getTitle, needle)
+                        .or()
+                        .like(AgentAiKnowledgeDocumentEntity::getContent, needle))
+                .orderByDesc(AgentAiKnowledgeDocumentEntity::getId)
+                .last("LIMIT " + KNOWLEDGE_SNIPPET_LIMIT);
+    }
+
     /** 向量索引没有命中时，Python 用这些原文片段回答。没有匹配则不传。 */
     private List<String> knowledgeSnippets(long agentId, String query) {
         String needle = needle(query);
         if (needle.isEmpty()) {
             return null;
         }
+        List<Long> baseIds = knowledgeBaseIdValues(agentId);
+        if (baseIds.isEmpty()) {
+            return null;
+        }
         List<String> snippets = knowledgeDocumentMapper
-                .selectList(new LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity>()
-                        .eq(AgentAiKnowledgeDocumentEntity::getAgentId, agentId)
-                        .eq(AgentAiKnowledgeDocumentEntity::getStatus, AgentAiKnowledgeDocumentEntity.STATUS_ACTIVE)
-                        .and(wrapper -> wrapper
-                                .like(AgentAiKnowledgeDocumentEntity::getTitle, needle)
-                                .or()
-                                .like(AgentAiKnowledgeDocumentEntity::getContent, needle))
-                        .orderByDesc(AgentAiKnowledgeDocumentEntity::getId)
-                        .last("LIMIT " + KNOWLEDGE_SNIPPET_LIMIT))
+                .selectList(textMatchWrapper(baseIds, needle))
                 .stream()
                 .map(AgentAiServiceImpl::snippet)
                 .filter(StringUtils::hasText)
@@ -644,16 +706,12 @@ public class AgentAiServiceImpl implements AgentAiService {
         if (needle.isEmpty()) {
             return List.of();
         }
+        List<Long> baseIds = knowledgeBaseIdValues(agentId);
+        if (baseIds.isEmpty()) {
+            return List.of();
+        }
         return knowledgeDocumentMapper
-                .selectList(new LambdaQueryWrapper<AgentAiKnowledgeDocumentEntity>()
-                        .eq(AgentAiKnowledgeDocumentEntity::getAgentId, agentId)
-                        .eq(AgentAiKnowledgeDocumentEntity::getStatus, AgentAiKnowledgeDocumentEntity.STATUS_ACTIVE)
-                        .and(wrapper -> wrapper
-                                .like(AgentAiKnowledgeDocumentEntity::getTitle, needle)
-                                .or()
-                                .like(AgentAiKnowledgeDocumentEntity::getContent, needle))
-                        .orderByDesc(AgentAiKnowledgeDocumentEntity::getId)
-                        .last("LIMIT " + KNOWLEDGE_SNIPPET_LIMIT))
+                .selectList(textMatchWrapper(baseIds, needle))
                 .stream()
                 .map(document -> new AgentKnowledgeSearchResponseDto.Hit(
                         "kb:" + document.getId(), 0, 1.0d, snippet(document)))
@@ -732,13 +790,29 @@ public class AgentAiServiceImpl implements AgentAiService {
     }
 
     /**
-     * 已登记的嵌入类，与当前对话模式无关。来源是登记表，委托 agent-core 的
-     * {@code AgentEmbeddingClassService}（Issue #126 登记制，与 admin 共用同一份
-     * 实现，含首次读物化）；原先扫入口 {@code embeddingSpec} 的推算已退役。
-     * 都没有时返回空列表，检索改用进程嵌入模型。
+     * 某知识空间已登记的嵌入类，与当前对话模式无关。来源是登记表，委托
+     * agent-core 的 {@code AgentEmbeddingClassService}（Issue #126 登记制、
+     * scope 于 Issue #209 UoW-3 迁空间，与 admin 共用同一份实现，含首次读
+     * 物化）；原先扫入口 {@code embeddingSpec} 的推算已退役。没有时返回空
+     * 列表，检索改用进程嵌入模型。
      */
-    private List<AgentModelSelection> embeddingClasses(long agentId) {
-        return embeddingClassService.embeddingClasses(agentId);
+    private List<AgentModelSelection> embeddingClassesForSpace(long baseId) {
+        return embeddingClassService.embeddingClassesForSpace(baseId);
+    }
+
+    /**
+     * 聊天请求级的嵌入类集（Issue #209 UoW-3）：聊天契约仍是请求级一份类集
+     * ＋空间集（{@code knowledgeBaseIds}）的形状，类集按空间分别解析后并集
+     * 去重——展开顺序（创建在前、订阅在后）即类优先级，{@code dedupe} 兜底
+     * 同类只留先出现者、上限 4 类。无可检索空间时为空列表：执行层没有空间
+     * 可查，类集本就无消费方。
+     */
+    private List<AgentModelSelection> embeddingClassesForChat(long agentId) {
+        List<AgentModelSelection> union = new ArrayList<>();
+        for (Long baseId : knowledgeBaseIdValues(agentId)) {
+            union.addAll(embeddingClassesForSpace(baseId));
+        }
+        return AgentEmbeddingClassUtils.dedupe(union);
     }
 
     /**

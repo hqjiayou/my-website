@@ -72,4 +72,6 @@ Java 在正文与原件重抽一致时才带下列可选字段。不一致、读
 | `segments` | 可选。位置段：`text`，以及 `page` 或 `sheet` + `rowStart`/`rowEnd`。缺省时仍按 `content` 整篇切块 |
 | `tables` | 可选。结构化表：`sheet`、`headerRow`、`headers`、`rows[{rowNumber, cells}]`、`truncated`。`rowNumber` 是工作表原始行号；表头行不在 `rows` 里。单元格为原始文本。仅写入 Python `agent_retrieval`，不进 Java 主库 |
 
+分区键为知识空间（Issue #209 UoW-2 起由 `agentId` 换为 `baseId`）：文档只属一个空间、只写一份，agent 的订阅关系由 Java 侧展开。同步与删除以 `baseId` 定位：`PUT` 体带 `baseId`；`DELETE /internal/v1/retrieval/documents?baseId=&sourceId=` 删单份；`DELETE /internal/v1/retrieval/bases/{baseId}` 整空间清理；`GET /internal/v1/retrieval/documents?baseId=` 回该空间已索引的 `sourceIds` 清单（存量对账用）。检索 `POST /internal/v1/retrieval/search` 带 `spaces` 空间集（UoW-3 起取代 `baseIds`＋请求级 `embeddingClasses`）：每项为 `{baseId, embeddingClasses?}`，类集按空间各自下发（嵌入登记是空间级的），未带类集的空间落请求级 `embeddingSpec` 凭证、再落进程默认类；跨空间按名次合并，命中带 `baseId`（未带空间的旧命中不写出该字段）；chat 请求以 `knowledgeBaseIds` 下发本 agent 可检索的空间集，知识工具据此检索，`agentId` 只作会话标识。
+
 管理端知识库文档列表与详情另有 `unevaluatedFormulaCount`（未求值公式格数量，0 表示没有）。大于 0 时正文里这些格子为空，界面标记「含未计算的公式，数值可能缺失」。该计数不阻断索引。

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, FileText, X } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, FileText, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -16,6 +16,7 @@ import { PERMISSION_CODES } from '@/types/rbac'
 import { isApiError } from '@/utils/http/apiError'
 
 import { AiAgentScope } from './aiAgentScope'
+import { EmbeddingRegistrationCard } from './embeddingRegistrationCard'
 
 export function AiKnowledgeBasesPage() {
   const { t } = useTranslation('aiAdmin')
@@ -117,6 +118,8 @@ function KnowledgeBasesAdminSection() {
   const { t } = useTranslation('aiAdmin')
   const queryClient = useQueryClient()
   const [linkTargets, setLinkTargets] = useState<Record<number, string>>({})
+  const [embeddingBaseId, setEmbeddingBaseId] = useState<number | null>(null)
+  const [expandedBaseId, setExpandedBaseId] = useState<number | null>(null)
   const basesQuery = useQuery({
     queryKey: ['ai-knowledge-bases-all'],
     queryFn: () => aiApi.listAllKnowledgeBases(),
@@ -156,6 +159,7 @@ function KnowledgeBasesAdminSection() {
   if (bases.length === 0) {
     return null
   }
+  const selectedBase = bases.find((base) => base.id === embeddingBaseId) ?? bases[0]
   return (
     <article className="mb-4 rounded-xl border border-admin bg-admin-surface p-5">
       <h2 className="text-sm font-semibold text-admin">{t('knowledgeBases.bases.title')}</h2>
@@ -183,6 +187,8 @@ function KnowledgeBasesAdminSection() {
                     {t('knowledgeBases.bases.owner')} {base.ownerAgentName ?? `#${base.agentId}`}
                     {' · '}
                     {t('knowledgeBases.bases.documents')} {base.documentCount}
+                    {' · '}
+                    {t('knowledgeBases.bases.sharedWith')} {base.linkedAgentIds.length}
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -199,11 +205,21 @@ function KnowledgeBasesAdminSection() {
                         <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
                           <button
                             type="button"
-                            className="rounded-full p-0.5 text-danger-emphasis transition hover:bg-danger-muted"
+                            className="rounded-full p-0.5 text-danger-emphasis transition hover:bg-danger-muted disabled:opacity-50"
                             title={t('knowledgeBases.bases.unlink')}
-                            onClick={() =>
+                            disabled={unlinkMutation.isPending}
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  t('knowledgeBases.bases.unlinkConfirm', {
+                                    name: agentName(linkedAgentId),
+                                  }),
+                                )
+                              ) {
+                                return
+                              }
                               unlinkMutation.mutate({ baseId: base.id, targetAgentId: linkedAgentId })
-                            }
+                            }}
                           >
                             <X className="h-3 w-3" />
                           </button>
@@ -241,12 +257,98 @@ function KnowledgeBasesAdminSection() {
                     </PermissionGate>
                   ) : null}
                 </div>
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs text-admin-muted transition hover:text-admin"
+                    onClick={() => setExpandedBaseId(expandedBaseId === base.id ? null : base.id)}
+                  >
+                    {expandedBaseId === base.id ? (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    )}
+                    {t('knowledgeBases.bases.documents')} {base.documentCount}
+                  </button>
+                  {expandedBaseId === base.id ? (
+                    <BaseDocumentsList baseId={base.id} ownerAgentId={base.agentId} />
+                  ) : null}
+                </div>
               </div>
             </div>
           )
         })}
       </div>
+      <div className="mt-5 border-t border-admin pt-4">
+        <h3 className="text-sm font-semibold text-admin">{t('knowledgeBases.bases.embeddingTitle')}</h3>
+        <p className="mt-1 text-xs text-admin-muted">{t('knowledgeBases.bases.embeddingHint')}</p>
+        <select
+          className="mt-3 w-72 max-w-full rounded-lg border border-admin bg-admin-surface px-2 py-1.5 text-sm text-admin"
+          value={selectedBase.id}
+          onChange={(event) => setEmbeddingBaseId(Number(event.target.value))}
+          aria-label={t('knowledgeBases.bases.embeddingPick')}
+        >
+          {bases.map((base) => (
+            <option key={base.id} value={base.id}>
+              {base.name} · {t('knowledgeBases.bases.owner')} {base.ownerAgentName ?? `#${base.agentId}`}
+            </option>
+          ))}
+        </select>
+        <div className="mt-3">
+          <EmbeddingRegistrationCard key={selectedBase.id} baseId={selectedBase.id} />
+        </div>
+      </div>
     </article>
+  )
+}
+
+/**
+ * 按空间只读文档列表（Issue #209 UoW-5 管理面空间视角）：以空间创建者为 viewer
+ * 复用既有文档列表接口，只展示标题与索引状态，不提供任何写操作——文档写入仍限
+ * 创建者在自己的工作区维护，订阅者只读消费，此处与之同一口径。
+ */
+function BaseDocumentsList({ baseId, ownerAgentId }: { baseId: number; ownerAgentId: number }) {
+  const { t } = useTranslation('aiAdmin')
+  const documentsQuery = useQuery({
+    queryKey: ['ai-knowledge-base-documents', baseId],
+    queryFn: () => aiApi.listKnowledgeDocuments(ownerAgentId, { baseId, pageNum: 1, pageSize: 20 }),
+  })
+  const items = documentsQuery.data?.records ?? []
+  if (documentsQuery.isLoading) {
+    return null
+  }
+  if (items.length === 0) {
+    return <p className="mt-2 text-xs text-admin-muted">{t('knowledgeBases.bases.none')}</p>
+  }
+  return (
+    <ul className="mt-2 space-y-1">
+      {items.map((item) => (
+        <li
+          key={item.id}
+          className="flex items-center gap-2 rounded-lg border border-admin px-3 py-2"
+        >
+          <FileText className="h-3.5 w-3.5 shrink-0 text-admin-muted" />
+          <span className="min-w-0 flex-1 truncate text-xs text-admin">{item.title}</span>
+          <span
+            className={cn(
+              'shrink-0 rounded-full px-2 py-0.5 text-xs',
+              item.indexStatus === 'INDEXED'
+                ? 'bg-success-muted text-success-emphasis'
+                : item.indexStatus === 'FAILED'
+                  ? 'bg-danger-muted text-danger-emphasis'
+                  : 'bg-admin-surface-muted text-admin-muted',
+            )}
+            title={item.indexStatus === 'FAILED' ? (item.indexError ?? undefined) : undefined}
+          >
+            {item.indexStatus === 'INDEXED'
+              ? t('knowledgeBases.overview.indexed')
+              : item.indexStatus === 'FAILED'
+                ? t('knowledgeBases.overview.failed')
+                : t('knowledgeBases.overview.pending')}
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }
 

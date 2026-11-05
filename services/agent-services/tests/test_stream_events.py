@@ -29,7 +29,7 @@ from agent_services.schemas.stream import AgentStreamEvent
 class _FakeRetrieval:
     degraded = False
 
-    async def retrieve_chunks(self, *, agent_id: str, query: str, **_kwargs: object) -> list[RetrievedChunk]:
+    async def retrieve_chunks(self, *, spaces: list, query: str, **_kwargs: object) -> list[RetrievedChunk]:
         return [RetrievedChunk(source_id="kb:1", chunk_index=2, content="KB-FACT", score=0.9)]
 
 
@@ -58,7 +58,7 @@ async def test_stream_maps_thinking_tool_and_citations() -> None:
 
 
     collector = KnowledgeSearchCollector()
-    toolset = build_knowledge_toolset("1", _FakeRetrieval(), collector=collector)  # type: ignore[arg-type]
+    toolset = build_knowledge_toolset("1", _FakeRetrieval(), collector=collector, knowledge_base_ids=["1"])  # type: ignore[arg-type]
     events = await _collect(
         FunctionModel(stream_function=stream_fn),
         toolsets=[toolset],

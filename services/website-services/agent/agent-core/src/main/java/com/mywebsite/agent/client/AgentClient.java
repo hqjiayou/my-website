@@ -12,8 +12,10 @@ import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
+import com.mywebsite.agent.dto.AgentRetrievalPartitionStats;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
 import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
+import com.mywebsite.agent.dto.AgentIndexedDocument;
 import com.mywebsite.agent.dto.AgentRuntimeConfigPayload;
 import com.mywebsite.agent.dto.AgentRuntimeConfigPushResult;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
@@ -58,8 +60,20 @@ public interface AgentClient {
      */
     AgentReembedPrepareResult prepareReembed(AgentModelSelection selection, boolean confirmRecreate);
 
-    /** 从派生索引移除文档。 */
-    void deleteRetrievalDocument(String agentId, String sourceId);
+    /** 从派生索引移除文档（按其所属空间分区，Issue #209 UoW-2）。 */
+    void deleteRetrievalDocument(String baseId, String sourceId);
+
+    /** 清空某知识空间的整个派生索引分区（删库/删站点时的兜底清扫，Issue #209 UoW-2）。 */
+    void deleteRetrievalDocumentsByBase(String baseId);
+
+    /** 某知识空间在派生索引中的已索引文档清单（按空间核对索引现状，Issue #209 UoW-2）。 */
+    List<AgentIndexedDocument> listIndexedDocuments(String baseId);
+
+    /**
+     * 某分区在派生索引中的对账统计：已索引 sourceId 清单＋块行总数（Issue #209 UoW-5
+     * 全量重建对账用）。分区键也可是旧 agent id（查遗留分区残留）。
+     */
+    AgentRetrievalPartitionStats retrievalPartitionStats(String baseId);
 
     /** 知识检索。检索未配置时抛 BusinessException（EXTERNAL_DEPENDENCY_BLOCKED，与 upsert 相同）。 */
     AgentRetrievalSearchResult searchRetrieval(AgentRetrievalSearchRequest request);

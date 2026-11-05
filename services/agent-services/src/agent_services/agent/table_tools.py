@@ -14,22 +14,27 @@ logger = logging.getLogger(__name__)
 TABLE_TOOL_NAME = "query_site_table"
 
 
-async def structured_tables_available(retrieval: object | None, agent_id: str) -> bool:
-    """探测失败当成没有表，避免对话因为检索库不可用而 500。"""
+async def structured_tables_available(
+    retrieval: object | None, base_ids: list[str]
+) -> bool:
+    """任一空间有结构化行即为真。探测失败当成没有表，避免对话因为检索库不可用而 500。"""
     if retrieval is None:
         return False
     probe = getattr(retrieval, "has_structured_tables", None)
     if probe is None:
         return False
     try:
-        return bool(await probe(agent_id))
+        for base_id in base_ids:
+            if await probe(base_id):
+                return True
+        return False
     except Exception:
         logger.warning("structured table probe failed", exc_info=True)
         return False
 
 
 def build_table_toolset(
-    agent_id: str,
+    base_ids: list[str],
     retrieval: object | None,
     *,
     collector: KnowledgeSearchCollector | None = None,
@@ -70,7 +75,11 @@ def build_table_toolset(
             text = "No structured table data is available for this site."
         else:
             try:
-                loaded = await retrieval.load_structured_tables(agent_id)  # type: ignore[attr-defined]
+                loaded: list[object] = []
+                for base_id in base_ids:
+                    loaded.extend(
+                        await retrieval.load_structured_tables(base_id)  # type: ignore[attr-defined]
+                    )
                 sheets = [item for item in loaded if isinstance(item, StoredSheet)]
             except Exception:
                 logger.warning("structured table load failed", exc_info=True)

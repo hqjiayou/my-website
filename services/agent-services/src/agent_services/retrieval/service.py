@@ -1,4 +1,9 @@
-"""检索服务：分块 → embedding → 向量存取；agent_id 全链路强制。"""
+"""检索服务：分块 → embedding → 向量存取；base_id（知识空间）全链路强制。
+
+分区键 Issue #209 UoW-2 起由 agent_id 换为 base_id：文档只属一个空间、只写
+一份；读取时调用方给出空间集，单空间走原管线，多空间各空间独立走完管线后
+按名次合并（与多类合并同一先例）。
+"""
 
 import logging
 import re
@@ -114,6 +119,19 @@ class EmbeddingClass:
 
     name: str
     client: EmbeddingClient | None
+
+
+@dataclass(frozen=True)
+class RetrievalSpace:
+    """一次检索中的一个知识空间，带它自己的登记嵌入类集（Issue #209 UoW-3）。
+
+    嵌入登记是空间级的：同一请求里每个空间用各自的类集检索，不再有一份
+    请求级类集套给所有空间。embedding_classes 为 None 或空 = 该空间未单独
+    登记类，检索时落请求级嵌入器/进程默认类，与未登记口径一致。
+    """
+
+    base_id: str
+    embedding_classes: list[EmbeddingClass] | None = None
 
 
 DEFAULT_TOP_K = 4
@@ -520,7 +538,7 @@ class RetrievalService:
     async def _upsert_one(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         source_id: str,
         title: str,
         chunks: list[str],
@@ -531,7 +549,7 @@ class RetrievalService:
             raise RuntimeError("Embedding client is not configured.")
         embeddings = await item.client.embed_documents(chunks)
         stored = {
-            "agent_id": agent_id,
+            "base_id": base_id,
             "source_id": source_id,
             "title": title,
             "chunks": chunks,
@@ -545,7 +563,7 @@ class RetrievalService:
     async def upsert_document(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         source_id: str,
         title: str,
         content: str,
@@ -558,8 +576,8 @@ class RetrievalService:
     ) -> int:
         chunks, locations = _chunks_for_index(content, segments)
         if not chunks:
-            await self._store.delete_document(agent_id=agent_id, source_id=source_id)
-            await self._replace_sheet_rows(agent_id, source_id, title, tables)
+            await self._store.delete_document(base_id=base_id, source_id=source_id)
+            await self._replace_sheet_rows(base_id, source_id, title, tables)
             return 0
         if len(chunks) > MAX_UPSERT_CHUNKS:
             raise RetrievalChunkLimitExceeded(
@@ -568,7 +586,7 @@ class RetrievalService:
         classes = self._resolve_classes(embedder, embedding_classes, embedding_model)
         if len(classes) == 1:
             count = await self._upsert_one(
-                agent_id=agent_id,
+                base_id=base_id,
                 source_id=source_id,
                 title=title,
                 chunks=chunks,
@@ -576,15 +594,15 @@ class RetrievalService:
                 locations=locations,
             )
             if prune_stale_classes:
-                await self._prune_stale_classes(agent_id, source_id, classes)
-            await self._replace_sheet_rows(agent_id, source_id, title, tables)
+                await self._prune_stale_classes(base_id, source_id, classes)
+            await self._replace_sheet_rows(base_id, source_id, title, tables)
             return count
         count = 0
         failures = 0
         for item in classes:
             try:
                 count = await self._upsert_one(
-                    agent_id=agent_id,
+                    base_id=base_id,
                     source_id=source_id,
                     title=title,
                     chunks=chunks,
@@ -601,32 +619,33 @@ class RetrievalService:
         if failures:
             raise RuntimeError("One or more embedding classes failed to index.")
         if prune_stale_classes:
-            await self._prune_stale_classes(agent_id, source_id, classes)
-        await self._replace_sheet_rows(agent_id, source_id, title, tables)
+            await self._prune_stale_classes(base_id, source_id, classes)
+        await self._replace_sheet_rows(base_id, source_id, title, tables)
         return count
 
     async def _prune_stale_classes(
-        self, agent_id: str, source_id: str, classes: list[EmbeddingClass]
+        self, base_id: str, source_id: str, classes: list[EmbeddingClass]
     ) -> None:
         """完整类集写入成功后，清理该文档在未登记类下的残留行（Issue #202 UoW-2）。
 
-        只在调用方明示本次是完整类集（prune_stale_classes）时执行：fill-missing
-        子集写绝不走到这里。store 未实现该方法（测试替身等）时跳过，与
-        _replace_sheet_rows 的 getattr 口径一致；生产 PgVector store 恒实现。
-        清理失败照常上抛——Java 侧会把文档标 FAILED，不假装索引完全同步。
+        清理键是（空间, 文档）：差集只在本空间内算，另一空间的同源文档不受影响
+        （Issue #209 UoW-2）。只在调用方明示本次是完整类集（prune_stale_classes）
+        时执行：fill-missing 子集写绝不走到这里。store 未实现该方法（测试替身等）
+        时跳过，与 _replace_sheet_rows 的 getattr 口径一致；生产 PgVector store
+        恒实现。清理失败照常上抛——Java 侧会把文档标 FAILED，不假装索引完全同步。
         """
         prune = getattr(self._store, "prune_document_classes", None)
         if prune is None:
             return
         await prune(
-            agent_id=agent_id,
+            base_id=base_id,
             source_id=source_id,
             keep_models=[item.name for item in classes],
         )
 
     async def _replace_sheet_rows(
         self,
-        agent_id: str,
+        base_id: str,
         source_id: str,
         title: str,
         tables: list[IndexTable] | None,
@@ -636,23 +655,23 @@ class RetrievalService:
         if replace is None:
             return
         await replace(
-            agent_id=agent_id,
+            base_id=base_id,
             source_id=source_id,
             title=title,
             tables=[] if tables is None else tables,
         )
 
-    async def has_structured_tables(self, agent_id: str) -> bool:
+    async def has_structured_tables(self, base_id: str) -> bool:
         probe = getattr(self._store, "has_structured_tables", None)
         if probe is None:
             return False
-        return bool(await probe(agent_id=agent_id))
+        return bool(await probe(base_id=base_id))
 
-    async def load_structured_tables(self, agent_id: str) -> list[object]:
+    async def load_structured_tables(self, base_id: str) -> list[object]:
         load = getattr(self._store, "load_structured_tables", None)
         if load is None:
             return []
-        loaded = await load(agent_id=agent_id)
+        loaded = await load(base_id=base_id)
         return list(loaded)
 
     async def prepare_reembed(
@@ -689,8 +708,29 @@ class RetrievalService:
             dimensions=new_dim, column_dimensions=column_dim, recreated=True
         )
 
-    async def delete_document(self, *, agent_id: str, source_id: str) -> None:
-        await self._store.delete_document(agent_id=agent_id, source_id=source_id)
+    async def delete_document(self, *, base_id: str, source_id: str) -> None:
+        await self._store.delete_document(base_id=base_id, source_id=source_id)
+
+    async def delete_base_documents(self, *, base_id: str) -> None:
+        """整空间清理（空间删除时）。store 未实现时按未实现跳过，与 prune 同口径。"""
+        delete = getattr(self._store, "delete_base", None)
+        if delete is None:
+            return
+        await delete(base_id=base_id)
+
+    async def list_indexed_documents(self, *, base_id: str) -> list[str]:
+        """该空间已索引的 source 全集，供 Java 对账。store 未实现时回空集。"""
+        list_ids = getattr(self._store, "list_indexed_source_ids", None)
+        if list_ids is None:
+            return []
+        return list(await list_ids(base_id=base_id))
+
+    async def count_indexed_chunks(self, *, base_id: str) -> int:
+        """该空间的块行总数（全部嵌入类表求和），供 Java 对账。store 未实现时回 0。"""
+        count = getattr(self._store, "count_chunks", None)
+        if count is None:
+            return 0
+        return int(await count(base_id=base_id))
 
     def _resolve_rerank_model(self, selection: ModelSelection | None) -> Model | None:
         """请求里的模型入口优先；建不起来再用测试注入或进程 AI_MODEL。"""
@@ -741,13 +781,13 @@ class RetrievalService:
         return [window[index] for index in order] + tail
 
     async def _lexical_hits(
-        self, agent_id: str, query: str, classes: list[EmbeddingClass]
+        self, base_id: str, query: str, classes: list[EmbeddingClass]
     ) -> tuple[list[str], list[RetrievedChunk]]:
         terms = query_terms(query)
         if not terms:
             return terms, []
         hits = await self._store.search_lexical(
-            agent_id=agent_id,
+            base_id=base_id,
             tokens=terms,
             limit=LEXICAL_CANDIDATE_LIMIT,
             embedding_models=[item.name for item in classes],
@@ -782,45 +822,39 @@ class RetrievalService:
                     )
         return ordered[:top_k]
 
-    async def _lexical_only(
+    async def _lexical_fused(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         query: str,
-        top_k: int,
         classes: list[EmbeddingClass],
-        model_selection: ModelSelection | None,
     ) -> list[RetrievedChunk]:
-        """纯字面降级（Issue #202 UoW-3）：覆盖率成一路名次、per-source 上限、再走 rerank 收尾。
+        """纯字面一路（Issue #202 UoW-3）：覆盖率成一路名次、per-source 上限，不收尾。
 
         调用方须已置 _retrieval_incomplete；字面无命中时返回空（degraded 仍真，
         不假装正常空结果）。分数门 min_score/ratio_floor 是向量余弦口径，不套到字面覆盖率上。
         """
-        terms, lexical_hits = await self._lexical_hits(agent_id, query, classes)
-        fused = apply_per_source_cap(
+        terms, lexical_hits = await self._lexical_hits(base_id, query, classes)
+        return apply_per_source_cap(
             lexical_rank_path(lexical_hits, terms), self._max_chunks_per_source
         )
-        return await self._finish_with_rerank(
-            fused, query=query, top_k=top_k, model_selection=model_selection
-        )
 
-    async def _search_one(
+    async def _search_one_fused(
         self,
         item: EmbeddingClass,
         *,
-        agent_id: str,
+        base_id: str,
         query: str,
         top_k: int,
-        model_selection: ModelSelection | None,
     ) -> list[RetrievedChunk]:
-        """只有一类时保持原来的余弦、字面覆盖率取较大值、相对裁剪。"""
+        """单类单空间的融合结果（不走 rerank 收尾）：余弦、字面覆盖率取较大值、相对裁剪。"""
         if item.client is None:
             raise RuntimeError("Embedding client is not configured.")
         try:
             embedding = await item.client.embed_query(query)
             vector_hits = apply_min_score(
                 await self._store.search(
-                    agent_id=agent_id,
+                    base_id=base_id,
                     embedding=embedding,
                     top_k=top_k,
                     embedding_model=item.name,
@@ -837,54 +871,60 @@ class RetrievalService:
                 type(exc).__name__,
             )
             self._retrieval_incomplete = True
-            return await self._lexical_only(
-                agent_id=agent_id,
-                query=query,
-                top_k=top_k,
-                classes=[item],
-                model_selection=model_selection,
-            )
-        terms, lexical_hits = await self._lexical_hits(agent_id, query, [item])
-        fused = apply_per_source_cap(
+            return await self._lexical_fused(base_id=base_id, query=query, classes=[item])
+        terms, lexical_hits = await self._lexical_hits(base_id, query, [item])
+        return apply_per_source_cap(
             apply_score_ratio_floor(
                 _ranked_hits(vector_hits, lexical_hits, terms), self._score_ratio_floor
             ),
             self._max_chunks_per_source,
         )
+
+    async def _search_one(
+        self,
+        item: EmbeddingClass,
+        *,
+        base_id: str,
+        query: str,
+        top_k: int,
+        model_selection: ModelSelection | None,
+    ) -> list[RetrievedChunk]:
+        """只有一类时保持原来的余弦、字面覆盖率取较大值、相对裁剪。"""
+        fused = await self._search_one_fused(item, base_id=base_id, query=query, top_k=top_k)
         return await self._finish_with_rerank(
             fused, query=query, top_k=top_k, model_selection=model_selection
         )
 
     async def _class_vector_hits(
-        self, item: EmbeddingClass, *, agent_id: str, query: str, top_k: int
+        self, item: EmbeddingClass, *, base_id: str, query: str, top_k: int
     ) -> list[RetrievedChunk]:
         """一类内部：余弦、绝对分门槛、相对裁剪。名次从这份结果的顺序来。"""
         if item.client is None:
             raise RuntimeError("Embedding client is not configured.")
         embedding = await item.client.embed_query(query)
         raw = await self._store.search(
-            agent_id=agent_id,
+            base_id=base_id,
             embedding=embedding,
             top_k=top_k,
             embedding_model=item.name,
         )
         return apply_score_ratio_floor(apply_min_score(raw, self._min_score), self._score_ratio_floor)
 
-    async def _search_many(
+    async def _search_many_fused(
         self,
         classes: list[EmbeddingClass],
         *,
-        agent_id: str,
+        base_id: str,
         query: str,
         top_k: int,
-        model_selection: ModelSelection | None,
     ) -> list[RetrievedChunk]:
+        """多类单空间的融合结果（不走 rerank 收尾）：各类一路＋字面一路，按名次合并。"""
         paths: list[list[RetrievedChunk]] = []
         failures = 0
         for item in classes:
             try:
                 paths.append(
-                    await self._class_vector_hits(item, agent_id=agent_id, query=query, top_k=top_k)
+                    await self._class_vector_hits(item, base_id=base_id, query=query, top_k=top_k)
                 )
             except Exception as exc:  # noqa: BLE001 — 一类失败跳过，其它类继续
                 failures += 1
@@ -897,65 +937,160 @@ class RetrievalService:
             # 全部类向量失败时与单类同口径（Issue #202 UoW-3）：降级纯字面，
             # 不整次落空；置 _retrieval_incomplete 让 degraded 随之成立。
             self._retrieval_incomplete = True
-            return await self._lexical_only(
-                agent_id=agent_id,
-                query=query,
-                top_k=top_k,
-                classes=classes,
-                model_selection=model_selection,
-            )
+            return await self._lexical_fused(base_id=base_id, query=query, classes=classes)
         if failures:
             self._retrieval_incomplete = True
-        terms, lexical_hits = await self._lexical_hits(agent_id, query, classes)
+        terms, lexical_hits = await self._lexical_hits(base_id, query, classes)
         lexical_path = lexical_rank_path(lexical_hits, terms)
         ranked_paths = [path for path in paths if path]
         if lexical_path:
             ranked_paths.append(lexical_path)
-        fused = apply_per_source_cap(merge_by_rank(ranked_paths), self._max_chunks_per_source)
+        return apply_per_source_cap(merge_by_rank(ranked_paths), self._max_chunks_per_source)
+
+    async def _search_many(
+        self,
+        classes: list[EmbeddingClass],
+        *,
+        base_id: str,
+        query: str,
+        top_k: int,
+        model_selection: ModelSelection | None,
+    ) -> list[RetrievedChunk]:
+        fused = await self._search_many_fused(
+            classes, base_id=base_id, query=query, top_k=top_k
+        )
         return await self._finish_with_rerank(
             fused, query=query, top_k=top_k, model_selection=model_selection
+        )
+
+    async def _fused_for_base(
+        self,
+        classes: list[EmbeddingClass],
+        *,
+        base_id: str,
+        query: str,
+        top_k: int,
+    ) -> list[RetrievedChunk]:
+        if len(classes) == 1:
+            return await self._search_one_fused(
+                classes[0], base_id=base_id, query=query, top_k=top_k
+            )
+        return await self._search_many_fused(
+            classes, base_id=base_id, query=query, top_k=top_k
+        )
+
+    async def _search_spaces(
+        self,
+        spaces: list[RetrievalSpace],
+        *,
+        query: str,
+        top_k: int,
+        model_selection: ModelSelection | None,
+        embedder: EmbeddingClient | None,
+        embedding_model: str | None,
+    ) -> list[RetrievedChunk]:
+        """多空间：各空间带自己登记的类集独立走完单空间管线（分数门/相对裁剪/
+        per-source 上限在空间内先行），再按名次合并（merge_by_rank，与多类合并
+        同一先例），合并后 per-source 上限按全局口径再收一遍，最后统一走一次
+        rerank 收尾。类集在空间内解析：某空间的类集解析失败与它的检索失败
+        同等对待（跳过并标不完整），不连累其它空间。
+
+        单个空间硬失败（store 异常等）跳过并标不完整；全部空间失败才上抛，
+        由 retrieve_chunks 整次降级——与多类「一类失败跳过、全部失败才落空」同口径。
+        """
+        paths: list[list[RetrievedChunk]] = []
+        failures = 0
+        last_error: Exception | None = None
+        for space in spaces:
+            try:
+                classes = self._resolve_classes(
+                    embedder, space.embedding_classes, embedding_model
+                )
+                fused = await self._fused_for_base(
+                    classes, base_id=space.base_id, query=query, top_k=top_k
+                )
+            except Exception as exc:  # noqa: BLE001 — 一空间失败跳过，其它空间继续
+                failures += 1
+                last_error = exc
+                logger.warning(
+                    "retrieval search failed for base %s (%s); skipping its hits",
+                    space.base_id,
+                    type(exc).__name__,
+                )
+                continue
+            if fused:
+                paths.append(fused)
+        if failures == len(spaces) and last_error is not None:
+            raise last_error
+        if failures:
+            self._retrieval_incomplete = True
+        merged = apply_per_source_cap(merge_by_rank(paths), self._max_chunks_per_source)
+        return await self._finish_with_rerank(
+            merged, query=query, top_k=top_k, model_selection=model_selection
         )
 
     async def search(
         self,
         *,
-        agent_id: str,
+        spaces: list[RetrievalSpace],
         query: str,
         top_k: int = DEFAULT_TOP_K,
         embedder: EmbeddingClient | None = None,
         model_selection: ModelSelection | None = None,
         embedding_model: str | None = None,
-        embedding_classes: list[EmbeddingClass] | None = None,
     ) -> list[RetrievedChunk]:
         self._rerank_applied = False
         self._retrieval_incomplete = False
-        classes = self._resolve_classes(embedder, embedding_classes, embedding_model)
-        if len(classes) == 1:
-            return await self._search_one(
-                classes[0],
-                agent_id=agent_id,
+        normalized: list[RetrievalSpace] = []
+        seen: set[str] = set()
+        for space in spaces:
+            base_id = space.base_id.strip()
+            if not base_id or base_id in seen:
+                continue
+            seen.add(base_id)
+            normalized.append(
+                RetrievalSpace(base_id=base_id, embedding_classes=space.embedding_classes)
+            )
+        if not normalized:
+            return []
+        if len(normalized) == 1:
+            space = normalized[0]
+            classes = self._resolve_classes(
+                embedder, space.embedding_classes, embedding_model
+            )
+            if len(classes) == 1:
+                return await self._search_one(
+                    classes[0],
+                    base_id=space.base_id,
+                    query=query,
+                    top_k=top_k,
+                    model_selection=model_selection,
+                )
+            return await self._search_many(
+                classes,
+                base_id=space.base_id,
                 query=query,
                 top_k=top_k,
                 model_selection=model_selection,
             )
-        return await self._search_many(
-            classes,
-            agent_id=agent_id,
+        return await self._search_spaces(
+            normalized,
             query=query,
             top_k=top_k,
             model_selection=model_selection,
+            embedder=embedder,
+            embedding_model=embedding_model,
         )
 
     async def retrieve_chunks(
         self,
         *,
-        agent_id: str,
+        spaces: list[RetrievalSpace],
         query: str,
         top_k: int = DEFAULT_TOP_K,
         embedder: EmbeddingClient | None = None,
         model_selection: ModelSelection | None = None,
         embedding_model: str | None = None,
-        embedding_classes: list[EmbeddingClass] | None = None,
     ) -> list[RetrievedChunk]:
         """与 retrieve_context 同一条降级路径：嵌入或向量库失败时返回空列表并置 degraded。
 
@@ -964,13 +1099,12 @@ class RetrievalService:
         """
         try:
             chunks = await self.search(
-                agent_id=agent_id,
+                spaces=spaces,
                 query=query,
                 top_k=top_k,
                 embedder=embedder,
                 model_selection=model_selection,
                 embedding_model=embedding_model,
-                embedding_classes=embedding_classes,
             )
         except Exception as exc:  # noqa: BLE001
             self._degraded = True
@@ -982,12 +1116,15 @@ class RetrievalService:
         self._last_error = "EmbeddingError" if self._retrieval_incomplete else None
         return chunks
 
-    async def retrieve_context(self, *, agent_id: str, query: str) -> list[str]:
+    async def retrieve_context(self, *, base_ids: list[str], query: str) -> list[str]:
         """chat 检索增强：失败降级为无上下文（派生索引问题不阻断对话），记录日志。
 
         最近一次失败置 degraded 并记下异常类型名；成功则清除。返回值仍是上下文列表。
+        空间不带类集：逐空间落进程默认类（retrieve_context 本就没有凭证入参）。
         """
-        chunks = await self.retrieve_chunks(agent_id=agent_id, query=query)
+        chunks = await self.retrieve_chunks(
+            spaces=[RetrievalSpace(base_id=base_id) for base_id in base_ids], query=query
+        )
         return [chunk.content for chunk in chunks]
 
     async def close(self) -> None:

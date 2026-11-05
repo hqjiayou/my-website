@@ -92,12 +92,14 @@ class AgentAiExperienceLessonInjectionTest {
                 Mockito.mock(AgentUsageService.class),
                 Mockito.mock(AgentEmbeddingClassService.class),
                 experienceLessonService,
-                Mockito.mock(com.mywebsite.agent.service.AgentMcpSelectionService.class));
+                Mockito.mock(com.mywebsite.agent.service.AgentMcpSelectionService.class),
+                Mockito.mock(KnowledgeSpaceResolver.class));
         String subject = SubjectCodes.formatAgentUserSubject(200L);
         AuthContext.set(new AuthenticatedUser(TokenAudience.AGENT, subject, "u", 10L, Set.of()));
         when(rateLimitService.tryAcquire(10L, subject)).thenReturn(true);
         when(localizedMessageService.currentLanguageTag()).thenReturn("zh-Hant-TW");
-        when(knowledgeDocumentMapper.selectList(any())).thenReturn(List.of());
+        // 片段回退在无可达空间时短路不查文档（Issue #209 UoW-4），本 stub 只在有空间的用例才被消费。
+        Mockito.lenient().when(knowledgeDocumentMapper.selectList(any())).thenReturn(List.of());
         when(memoryService.recentContents(10L, 200L)).thenReturn(List.of());
         AgentAiConversationEntity conversation = new AgentAiConversationEntity();
         conversation.setId(77L);

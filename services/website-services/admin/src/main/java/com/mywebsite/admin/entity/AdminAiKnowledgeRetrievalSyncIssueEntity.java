@@ -7,8 +7,10 @@ import java.io.Serializable;
 import java.time.OffsetDateTime;
 
 /**
- * 检索派生索引同步问题行（Issue #203）：扇出失败落行、定时重试，解决即真删。
- * op=DELETE 为删文档残留（tombstone）；op=UPSERT 为链接分区待同步。
+ * 检索派生索引同步问题行（Issue #203 落行＋定时重试，解决即真删；Issue #209 UoW-2 换键）：
+ * 唯一键为 (baseId, sourceId, op)——向量按知识空间单写，同步问题只剩 op=DELETE
+ * （空间分区删文档残留 tombstone）。agentId 仅作留痕（落行时空间创建者）。
+ * op=UPSERT 是已退役的链接分区记账：V58 迁移全删存量行，新代码不再产生。
  */
 @TableName("agent_ai_knowledge_retrieval_sync_issue")
 public class AdminAiKnowledgeRetrievalSyncIssueEntity implements Serializable {
@@ -19,6 +21,7 @@ public class AdminAiKnowledgeRetrievalSyncIssueEntity implements Serializable {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
+    private Long baseId;
     private Long agentId;
     private String sourceId;
     private String op;
@@ -33,6 +36,14 @@ public class AdminAiKnowledgeRetrievalSyncIssueEntity implements Serializable {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getBaseId() {
+        return baseId;
+    }
+
+    public void setBaseId(Long baseId) {
+        this.baseId = baseId;
     }
 
     public Long getAgentId() {

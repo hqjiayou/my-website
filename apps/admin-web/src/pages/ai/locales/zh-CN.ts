@@ -62,10 +62,10 @@ export default {
     chainModeEmpty: '该模式未配置默认入口，Portal 中不可用。',
     embeddingRegistration: {
       title: '嵌入类登记',
-      descriptionSite:
-        '知识库向量按登记的类分开索引和检索，顺序即优先级，最多 4 类。这是本站登记：本站登记优先，全站登记兜底合并。类由所选 API key 入口的向量 spec 决定，key 在入口里维护——同 spec 换 key 不用重嵌。',
+      descriptionSpace:
+        '知识库向量按登记的类分开索引和检索，顺序即优先级，最多 4 类。这是本知识空间的登记：空间登记优先，全站登记兜底合并。类由所选 API key 入口的向量 spec 决定，key 在入口里维护——同 spec 换 key 不用重嵌。',
       descriptionGlobal:
-        '全站登记：没有本站登记的智能体用这一份。知识库向量按登记的类分开索引和检索，顺序即优先级，最多 4 类。类由所选 API key 入口的向量 spec 决定，key 在入口里维护——同 spec 换 key 不用重嵌。',
+        '全站登记：没有自己登记的知识空间用这一份。知识库向量按登记的类分开索引和检索，顺序即优先级，最多 4 类。类由所选 API key 入口的向量 spec 决定，key 在入口里维护——同 spec 换 key 不用重嵌。',
       empty: '还没有登记任何嵌入类。没有登记时，知识库向量用服务自己的嵌入模型。',
       loadError: '嵌入类登记没有读出来。',
       entryMissing: '登记的入口已删除',
@@ -81,7 +81,7 @@ export default {
       limitReached: '最多登记 4 个嵌入类。',
       duplicateClass: '类 {{className}} 已经登记过了：同一个向量 spec 只能登记一次（google-gla: 与 google: 视为同一类）。',
       orphanBlocksSave: '有登记行引用的入口已被删除，先移除这些行再保存。',
-      boundOther: '绑在别的智能体上',
+      boundOther: '绑在某个智能体上',
       reset: '撤销修改',
       save: '保存登记',
       saving: '保存中…',
@@ -291,8 +291,13 @@ export default {
       none: '（无）',
       link: '共享',
       unlink: '取消共享',
+      unlinkConfirm: '取消对 {{name}} 的共享？对方站点将不再能检索这些文档。',
       linked: '已共享，文档已同步到目标站点',
       unlinked: '已取消共享，文档已从目标站点移除',
+      embeddingTitle: '嵌入类登记（按知识空间）',
+      embeddingHint:
+        '登记已改为按知识空间维护：选择一个知识空间编辑它的嵌入类登记；空间登记优先，全站登记（在 AI 设置页维护）兜底合并。',
+      embeddingPick: '选择知识空间',
     },
     reembed: {
       action: '重新嵌入全部知识',

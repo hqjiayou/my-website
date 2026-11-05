@@ -13,8 +13,12 @@ import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionUpdateReque
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
 import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
+import com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity;
+import com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
 import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
+import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper;
+import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
@@ -72,6 +76,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     private final AdminAgentMapper adminAgentMapper;
     private final AdminAiConfigPresetMapper configPresetMapper;
     private final AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper;
+    private final AdminAiKnowledgeBaseMapper knowledgeBaseMapper;
+    private final AdminAiKnowledgeBaseSubscriptionMapper knowledgeSubscriptionMapper;
     private final AdminAiModelEntryService modelEntryService;
     private final LocalizedMessageService localizedMessageService;
     private final ExecutorService adminAiStreamExecutor;
@@ -87,6 +93,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             AdminAgentMapper adminAgentMapper,
             AdminAiConfigPresetMapper configPresetMapper,
             AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper,
+            AdminAiKnowledgeBaseMapper knowledgeBaseMapper,
+            AdminAiKnowledgeBaseSubscriptionMapper knowledgeSubscriptionMapper,
             AdminAiModelEntryService modelEntryService,
             LocalizedMessageService localizedMessageService,
             ExecutorService adminAiStreamExecutor,
@@ -100,6 +108,8 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         this.adminAgentMapper = adminAgentMapper;
         this.configPresetMapper = configPresetMapper;
         this.knowledgeDocumentMapper = knowledgeDocumentMapper;
+        this.knowledgeBaseMapper = knowledgeBaseMapper;
+        this.knowledgeSubscriptionMapper = knowledgeSubscriptionMapper;
         this.modelEntryService = modelEntryService;
         this.localizedMessageService = localizedMessageService;
         this.adminAiStreamExecutor = adminAiStreamExecutor;
@@ -137,7 +147,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             emitter.complete();
             return emitter;
         }
-        List<AgentModelSelection> embeddingClasses = modelEntryService.embeddingClasses(agentId);
+        List<AgentModelSelection> embeddingClasses = embeddingClassesForAgent(agentId);
         AgentModelSelection embedding = embeddingClasses == null || embeddingClasses.isEmpty()
                 ? null
                 : embeddingClasses.get(0);
@@ -172,7 +182,9 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 Boolean.TRUE,
                 experienceLessons.isEmpty() ? null : experienceLessons,
                 // MCP per-agent 名字过滤（Issue #192 UoW-3）：与正式对话同口径三态。
-                mcpWireNames(agentId));
+                mcpWireNames(agentId),
+                // 可检索知识空间集（Issue #209 UoW-2）：与正式对话同口径展开。
+                knowledgeBaseIds(agentId));
         // 用量记账归属（Issue #140）：试聊只打单入口——点名时就是点名 id，未点名时
         // 是该模式链首（与 previewModel 回填同一口径：chainCandidates 的首元）。
         Long usageEntryId = request.modelEntryId();
@@ -243,6 +255,50 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             return mcpSelectionService.resolveWireNames(agentId);
         } catch (RuntimeException ex) {
             log.warn("mcp selection lookup failed; continuing with INHERIT", ex);
+            return null;
+        }
+    }
+
+    /**
+     * 可检索知识空间集的下发值（Issue #209 UoW-2）：该 agent 创建的空间 ∪ 订阅的
+     * 空间（订阅表含创建者行，按 base id 去重），字符串化 id；与 agent-app 正式
+     * 对话同一展开口径。向量分区键已改 base，执行层据此跨空间检索。失败隔离同
+     * MCP 选择：查库失败只记日志、按无空间继续，不拖垮试聊；无空间时返回 null。
+     */
+    /**
+     * 试聊请求级的嵌入类集（Issue #209 UoW-3）：与正式对话同口径——按可检索
+     * 空间分别解析登记类集（空间行优先、全站补充）后并集去重，展开序即类
+     * 优先级、{@code dedupe} 兜底上限 4 类。无可检索空间时为空列表。
+     */
+    private List<AgentModelSelection> embeddingClassesForAgent(long agentId) {
+        List<String> baseIds = knowledgeBaseIds(agentId);
+        if (baseIds == null || baseIds.isEmpty()) {
+            return List.of();
+        }
+        List<AgentModelSelection> union = new ArrayList<>();
+        for (String baseId : baseIds) {
+            union.addAll(modelEntryService.embeddingClassesForSpace(Long.parseLong(baseId)));
+        }
+        return AgentEmbeddingClassUtils.dedupe(union);
+    }
+
+    private List<String> knowledgeBaseIds(long agentId) {
+        try {
+            java.util.LinkedHashSet<Long> baseIds = new java.util.LinkedHashSet<>();
+            knowledgeBaseMapper
+                    .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
+                            .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId))
+                    .forEach(base -> baseIds.add(base.getId()));
+            knowledgeSubscriptionMapper
+                    .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                            .eq(AdminAiKnowledgeBaseSubscriptionEntity::getAgentId, agentId))
+                    .forEach(subscription -> baseIds.add(subscription.getBaseId()));
+            if (baseIds.isEmpty()) {
+                return null;
+            }
+            return baseIds.stream().map(String::valueOf).toList();
+        } catch (RuntimeException ex) {
+            log.warn("knowledge base expansion failed; continuing without knowledge bases", ex);
             return null;
         }
     }
@@ -356,9 +412,20 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             return null;
         }
         String needle = trimmed;
+        // 文档 agent_id 已停写（Issue #209 UoW-1）：按该 agent 创建的空间集查文档——
+        // 只含自有空间、不含订阅文档，与旧 agent_id 口径等价；无自有空间时无片段。
+        List<Long> ownBaseIds = knowledgeBaseMapper
+                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
+                        .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId))
+                .stream()
+                .map(AdminAiKnowledgeBaseEntity::getId)
+                .toList();
+        if (ownBaseIds.isEmpty()) {
+            return null;
+        }
         List<String> snippets = knowledgeDocumentMapper
                 .selectList(new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
-                        .eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId)
+                        .in(AdminAiKnowledgeDocumentEntity::getBaseId, ownBaseIds)
                         .eq(AdminAiKnowledgeDocumentEntity::getStatus, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)
                         .and(wrapper -> wrapper
                                 .like(AdminAiKnowledgeDocumentEntity::getTitle, needle)

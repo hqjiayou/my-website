@@ -47,22 +47,23 @@ function sameRows(a: DraftRow[], b: DraftRow[]) {
 }
 
 /**
- * 嵌入类登记编辑区（Issue #126 UoW-3）：站点接入页（传 agentId）与 AI 设置页
- * （不传＝全站 scope）共用同形卡片。登记只引用模型入口：候选只列 mode=KEY 且
- * embeddingSpec 非空的入口；行序即类优先级，整表 PUT 保存。
+ * 嵌入类登记编辑区（Issue #126 UoW-3；scope 于 Issue #209 UoW-3 改知识空间）：
+ * 知识中心页（传 baseId）与 AI 设置页（不传＝全站 scope）共用同形卡片。
+ * 登记只引用模型入口：候选只列 mode=KEY 且 embeddingSpec 非空的入口；
+ * 行序即类优先级，整表 PUT 保存。
  * 本地草稿用 draft 覆盖服务端数据（null＝未改），不写 effect 同步。
  */
-export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
+export function EmbeddingRegistrationCard({ baseId }: { baseId?: number }) {
   const { t } = useTranslation('aiAdmin')
   const queryClient = useQueryClient()
   const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
-  const scopeKey = agentId ?? 'global'
+  const scopeKey = baseId ?? 'global'
   const [draft, setDraft] = useState<DraftRow[] | null>(null)
   const [candidateId, setCandidateId] = useState('')
 
   const registrationQuery = useQuery({
     queryKey: ['ai', 'embedding-classes', scopeKey],
-    queryFn: () => aiApi.listEmbeddingClasses(agentId),
+    queryFn: () => aiApi.listEmbeddingClasses(baseId),
   })
   const entriesQuery = useQuery({
     queryKey: ['ai', 'model-entries'],
@@ -72,7 +73,7 @@ export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
   const saveMutation = useMutation({
     mutationFn: (rows: DraftRow[]) =>
       aiApi.replaceEmbeddingClasses(
-        agentId,
+        baseId,
         rows.map((row) => ({ entryId: row.entryId, enabled: row.enabled })),
       ),
     onSuccess: () => {
@@ -179,9 +180,9 @@ export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
       </div>
       <p className="mb-4 max-w-3xl text-xs leading-5 text-muted-foreground">
         {t(
-          agentId == null
+          baseId == null
             ? 'settings.embeddingRegistration.descriptionGlobal'
-            : 'settings.embeddingRegistration.descriptionSite',
+            : 'settings.embeddingRegistration.descriptionSpace',
         )}
       </p>
 
@@ -308,7 +309,7 @@ export function EmbeddingRegistrationCard({ agentId }: { agentId?: number }) {
                   {candidates.map((entry) => (
                     <option key={entry.id} value={entry.id}>
                       {entry.displayName} · {entry.embeddingSpec}
-                      {entry.agentId != null && entry.agentId !== agentId
+                      {entry.agentId != null
                         ? ` · ${t('settings.embeddingRegistration.boundOther')}`
                         : ''}
                     </option>

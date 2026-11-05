@@ -17,11 +17,13 @@ public final class AgentInternalDtos {
     /**
      * 知识文档枚举单项（Issue #181）：只有元数据、不含正文。
      * {@code sourceId} 与检索片段/结构化表格的来源口径对齐（{@code "kb:" + id}），
-     * 供 agent 逐份回指文档。
+     * 供 agent 逐份回指文档。{@code baseId} 为文档所属知识空间（Issue #209
+     * UoW-4 增补，来源可溯；消费方按名取值，加字段向后兼容）。
      */
     public record AgentKnowledgeDocumentItemDto(
             Long id,
             String sourceId,
+            Long baseId,
             String title,
             String sourceFormat,
             String originalFilename,

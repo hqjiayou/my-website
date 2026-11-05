@@ -8,9 +8,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.entity.AgentAiKnowledgeBaseEntity;
 import com.mywebsite.agent.entity.AgentAiModelEntryEntity;
 import com.mywebsite.agent.entity.AgentEmbeddingClassEntity;
 import com.mywebsite.agent.entity.AgentEmbeddingClassMaterializationEntity;
+import com.mywebsite.agent.mapper.AgentAiKnowledgeBaseMapper;
 import com.mywebsite.agent.mapper.AgentAiModelEntryMapper;
 import com.mywebsite.agent.mapper.AgentEmbeddingClassMapper;
 import com.mywebsite.agent.mapper.AgentEmbeddingClassMaterializationMapper;
@@ -28,9 +30,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 登记制读取与首次读物化（Issue #126 UoW-2）。物化用例的期望类序按旧推算
- * 语义（站点＋全站一次扫描、站点优先 dedupe）手工推导后钉死，证明按 scope
- * 分别物化＋合并读与旧结果逐字一致。
+ * 登记制读取与首次读物化（Issue #126 UoW-2；scope 于 Issue #209 UoW-3 改
+ * 知识空间）。空间 901/902 的创建者均为站点 10。物化用例的期望类序按旧推算
+ * 语义（创建者站点＋全站一次扫描、站点优先 dedupe）手工推导后钉死，证明按
+ * scope 分别物化＋合并读与旧结果逐字一致——空间 scope 的推算输入是创建者的
+ * 站点入口，与 V61 把创建者登记行扇出到空间同源等价。
  */
 @ExtendWith(MockitoExtension.class)
 class AgentEmbeddingClassServiceImplTest {
@@ -45,6 +49,9 @@ class AgentEmbeddingClassServiceImplTest {
     private AgentAiModelEntryMapper modelEntryMapper;
 
     @Mock
+    private AgentAiKnowledgeBaseMapper knowledgeBaseMapper;
+
+    @Mock
     private ModelEntryCipher cipher;
 
     private AgentEmbeddingClassServiceImpl service;
@@ -53,7 +60,11 @@ class AgentEmbeddingClassServiceImplTest {
     void setUp() {
         service =
                 new AgentEmbeddingClassServiceImpl(
-                        registrationMapper, materializationMapper, modelEntryMapper, cipher);
+                        registrationMapper,
+                        materializationMapper,
+                        modelEntryMapper,
+                        knowledgeBaseMapper,
+                        cipher);
         // enc:key-<id> 解出 key-<id>；enc:bad-<id> 模拟解不出（返回 null）。
         lenient().when(cipher.decrypt(any())).thenAnswer(invocation -> {
             String raw = invocation.getArgument(0);
@@ -63,6 +74,17 @@ class AgentEmbeddingClassServiceImplTest {
             String plain = raw.substring(4);
             return plain.startsWith("bad") ? null : plain;
         });
+        // 空间 901/902 的创建者都是站点 10；其余 id 视为空间不存在。
+        lenient().when(knowledgeBaseMapper.selectById(any())).thenAnswer(invocation -> {
+            Long id = invocation.getArgument(0);
+            if (Long.valueOf(901L).equals(id) || Long.valueOf(902L).equals(id)) {
+                AgentAiKnowledgeBaseEntity base = new AgentAiKnowledgeBaseEntity();
+                base.setId(id);
+                base.setCreatedByAgentId(10L);
+                return base;
+            }
+            return null;
+        });
     }
 
     // ------------------------------------------------------------------
@@ -70,7 +92,7 @@ class AgentEmbeddingClassServiceImplTest {
     // ------------------------------------------------------------------
 
     @Test
-    void readsRegistrationsSiteFirstThenGlobalWithCrossScopeDedupeAndCap() {
+    void readsRegistrationsSpaceFirstThenGlobalWithCrossScopeDedupeAndCap() {
         givenMaterialized();
         Map<Long, AgentAiModelEntryEntity> entries = new HashMap<>();
         entries.put(1L, entry(1, 10L, "google:chat", "google-gla:gemini-embedding-001"));
@@ -81,7 +103,7 @@ class AgentEmbeddingClassServiceImplTest {
         entries.put(6L, entry(6, null, "openai:chat", "openai:embed-dropped"));
         givenEntries(entries);
         when(registrationMapper.selectList(any()))
-                .thenReturn(List.of(row(101, 10L, 1L, 0), row(102, 10L, 2L, 1)))
+                .thenReturn(List.of(row(101, 901L, 1L, 0), row(102, 901L, 2L, 1)))
                 .thenReturn(
                         List.of(
                                 row(103, null, 3L, 0),
@@ -89,9 +111,9 @@ class AgentEmbeddingClassServiceImplTest {
                                 row(105, null, 5L, 2),
                                 row(106, null, 6L, 3)));
 
-        List<AgentModelSelection> classes = service.embeddingClasses(10L);
+        List<AgentModelSelection> classes = service.embeddingClassesForSpace(901L);
 
-        // 站点行在前；全站的 google: 类与站点 google-gla: 同类、站点胜出被压掉；
+        // 空间行在前；全站的 google: 类与空间 google-gla: 同类、空间胜出被压掉；
         // 合并后上限 4，全站最后一类落选。元素保留登记行引用入口的原始 spec 文本。
         assertThat(classes).extracting(AgentModelSelection::embeddingSpec)
                 .containsExactly(
@@ -105,6 +127,20 @@ class AgentEmbeddingClassServiceImplTest {
         verify(registrationMapper, never()).insert(any(AgentEmbeddingClassEntity.class));
         verify(materializationMapper, never()).insert(any(AgentEmbeddingClassMaterializationEntity.class));
         verify(modelEntryMapper, never()).selectList(any());
+    }
+
+    @Test
+    void globalRegistrationsApplyToSpaceWithoutOwnRows() {
+        givenMaterialized();
+        givenEntries(Map.of(3L, entry(3, null, "google:chat", "google:gemini-embedding-001")));
+        when(registrationMapper.selectList(any()))
+                .thenReturn(List.of())
+                .thenReturn(List.of(row(103, null, 3L, 0)));
+
+        // 空间没有自己的登记行时，平台默认（全站行）照样生效。
+        assertThat(service.embeddingClassesForSpace(901L))
+                .extracting(AgentModelSelection::embeddingSpec)
+                .containsExactly("google:gemini-embedding-001");
     }
 
     @Test
@@ -127,15 +163,15 @@ class AgentEmbeddingClassServiceImplTest {
         when(registrationMapper.selectList(any()))
                 .thenReturn(
                         List.of(
-                                row(101, 10L, 99L, 0),
-                                row(102, 10L, 2L, 1),
-                                row(103, 10L, 3L, 2),
-                                row(104, 10L, 4L, 3),
-                                row(105, 10L, 5L, 4),
-                                row(106, 10L, 1L, 5)))
+                                row(101, 901L, 99L, 0),
+                                row(102, 901L, 2L, 1),
+                                row(103, 901L, 3L, 2),
+                                row(104, 901L, 4L, 3),
+                                row(105, 901L, 5L, 4),
+                                row(106, 901L, 1L, 5)))
                 .thenReturn(List.of());
 
-        List<AgentModelSelection> classes = service.embeddingClasses(10L);
+        List<AgentModelSelection> classes = service.embeddingClassesForSpace(901L);
 
         assertThat(classes).extracting(AgentModelSelection::embeddingSpec)
                 .containsExactly("google:embed-ok");
@@ -146,9 +182,10 @@ class AgentEmbeddingClassServiceImplTest {
         givenMaterialized();
         when(registrationMapper.selectList(any())).thenReturn(List.of());
 
-        assertThat(service.embeddingClasses(10L)).isEmpty();
+        assertThat(service.embeddingClassesForSpace(901L)).isEmpty();
 
-        // 人工删光登记后 marker 仍在：不重新物化、不复活。
+        // 人工删光登记（含 V61 迁移后落下的 SPACE marker 场景）后 marker 仍在：
+        // 不重新物化、不复活。
         verify(registrationMapper, never()).insert(any(AgentEmbeddingClassEntity.class));
         verify(materializationMapper, never()).insert(any(AgentEmbeddingClassMaterializationEntity.class));
         verify(modelEntryMapper, never()).selectList(any());
@@ -161,7 +198,8 @@ class AgentEmbeddingClassServiceImplTest {
     @Test
     void materializesBothScopesOnFirstReadWithLegacyWinners() {
         when(materializationMapper.selectById(any())).thenReturn(null);
-        // 旧扫描序（默认在前、id 升序）下两侧的启用入口。
+        // 旧扫描序（默认在前、id 升序）下两侧的启用入口：空间的推算输入是创建者
+        // （站点 10）的入口，全站是 agent_id 为 NULL 的入口。
         AgentAiModelEntryEntity siteGoogle = entry(11, 10L, "google:chat-a", "google-gla:gemini-embedding-001");
         siteGoogle.setDefaultEntry(true);
         siteGoogle.setBaseUrl(" https://embed.example.com ");
@@ -195,14 +233,14 @@ class AgentEmbeddingClassServiceImplTest {
                                     .filter(
                                             row ->
                                                     call == 0
-                                                            ? Long.valueOf(10L).equals(row.getAgentId())
-                                                            : row.getAgentId() == null)
+                                                            ? Long.valueOf(901L).equals(row.getBaseId())
+                                                            : row.getBaseId() == null)
                                     .toList();
                         });
 
-        List<AgentModelSelection> classes = service.embeddingClasses(10L);
+        List<AgentModelSelection> classes = service.embeddingClassesForSpace(901L);
 
-        // 与旧推算对同一批入口的输出逐字一致：站点 google-gla 胜出（全站 google:
+        // 与旧推算对同一批入口的输出逐字一致：创建者 google-gla 胜出（全站 google:
         // 被压掉）、坏 key 的入口不占类位（同类由 15 号胜出）、CLI 不进。
         assertThat(classes).extracting(AgentModelSelection::embeddingSpec)
                 .containsExactly(
@@ -211,7 +249,7 @@ class AgentEmbeddingClassServiceImplTest {
                         "openai:text-embedding-3-large");
         assertThat(classes.get(0).apiKey()).isEqualTo("key-11");
         assertThat(classes.get(0).baseUrl()).isEqualTo("https://embed.example.com");
-        // 物化行：站点 scope 胜者 11、15；全站 scope 胜者 21、22；顺序即类序。
+        // 物化行：空间 scope 胜者 11、15（baseId=901）；全站 scope 胜者 21、22；顺序即类序。
         assertThat(insertedRows)
                 .extracting(AgentEmbeddingClassEntity::getEntryId)
                 .containsExactly(11L, 15L, 21L, 22L);
@@ -219,16 +257,16 @@ class AgentEmbeddingClassServiceImplTest {
                 .extracting(AgentEmbeddingClassEntity::getSortOrder)
                 .containsExactly(0, 1, 0, 1);
         assertThat(insertedRows)
-                .extracting(AgentEmbeddingClassEntity::getAgentId)
-                .containsExactly(10L, 10L, null, null);
+                .extracting(AgentEmbeddingClassEntity::getBaseId)
+                .containsExactly(901L, 901L, null, null);
         assertThat(insertedMarkers)
                 .extracting(AgentEmbeddingClassMaterializationEntity::getScopeKey)
-                .containsExactly("AGENT:10", "GLOBAL");
+                .containsExactly("SPACE:901", "GLOBAL");
     }
 
     @Test
     void materializationCapsAtFourClassesPerScope() {
-        when(materializationMapper.selectById("AGENT:10")).thenReturn(null);
+        when(materializationMapper.selectById("SPACE:901")).thenReturn(null);
         when(materializationMapper.selectById("GLOBAL"))
                 .thenReturn(new AgentEmbeddingClassMaterializationEntity());
         List<AgentAiModelEntryEntity> siteEntries = new ArrayList<>();
@@ -245,17 +283,68 @@ class AgentEmbeddingClassServiceImplTest {
                 .thenAnswer(
                         invocation ->
                                 insertedRows.stream()
-                                        .filter(row -> Long.valueOf(10L).equals(row.getAgentId()))
+                                        .filter(row -> Long.valueOf(901L).equals(row.getBaseId()))
                                         .toList())
                 .thenReturn(List.of());
 
-        List<AgentModelSelection> classes = service.embeddingClasses(10L);
+        List<AgentModelSelection> classes = service.embeddingClassesForSpace(901L);
 
         assertThat(insertedRows).hasSize(4);
         assertThat(classes).extracting(AgentModelSelection::embeddingSpec)
                 .containsExactly("openai:embed-1", "openai:embed-2", "openai:embed-3", "openai:embed-4");
         // 全站 marker 已在，不扫全站。
         verify(modelEntryMapper, org.mockito.Mockito.times(1)).selectList(any());
+    }
+
+    @Test
+    void twoSpacesOfSameCreatorMaterializeIndependently() {
+        lenient().when(materializationMapper.selectById("GLOBAL"))
+                .thenReturn(new AgentEmbeddingClassMaterializationEntity());
+        // SPACE:901 / SPACE:902 均无 marker（selectById 其余键返回 null）。
+        AgentAiModelEntryEntity siteEntry = entry(11, 10L, "openai:chat", "openai:embed-a");
+        when(modelEntryMapper.selectList(any())).thenReturn(List.of(siteEntry));
+        List<AgentEmbeddingClassEntity> insertedRows = captureRegistrationInserts();
+        List<AgentEmbeddingClassMaterializationEntity> insertedMarkers = captureMarkerInserts();
+        givenEntries(Map.of(11L, siteEntry));
+        when(registrationMapper.selectList(any()))
+                .thenAnswer(
+                        invocation ->
+                                insertedRows.stream()
+                                        .filter(row -> row.getBaseId() != null)
+                                        .toList())
+                .thenReturn(List.of());
+
+        service.embeddingClassesForSpace(901L);
+        service.embeddingClassesForSpace(902L);
+
+        // 同一创建者的两个空间各落各的 marker 与登记行，互不共享 scope 状态。
+        assertThat(insertedMarkers)
+                .extracting(AgentEmbeddingClassMaterializationEntity::getScopeKey)
+                .containsExactly("SPACE:901", "SPACE:902");
+        assertThat(insertedRows)
+                .extracting(AgentEmbeddingClassEntity::getBaseId)
+                .containsExactly(901L, 902L);
+    }
+
+    @Test
+    void unknownSpaceMaterializesEmptyAndReadsGlobalOnly() {
+        when(materializationMapper.selectById("SPACE:999")).thenReturn(null);
+        when(materializationMapper.selectById("GLOBAL"))
+                .thenReturn(new AgentEmbeddingClassMaterializationEntity());
+        List<AgentEmbeddingClassMaterializationEntity> insertedMarkers = captureMarkerInserts();
+        givenEntries(Map.of(3L, entry(3, null, "google:chat", "google:gemini-embedding-001")));
+        when(registrationMapper.selectList(any()))
+                .thenReturn(List.of())
+                .thenReturn(List.of(row(103, null, 3L, 0)));
+
+        // 空间不存在（创建者无从解析）：不扫任何入口，落空 marker，只剩全站类。
+        assertThat(service.embeddingClassesForSpace(999L))
+                .extracting(AgentModelSelection::embeddingSpec)
+                .containsExactly("google:gemini-embedding-001");
+        verify(modelEntryMapper, never()).selectList(any());
+        assertThat(insertedMarkers)
+                .extracting(AgentEmbeddingClassMaterializationEntity::getScopeKey)
+                .containsExactly("SPACE:999");
     }
 
     // ------------------------------------------------------------------
@@ -318,10 +407,10 @@ class AgentEmbeddingClassServiceImplTest {
         return entry;
     }
 
-    private static AgentEmbeddingClassEntity row(long id, Long agentId, long entryId, int sortOrder) {
+    private static AgentEmbeddingClassEntity row(long id, Long baseId, long entryId, int sortOrder) {
         AgentEmbeddingClassEntity row = new AgentEmbeddingClassEntity();
         row.setId(id);
-        row.setAgentId(agentId);
+        row.setBaseId(baseId);
         row.setEntryId(entryId);
         row.setEnabled(true);
         row.setSortOrder(sortOrder);

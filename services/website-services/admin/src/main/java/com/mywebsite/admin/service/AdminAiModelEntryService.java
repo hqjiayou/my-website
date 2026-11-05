@@ -52,11 +52,12 @@ public interface AdminAiModelEntryService {
     record ChainCandidate(Long id, String displayName, String modelSpec) {}
 
     /**
-     * 已登记的嵌入类（Issue #126 登记制）：来源是登记表，站点登记在前、全站
-     * 登记在后，同一模型名只留先出现的一把，{@code google-gla:} 与
-     * {@code google:} 算同一类，最多 4 类。实现委托 agent-core 的
-     * {@code AgentEmbeddingClassService}（含首次读物化），本接口只是 admin 侧
-     * 的门面。都没有时返回空列表，检索改用进程嵌入模型。
+     * 已登记的嵌入类（Issue #126 登记制；scope 于 Issue #209 UoW-3 改知识
+     * 空间）：来源是登记表，空间登记在前、全站登记在后，同一模型名只留先
+     * 出现的一把，{@code google-gla:} 与 {@code google:} 算同一类，最多
+     * 4 类。实现委托 agent-core 的 {@code AgentEmbeddingClassService}
+     * （含首次读物化），本接口只是 admin 侧的门面。都没有时返回空列表，
+     * 检索改用进程嵌入模型。
      */
-    List<AgentModelSelection> embeddingClasses(long agentId);
+    List<AgentModelSelection> embeddingClassesForSpace(long baseId);
 }

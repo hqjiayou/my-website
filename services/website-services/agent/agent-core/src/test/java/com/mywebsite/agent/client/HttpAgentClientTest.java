@@ -499,13 +499,91 @@ class HttpAgentClientTest {
         });
 
         var reranked = client.searchRetrieval(
-                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("7", "reranked query", null, null, null, null));
+                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("reranked query", null, null, null, null));
         assertThat(reranked.rerankApplied()).isTrue();
         assertThat(reranked.hits()).hasSize(1);
 
         var plain = client.searchRetrieval(
-                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("7", "plain query", null, null, null, null));
+                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("plain query", null, null, null, null));
         assertThat(plain.rerankApplied()).isFalse();
+    }
+
+    @Test
+    void deleteRetrievalDocumentsByBaseHitsBasePathEndpoint() throws IOException {
+        // 整空间清理（Issue #209 UoW-2）：DELETE /internal/v1/retrieval/bases/{baseId}
+        java.util.concurrent.atomic.AtomicReference<String> seenPath = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> seenMethod = new java.util.concurrent.atomic.AtomicReference<>();
+        server.createContext("/internal/v1/retrieval/bases", exchange -> {
+            seenPath.set(exchange.getRequestURI().getPath());
+            seenMethod.set(exchange.getRequestMethod());
+            write(exchange, 200, "{\"ok\":true,\"data\":null}");
+        });
+
+        client.deleteRetrievalDocumentsByBase("9");
+
+        assertThat(seenMethod.get()).isEqualTo("DELETE");
+        assertThat(seenPath.get()).isEqualTo("/internal/v1/retrieval/bases/9");
+    }
+
+    @Test
+    void listIndexedDocumentsParsesSourceIdsEnvelope() throws IOException {
+        // 已索引清单（Issue #209 UoW-2）：GET /retrieval/documents?baseId= → {ok, data:{baseId, sourceIds}}
+        java.util.concurrent.atomic.AtomicReference<String> seenQuery = new java.util.concurrent.atomic.AtomicReference<>();
+        server.createContext("/internal/v1/retrieval/documents", exchange -> {
+            seenQuery.set(exchange.getRequestURI().getQuery());
+            write(exchange, 200, "{\"ok\":true,\"data\":{\"baseId\":\"9\",\"sourceIds\":[\"kb:1\",\"kb:2\"]}}");
+        });
+
+        var documents = client.listIndexedDocuments("9");
+
+        assertThat(seenQuery.get()).isEqualTo("baseId=9");
+        assertThat(documents)
+                .extracting(com.mywebsite.agent.dto.AgentIndexedDocument::sourceId)
+                .containsExactly("kb:1", "kb:2");
+    }
+
+    @Test
+    void retrievalPartitionStatsParsesChunkCountEnvelope() throws IOException {
+        // 分区统计（Issue #209 UoW-5）：与清单同一端点，data 增 chunkCount（源文档的块行数合计）
+        server.createContext("/internal/v1/retrieval/documents", exchange -> {
+            write(
+                    exchange,
+                    200,
+                    "{\"ok\":true,\"data\":{\"baseId\":\"9\",\"sourceIds\":[\"kb:1\",\"kb:2\"],\"chunkCount\":7}}");
+        });
+
+        var stats = client.retrievalPartitionStats("9");
+
+        assertThat(stats.baseId()).isEqualTo("9");
+        assertThat(stats.sourceIds()).containsExactly("kb:1", "kb:2");
+        assertThat(stats.chunkCount()).isEqualTo(7L);
+    }
+
+    @Test
+    void retrievalPartitionStatsDefaultsChunkCountWhenFieldMissing() throws IOException {
+        // 旧版执行层未回 chunkCount 时按 0 计，不得因缺字段失败（滚动部署窗口）
+        server.createContext("/internal/v1/retrieval/documents", exchange -> {
+            write(exchange, 200, "{\"ok\":true,\"data\":{\"baseId\":\"9\",\"sourceIds\":[]}}");
+        });
+
+        var stats = client.retrievalPartitionStats("9");
+
+        assertThat(stats.sourceIds()).isEmpty();
+        assertThat(stats.chunkCount()).isEqualTo(0L);
+    }
+
+    @Test
+    void deleteRetrievalDocumentSendsBaseIdQueryParam() throws IOException {
+        // 单篇删除换键（Issue #209 UoW-2）：query 参数 agentId → baseId
+        java.util.concurrent.atomic.AtomicReference<String> seenQuery = new java.util.concurrent.atomic.AtomicReference<>();
+        server.createContext("/internal/v1/retrieval/documents", exchange -> {
+            seenQuery.set(exchange.getRequestURI().getQuery());
+            write(exchange, 200, "{\"ok\":true,\"data\":null}");
+        });
+
+        client.deleteRetrievalDocument("9", "kb:1");
+
+        assertThat(seenQuery.get()).isEqualTo("baseId=9&sourceId=kb%3A1");
     }
 
     @Test

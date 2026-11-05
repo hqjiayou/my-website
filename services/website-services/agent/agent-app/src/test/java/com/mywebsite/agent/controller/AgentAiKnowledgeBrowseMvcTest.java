@@ -15,9 +15,16 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** 站点用户只读浏览知识库文档（列表/详情）：成员校验、只见 ACTIVE 与本站文档。 */
+/**
+ * 站点用户只读浏览知识库文档（列表/详情）：成员校验、只见 ACTIVE 与可达空间
+ * （创建∪订阅，Issue #209 UoW-4）内的文档；文档 agent_id 停写后按 base 归属判定。
+ */
 @AutoConfigureMockMvc
 class AgentAiKnowledgeBrowseMvcTest extends AbstractAgentSpringBootTest {
+
+    private static final long OWN_BASE_ID = 100L;
+    private static final long SUBSCRIBED_BASE_ID = 200L;
+    private static final long FOREIGN_BASE_ID = 300L;
 
     @Autowired
     private MockMvc mockMvc;
@@ -32,15 +39,34 @@ class AgentAiKnowledgeBrowseMvcTest extends AbstractAgentSpringBootTest {
     void setUp() throws Exception {
         privateKey = AgentTestJwtSigner.loadRsaFromClasspathPrivatePem("jwt/test-private.pem");
         jdbcTemplate.update("DELETE FROM agent_ai_knowledge_document");
-        activeDocId = insertDocument(10L, "公开手册", "# 手册正文", "ACTIVE");
-        insertDocument(10L, "已停用文档", "不应可见", "DISABLED");
-        insertDocument(11L, "他站文档", "不应可见", "ACTIVE");
+        jdbcTemplate.update("DELETE FROM agent_ai_knowledge_base_subscription");
+        jdbcTemplate.update("DELETE FROM agent_ai_knowledge_base");
+        insertBase(OWN_BASE_ID, 10L);
+        insertBase(FOREIGN_BASE_ID, 11L);
+        insertSubscription(OWN_BASE_ID, 10L);
+        insertSubscription(FOREIGN_BASE_ID, 11L);
+        // 文档 agent_id 一律 NULL：UoW-1 停写后的新文档形状，可见性只看 base_id。
+        activeDocId = insertDocument(OWN_BASE_ID, "公开手册", "# 手册正文", "ACTIVE");
+        insertDocument(OWN_BASE_ID, "已停用文档", "不应可见", "DISABLED");
+        insertDocument(FOREIGN_BASE_ID, "他站文档", "不应可见", "ACTIVE");
     }
 
-    private long insertDocument(long agentId, String title, String content, String status) {
+    private void insertBase(long baseId, long createdByAgentId) {
         jdbcTemplate.update(
-                "INSERT INTO agent_ai_knowledge_document (agent_id, title, content, status) VALUES (?, ?, ?, ?)",
-                agentId,
+                "INSERT INTO agent_ai_knowledge_base (id, created_by_agent_id, name, status) VALUES (?, ?, ?, 'ACTIVE')",
+                baseId, createdByAgentId, "空间-" + baseId);
+    }
+
+    private void insertSubscription(long baseId, long agentId) {
+        jdbcTemplate.update(
+                "INSERT INTO agent_ai_knowledge_base_subscription (base_id, agent_id) VALUES (?, ?)",
+                baseId, agentId);
+    }
+
+    private long insertDocument(long baseId, String title, String content, String status) {
+        jdbcTemplate.update(
+                "INSERT INTO agent_ai_knowledge_document (base_id, title, content, status) VALUES (?, ?, ?, ?)",
+                baseId,
                 title,
                 content,
                 status);
@@ -83,6 +109,23 @@ class AgentAiKnowledgeBrowseMvcTest extends AbstractAgentSpringBootTest {
         mockMvc.perform(get("/api/agent/10/ai/knowledge-documents/" + foreignId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void subscribedSpaceDocumentsAreBrowsable() throws Exception {
+        insertBase(SUBSCRIBED_BASE_ID, 11L);
+        insertSubscription(SUBSCRIBED_BASE_ID, 11L);
+        insertSubscription(SUBSCRIBED_BASE_ID, 10L);
+        long sharedDocId = insertDocument(SUBSCRIBED_BASE_ID, "共享手册", "# 共享正文", "ACTIVE");
+        mockMvc.perform(get("/api/agent/10/ai/knowledge-documents")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2));
+        mockMvc.perform(get("/api/agent/10/ai/knowledge-documents/" + sharedDocId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title").value("共享手册"))
+                .andExpect(jsonPath("$.data.content").value("# 共享正文"));
     }
 
     @Test

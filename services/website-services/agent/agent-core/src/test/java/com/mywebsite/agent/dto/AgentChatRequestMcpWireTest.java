@@ -18,7 +18,7 @@ class AgentChatRequestMcpWireTest {
     private AgentChatRequest requestWithNames(List<String> names) {
         return new AgentChatRequest(
                 "10", "hello", null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, names);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, names, null);
     }
 
     @Test

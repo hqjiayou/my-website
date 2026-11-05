@@ -84,8 +84,6 @@ public final class AdminAiKnowledgeDtos {
             long originalBytes,
             List<AdminAiKnowledgeAgentStatDto> sites,
             List<AdminAiKnowledgeFailureDto> recentFailures,
-            /** Issue #203：链接分区扇出失败待重试的（文档×分区）数——消费站点实际检索可能缺这些文档。 */
-            long laggingLinkPartitions,
             /** Issue #203：删除失败待重试的 tombstone 数——这些文档已删但向量残留仍可能被命中。 */
             long pendingRetrievalDeletes,
             /** 最早一条未解决同步问题的时间；无问题时为 null。 */
@@ -109,6 +107,36 @@ public final class AdminAiKnowledgeDtos {
 
     /** 批量重试索引失败文档的结果。 */
     public record AdminAiKnowledgeReindexFailedResultDto(int attempted, int succeeded) {}
+
+    /**
+     * 全量重建对账报告中的单空间行（Issue #209 UoW-5）：{@code documents} 为该空间
+     * ACTIVE 文档数（本轮重建的覆盖面）；{@code indexedSources}/{@code chunks} 取自
+     * 执行层分区统计，取不到时为 -1（未能取得，不代表为零）；{@code syncFailures}
+     * 为本轮同步后未达 INDEXED 的文档数。
+     */
+    public record AdminAiKnowledgeRebuildSpaceDto(
+            Long baseId,
+            long documents,
+            long indexedSources,
+            long chunks,
+            long syncFailures) {}
+
+    /** 旧分区残留：以旧 agent id 为键的分区在清扫＋重建后仍有索引源（且该 id 不是现存空间）。 */
+    public record AdminAiKnowledgeRebuildResidueDto(Long partitionKey, long indexedSources) {}
+
+    /**
+     * 全量重建对账报告（Issue #209 UoW-5）：文档/块/spec 三数合计中，文档数＝各空间
+     * ACTIVE 文档数之和，块数＝各空间执行层块行数之和（取不到的空间按 0 计、其行内
+     * 值为 -1），spec 数＝本轮覆盖文档中同步后 INDEXED 且已记
+     * {@code index_embedding_spec} 的数量。
+     */
+    public record AdminAiKnowledgeRebuildReportDto(
+            List<AdminAiKnowledgeRebuildSpaceDto> spaces,
+            long totalDocuments,
+            long totalChunks,
+            long totalSpecs,
+            long totalSyncFailures,
+            List<AdminAiKnowledgeRebuildResidueDto> legacyResidues) {}
 
     public record AdminAiKnowledgeCreateRequest(
             @NotBlank @Size(max = 255) String title, @NotBlank String content, Long baseId) {

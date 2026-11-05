@@ -30,6 +30,7 @@ import com.mywebsite.agent.dto.AgentOcrPdfRequest;
 import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
+import com.mywebsite.agent.dto.AgentRetrievalPartitionStats;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
 import java.nio.charset.StandardCharsets;
@@ -73,7 +74,7 @@ class AdminAiKnowledgeServiceImplTest {
     private com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper baseMapper;
 
     @Mock
-    private com.mywebsite.admin.mapper.AdminAiKnowledgeBaseLinkMapper linkMapper;
+    private com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper;
 
     @Mock
     private com.mywebsite.admin.mapper.AdminAiKnowledgeRetrievalSyncIssueMapper syncIssueMapper;
@@ -96,7 +97,7 @@ class AdminAiKnowledgeServiceImplTest {
                 objectStorageService,
                 new com.mywebsite.infra.properties.StorageProperties(),
                 baseMapper,
-                linkMapper,
+                subscriptionMapper,
                 adminAiStreamExecutor,
                 syncIssueMapper);
     }
@@ -109,8 +110,10 @@ class AdminAiKnowledgeServiceImplTest {
                 document(1L, 12L, AdminAiKnowledgeDocumentEntity.STATUS_DISABLED),
                 document(2L, 21L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE),
                 document(2L, 22L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection));
-        when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of(selection));
+        // 文档按空间分组（helper 口径：agent 1→空间 901、agent 2→空间 902），类集按空间原生登记取（stub 键为空间 id）
+        when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L), base(902L, 2L)));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection));
+        when(modelEntryService.embeddingClassesForSpace(902L)).thenReturn(List.of(selection));
         when(agentClient.prepareReembed(selection, false))
                 .thenReturn(new AgentReembedPrepareResult(3, 3, false));
 
@@ -134,8 +137,9 @@ class AdminAiKnowledgeServiceImplTest {
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(
                 document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE),
                 document(2L, 21L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(first));
-        when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of(second));
+        when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L), base(902L, 2L)));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(first));
+        when(modelEntryService.embeddingClassesForSpace(902L)).thenReturn(List.of(second));
         when(agentClient.prepareReembed(first, false)).thenReturn(new AgentReembedPrepareResult(3, 3, false));
         when(agentClient.prepareReembed(second, false))
                 .thenThrow(new AgentDimensionChangeRequiredException(4, 3));
@@ -154,7 +158,8 @@ class AdminAiKnowledgeServiceImplTest {
         AgentModelSelection selection = selection("openai:embed-a");
         when(knowledgeMapper.selectList(any()))
                 .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection));
+        when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L)));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection));
         when(agentClient.prepareReembed(selection, false))
                 .thenThrow(new AgentDimensionChangeRequiredException(8, 3));
         when(agentClient.prepareReembed(selection, true))
@@ -177,7 +182,8 @@ class AdminAiKnowledgeServiceImplTest {
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(
                 document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE),
                 document(1L, 22L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection));
+        when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L)));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection));
         when(agentClient.prepareReembed(selection, false))
                 .thenReturn(new AgentReembedPrepareResult(3, 3, false));
         org.mockito.Mockito.doAnswer(invocation -> {
@@ -207,7 +213,8 @@ class AdminAiKnowledgeServiceImplTest {
         AgentModelSelection selection = selection("openai:embed-a");
         when(knowledgeMapper.selectList(any()))
                 .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection));
+        when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L)));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection));
         when(agentClient.prepareReembed(selection, false))
                 .thenReturn(new AgentReembedPrepareResult(3, 3, false));
         org.mockito.Mockito.doThrow(new BusinessException(
@@ -247,6 +254,9 @@ class AdminAiKnowledgeServiceImplTest {
         site2.setId(2L);
         site2.setAgentName("Agent Two");
         when(adminAgentMapper.selectList(any())).thenReturn(List.of(site1, site2));
+        // 所有者只经空间创建者推导（Issue #209 UoW-5）：文档 11/12 属空间 901（创建者 1）、21 属 902（创建者 2）
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
+        when(baseMapper.selectById(902L)).thenReturn(base(902L, 2L));
 
         var overview = service.knowledgeOverview();
 
@@ -267,10 +277,12 @@ class AdminAiKnowledgeServiceImplTest {
     // ------------------------------------------------------------------
 
     private static com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity syncIssue(
-            long id, long agentId, String sourceId, String op, int attempts) {
+            long id, long baseId, long agentId, String sourceId, String op, int attempts) {
         com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity issue =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity();
         issue.setId(id);
+        // 键为 (baseId, sourceId, op)（Issue #209 UoW-2）；agentId 只作创建者留痕
+        issue.setBaseId(baseId);
         issue.setAgentId(agentId);
         issue.setSourceId(sourceId);
         issue.setOp(op);
@@ -279,65 +291,58 @@ class AdminAiKnowledgeServiceImplTest {
     }
 
     @Test
-    void linkBaseFanOutFailureRecordsUpsertIssue() {
-        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+    void linkBaseOnlyWritesSubscriptionRowWithoutTouchingIndex() {
+        // Issue #209 UoW-2：向量按空间单写，订阅不再扇出——link 只落订阅行，
+        // 不写目标分区、不落同步问题行（目标 agent 靠空间集展开命中既有向量）。
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         base.setId(5L);
-        base.setAgentId(1L);
+        base.setCreatedByAgentId(1L);
         when(baseMapper.selectById(5L)).thenReturn(base);
         com.mywebsite.admin.entity.AdminAgentEntity targetSite = new com.mywebsite.admin.entity.AdminAgentEntity();
         targetSite.setId(2L);
         when(adminAgentMapper.selectById(2L)).thenReturn(targetSite);
-        when(linkMapper.selectOne(any())).thenReturn(null);
-        when(knowledgeMapper.selectList(any())).thenReturn(List.of(doc));
-        when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of());
-        doThrow(new RuntimeException("python down")).when(agentClient).upsertRetrievalDocument(any());
-        when(syncIssueMapper.selectOne(any())).thenReturn(null);
+        when(subscriptionMapper.selectOne(any())).thenReturn(null);
 
         service.linkBase(5L, 2L);
 
-        verify(syncIssueMapper).insert(argThat((com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity issue) ->
-                issue.getAgentId() == 2L
-                        && "kb:11".equals(issue.getSourceId())
-                        && com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT
-                                .equals(issue.getOp())));
+        verify(subscriptionMapper).insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity.class));
+        verify(agentClient, never()).upsertRetrievalDocument(any());
+        verify(syncIssueMapper, never())
+                .insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.class));
     }
 
     @Test
-    void unlinkBaseDeleteFailureRecordsTombstone() {
-        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
-                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
+    void unlinkBaseOnlyDeletesSubscriptionRowWithoutTouchingIndex() {
+        // Issue #209 UoW-2：解链不删索引——向量只存空间一份，其他订阅者仍要命中；
+        // 目标 agent 的空间集展开不再包含本空间即可。
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity();
         link.setId(7L);
-        when(linkMapper.selectOne(any())).thenReturn(link);
-        when(knowledgeMapper.selectList(any()))
-                .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
-        doThrow(new RuntimeException("python down"))
-                .when(agentClient)
-                .deleteRetrievalDocument(eq("2"), eq("kb:11"));
-        when(syncIssueMapper.selectOne(any())).thenReturn(null);
+        when(subscriptionMapper.selectOne(any())).thenReturn(link);
 
         service.unlinkBase(5L, 2L);
 
-        verify(syncIssueMapper).insert(argThat((com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity issue) ->
-                issue.getAgentId() == 2L
-                        && "kb:11".equals(issue.getSourceId())
-                        && com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE
-                                .equals(issue.getOp())));
+        verify(subscriptionMapper).deleteById(7L);
+        verify(agentClient, never()).deleteRetrievalDocument(any(), any());
+        verify(syncIssueMapper, never())
+                .insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.class));
     }
 
     @Test
     void retryDeletesTombstoneAfterSuccessfulDelete() {
+        // 键改为空间（Issue #209 UoW-2）：重试删除按 (baseId, sourceId) 执行
         when(syncIssueMapper.selectList(any())).thenReturn(List.of(syncIssue(
                 3L,
-                2L,
+                5L,
+                1L,
                 "kb:11",
                 com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE,
                 1)));
 
         service.retryRetrievalSyncIssues();
 
-        verify(agentClient).deleteRetrievalDocument("2", "kb:11");
+        verify(agentClient).deleteRetrievalDocument("5", "kb:11");
         verify(syncIssueMapper).deleteById(3L);
     }
 
@@ -345,7 +350,8 @@ class AdminAiKnowledgeServiceImplTest {
     void retryBumpsAttemptsWhenDeleteStillFails() {
         when(syncIssueMapper.selectList(any())).thenReturn(List.of(syncIssue(
                 3L,
-                2L,
+                5L,
+                1L,
                 "kb:11",
                 com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE,
                 1)));
@@ -360,14 +366,15 @@ class AdminAiKnowledgeServiceImplTest {
     }
 
     @Test
-    void retryDropsUpsertIssueWhenDocumentIsGone() {
+    void retryDropsRetiredUpsertIssueRows() {
+        // op=UPSERT 是已退役的链接分区记账（V58 存量全删）：偶见行直接作废，不再重同步
         when(syncIssueMapper.selectList(any())).thenReturn(List.of(syncIssue(
                 4L,
-                2L,
+                5L,
+                1L,
                 "kb:99",
                 com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT,
                 0)));
-        // knowledgeMapper.selectById 未打桩：默认 null，文档已不存在，问题行应作废
         service.retryRetrievalSyncIssues();
 
         verify(syncIssueMapper).deleteById(4L);
@@ -376,21 +383,18 @@ class AdminAiKnowledgeServiceImplTest {
 
     @Test
     void retryDropsTombstoneSupersededByActiveDocument() {
-        // 复评三审计：停用期落下的 tombstone，文档恢复 ACTIVE 并重写后不得再被执行
+        // 复评三审计：停用期落下的 tombstone，文档恢复 ACTIVE 并重写后不得再被执行；
+        // 取代判定改为（Issue #209 UoW-2）：文档 ACTIVE 且仍属 tombstone 的空间。
         when(syncIssueMapper.selectList(any())).thenReturn(List.of(syncIssue(
                 3L,
-                2L,
+                5L,
+                1L,
                 "kb:11",
                 com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE,
                 1)));
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         doc.setBaseId(5L);
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
-                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
-        link.setBaseId(5L);
-        link.setAgentId(2L);
-        when(linkMapper.selectList(any())).thenReturn(List.of(link));
 
         service.retryRetrievalSyncIssues();
 
@@ -399,38 +403,60 @@ class AdminAiKnowledgeServiceImplTest {
     }
 
     @Test
-    void linkBaseSuccessClearsDeleteAndUpsertIssues() {
-        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+    void documentDeleteFailureRecordsTombstoneKeyedByBase() {
+        // 删文档时空间分区删除失败：落 (baseId, sourceId, DELETE) tombstone 行待重试，
+        // 行上 agentId 只作空间创建者留痕（Issue #209 UoW-2）。
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         base.setId(5L);
-        base.setAgentId(1L);
+        base.setCreatedByAgentId(1L);
         when(baseMapper.selectById(5L)).thenReturn(base);
-        com.mywebsite.admin.entity.AdminAgentEntity targetSite = new com.mywebsite.admin.entity.AdminAgentEntity();
-        targetSite.setId(2L);
-        when(adminAgentMapper.selectById(2L)).thenReturn(targetSite);
-        when(linkMapper.selectOne(any())).thenReturn(null);
-        when(knowledgeMapper.selectList(any())).thenReturn(List.of(doc));
-        when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of());
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setBaseId(5L);
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(knowledgeMapper.deleteById(11L)).thenReturn(1);
+        doThrow(new RuntimeException("python down"))
+                .when(agentClient)
+                .deleteRetrievalDocument(eq("5"), eq("kb:11"));
+        when(syncIssueMapper.selectOne(any())).thenReturn(null);
 
-        service.linkBase(5L, 2L);
+        service.deleteDocument(1L, 11L);
 
-        // 漏斗层清 DELETE（写入取代待删）＋扇出包装清 UPSERT，共两次清行
-        verify(syncIssueMapper, times(2)).delete(any());
+        verify(syncIssueMapper).insert(argThat((com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity issue) ->
+                issue.getBaseId() == 5L
+                        && issue.getAgentId() == 1L
+                        && "kb:11".equals(issue.getSourceId())
+                        && com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE
+                                .equals(issue.getOp())));
     }
 
     @Test
-    void unlinkBaseSuccessClearsDeleteAndUpsertIssues() {
-        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
-                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
-        link.setId(7L);
-        when(linkMapper.selectOne(any())).thenReturn(link);
-        when(knowledgeMapper.selectList(any()))
-                .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
+    void documentUpsertSuccessClearsDeleteTombstoneForSameBase() {
+        // 漏斗双清按新键等价迁移：upsert 成功清同 (base, source) 的 DELETE 行
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
 
-        service.unlinkBase(5L, 2L);
+        service.reindexDocument(1L, 11L);
 
-        verify(syncIssueMapper, times(2)).delete(any());
+        // LambdaQueryWrapper 的参数要在 lambda 列缓存就绪并构建 SQL 段后才物化；
+        // 纯 mock 单测无 MyBatis 运行时，先为问题行实体初始化 TableInfo 缓存再断言参数。
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""),
+                com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.class);
+        verify(syncIssueMapper).delete(argThat((com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<
+                        com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity>
+                wrapper) -> {
+                    wrapper.getSqlSegment();
+                    return wrapper.getParamNameValuePairs().containsValue(901L)
+                            && wrapper.getParamNameValuePairs().containsValue("kb:11")
+                            && wrapper.getParamNameValuePairs().containsValue(
+                                    com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE);
+                }));
     }
 
     @Test
@@ -439,14 +465,16 @@ class AdminAiKnowledgeServiceImplTest {
         when(adminAgentMapper.selectList(any())).thenReturn(List.of());
         var upsert = syncIssue(
                 1L,
-                2L,
+                5L,
+                1L,
                 "kb:11",
                 com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT,
                 0);
         upsert.setCreatedAt(java.time.OffsetDateTime.parse("2026-11-05T00:00:00Z"));
         var delete = syncIssue(
                 2L,
-                2L,
+                5L,
+                1L,
                 "kb:12",
                 com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE,
                 3);
@@ -455,7 +483,6 @@ class AdminAiKnowledgeServiceImplTest {
 
         var overview = service.knowledgeOverview();
 
-        assertThat(overview.laggingLinkPartitions()).isEqualTo(1);
         assertThat(overview.pendingRetrievalDeletes()).isEqualTo(1);
         assertThat(overview.oldestSyncIssueAt())
                 .isEqualTo(java.time.OffsetDateTime.parse("2026-11-05T00:00:00Z"));
@@ -468,7 +495,7 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity refreshed = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         refreshed.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(failed));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
         when(knowledgeMapper.selectById(11L)).thenReturn(refreshed);
         when(knowledgeMapper.update(any(), any())).thenReturn(1);
 
@@ -480,38 +507,17 @@ class AdminAiKnowledgeServiceImplTest {
     }
 
     @Test
-    void linkBaseFansOutActiveDocumentsToTargetPartition() {
-        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
-                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
-        base.setId(9L);
-        base.setAgentId(1L);
-        when(baseMapper.selectById(9L)).thenReturn(base);
-        com.mywebsite.admin.entity.AdminAgentEntity target = new com.mywebsite.admin.entity.AdminAgentEntity();
-        target.setId(2L);
-        when(adminAgentMapper.selectById(2L)).thenReturn(target);
-        when(linkMapper.selectOne(any())).thenReturn(null);
-        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
-        doc.setBaseId(9L);
-        when(knowledgeMapper.selectList(any())).thenReturn(List.of(doc));
-        when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of(selection("openai:embed-a")));
-
-        service.linkBase(9L, 2L);
-
-        verify(linkMapper).insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity.class));
-        var captor = org.mockito.ArgumentCaptor.forClass(AgentRetrievalDocument.class);
-        verify(agentClient).upsertRetrievalDocument(captor.capture());
-        assertThat(captor.getValue().agentId()).isEqualTo("2");
-    }
-
-    @Test
-    void createDocumentSyncsToOwnerAndLinkedPartitions() {
+    void createDocumentSyncsOnceToItsBasePartitionEvenWhenSubscribed() {
+        // Issue #209 UoW-2 核心验收：同一文档被 2 个 agent 订阅时向量仅写 1 份——
+        // 建档只向其所属空间分区写一次，订阅关系不产生额外副本。
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity defaultBase =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         defaultBase.setId(9L);
-        defaultBase.setAgentId(1L);
+        defaultBase.setCreatedByAgentId(1L);
         defaultBase.setIsDefault(true);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(baseMapper.selectOne(any())).thenReturn(defaultBase);
+        when(baseMapper.selectById(9L)).thenReturn(defaultBase);
         when(knowledgeMapper.insert(any(AdminAiKnowledgeDocumentEntity.class)))
                 .thenAnswer(invocation -> {
                     AdminAiKnowledgeDocumentEntity inserted = invocation.getArgument(0);
@@ -521,13 +527,15 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity saved = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         saved.setBaseId(9L);
         when(knowledgeMapper.selectById(any())).thenReturn(saved);
-        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
-                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity();
         link.setBaseId(9L);
         link.setAgentId(3L);
-        when(linkMapper.selectList(any())).thenReturn(List.of(link));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
-        when(modelEntryService.embeddingClasses(3L)).thenReturn(List.of(selection("openai:embed-a")));
+        // 订阅行存在只为证明「有订阅也不多写」：同步路径已不读订阅表，故用 lenient 打桩
+        org.mockito.Mockito.lenient()
+                .when(subscriptionMapper.selectList(any()))
+                .thenReturn(List.of(link));
+        when(modelEntryService.embeddingClassesForSpace(9L)).thenReturn(List.of(selection("openai:embed-a")));
         when(knowledgeMapper.update(any(), any())).thenReturn(1);
 
         service.createDocument(
@@ -535,10 +543,240 @@ class AdminAiKnowledgeServiceImplTest {
                 new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest("t", "c"));
 
         var captor = org.mockito.ArgumentCaptor.forClass(AgentRetrievalDocument.class);
-        verify(agentClient, times(2)).upsertRetrievalDocument(captor.capture());
-        assertThat(captor.getAllValues())
-                .extracting(AgentRetrievalDocument::agentId)
-                .containsExactlyInAnyOrder("1", "3");
+        verify(agentClient, times(1)).upsertRetrievalDocument(captor.capture());
+        assertThat(captor.getValue().baseId()).isEqualTo("9");
+        assertThat(captor.getValue().sourceId()).isEqualTo("kb:11");
+    }
+
+    @Test
+    void createDocumentWritesOnlyBaseAndDerivesOwnerFromBaseCreator() {
+        // Issue #209 UoW-1 起建档只写 base（文档 agent_id 已随 UoW-5 删列）；所有者经 base 创建者推导（DTO/分区口径不变）
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity defaultBase =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        defaultBase.setId(9L);
+        defaultBase.setCreatedByAgentId(1L);
+        defaultBase.setIsDefault(true);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(baseMapper.selectOne(any())).thenReturn(defaultBase);
+        when(baseMapper.selectById(9L)).thenReturn(defaultBase);
+        when(knowledgeMapper.insert(any(AdminAiKnowledgeDocumentEntity.class)))
+                .thenAnswer(invocation -> {
+                    AdminAiKnowledgeDocumentEntity inserted = invocation.getArgument(0);
+                    inserted.setId(11L);
+                    return 1;
+                });
+        AdminAiKnowledgeDocumentEntity saved = new AdminAiKnowledgeDocumentEntity();
+        saved.setId(11L);
+        saved.setBaseId(9L);
+        saved.setTitle("t");
+        saved.setContent("c");
+        saved.setStatus(AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        when(knowledgeMapper.selectById(any())).thenReturn(saved);
+        when(modelEntryService.embeddingClassesForSpace(9L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(knowledgeMapper.update(any(), any())).thenReturn(1);
+
+        var detail = service.createDocument(
+                1L,
+                new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest("t", "c"));
+
+        ArgumentCaptor<AdminAiKnowledgeDocumentEntity> insertedCaptor =
+                ArgumentCaptor.forClass(AdminAiKnowledgeDocumentEntity.class);
+        verify(knowledgeMapper).insert(insertedCaptor.capture());
+        assertThat(insertedCaptor.getValue().getBaseId()).isEqualTo(9L);
+        assertThat(detail.agentId()).isEqualTo(1L);
+        assertThat(detail.owned()).isTrue();
+        var captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        // 分区键已改 base（Issue #209 UoW-2）：载荷首字段是文档所属空间 id
+        assertThat(captor.getValue().baseId()).isEqualTo("9");
+    }
+
+    @Test
+    void ownerIsDerivedFromBaseCreator() {
+        // 所有者只经 base 创建者推导（文档 agent_id 已随 Issue #209 UoW-5 删列，无其他来源）
+        AdminAiKnowledgeDocumentEntity doc = document(999L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setBaseId(5L);
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(5L);
+        base.setCreatedByAgentId(1L);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(baseMapper.selectById(5L)).thenReturn(base);
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(modelEntryService.embeddingClassesForSpace(5L)).thenReturn(List.of(selection("openai:embed-a")));
+
+        var detail = service.reindexDocument(1L, 11L);
+
+        assertThat(detail.agentId()).isEqualTo(1L);
+        var captor = ArgumentCaptor.forClass(AgentRetrievalDocument.class);
+        verify(agentClient).upsertRetrievalDocument(captor.capture());
+        // 分区键已改 base（Issue #209 UoW-2）：写入文档所属空间 5 的分区
+        assertThat(captor.getValue().baseId()).isEqualTo("5");
+    }
+
+    private static com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base(long id, long creatorId) {
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(id);
+        base.setCreatedByAgentId(creatorId);
+        return base;
+    }
+
+    private static com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity subscription(
+            long baseId, long agentId) {
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity subscription =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity();
+        subscription.setBaseId(baseId);
+        subscription.setAgentId(agentId);
+        return subscription;
+    }
+
+    @Test
+    void baseDtoLinkedAgentIdsExcludeCreatorSubscriptionRow() {
+        // V57 回填后订阅表含创建者行：DTO 的 linkedAgentIds 沿用旧口径（仅其他订阅者），须排除创建者本人
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(5L);
+        base.setCreatedByAgentId(1L);
+        base.setName("kb");
+        when(baseMapper.selectList(any())).thenReturn(List.of(base));
+        when(knowledgeMapper.selectCount(any())).thenReturn(0L);
+        when(subscriptionMapper.selectList(any()))
+                .thenReturn(List.of(subscription(5L, 1L), subscription(5L, 3L)));
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of());
+
+        var dtos = service.listAllBases();
+
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.getFirst().agentId()).isEqualTo(1L);
+        assertThat(dtos.getFirst().linkedAgentIds()).containsExactly(3L);
+    }
+
+    @Test
+    void createUploadedDocumentRejectsDuplicateShaWithinCreatorSpaces() {
+        // Issue #209 UoW-1 补修：文档不带 agent 归属后，上传去重改按创建者空间集＋sha256——
+        // 既有文档只凭 base 归属也须命中同 sha 并抛 CONFLICT，不得再按 document.agentId 查。
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(9L);
+        base.setCreatedByAgentId(1L);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(baseMapper.selectList(any())).thenReturn(List.of(base));
+        AdminAiKnowledgeDocumentEntity existing = new AdminAiKnowledgeDocumentEntity();
+        existing.setId(5L);
+        existing.setBaseId(9L);
+        existing.setSha256("sha-dup");
+        when(knowledgeMapper.selectOne(any())).thenReturn(existing);
+        var meta = new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta(
+                "a.md", "md", "text/markdown", 3L, "sha-dup", "abc".getBytes(StandardCharsets.UTF_8));
+        var request = new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest(
+                "t", "abc", null);
+
+        assertThatThrownBy(() -> service.createUploadedDocument(1L, request, meta))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode()));
+        verify(knowledgeMapper, never()).insert(any(AdminAiKnowledgeDocumentEntity.class));
+    }
+
+    @Test
+    void createUploadedDocumentSkipsDuplicateQueryWhenAgentCreatesNoBase() {
+        // 无自有空间时必无重复：跳过文档去重查询，未指定库时懒创建默认库并同步落创建者订阅行
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(baseMapper.selectList(any())).thenReturn(List.of());
+        when(baseMapper.selectOne(any())).thenReturn(null);
+        when(baseMapper.insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity.class)))
+                .thenAnswer(invocation -> {
+                    com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity inserted = invocation.getArgument(0);
+                    inserted.setId(9L);
+                    return 1;
+                });
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity createdBase =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        createdBase.setId(9L);
+        createdBase.setCreatedByAgentId(1L);
+        createdBase.setIsDefault(true);
+        when(baseMapper.selectById(9L)).thenReturn(createdBase);
+        when(knowledgeMapper.insert(any(AdminAiKnowledgeDocumentEntity.class)))
+                .thenAnswer(invocation -> {
+                    AdminAiKnowledgeDocumentEntity inserted = invocation.getArgument(0);
+                    inserted.setId(77L);
+                    return 1;
+                });
+        AdminAiKnowledgeDocumentEntity saved = new AdminAiKnowledgeDocumentEntity();
+        saved.setId(77L);
+        saved.setBaseId(9L);
+        saved.setTitle("t");
+        saved.setContent("abc");
+        saved.setStatus(AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        saved.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING);
+        when(knowledgeMapper.selectById(77L)).thenReturn(saved);
+        var meta = new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta(
+                "a.md", "md", "text/markdown", 3L, "sha-new", "abc".getBytes(StandardCharsets.UTF_8));
+        var request = new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateRequest(
+                "t", "abc", null);
+
+        var detail = service.createUploadedDocument(1L, request, meta);
+
+        assertThat(detail.id()).isEqualTo(77L);
+        verify(knowledgeMapper, never()).selectOne(any());
+        ArgumentCaptor<com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity> captor =
+                ArgumentCaptor.forClass(com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity.class);
+        verify(subscriptionMapper).insert(captor.capture());
+        assertThat(captor.getValue().getBaseId()).isEqualTo(9L);
+        assertThat(captor.getValue().getAgentId()).isEqualTo(1L);
+    }
+
+    @Test
+    void createBaseInsertsCreatorSubscriptionRowExcludedFromLinkedAgentIds() {
+        // Issue #209 UoW-1 补修：新建空间同步落创建者订阅行（与 V57 回填同口径）；
+        // DTO 的 linkedAgentIds 仍排除创建者本人，前台无感。
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of());
+        when(baseMapper.insert(any(com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity.class)))
+                .thenAnswer(invocation -> {
+                    com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity inserted = invocation.getArgument(0);
+                    inserted.setId(9L);
+                    return 1;
+                });
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity created =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        created.setId(9L);
+        created.setCreatedByAgentId(1L);
+        created.setName("kb");
+        when(baseMapper.selectById(9L)).thenReturn(created);
+        when(knowledgeMapper.selectCount(any())).thenReturn(0L);
+        when(subscriptionMapper.selectList(any())).thenReturn(List.of(subscription(9L, 1L)));
+
+        var dto = service.createBase(
+                1L, new com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeBaseCreateRequest("kb"));
+
+        ArgumentCaptor<com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity> captor =
+                ArgumentCaptor.forClass(com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity.class);
+        verify(subscriptionMapper).insert(captor.capture());
+        assertThat(captor.getValue().getBaseId()).isEqualTo(9L);
+        assertThat(captor.getValue().getAgentId()).isEqualTo(1L);
+        assertThat(dto.agentId()).isEqualTo(1L);
+        assertThat(dto.linkedAgentIds()).isEmpty();
+    }
+
+    @Test
+    void deleteBaseOnEmptyBaseSweepsPartitionByBase() {
+        // Issue #209 UoW-2：删库走整空间清理（deleteRetrievalDocumentsByBase），不再逐篇/逐分区处理
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(9L);
+        base.setCreatedByAgentId(1L);
+        base.setIsDefault(false);
+        when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(baseMapper.selectById(9L)).thenReturn(base);
+        when(knowledgeMapper.selectCount(any())).thenReturn(0L);
+
+        service.deleteBase(1L, 9L);
+
+        verify(agentClient).deleteRetrievalDocumentsByBase("9");
+        verify(subscriptionMapper).delete(any());
+        verify(baseMapper).deleteById(9L);
     }
 
     @Test
@@ -546,7 +784,7 @@ class AdminAiKnowledgeServiceImplTest {
         com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
                 new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
         base.setId(9L);
-        base.setAgentId(1L);
+        base.setCreatedByAgentId(1L);
         base.setIsDefault(false);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(baseMapper.selectById(9L)).thenReturn(base);
@@ -689,7 +927,8 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
 
         var detail = service.reindexDocument(1L, 11L);
 
@@ -703,7 +942,8 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of());
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of());
 
         var detail = service.reindexDocument(1L, 11L);
 
@@ -717,7 +957,8 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
 
         service.reindexDocument(1L, 11L);
         assertThat(doc.getIndexEmbeddingSpec()).isEqualTo("openai:embed-a");
@@ -741,6 +982,7 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexedAt(OffsetDateTime.now());
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
         when(knowledgeMapper.updateById(any(AdminAiKnowledgeDocumentEntity.class))).thenReturn(1);
 
         var detail = service.updateDocument(
@@ -764,7 +1006,8 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexEmbeddingSpec("openai:embed-a");
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-b")));
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-b")));
 
         assertThat(service.getDocument(1L, 11L).indexStale()).isTrue();
     }
@@ -776,7 +1019,8 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexEmbeddingSpec("openai:embed-a");
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
 
         assertThat(service.getDocument(1L, 11L).indexStale()).isFalse();
     }
@@ -787,9 +1031,10 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_PENDING);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
 
         assertThat(service.getDocument(1L, 11L).indexStale()).isFalse();
-        verify(modelEntryService, never()).embeddingClasses(anyLong());
+        verify(modelEntryService, never()).embeddingClassesForSpace(anyLong());
     }
 
     @Test
@@ -799,7 +1044,8 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexEmbeddingSpec("openai:embed-a");
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-b")));
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-b")));
 
         assertThat(service.getDocument(1L, 11L).indexStale()).isTrue();
 
@@ -821,14 +1067,14 @@ class AdminAiKnowledgeServiceImplTest {
         failedDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED);
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(staleDoc, freshDoc, failedDoc));
         when(adminAgentMapper.selectList(any())).thenReturn(List.of());
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-b")));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-b")));
 
         var overview = service.knowledgeOverview();
 
         // staleDoc 记录 embed-a、当前 selection 是 embed-b → stale；freshDoc 记录与当前一致 → 不 stale；
         // failedDoc 非 INDEXED，恒不计入。
         assertThat(overview.staleDocuments()).isEqualTo(1);
-        verify(modelEntryService, times(1)).embeddingClasses(1L);
+        verify(modelEntryService, times(1)).embeddingClassesForSpace(901L);
     }
 
     @Test
@@ -838,9 +1084,10 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexEmbeddingSpec("openai:embed-a");
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
         doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
                 .when(modelEntryService)
-                .embeddingClasses(1L);
+                .embeddingClassesForSpace(901L);
 
         assertThat(service.getDocument(1L, 11L).indexStale()).isTrue();
     }
@@ -852,9 +1099,10 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexEmbeddingSpec("openai:embed-a");
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
         doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
                 .when(modelEntryService)
-                .embeddingClasses(1L);
+                .embeddingClassesForSpace(901L);
 
         var detail = service.reindexDocument(1L, 11L);
 
@@ -875,10 +1123,11 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexEmbeddingSpec("openai:embed-a");
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
         when(knowledgeMapper.updateById(any(AdminAiKnowledgeDocumentEntity.class))).thenReturn(1);
         doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
                 .when(modelEntryService)
-                .embeddingClasses(1L);
+                .embeddingClassesForSpace(901L);
 
         service.updateDocument(
                 1L,
@@ -900,9 +1149,10 @@ class AdminAiKnowledgeServiceImplTest {
     void reembedSkipsLegacyRecreateWhenASiteHasMultipleClasses() {
         when(knowledgeMapper.selectList(any()))
                 .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
+        when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L)));
         doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
                 .when(modelEntryService)
-                .embeddingClasses(1L);
+                .embeddingClassesForSpace(901L);
 
         var result = service.reembedAll();
 
@@ -917,12 +1167,105 @@ class AdminAiKnowledgeServiceImplTest {
                 .containsExactly("openai:embed-a", "openai:embed-b");
     }
 
+    // ------------------------------------------------------------------
+    // Issue #209 UoW-5：全量重建＋对账（rebuildAllSpaces）
+    // ------------------------------------------------------------------
+
+    @Test
+    void rebuildSweepsLegacyAgentPartitionsBeforeRebuildingSpaces() {
+        // 顺序钉死：旧分区（键＝agent id）清扫必须先于按空间重建——agent id 与 base id
+        // 数值相撞时，相撞空间的真分区只能靠清扫之后的步骤二重建回来。
+        com.mywebsite.admin.entity.AdminAgentEntity agent1 = new com.mywebsite.admin.entity.AdminAgentEntity();
+        agent1.setId(1L);
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of(agent1));
+        when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L)));
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(doc));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(agentClient.retrievalPartitionStats("901"))
+                .thenReturn(new AgentRetrievalPartitionStats("901", List.of("kb:11"), 5L));
+        when(agentClient.retrievalPartitionStats("1"))
+                .thenReturn(new AgentRetrievalPartitionStats("1", List.of(), 0L));
+
+        var report = service.rebuildAllSpaces();
+
+        InOrder order = inOrder(agentClient);
+        order.verify(agentClient).deleteRetrievalDocumentsByBase("1");
+        order.verify(agentClient).upsertRetrievalDocument(any());
+        assertThat(report.spaces()).hasSize(1);
+        var space = report.spaces().getFirst();
+        assertThat(space.baseId()).isEqualTo(901L);
+        assertThat(space.documents()).isEqualTo(1L);
+        assertThat(space.indexedSources()).isEqualTo(1L);
+        assertThat(space.chunks()).isEqualTo(5L);
+        assertThat(space.syncFailures()).isEqualTo(0L);
+        assertThat(report.totalDocuments()).isEqualTo(1L);
+        assertThat(report.totalChunks()).isEqualTo(5L);
+        assertThat(report.totalSpecs()).isEqualTo(1L);
+        assertThat(report.totalSyncFailures()).isEqualTo(0L);
+        assertThat(report.legacyResidues()).isEmpty();
+    }
+
+    @Test
+    void rebuildCountsSyncFailurePerSpaceWithoutAbortingOthers() {
+        // 单空间同步失败只计入该空间行与全局合计，不中断其余空间的重建。
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of());
+        when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L), base(902L, 2L)));
+        AdminAiKnowledgeDocumentEntity okDoc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        AdminAiKnowledgeDocumentEntity badDoc = document(2L, 21L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(okDoc), List.of(badDoc));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(modelEntryService.embeddingClassesForSpace(902L)).thenReturn(List.of(selection("openai:embed-a")));
+        // 先给全量兜底 stub，再叠 902 定向抛错——否则严格模式会对 901 的调用报 PotentialStubbingProblem
+        org.mockito.Mockito.doNothing().when(agentClient).upsertRetrievalDocument(any());
+        doThrow(new RuntimeException("index down"))
+                .when(agentClient)
+                .upsertRetrievalDocument(argThat(payload -> "902".equals(payload.baseId())));
+        when(agentClient.retrievalPartitionStats("901"))
+                .thenReturn(new AgentRetrievalPartitionStats("901", List.of("kb:11"), 4L));
+        when(agentClient.retrievalPartitionStats("902"))
+                .thenReturn(new AgentRetrievalPartitionStats("902", List.of(), 0L));
+
+        var report = service.rebuildAllSpaces();
+
+        assertThat(report.spaces()).hasSize(2);
+        assertThat(report.spaces().get(0).syncFailures()).isEqualTo(0L);
+        assertThat(report.spaces().get(1).syncFailures()).isEqualTo(1L);
+        assertThat(report.totalDocuments()).isEqualTo(2L);
+        assertThat(report.totalChunks()).isEqualTo(4L);
+        assertThat(report.totalSpecs()).isEqualTo(1L);
+        assertThat(report.totalSyncFailures()).isEqualTo(1L);
+        assertThat(report.legacyResidues()).isEmpty();
+    }
+
+    @Test
+    void rebuildReportsLegacyResidueForPartitionKeyThatIsNotASpace() {
+        // 残留口径：键不是现存空间、且清扫＋重建后索引源数仍非 0 → 列入残留清单；
+        // 是现存空间的键下有内容属重建成果，不算残留（本用例无空间，键 7 纯残留）。
+        com.mywebsite.admin.entity.AdminAgentEntity agent7 = new com.mywebsite.admin.entity.AdminAgentEntity();
+        agent7.setId(7L);
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of(agent7));
+        when(baseMapper.selectList(any())).thenReturn(List.of());
+        when(agentClient.retrievalPartitionStats("7"))
+                .thenReturn(new AgentRetrievalPartitionStats("7", List.of("kb:99"), 3L));
+
+        var report = service.rebuildAllSpaces();
+
+        verify(agentClient).deleteRetrievalDocumentsByBase("7");
+        assertThat(report.spaces()).isEmpty();
+        assertThat(report.totalDocuments()).isEqualTo(0L);
+        assertThat(report.legacyResidues()).hasSize(1);
+        assertThat(report.legacyResidues().getFirst().partitionKey()).isEqualTo(7L);
+        assertThat(report.legacyResidues().getFirst().indexedSources()).isEqualTo(1L);
+    }
+
     @Test
     void reindexOmitsSegmentsWhenStoredContentDiffersFromOriginal() throws Exception {
         byte[] bytes = workbookBytes("Hours", 1, "Day", "9:00-18:00");
         AdminAiKnowledgeDocumentEntity doc = spreadsheetDocument("edited by hand");
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
         when(objectStorageService.get("bucket", "key")).thenReturn(bytes);
 
         service.reindexDocument(1L, 11L);
@@ -942,6 +1285,7 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity doc = spreadsheetDocument(stored);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
         when(objectStorageService.get("bucket", "key")).thenReturn(bytes);
 
         service.reindexDocument(1L, 11L);
@@ -979,6 +1323,7 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity doc = spreadsheetDocument(stored);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
         when(objectStorageService.get("bucket", "key")).thenReturn(bytes);
 
         service.reindexDocument(1L, 11L);
@@ -1012,10 +1357,12 @@ class AdminAiKnowledgeServiceImplTest {
         }
     }
 
-    private static AdminAiKnowledgeDocumentEntity document(long agentId, long id, String status) {
+    private static AdminAiKnowledgeDocumentEntity document(long creatorAgentId, long id, String status) {
         AdminAiKnowledgeDocumentEntity entity = new AdminAiKnowledgeDocumentEntity();
         entity.setId(id);
-        entity.setAgentId(agentId);
+        // 文档只属空间（Issue #209 UoW-5 起 agent_id 列已删）：给每篇文档一个确定
+        // 空间（按创建者 agent 分开），需要特定空间的用例在 helper 后显式覆盖 setBaseId。
+        entity.setBaseId(900L + creatorAgentId);
         entity.setTitle("title-" + id);
         entity.setContent("content-" + id);
         entity.setStatus(status);

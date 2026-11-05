@@ -639,7 +639,7 @@ def _cosine(left: Sequence[float], right: Sequence[float]) -> float:
 
 @dataclass
 class _Row:
-    agent_id: str
+    base_id: str
     source_id: str
     chunk_index: int
     content: str
@@ -648,7 +648,7 @@ class _Row:
 
 
 class MemoryRetrievalStore:
-    """进程内索引。向量按余弦排序，词法按字面量子串命中数排序，都强制 agent_id。"""
+    """进程内索引。向量按余弦排序，词法按字面量子串命中数排序，都强制 base_id（空间）。"""
 
     def __init__(self) -> None:
         self._rows: list[_Row] = []
@@ -658,7 +658,7 @@ class MemoryRetrievalStore:
     async def upsert_document(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         source_id: str,
         title: str,
         chunks: list[str],
@@ -669,16 +669,16 @@ class MemoryRetrievalStore:
             row
             for row in self._rows
             if not (
-                row.agent_id == agent_id
+                row.base_id == base_id
                 and row.source_id == source_id
                 and row.embedding_model == embedding_model
             )
         ]
-        self._titles[(agent_id, source_id)] = title
+        self._titles[(base_id, source_id)] = title
         for index, (content, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
             self._rows.append(
                 _Row(
-                    agent_id=agent_id,
+                    base_id=base_id,
                     source_id=source_id,
                     chunk_index=index,
                     content=content,
@@ -689,16 +689,16 @@ class MemoryRetrievalStore:
             self._dimensions = len(embedding)
         return len(chunks)
 
-    async def delete_document(self, *, agent_id: str, source_id: str) -> None:
+    async def delete_document(self, *, base_id: str, source_id: str) -> None:
         self._rows = [
-            row for row in self._rows if not (row.agent_id == agent_id and row.source_id == source_id)
+            row for row in self._rows if not (row.base_id == base_id and row.source_id == source_id)
         ]
-        self._titles.pop((agent_id, source_id), None)
+        self._titles.pop((base_id, source_id), None)
 
     async def search(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         embedding: list[float],
         top_k: int,
         embedding_model: str = "",
@@ -708,7 +708,7 @@ class MemoryRetrievalStore:
         scored = [
             (_cosine(row.embedding, embedding), row)
             for row in self._rows
-            if row.agent_id == agent_id and row.embedding_model == embedding_model
+            if row.base_id == base_id and row.embedding_model == embedding_model
         ]
         scored.sort(key=lambda item: (-item[0], item[1].source_id, item[1].chunk_index))
         return [
@@ -717,6 +717,7 @@ class MemoryRetrievalStore:
                 chunk_index=row.chunk_index,
                 content=row.content,
                 score=score,
+                base_id=row.base_id,
             )
             for score, row in scored[:top_k]
         ]
@@ -724,7 +725,7 @@ class MemoryRetrievalStore:
     async def search_lexical(
         self,
         *,
-        agent_id: str,
+        base_id: str,
         tokens: list[str],
         limit: int,
         embedding_models: list[str] | None = None,
@@ -734,7 +735,7 @@ class MemoryRetrievalStore:
         allowed = None if embedding_models is None else set(embedding_models)
         ranked: list[tuple[int, _Row]] = []
         for row in self._rows:
-            if row.agent_id != agent_id:
+            if row.base_id != base_id:
                 continue
             if allowed is not None and row.embedding_model not in allowed:
                 continue
@@ -750,6 +751,7 @@ class MemoryRetrievalStore:
                 chunk_index=row.chunk_index,
                 content=row.content,
                 score=0.0,
+                base_id=row.base_id,
             )
             for _, row in ranked[:limit]
         ]
@@ -772,7 +774,11 @@ class MemoryRetrievalStore:
 async def build_eval_index(
     corpus: Sequence[CorpusDoc], *, agent_id: str = EVAL_SITE_ID
 ) -> RetrievalService:
-    """种入语料。重排关掉：评估模型只负责作答，不额外改检索顺序。"""
+    """种入语料。重排关掉：评估模型只负责作答，不额外改检索顺序。
+
+    语料整体是一个知识空间：agent_id（eval 站点标识）即空间 id 种入，
+    检索时经 knowledge_base_ids=[agent_id] 查这一个空间（Issue #209 UoW-2）。
+    """
     service = RetrievalService(
         DeterministicEmbedder(),
         MemoryRetrievalStore(),
@@ -781,7 +787,7 @@ async def build_eval_index(
     )
     for doc in corpus:
         await service.upsert_document(
-            agent_id=agent_id,
+            base_id=agent_id,
             source_id=doc.source_id,
             title=doc.title,
             content=doc.content,
@@ -859,6 +865,7 @@ async def _run_case(
         service,
         collector=collector,
         client=knowledge_client,  # type: ignore[arg-type] — duck-typing 对齐 BusinessApiClient 的枚举方法
+        knowledge_base_ids=[agent_id],
     )
     toolsets: list[object] = [toolset, build_todo_toolset(TodoStore())]
     # 自选场景（Issue #195）：与生产 toolset_factory 同一工具、同一收集器，
