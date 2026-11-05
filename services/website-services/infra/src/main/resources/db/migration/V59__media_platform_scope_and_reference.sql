@@ -1,5 +1,5 @@
 -- =============================================================================
--- website-services | Flyway V57 | 媒体库平台化（Issue #212，解耦 Phase 4 / UoW-10）
+-- website-services | Flyway V59 | 媒体库平台化（Issue #212，解耦 Phase 4 / UoW-10）
 -- media_file 归属语义由「站点私有」改平台：site_id 保留为上传来源留痕（仍 NOT NULL），
 -- 新增 scope 可见范围（AGENT=仅来源站与引用站可见 / PLATFORM=平台可见，存量默认 AGENT
 -- 行为不变）；跨站共享走 media_reference 引用行（引用不复制对象，对象只存一份）。

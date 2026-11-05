@@ -12,7 +12,7 @@ public final class AdminMediaConstants {
 
     public static final String VISIBILITY_PRIVATE = "PRIVATE";
 
-    /** 可见范围（media_file.scope，V57）：AGENT=仅来源站与引用站 / PLATFORM=平台可见。 */
+    /** 可见范围（media_file.scope，V59）：AGENT=仅来源站与引用站 / PLATFORM=平台可见。 */
     public static final String SCOPE_AGENT = "AGENT";
 
     public static final String SCOPE_PLATFORM = "PLATFORM";

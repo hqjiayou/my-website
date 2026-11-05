@@ -20,7 +20,7 @@ public class AdminMediaEntity extends AbstractAuditableEntity {
     private Long fileSize;
     private String sha256;
     private String visibility;
-    /** 可见范围：AGENT=仅来源站与引用站可见 / PLATFORM=平台可见（V57）。 */
+    /** 可见范围：AGENT=仅来源站与引用站可见 / PLATFORM=平台可见（V59）。 */
     private String scope;
     private String status;
     /** 对象存储已清理时间；非空表示不再进入 orphan 候选。 */

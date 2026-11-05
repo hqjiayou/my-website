@@ -6,9 +6,9 @@ status: CURRENT
 last_verified: 2026-11-05
 ```
 
-`AdminMediaController`：`/api/admin/agents/{agentId}/media` 的 list、upload、detail、preview、delete，以及平台化（#212 / V57）新增的 `POST /{id}/reference`、`DELETE /{id}/reference`、`PUT /{id}/scope`。object key 由服务端生成（ADR-0003）。MIME 以服务端检测为准。
+`AdminMediaController`：`/api/admin/agents/{agentId}/media` 的 list、upload、detail、preview、delete，以及平台化（#212 / V59）新增的 `POST /{id}/reference`、`DELETE /{id}/reference`、`PUT /{id}/scope`。object key 由服务端生成（ADR-0003）。MIME 以服务端检测为准。
 
-归属语义（V57 起）：媒体文件归平台，`media_file.site_id` 为上传来源站留痕（必填、非归属）。可见范围由 `media_file.scope` 决定：`AGENT`（默认，存量行为不变）仅来源站与引用站可见；`PLATFORM` 平台内任意站可见。文件对某站可见 ⇔ 该站为来源站 ∨ `scope = PLATFORM` ∨ 存在 `media_reference(media_id, agent_id)` 引用行；不可见一律按不存在处理（404，不泄露归属）。
+归属语义（V59 起）：媒体文件归平台，`media_file.site_id` 为上传来源站留痕（必填、非归属）。可见范围由 `media_file.scope` 决定：`AGENT`（默认，存量行为不变）仅来源站与引用站可见；`PLATFORM` 平台内任意站可见。文件对某站可见 ⇔ 该站为来源站 ∨ `scope = PLATFORM` ∨ 存在 `media_reference(media_id, agent_id)` 引用行；不可见一律按不存在处理（404，不泄露归属）。
 
 列表 `GET /` 带 `view` 参数：`library`（默认）＝来源站文件＋本站已引用文件；`platform`＝全部 `PLATFORM` 文件。列表项带 `scope` 与 `referenced`（是否经引用可见），详情带 `scope` 与 `referenceCount`（被引用站数）。
 
