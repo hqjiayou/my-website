@@ -8,6 +8,7 @@ export default {
   },
   groups: {
     myApp: 'マイアプリ',
+    platform: 'プラットフォーム',
   },
   items: {
     dashboard: 'データ概要',
@@ -29,6 +30,9 @@ export default {
     contents: 'ページコンテンツ',
     files: 'ファイル管理',
     aiSettings: 'モデル入口',
+    aiChainPresets: 'チェーンプリセット',
+    aiConfigPresets: '設定プリセット',
+    aiPlatformSettings: 'AI 設定',
     proxyServices: 'API キー',
     aiUsage: 'AI 利用量',
     aiPrompts: 'Prompt 設定',

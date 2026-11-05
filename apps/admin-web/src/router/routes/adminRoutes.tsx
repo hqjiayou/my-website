@@ -87,6 +87,18 @@ const AiConversationsPage = lazyNamed(
   () => import('@/pages/ai/conversationsPage'),
   'AiConversationsPage',
 )
+const AiModelEntriesPage = lazyNamed(
+  () => import('@/pages/ai/modelEntriesPage'),
+  'AiModelEntriesPage',
+)
+const AiChainPresetsPage = lazyNamed(
+  () => import('@/pages/ai/chainPresetsPage'),
+  'AiChainPresetsPage',
+)
+const AiConfigPresetsPage = lazyNamed(
+  () => import('@/pages/ai/configPresetsPage'),
+  'AiConfigPresetsPage',
+)
 
 const ParamsConfigPage = lazyNamed(
   () => import('@/pages/config/paramsConfigPage'),
@@ -147,6 +159,9 @@ export const adminRoutes = (
     <Route path={ROUTES.ai.prompts} element={<AiPromptsPage />} />
     <Route path={ROUTES.ai.knowledgeBases} element={<AiKnowledgeBasesPage />} />
     <Route path={ROUTES.ai.conversations} element={<AiConversationsPage />} />
+    <Route path={ROUTES.ai.modelEntries} element={<AiModelEntriesPage />} />
+    <Route path={ROUTES.ai.chainPresets} element={<AiChainPresetsPage />} />
+    <Route path={ROUTES.ai.configPresets} element={<AiConfigPresetsPage />} />
 
     <Route path={ROUTES.config.params} element={<ParamsConfigPage />} />
     <Route path={ROUTES.governance.analytics} element={<AnalyticsPage />} />

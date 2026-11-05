@@ -8,6 +8,7 @@ export default {
   },
   groups: {
     myApp: '我的应用',
+    platform: '平台区',
   },
   items: {
     dashboard: '数据概览',
@@ -29,6 +30,9 @@ export default {
     contents: '页面内容',
     files: '文件管理',
     aiSettings: '模型入口',
+    aiChainPresets: '链预设',
+    aiConfigPresets: '配置预设',
+    aiPlatformSettings: 'AI 设置',
     proxyServices: 'API 管理',
     aiUsage: 'AI 用量',
     aiPrompts: 'Prompt 配置',
