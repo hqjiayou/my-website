@@ -12,6 +12,10 @@ UoW-3 追加：嵌入类集按空间下发（spaces 取代请求级一份类集�
 - 两空间登记不同类集时，各自只用自己的类集命中，串用即无命中；
 - search 端点把类集逐空间解析下发（全链）；
 - spaces 空/空白/缺失的拒绝口径与旧 baseIds 一致；同 id 空间去重保序。
+
+UoW-4 追加：#202 字面降级按空间口径复核。
+
+- 全部空间嵌入失败时，每空间各自走纯字面降级、双空间仍各出命中，degraded 置位。
 """
 
 from conftest import TOKEN_HEADER, make_settings
@@ -19,7 +23,11 @@ from fastapi.testclient import TestClient
 from test_retrieval import FakeEmbedder, FakeStore, _service
 
 from agent_services.app import create_app
-from agent_services.retrieval.service import EmbeddingClass, RetrievalSpace
+from agent_services.retrieval.service import (
+    EmbeddingClass,
+    RetrievalService,
+    RetrievalSpace,
+)
 from agent_services.retrieval.store import PgVectorRetrievalStore, RetrievedChunk
 from agent_services.schemas.retrieval import RetrievalSearchRequest
 
@@ -388,3 +396,44 @@ def test_search_endpoint_rejects_empty_or_blank_spaces() -> None:
     )
     assert missing.status_code == 400
     assert missing.json()["errorCode"] == "BAD_REQUEST"
+
+
+async def test_all_spaces_embedding_failure_falls_back_to_lexical_per_space() -> None:
+    """全部空间嵌入失败（Issue #202 字面降级按空间口径，UoW-4 复核）：向量通道
+    在每个空间内失败，各空间各自降级纯字面兜底，双空间仍各出命中，整次标
+    degraded——降级发生在空间内，不是多空间整次落空。"""
+
+    class LexicalStore(FakeStore):
+        async def search_lexical(self, *, base_id, tokens, limit, embedding_models=None):
+            results = []
+            for (sid, source_id), chunks in self.docs.items():
+                if sid != base_id:
+                    continue
+                for index, content in enumerate(chunks):
+                    if any(token in content for token in tokens):
+                        results.append(
+                            RetrievedChunk(
+                                source_id=source_id,
+                                chunk_index=index,
+                                content=content,
+                                score=0.1,
+                                base_id=base_id,
+                            )
+                        )
+            return results[:limit]
+
+    class QueryDownEmbedder(FakeEmbedder):
+        # 只坏查询嵌入：写入（embed_documents）照常，检索时每空间向量通道全灭。
+        async def embed_query(self, text: str) -> list[float]:
+            raise RuntimeError("embed down")
+
+    service = RetrievalService(QueryDownEmbedder(), LexicalStore())
+    await service.upsert_document(base_id="A", source_id="kb:1", title="t", content="alpha one")
+    await service.upsert_document(base_id="B", source_id="kb:2", title="t", content="alpha two")
+
+    hits = await service.retrieve_chunks(
+        spaces=[RetrievalSpace("A"), RetrievalSpace("B")], query="alpha"
+    )
+    assert [(hit.base_id, hit.source_id) for hit in hits] == [("A", "kb:1"), ("B", "kb:2")]
+    assert service.degraded is True
+    assert service.last_error == "EmbeddingError"

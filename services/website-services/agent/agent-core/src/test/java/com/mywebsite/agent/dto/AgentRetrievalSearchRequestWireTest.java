@@ -12,6 +12,9 @@ import org.junit.jupiter.api.Test;
  * {@code embeddingClasses}——登记迁空间后每空间带自己的类集。无类空间不带
  * {@code embeddingClasses} 字段、{@code spaces} 为 null 时整字段缺席
  * （NON_NULL 省略，与旧版无空间报文同形）。
+ *
+ * <p>UoW-4 定稿：请求不再带 {@code agentId}——空间集即查询范围，执行层
+ * schema 本就没有该字段，报文里不得再出现。
  */
 class AgentRetrievalSearchRequestWireTest {
 
@@ -20,7 +23,6 @@ class AgentRetrievalSearchRequestWireTest {
     @Test
     void spacesCarryPerSpaceClassesAndReplaceBaseIds() throws Exception {
         AgentRetrievalSearchRequest request = new AgentRetrievalSearchRequest(
-                "7",
                 "query",
                 null,
                 null,
@@ -37,12 +39,13 @@ class AgentRetrievalSearchRequestWireTest {
         assertThat(json)
                 .contains(
                         "\"spaces\":[{\"baseId\":\"901\",\"embeddingClasses\":[{\"embeddingSpec\":\"openai:embed-a\",\"apiKey\":\"key-a\"}]},{\"baseId\":\"902\"}]")
-                .doesNotContain("\"baseIds\"");
+                .doesNotContain("\"baseIds\"")
+                .doesNotContain("agentId");
     }
 
     @Test
     void requestWithoutSpacesOmitsSpacesField() throws Exception {
-        String json = mapper.writeValueAsString(new AgentRetrievalSearchRequest("7", "query", null));
-        assertThat(json).doesNotContain("spaces").doesNotContain("baseIds");
+        String json = mapper.writeValueAsString(new AgentRetrievalSearchRequest("query", null));
+        assertThat(json).doesNotContain("spaces").doesNotContain("baseIds").doesNotContain("agentId");
     }
 }

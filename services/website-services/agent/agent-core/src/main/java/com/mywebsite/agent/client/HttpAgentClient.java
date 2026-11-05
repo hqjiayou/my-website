@@ -547,7 +547,7 @@ public class HttpAgentClient implements AgentClient {
 
     @Override
     public AgentRetrievalSearchResult searchRetrieval(AgentRetrievalSearchRequest request) {
-        if (request == null || !StringUtils.hasText(request.agentId()) || !StringUtils.hasText(request.query())) {
+        if (request == null || !StringUtils.hasText(request.query())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         ensureTokenConfigured();

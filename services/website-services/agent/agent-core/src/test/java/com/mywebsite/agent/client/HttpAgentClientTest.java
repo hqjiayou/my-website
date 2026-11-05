@@ -499,12 +499,12 @@ class HttpAgentClientTest {
         });
 
         var reranked = client.searchRetrieval(
-                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("7", "reranked query", null, null, null, null));
+                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("reranked query", null, null, null, null));
         assertThat(reranked.rerankApplied()).isTrue();
         assertThat(reranked.hits()).hasSize(1);
 
         var plain = client.searchRetrieval(
-                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("7", "plain query", null, null, null, null));
+                new com.mywebsite.agent.dto.AgentRetrievalSearchRequest("plain query", null, null, null, null));
         assertThat(plain.rerankApplied()).isFalse();
     }
 

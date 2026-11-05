@@ -10,6 +10,14 @@ public class AgentAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     public static final String STATUS_ACTIVE = "ACTIVE";
 
     private Long agentId;
+
+    /**
+     * 所属知识空间（V29 列，admin 侧写入）。文档只属一个空间：Issue #209 UoW-1 起
+     * {@code agentId} 停写，站点侧一切文档可见性过滤按本列对 agent 可达空间集
+     * （创建∪订阅）判定（UoW-4 定稿），{@code agentId} 只剩存量留痕。
+     */
+    private Long baseId;
+
     private String title;
     private String content;
     private String status;
@@ -31,6 +39,14 @@ public class AgentAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public void setAgentId(Long agentId) {
         this.agentId = agentId;
+    }
+
+    public Long getBaseId() {
+        return baseId;
+    }
+
+    public void setBaseId(Long baseId) {
+        this.baseId = baseId;
     }
 
     public String getTitle() {

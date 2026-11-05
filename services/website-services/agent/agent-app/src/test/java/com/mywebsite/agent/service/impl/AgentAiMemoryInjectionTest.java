@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -101,8 +102,7 @@ class AgentAiMemoryInjectionTest {
                 org.mockito.Mockito.mock(AgentEmbeddingClassService.class),
                 org.mockito.Mockito.mock(AgentExperienceLessonService.class),
                 org.mockito.Mockito.mock(AgentMcpSelectionService.class),
-                org.mockito.Mockito.mock(com.mywebsite.agent.mapper.AgentAiKnowledgeBaseMapper.class),
-                org.mockito.Mockito.mock(com.mywebsite.agent.mapper.AgentAiKnowledgeBaseSubscriptionMapper.class));
+                org.mockito.Mockito.mock(KnowledgeSpaceResolver.class));
     }
 
     @AfterEach
@@ -116,7 +116,8 @@ class AgentAiMemoryInjectionTest {
         AuthContext.set(new AuthenticatedUser(TokenAudience.AGENT, subject, "u", 10L, Set.of()));
         when(rateLimitService.tryAcquire(10L, subject)).thenReturn(true);
         when(localizedMessageService.currentLanguageTag()).thenReturn("zh-Hant-TW");
-        when(knowledgeDocumentMapper.selectList(any())).thenReturn(List.of());
+        // 片段回退在无可达空间时短路不查文档（Issue #209 UoW-4），本 stub 只在有空间的用例才被消费。
+        lenient().when(knowledgeDocumentMapper.selectList(any())).thenReturn(List.of());
         AgentAiConversationEntity conversation = conversation(77L);
         when(conversationService.prepare(10L, 200L, null))
                 .thenReturn(new ChatPreparation(conversation, List.of(), null, List.of()));
