@@ -375,6 +375,65 @@ class AdminAiKnowledgeServiceImplTest {
     }
 
     @Test
+    void retryDropsTombstoneSupersededByActiveDocument() {
+        // 复评三审计：停用期落下的 tombstone，文档恢复 ACTIVE 并重写后不得再被执行
+        when(syncIssueMapper.selectList(any())).thenReturn(List.of(syncIssue(
+                3L,
+                2L,
+                "kb:11",
+                com.mywebsite.admin.entity.AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE,
+                1)));
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        doc.setBaseId(5L);
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
+        link.setBaseId(5L);
+        link.setAgentId(2L);
+        when(linkMapper.selectList(any())).thenReturn(List.of(link));
+
+        service.retryRetrievalSyncIssues();
+
+        verify(syncIssueMapper).deleteById(3L);
+        verify(agentClient, never()).deleteRetrievalDocument(any(), any());
+    }
+
+    @Test
+    void linkBaseSuccessClearsDeleteAndUpsertIssues() {
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity base =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity();
+        base.setId(5L);
+        base.setAgentId(1L);
+        when(baseMapper.selectById(5L)).thenReturn(base);
+        com.mywebsite.admin.entity.AdminAgentEntity targetSite = new com.mywebsite.admin.entity.AdminAgentEntity();
+        targetSite.setId(2L);
+        when(adminAgentMapper.selectById(2L)).thenReturn(targetSite);
+        when(linkMapper.selectOne(any())).thenReturn(null);
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(doc));
+        when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of());
+
+        service.linkBase(5L, 2L);
+
+        // 漏斗层清 DELETE（写入取代待删）＋扇出包装清 UPSERT，共两次清行
+        verify(syncIssueMapper, times(2)).delete(any());
+    }
+
+    @Test
+    void unlinkBaseSuccessClearsDeleteAndUpsertIssues() {
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseLinkEntity();
+        link.setId(7L);
+        when(linkMapper.selectOne(any())).thenReturn(link);
+        when(knowledgeMapper.selectList(any()))
+                .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
+
+        service.unlinkBase(5L, 2L);
+
+        verify(syncIssueMapper, times(2)).delete(any());
+    }
+
+    @Test
     void overviewCountsSyncIssues() {
         when(knowledgeMapper.selectList(any())).thenReturn(List.of());
         when(adminAgentMapper.selectList(any())).thenReturn(List.of());

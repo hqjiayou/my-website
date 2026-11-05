@@ -1031,6 +1031,11 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             boolean classesComplete) {
         agentClient.upsertRetrievalDocument(
                 retrievalDocument(entity, targetAgentId, classes, parts, classesComplete));
+        // Issue #203 复评三审计：写入成功即作废同分区同文档的待删 tombstone——
+        // 否则文档停用期落下的 DELETE 行会在文档恢复 ACTIVE 并重写后被重试任务
+        // 执行，把活向量删掉（文档 INDEXED 却检索不到）。
+        clearSyncIssue(
+                targetAgentId, sourceId(entity.getId()), AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE);
     }
 
     private static AgentRetrievalDocument retrievalDocument(
@@ -1229,11 +1234,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         }
     }
 
-    /** 分区删除：成功清 op=DELETE 问题行，失败落 tombstone 行并原样抛回（调用方维持原日志语义）。 */
+    /** 分区删除：成功清 op=DELETE 与 op=UPSERT 问题行（删除取代待同步），失败落 tombstone 行并原样抛回。 */
     private void deleteFromPartition(long agentId, String sourceId) {
         try {
             agentClient.deleteRetrievalDocument(String.valueOf(agentId), sourceId);
             clearSyncIssue(agentId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE);
+            clearSyncIssue(agentId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT);
         } catch (RuntimeException ex) {
             recordSyncIssue(agentId, sourceId, AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE, ex);
             throw ex;
@@ -1258,8 +1264,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         for (AdminAiKnowledgeRetrievalSyncIssueEntity issue : issues) {
             try {
                 if (AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE.equals(issue.getOp())) {
-                    agentClient.deleteRetrievalDocument(
-                            String.valueOf(issue.getAgentId()), issue.getSourceId());
+                    // 复评三审计第二层防护：落行后文档又恢复 ACTIVE 且仍属该分区时，
+                    // 这条 tombstone 已被后续重写取代，作废不执行（与 upsert 成功清行互为冗余）。
+                    if (!deleteIssueSuperseded(issue)) {
+                        agentClient.deleteRetrievalDocument(
+                                String.valueOf(issue.getAgentId()), issue.getSourceId());
+                    }
                     syncIssueMapper.deleteById(issue.getId());
                 } else if (AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT.equals(issue.getOp())) {
                     if (retryLinkPartitionUpsert(issue)) {
@@ -1275,6 +1285,18 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 bumpSyncIssue(issue, ex);
             }
         }
+    }
+
+    /** tombstone 是否已被后续重写取代：文档存在、ACTIVE 且该分区仍在文档的目标分区内。 */
+    private boolean deleteIssueSuperseded(AdminAiKnowledgeRetrievalSyncIssueEntity issue) {
+        Long documentId = parseSourceDocumentId(issue.getSourceId());
+        if (documentId == null) {
+            return false;
+        }
+        AdminAiKnowledgeDocumentEntity document = knowledgeMapper.selectById(documentId);
+        return document != null
+                && AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE.equals(document.getStatus())
+                && partitionAgentIds(document).contains(issue.getAgentId());
     }
 
     /** @return true 表示该行可以删（已同步成功，或已被业务变化取代）；false 表示文档暂不可同步，留下轮。 */
