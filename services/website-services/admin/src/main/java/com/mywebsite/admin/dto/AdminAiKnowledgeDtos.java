@@ -128,7 +128,9 @@ public final class AdminAiKnowledgeDtos {
      * 全量重建对账报告（Issue #209 UoW-5）：文档/块/spec 三数合计中，文档数＝各空间
      * ACTIVE 文档数之和，块数＝各空间执行层块行数之和（取不到的空间按 0 计、其行内
      * 值为 -1），spec 数＝本轮覆盖文档中同步后 INDEXED 且已记
-     * {@code index_embedding_spec} 的数量。
+     * {@code index_embedding_spec} 的数量。{@code chunksUnknownSpaces}＝分区统计
+     * 取不到（块数未知）的空间数：非 0 时 {@code totalChunks} 是低报，须结合此
+     * 字段读（解耦深审）。
      */
     public record AdminAiKnowledgeRebuildReportDto(
             List<AdminAiKnowledgeRebuildSpaceDto> spaces,
@@ -136,7 +138,8 @@ public final class AdminAiKnowledgeDtos {
             long totalChunks,
             long totalSpecs,
             long totalSyncFailures,
-            List<AdminAiKnowledgeRebuildResidueDto> legacyResidues) {}
+            List<AdminAiKnowledgeRebuildResidueDto> legacyResidues,
+            long chunksUnknownSpaces) {}
 
     public record AdminAiKnowledgeCreateRequest(
             @NotBlank @Size(max = 255) String title, @NotBlank String content, Long baseId) {

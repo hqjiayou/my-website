@@ -330,6 +330,63 @@ class AdminAiKnowledgeServiceImplTest {
     }
 
     @Test
+    void unlinkBaseRejectsRemovingCreatorSubscription() {
+        // 解耦深审：创建者订阅行是空间归属锚点，服务端须拒绝移除（前台只是禁用）；
+        // 删掉后 linkBase 拒自链、无 API 可补回。
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity();
+        link.setId(7L);
+        when(subscriptionMapper.selectOne(any())).thenReturn(link);
+        when(baseMapper.selectById(5L)).thenReturn(base(5L, 2L));
+
+        assertThatThrownBy(() -> service.unlinkBase(5L, 2L))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> {
+                            assertThat(ex.getCode()).isEqualTo(ErrorCode.BAD_REQUEST.getCode());
+                            assertThat(ex.getMessageKey())
+                                    .isEqualTo(
+                                            com.mywebsite.admin.constant.AdminAiKnowledgeMessageKeys
+                                                    .BASE_UNLINK_CREATOR);
+                        });
+        verify(subscriptionMapper, never()).deleteById(any());
+    }
+
+    @Test
+    void getDocumentAllowsSubscriberOfTheSpace() {
+        // 解耦深审：详情读口径与 originalFileUrl 对齐——空间订阅者可读详情。
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        when(adminAgentMapper.selectById(2L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
+        com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity link =
+                new com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity();
+        link.setId(7L);
+        when(subscriptionMapper.selectOne(any())).thenReturn(link);
+
+        var detail = service.getDocument(2L, 11L);
+
+        assertThat(detail.id()).isEqualTo(11L);
+        assertThat(detail.title()).isEqualTo("title-11");
+        assertThat(detail.agentId()).isEqualTo(1L);
+    }
+
+    @Test
+    void getDocumentRejectsAgentWithoutSubscription() {
+        // 非所有者且未订阅该空间：统一 404，不泄露文档存在性。
+        AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
+        when(adminAgentMapper.selectById(2L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
+        when(knowledgeMapper.selectById(11L)).thenReturn(doc);
+        when(baseMapper.selectById(901L)).thenReturn(base(901L, 1L));
+        when(subscriptionMapper.selectOne(any())).thenReturn(null);
+
+        assertThatThrownBy(() -> service.getDocument(2L, 11L))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
+    }
+
+    @Test
     void retryDeletesTombstoneAfterSuccessfulDelete() {
         // 键改为空间（Issue #209 UoW-2）：重试删除按 (baseId, sourceId) 执行
         when(syncIssueMapper.selectList(any())).thenReturn(List.of(syncIssue(
@@ -1257,6 +1314,41 @@ class AdminAiKnowledgeServiceImplTest {
         assertThat(report.legacyResidues()).hasSize(1);
         assertThat(report.legacyResidues().getFirst().partitionKey()).isEqualTo(7L);
         assertThat(report.legacyResidues().getFirst().indexedSources()).isEqualTo(1L);
+    }
+
+    @Test
+    void rebuildSweepsAndChecksResiduesForDeletedAgentsToo() {
+        // 解耦深审：已软删 agent 的旧分区同样在清扫与残留检查的键集合内——
+        // 否则删站后的孤儿分区既不清扫、也不进对账报告。
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of());
+        when(adminAgentMapper.selectDeletedAgentIds()).thenReturn(List.of(9L));
+        when(baseMapper.selectList(any())).thenReturn(List.of());
+        when(agentClient.retrievalPartitionStats("9"))
+                .thenReturn(new AgentRetrievalPartitionStats("9", List.of("kb:77"), 2L));
+
+        var report = service.rebuildAllSpaces();
+
+        verify(agentClient).deleteRetrievalDocumentsByBase("9");
+        assertThat(report.legacyResidues()).hasSize(1);
+        assertThat(report.legacyResidues().getFirst().partitionKey()).isEqualTo(9L);
+        assertThat(report.chunksUnknownSpaces()).isEqualTo(0L);
+    }
+
+    @Test
+    void rebuildMarksChunksUnknownWhenPartitionStatsFail() {
+        // 解耦深审：单空间分区统计取不到时，该空间块数记 -1 且计入
+        // chunksUnknownSpaces——汇总 totalChunks 是低报，报告须可辨识。
+        when(adminAgentMapper.selectList(any())).thenReturn(List.of());
+        when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L)));
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of());
+        when(agentClient.retrievalPartitionStats("901")).thenThrow(new RuntimeException("stats down"));
+
+        var report = service.rebuildAllSpaces();
+
+        assertThat(report.spaces()).hasSize(1);
+        assertThat(report.spaces().getFirst().chunks()).isEqualTo(-1L);
+        assertThat(report.totalChunks()).isEqualTo(0L);
+        assertThat(report.chunksUnknownSpaces()).isEqualTo(1L);
     }
 
     @Test

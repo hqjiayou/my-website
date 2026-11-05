@@ -403,6 +403,24 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         return StringUtils.hasText(configured) ? configured.trim() : null;
     }
 
+    /**
+     * 该 agent 可见的知识空间 id 集（创建∪订阅、去重保序）：与
+     * {@code AdminAiKnowledgeServiceImpl} 的可见性口径（listBasesForSite）同形，
+     * 也与正式对话的 reachableBaseIds 一致。
+     */
+    private List<Long> visibleBaseIds(long agentId) {
+        java.util.LinkedHashSet<Long> baseIds = new java.util.LinkedHashSet<>();
+        knowledgeBaseMapper
+                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
+                        .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId))
+                .forEach(base -> baseIds.add(base.getId()));
+        knowledgeSubscriptionMapper
+                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                        .eq(AdminAiKnowledgeBaseSubscriptionEntity::getAgentId, agentId))
+                .forEach(subscription -> baseIds.add(subscription.getBaseId()));
+        return List.copyOf(baseIds);
+    }
+
     private List<String> knowledgeSnippets(long agentId, String query) {
         String trimmed = query.trim();
         if (trimmed.length() > KNOWLEDGE_NEEDLE_CHARS) {
@@ -412,20 +430,17 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             return null;
         }
         String needle = trimmed;
-        // 文档 agent_id 已停写（Issue #209 UoW-1）：按该 agent 创建的空间集查文档——
-        // 只含自有空间、不含订阅文档，与旧 agent_id 口径等价；无自有空间时无片段。
-        List<Long> ownBaseIds = knowledgeBaseMapper
-                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
-                        .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId))
-                .stream()
-                .map(AdminAiKnowledgeBaseEntity::getId)
-                .toList();
-        if (ownBaseIds.isEmpty()) {
+        // 文档 agent_id 已停写（Issue #209 UoW-1）：按该 agent 可见空间集（创建∪订阅，
+        // 与正式对话 reachableBaseIds 同口径）查文档——此前只搜自有空间，向量检索
+        // 降级走字面回退时订阅空间文档在试聊里搜不到、与正式对话分叉（解耦深审）。
+        // 无可见空间时无片段。
+        List<Long> visibleBaseIds = visibleBaseIds(agentId);
+        if (visibleBaseIds.isEmpty()) {
             return null;
         }
         List<String> snippets = knowledgeDocumentMapper
                 .selectList(new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
-                        .in(AdminAiKnowledgeDocumentEntity::getBaseId, ownBaseIds)
+                        .in(AdminAiKnowledgeDocumentEntity::getBaseId, visibleBaseIds)
                         .eq(AdminAiKnowledgeDocumentEntity::getStatus, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)
                         .and(wrapper -> wrapper
                                 .like(AdminAiKnowledgeDocumentEntity::getTitle, needle)

@@ -9,7 +9,9 @@ import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.admin.service.AdminEmbeddingRegistrationService;
 import com.mywebsite.agent.entity.AgentEmbeddingClassEntity;
+import com.mywebsite.agent.entity.AgentEmbeddingClassMaterializationEntity;
 import com.mywebsite.agent.mapper.AgentEmbeddingClassMapper;
+import com.mywebsite.agent.mapper.AgentEmbeddingClassMaterializationMapper;
 import com.mywebsite.agent.utils.AgentEmbeddingClassUtils;
 import com.mywebsite.common.enums.ErrorCode;
 import com.mywebsite.common.exception.BusinessException;
@@ -37,17 +39,25 @@ import org.springframework.util.StringUtils;
 @Service
 public class AdminEmbeddingRegistrationServiceImpl implements AdminEmbeddingRegistrationService {
 
+    /** 物化作用域键：与 agent-core {@code AgentEmbeddingClassServiceImpl} 的常量同字面（跨模块不共享常量）。 */
+    private static final String GLOBAL_SCOPE_KEY = "GLOBAL";
+
+    private static final String SPACE_SCOPE_PREFIX = "SPACE:";
+
     private final AgentEmbeddingClassMapper registrationMapper;
     private final AdminAiModelEntryMapper modelEntryMapper;
     private final AdminAiKnowledgeBaseMapper knowledgeBaseMapper;
+    private final AgentEmbeddingClassMaterializationMapper materializationMapper;
 
     public AdminEmbeddingRegistrationServiceImpl(
             AgentEmbeddingClassMapper registrationMapper,
             AdminAiModelEntryMapper modelEntryMapper,
-            AdminAiKnowledgeBaseMapper knowledgeBaseMapper) {
+            AdminAiKnowledgeBaseMapper knowledgeBaseMapper,
+            AgentEmbeddingClassMaterializationMapper materializationMapper) {
         this.registrationMapper = registrationMapper;
         this.modelEntryMapper = modelEntryMapper;
         this.knowledgeBaseMapper = knowledgeBaseMapper;
+        this.materializationMapper = materializationMapper;
     }
 
     @Override
@@ -109,7 +119,25 @@ public class AdminEmbeddingRegistrationServiceImpl implements AdminEmbeddingRegi
             row.setSortOrder(i);
             registrationMapper.insert(row);
         }
+        ensureScopeMarker(baseId);
         return listRegistrations(baseId);
+    }
+
+    /**
+     * 保存成功即为该 scope 落/补物化 marker（解耦深审 M-1）：登记行自此是该
+     * scope 的唯一真相源，消费侧首次读不得再按旧推算追加胜者行。含「整表
+     * 清空」的保存同样落 marker——人工删空的状态也要防推算复活。幂等：先查
+     * 后插，marker 已在则不重复 insert（同事务内与消费侧物化互斥，无并发窗口）。
+     */
+    private void ensureScopeMarker(Long baseId) {
+        String scopeKey = baseId == null ? GLOBAL_SCOPE_KEY : SPACE_SCOPE_PREFIX + baseId;
+        if (materializationMapper.selectById(scopeKey) != null) {
+            return;
+        }
+        AgentEmbeddingClassMaterializationEntity marker = new AgentEmbeddingClassMaterializationEntity();
+        marker.setScopeKey(scopeKey);
+        marker.setMaterializedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        materializationMapper.insert(marker);
     }
 
     /** 登记资格：只有 mode=KEY 且 embeddingSpec 非空的入口能成为嵌入类（CLI 入口的 spec 保存时已清空）。 */
