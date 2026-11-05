@@ -5,14 +5,22 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mywebsite.admin.constant.AdminAgentConstants;
 import com.mywebsite.admin.constant.AdminAgentMessageKeys;
+import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentConfigPresetUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentCreateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentDetailDto;
+import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentKindUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListItemDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListQuery;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentStatusUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentUpdateRequest;
 import com.mywebsite.admin.entity.AdminAgentEntity;
+import com.mywebsite.admin.entity.AdminAiChainPresetEntity;
+import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
+import com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
+import com.mywebsite.admin.mapper.AdminAiChainPresetMapper;
+import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
+import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
 
@@ -32,7 +40,13 @@ import com.mywebsite.common.page.PageResult;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +64,9 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     private final AgentUserMapper agentUserMapper;
     private final AgentUserMemoryMapper agentUserMemoryMapper;
     private final AgentAiConversationShareMapper conversationShareMapper;
+    private final AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper;
+    private final AdminAiChainPresetMapper chainPresetMapper;
+    private final AdminAiConfigPresetMapper configPresetMapper;
 
     public AdminAgentServiceImpl(
             AdminAgentMapper adminAgentMapper,
@@ -60,7 +77,10 @@ public class AdminAgentServiceImpl implements AdminAgentService {
             AdminAiConversationService adminAiConversationService,
             AgentUserMapper agentUserMapper,
             AgentUserMemoryMapper agentUserMemoryMapper,
-            AgentAiConversationShareMapper conversationShareMapper) {
+            AgentAiConversationShareMapper conversationShareMapper,
+            AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper,
+            AdminAiChainPresetMapper chainPresetMapper,
+            AdminAiConfigPresetMapper configPresetMapper) {
         this.adminAgentMapper = adminAgentMapper;
         this.adminAppearanceService = adminAppearanceService;
         this.adminMediaService = adminMediaService;
@@ -70,6 +90,9 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         this.agentUserMapper = agentUserMapper;
         this.agentUserMemoryMapper = agentUserMemoryMapper;
         this.conversationShareMapper = conversationShareMapper;
+        this.subscriptionMapper = subscriptionMapper;
+        this.chainPresetMapper = chainPresetMapper;
+        this.configPresetMapper = configPresetMapper;
     }
 
     @Override
@@ -96,11 +119,50 @@ public class AdminAgentServiceImpl implements AdminAgentService {
 
         Page<AdminAgentEntity> page =
                 adminAgentMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
+        List<AdminAgentEntity> records = page.getRecords();
+        // 关联摘要（#213）：订阅数与两类预设名按本页 id 集批量预载后内存组装，避免逐行查询。
+        Map<Long, Long> subscriptionCounts = subscriptionCounts(records);
+        Map<Long, String> chainPresetNames = presetNames(
+                records.stream().map(AdminAgentEntity::getChainPresetId).collect(Collectors.toSet()),
+                chainPresetMapper,
+                AdminAiChainPresetEntity::getName);
+        Map<Long, String> configPresetNames = presetNames(
+                records.stream().map(AdminAgentEntity::getConfigPresetId).collect(Collectors.toSet()),
+                configPresetMapper,
+                AdminAiConfigPresetEntity::getName);
         return new PageResult<>(
-                page.getRecords().stream().map(this::toListItem).toList(),
+                records.stream()
+                        .map(entity -> toListItem(entity, subscriptionCounts, chainPresetNames, configPresetNames))
+                        .toList(),
                 page.getTotal(),
                 (int) page.getCurrent(),
                 (int) page.getSize());
+    }
+
+    /** 订阅数＝订阅表行数（含空间创建者行，#209 口径）；一次按 agent id 集查回后内存计数。 */
+    private Map<Long, Long> subscriptionCounts(List<AdminAgentEntity> agents) {
+        if (agents.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> agentIds = agents.stream().map(AdminAgentEntity::getId).toList();
+        Map<Long, Long> counts = new HashMap<>();
+        subscriptionMapper
+                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
+                        .in(AdminAiKnowledgeBaseSubscriptionEntity::getAgentId, agentIds))
+                .forEach(row -> counts.merge(row.getAgentId(), 1L, Long::sum));
+        return counts;
+    }
+
+    /** 预设名批量解析：id 集一次查回；查不到的 id 不入表（组装时 name 落 null、id 照实）。 */
+    private static <E extends AbstractAuditableEntity> Map<Long, String> presetNames(
+            Set<Long> presetIds, BaseMapper<E> mapper, Function<E, String> nameExtractor) {
+        Set<Long> ids = presetIds.stream().filter(Objects::nonNull).collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> names = new HashMap<>();
+        mapper.selectBatchIds(ids).forEach(preset -> names.put(preset.getId(), nameExtractor.apply(preset)));
+        return names;
     }
 
     @Override
@@ -127,6 +189,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         entity.setAgentCode(request.agentCode());
         entity.setAgentName(request.agentName());
         entity.setAgentType(request.agentType());
+        entity.setAgentKind(normalizeAgentKind(request.agentKind()));
         entity.setDefaultDomain(blankToNull(request.defaultDomain()));
         entity.setDescription(blankToNull(request.description()));
         entity.setStatus(AdminAgentConstants.STATUS_ACTIVE);
@@ -148,6 +211,10 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         if (StringUtils.hasText(request.agentType())) {
             requireAgentType(request.agentType());
             agent.setAgentType(request.agentType());
+        }
+        if (StringUtils.hasText(request.agentKind())) {
+            requireAgentKind(request.agentKind());
+            agent.setAgentKind(request.agentKind());
         }
         agent.setDefaultDomain(blankToNull(request.defaultDomain()));
         agent.setDescription(blankToNull(request.description()));
@@ -226,6 +293,39 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         return toDetail(requireSite(id));
     }
 
+    /** 类型（kind）专属改写（#213）：封闭枚举校验＋乐观锁，口径与 updateStatus 一致。 */
+    @Override
+    public AdminAgentDetailDto updateKind(long id, AdminAgentKindUpdateRequest request) {
+        requireAgentKind(request.kind());
+        AdminAgentEntity agent = requireSite(id);
+        agent.setAgentKind(request.kind());
+        agent.setVersion(request.version());
+        int updated = adminAgentMapper.updateById(agent);
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAgentMessageKeys.AGENT_VERSION_CONFLICT);
+        }
+        return toDetail(requireSite(id));
+    }
+
+    /**
+     * 配置预设引用专属改写（#213）：形态仿链预设改引用——null 即清除引用；非空时
+     * 预设须存在（含未软删），与链预设 requirePreset 同口径抛裸 NOT_FOUND。
+     */
+    @Override
+    public AdminAgentDetailDto updateConfigPreset(long id, AdminAgentConfigPresetUpdateRequest request) {
+        AdminAgentEntity agent = requireSite(id);
+        Long presetId = request == null ? null : request.configPresetId();
+        if (presetId != null && configPresetMapper.selectById(presetId) == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        agent.setConfigPresetId(presetId);
+        int updated = adminAgentMapper.updateById(agent);
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.CONFLICT);
+        }
+        return toDetail(requireSite(id));
+    }
+
     private AdminAgentEntity requireSite(long id) {
         AdminAgentEntity agent = adminAgentMapper.selectById(id);
         if (agent == null) {
@@ -253,11 +353,31 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         }
     }
 
+    /** 类型（kind）封闭枚举校验（#213）：只收 SITE / AI_ONLY，与自由文本的 agentType 分开。 */
+    private static void requireAgentKind(String kind) {
+        if (kind == null || !AdminAgentConstants.ALLOWED_AGENT_KINDS.contains(kind)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST.getCode(), AdminAgentMessageKeys.AGENT_KIND_INVALID);
+        }
+    }
+
+    /** 创建时类型归一：缺省（null/空白）落 SITE，给出时走封闭枚举校验。 */
+    private static String normalizeAgentKind(String kind) {
+        if (!StringUtils.hasText(kind)) {
+            return AdminAgentConstants.AGENT_KIND_SITE;
+        }
+        requireAgentKind(kind);
+        return kind;
+    }
+
     private static String blankToNull(String value) {
         return StringUtils.hasText(value) ? value : null;
     }
 
-    private AdminAgentListItemDto toListItem(AdminAgentEntity entity) {
+    private AdminAgentListItemDto toListItem(
+            AdminAgentEntity entity,
+            Map<Long, Long> subscriptionCounts,
+            Map<Long, String> chainPresetNames,
+            Map<Long, String> configPresetNames) {
         return new AdminAgentListItemDto(
                 entity.getId(),
                 entity.getAgentCode(),
@@ -267,7 +387,13 @@ public class AdminAgentServiceImpl implements AdminAgentService {
                 entity.getDefaultDomain(),
                 entity.getVersion(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                entity.getUpdatedAt(),
+                entity.getAgentKind(),
+                subscriptionCounts.getOrDefault(entity.getId(), 0L),
+                entity.getChainPresetId(),
+                entity.getChainPresetId() == null ? null : chainPresetNames.get(entity.getChainPresetId()),
+                entity.getConfigPresetId(),
+                entity.getConfigPresetId() == null ? null : configPresetNames.get(entity.getConfigPresetId()));
     }
 
     private AdminAgentDetailDto toDetail(AdminAgentEntity entity) {
@@ -276,10 +402,12 @@ public class AdminAgentServiceImpl implements AdminAgentService {
                 entity.getAgentCode(),
                 entity.getAgentName(),
                 entity.getAgentType(),
+                entity.getAgentKind(),
                 entity.getStatus(),
                 entity.getDefaultDomain(),
                 entity.getDescription(),
                 entity.getConfigPresetId(),
+                entity.getChainPresetId(),
                 entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());

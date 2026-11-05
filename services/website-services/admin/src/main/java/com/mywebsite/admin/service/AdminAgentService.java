@@ -1,7 +1,9 @@
 package com.mywebsite.admin.service;
 
+import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentConfigPresetUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentCreateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentDetailDto;
+import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentKindUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListItemDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListQuery;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentStatusUpdateRequest;
@@ -21,4 +23,8 @@ public interface AdminAgentService {
     void deleteSite(long id);
 
     AdminAgentDetailDto updateStatus(long id, AdminAgentStatusUpdateRequest request);
+
+    AdminAgentDetailDto updateKind(long id, AdminAgentKindUpdateRequest request);
+
+    AdminAgentDetailDto updateConfigPreset(long id, AdminAgentConfigPresetUpdateRequest request);
 }

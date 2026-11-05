@@ -11,6 +11,14 @@ public final class AdminAgentConstants {
 
     public static final Set<String> ALLOWED_STATUSES = Set.of(STATUS_ACTIVE, STATUS_DISABLED);
 
+    /** agent 类型（#213）：站点型（建站向导／站点工作台形态）。 */
+    public static final String AGENT_KIND_SITE = "SITE";
+
+    /** agent 类型（#213）：纯 AI 型（无站点外壳、只跑 AI 对话）。 */
+    public static final String AGENT_KIND_AI_ONLY = "AI_ONLY";
+
+    public static final Set<String> ALLOWED_AGENT_KINDS = Set.of(AGENT_KIND_SITE, AGENT_KIND_AI_ONLY);
+
     /** 站点用途标签预设（前端下拉与此对齐；预设之外允许自订标签，见 AGENT_TAG_PATTERN）。 */
     public static final Set<String> AGENT_TAG_PRESETS = Set.of(
             "PERSONAL", "PORTFOLIO", "BLOG", "KNOWLEDGE", "TOOL", "OTHER");
