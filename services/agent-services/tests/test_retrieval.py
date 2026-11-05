@@ -663,6 +663,12 @@ class FakeStore:
         found.update(source_id for (sid, source_id) in self.sheets if sid == base_id)
         return sorted(found)
 
+    async def count_chunks(self, *, base_id) -> int:
+        # 假 store 不分 类表：docs 里的块即该空间全部块行（sheet_rows 不计）。
+        return sum(
+            len(chunks) for (sid, _source_id), chunks in self.docs.items() if sid == base_id
+        )
+
     async def replace_sheet_rows(self, *, base_id, source_id, title, tables) -> None:
         self.sheet_replaces.append((base_id, source_id))
         self.sheets[(base_id, source_id)] = list(tables)

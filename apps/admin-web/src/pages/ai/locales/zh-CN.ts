@@ -290,6 +290,7 @@ export default {
       none: '（无）',
       link: '共享',
       unlink: '取消共享',
+      unlinkConfirm: '取消对 {{name}} 的共享？对方站点将不再能检索这些文档。',
       linked: '已共享，文档已同步到目标站点',
       unlinked: '已取消共享，文档已从目标站点移除',
       embeddingTitle: '嵌入类登记（按知识空间）',

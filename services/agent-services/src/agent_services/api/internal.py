@@ -1018,6 +1018,7 @@ async def list_retrieval_documents(request: Request, baseId: str) -> dict[str, o
     service = _require_retrieval_service(request)
     try:
         source_ids = await service.list_indexed_documents(base_id=base_id)
+        chunk_count = await service.count_indexed_chunks(base_id=base_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Retrieval index list failed", exc_info=exc)
         raise InternalApiError(
@@ -1026,7 +1027,10 @@ async def list_retrieval_documents(request: Request, baseId: str) -> dict[str, o
             message=external_failure_message("Retrieval index list failed", exc),
             provider_status="BLOCKED",
         ) from exc
-    return {"ok": True, "data": {"baseId": base_id, "sourceIds": source_ids}}
+    return {
+        "ok": True,
+        "data": {"baseId": base_id, "sourceIds": source_ids, "chunkCount": chunk_count},
+    }
 
 
 @router.post("/retrieval/search")

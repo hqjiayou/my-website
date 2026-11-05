@@ -11,6 +11,9 @@ import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeCreateReques
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeFailureDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeFileDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeOverviewDto;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeRebuildReportDto;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeRebuildResidueDto;
+import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeRebuildSpaceDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeReindexFailedResultDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeAgentStatDto;
 import com.mywebsite.admin.dto.AdminAiKnowledgeDtos.AdminAiKnowledgeUploadMeta;
@@ -43,6 +46,7 @@ import com.mywebsite.agent.dto.AgentOcrPdfRequest;
 import com.mywebsite.agent.dto.AgentOcrPdfResult;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
+import com.mywebsite.agent.dto.AgentRetrievalPartitionStats;
 import com.mywebsite.agent.dto.AgentRetrievalSegment;
 import com.mywebsite.agent.dto.AgentRetrievalTable;
 import com.mywebsite.agent.dto.AgentRetrievalTableRow;
@@ -59,6 +63,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -140,20 +145,13 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             requireVisibleBase(agentId, query.baseId());
             wrapper.eq(AdminAiKnowledgeDocumentEntity::getBaseId, query.baseId());
         } else {
-            // 未指定库：本站创建的空间下的文档。文档 agent_id 已停写（Issue #209 UoW-1），
-            // 所有者经 base 创建者推导；or 条件兜住未挂 base 的历史行（其 agent_id 仍是创建者）。
-            List<Long> ownedBaseIds = baseMapper
-                    .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
-                            .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId))
-                    .stream()
-                    .map(AdminAiKnowledgeBaseEntity::getId)
-                    .toList();
+            // 未指定库：本站创建的空间下的文档。文档只属空间（Issue #209 UoW-5 起
+            // 文档 agent_id 列已删），所有者经 base 创建者推导；无自有空间即无文档。
+            List<Long> ownedBaseIds = createdBaseIds(agentId);
             if (ownedBaseIds.isEmpty()) {
-                wrapper.eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId);
+                wrapper.eq(AdminAiKnowledgeDocumentEntity::getId, -1L);
             } else {
-                wrapper.and(w -> w.in(AdminAiKnowledgeDocumentEntity::getBaseId, ownedBaseIds)
-                        .or()
-                        .eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId));
+                wrapper.in(AdminAiKnowledgeDocumentEntity::getBaseId, ownedBaseIds);
             }
         }
         if (query != null && StringUtils.hasText(query.status())) {
@@ -337,7 +335,9 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                             .mapToLong(doc -> doc.getFileSizeBytes() == null ? 0L : doc.getFileSizeBytes())
                             .sum()));
         }
-        agentStats.sort((a, b) -> a.agentId().compareTo(b.agentId()));
+        agentStats.sort(Comparator.comparing(
+                AdminAiKnowledgeAgentStatDto::agentId,
+                Comparator.nullsLast(Comparator.naturalOrder())));
 
         List<AdminAiKnowledgeFailureDto> recentFailures = documents.stream()
                 .filter(doc -> AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED.equals(doc.getIndexStatus()))
@@ -361,15 +361,12 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
         // Issue #203：同步问题表让待删残留在总览可见（此前只存在于日志）。
         // Issue #209 UoW-2 后只剩空间分区的 DELETE tombstone；OP_UPSERT（链接分区
-        // 滞后）已退役、恒为 0，计数保留是为 DTO 形状不变（管理面收官在 UoW-5）。
+        // 滞后）已退役，其计数字段已随 UoW-5 管理面收口从 DTO 删除。
         List<AdminAiKnowledgeRetrievalSyncIssueEntity> syncIssues = syncIssueMapper.selectList(
                 new LambdaQueryWrapper<AdminAiKnowledgeRetrievalSyncIssueEntity>());
         if (syncIssues == null) {
             syncIssues = List.of();
         }
-        long laggingLinkPartitions = syncIssues.stream()
-                .filter(issue -> AdminAiKnowledgeRetrievalSyncIssueEntity.OP_UPSERT.equals(issue.getOp()))
-                .count();
         long pendingRetrievalDeletes = syncIssues.stream()
                 .filter(issue -> AdminAiKnowledgeRetrievalSyncIssueEntity.OP_DELETE.equals(issue.getOp()))
                 .count();
@@ -388,9 +385,115 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 originalBytes,
                 agentStats,
                 recentFailures,
-                laggingLinkPartitions,
                 pendingRetrievalDeletes,
                 oldestSyncIssueAt);
+    }
+
+    /**
+     * 存量全量重建＋对账（Issue #209 UoW-5）。顺序不可换：先按旧 agent id 清扫
+     * 遗留分区，再按空间重建——agent id 与 base id 是两套独立序列、数值可相撞，
+     * 若先重建后清扫，清扫会把 id 相撞的真空间分区一并删掉；先清扫时被误删的
+     * 相撞分区则在重建步骤按空间补回。每步失败只影响局部：清扫/统计取数失败
+     * 只记日志，单篇同步失败沿现行机制落 FAILED 并计入报告，不中断整体。
+     */
+    @Override
+    public AdminAiKnowledgeRebuildReportDto rebuildAllSpaces() {
+        List<Long> agentIds = adminAgentMapper.selectList(new LambdaQueryWrapper<AdminAgentEntity>())
+                .stream()
+                .map(AdminAgentEntity::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        // 步骤一：旧分区清扫（旧分区键即 agent id，best-effort，失败只记日志）
+        for (Long agentId : agentIds) {
+            try {
+                agentClient.deleteRetrievalDocumentsByBase(String.valueOf(agentId));
+            } catch (RuntimeException ex) {
+                log.warn("KB rebuild legacy partition sweep failed (agentId={}); continuing", agentId, ex);
+            }
+        }
+
+        List<AdminAiKnowledgeBaseEntity> bases = baseMapper.selectList(
+                new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
+                        .orderByAsc(AdminAiKnowledgeBaseEntity::getId));
+        Set<Long> baseIds = new LinkedHashSet<>();
+        for (AdminAiKnowledgeBaseEntity base : bases) {
+            baseIds.add(base.getId());
+        }
+
+        // 步骤二：按空间重建——遍历全部空间，对每个空间的全部 ACTIVE 文档走现行单写同步路径
+        List<AdminAiKnowledgeRebuildSpaceDto> spaceReports = new ArrayList<>();
+        long totalDocuments = 0;
+        long totalChunks = 0;
+        long totalSpecs = 0;
+        long totalSyncFailures = 0;
+        for (AdminAiKnowledgeBaseEntity base : bases) {
+            List<AdminAiKnowledgeDocumentEntity> documents = knowledgeMapper.selectList(
+                    new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
+                            .eq(AdminAiKnowledgeDocumentEntity::getBaseId, base.getId())
+                            .eq(
+                                    AdminAiKnowledgeDocumentEntity::getStatus,
+                                    AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)
+                            .orderByAsc(AdminAiKnowledgeDocumentEntity::getId));
+            long syncFailures = 0;
+            long specDocuments = 0;
+            for (AdminAiKnowledgeDocumentEntity document : documents) {
+                syncDerivedIndex(document);
+                if (AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(document.getIndexStatus())) {
+                    if (StringUtils.hasText(document.getIndexEmbeddingSpec())) {
+                        specDocuments++;
+                    }
+                } else {
+                    syncFailures++;
+                }
+            }
+            // 步骤三（按空间对账）：索引源数/块数取自执行层分区统计，取不到记 -1（未知，非零值）
+            long indexedSources = -1;
+            long chunks = -1;
+            try {
+                AgentRetrievalPartitionStats stats =
+                        agentClient.retrievalPartitionStats(String.valueOf(base.getId()));
+                indexedSources = stats.sourceIds().size();
+                chunks = stats.chunkCount();
+            } catch (RuntimeException ex) {
+                log.warn(
+                        "KB rebuild partition stats failed (baseId={}); report carries -1",
+                        base.getId(),
+                        ex);
+            }
+            spaceReports.add(new AdminAiKnowledgeRebuildSpaceDto(
+                    base.getId(), documents.size(), indexedSources, chunks, syncFailures));
+            totalDocuments += documents.size();
+            totalChunks += Math.max(chunks, 0);
+            totalSpecs += specDocuments;
+            totalSyncFailures += syncFailures;
+        }
+
+        // 步骤三（旧分区残留检查）：id 不是现存空间的 agent 键下不应再有索引源；
+        // 是现存空间的键下有内容属重建成果，不算残留。取数失败只记日志跳过该键。
+        List<AdminAiKnowledgeRebuildResidueDto> residues = new ArrayList<>();
+        for (Long agentId : agentIds) {
+            if (baseIds.contains(agentId)) {
+                continue;
+            }
+            try {
+                AgentRetrievalPartitionStats stats =
+                        agentClient.retrievalPartitionStats(String.valueOf(agentId));
+                if (!stats.sourceIds().isEmpty()) {
+                    residues.add(new AdminAiKnowledgeRebuildResidueDto(agentId, stats.sourceIds().size()));
+                }
+            } catch (RuntimeException ex) {
+                log.warn("KB rebuild legacy residue check failed (agentId={}); skipped", agentId, ex);
+            }
+        }
+
+        return new AdminAiKnowledgeRebuildReportDto(
+                List.copyOf(spaceReports),
+                totalDocuments,
+                totalChunks,
+                totalSpecs,
+                totalSyncFailures,
+                List.copyOf(residues));
     }
 
     @Override
@@ -647,18 +750,19 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     /**
-     * 文档的「所有者 agent」推导（Issue #209 UoW-1）：文档 agent_id 已停写，所有者一律经所属
-     * base 的创建者（createdByAgentId）推导；文档未挂 base 或 base 不存在时回退存量文档行上的
-     * agent_id（过渡期回退，待文档 agent_id 删列后随列一并移除）。
+     * 文档的「所有者 agent」推导：文档只属空间（Issue #209 UoW-5 起文档
+     * {@code agent_id} 列已删），所有者一律经所属 base 的创建者
+     * （createdByAgentId）推导；文档未挂 base 或 base 不存在时为无主（null）——
+     * 同步路径对无空间文档已先行按 PENDING 返回，无主文档不索引。
      */
     private Long ownerAgentId(AdminAiKnowledgeDocumentEntity entity) {
         if (entity.getBaseId() != null) {
             AdminAiKnowledgeBaseEntity base = baseMapper.selectById(entity.getBaseId());
-            if (base != null && base.getCreatedByAgentId() != null) {
+            if (base != null) {
                 return base.getCreatedByAgentId();
             }
         }
-        return entity.getAgentId();
+        return null;
     }
 
     /** 该 agent 创建的空间 id 集：文档行只存在于创建者空间，空间口径查询以此展开。 */
@@ -751,8 +855,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             objectStorageService.remove(entity.getStorageBucket(), entity.getStorageKey());
         } catch (RuntimeException ex) {
             log.warn(
-                    "KB original file remove failed (agentId={}, documentId={}); object may linger",
-                    entity.getAgentId(),
+                    "KB original file remove failed (baseId={}, documentId={}); object may linger",
+                    entity.getBaseId(),
                     entity.getId(),
                     ex);
         }
@@ -761,22 +865,16 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     @Override
     @Transactional
     public void softDeleteByAgentId(long agentId) {
-        // 文档经 base 创建者推导归属（Issue #209 UoW-1）：先取该 agent 创建的全部空间，
-        // 再按空间取文档；文档 agent_id 已停写，or 条件兜住未挂 base 的历史行。
+        // 文档经 base 创建者推导归属（Issue #209 UoW-1 起、UoW-5 删列定稿）：
+        // 先取该 agent 创建的全部空间，再按空间取文档。
         List<AdminAiKnowledgeBaseEntity> bases = baseMapper.selectList(
                 new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>()
                         .eq(AdminAiKnowledgeBaseEntity::getCreatedByAgentId, agentId));
         List<Long> ownedBaseIds = bases.stream().map(AdminAiKnowledgeBaseEntity::getId).toList();
-        LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity> documentWrapper =
-                new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>();
-        if (ownedBaseIds.isEmpty()) {
-            documentWrapper.eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId);
-        } else {
-            documentWrapper.and(w -> w.in(AdminAiKnowledgeDocumentEntity::getBaseId, ownedBaseIds)
-                    .or()
-                    .eq(AdminAiKnowledgeDocumentEntity::getAgentId, agentId));
-        }
-        List<AdminAiKnowledgeDocumentEntity> documents = knowledgeMapper.selectList(documentWrapper);
+        List<AdminAiKnowledgeDocumentEntity> documents = ownedBaseIds.isEmpty()
+                ? List.of()
+                : knowledgeMapper.selectList(new LambdaQueryWrapper<AdminAiKnowledgeDocumentEntity>()
+                        .in(AdminAiKnowledgeDocumentEntity::getBaseId, ownedBaseIds));
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         for (AdminAiKnowledgeDocumentEntity document : documents) {
             document.setDeletedAt(now);
@@ -1164,17 +1262,14 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
      * 文档 {@code indexStatus == INDEXED} 且记下的类名与当前空间类集不一致时为 stale。
      * 新登记一类也算。非 INDEXED 文档恒为 false。判定按（空间,文档）键（Issue #209
      * UoW-2）：类集取文档所属空间的当前类集；缓存按 baseId 键（同一空间的文档共用
-     * 一份），无空间的存量行以负的创建者 id 作键避免与 baseId 撞键。供列表和总览复用。
+     * 一份），无空间的存量行统一以 0 作键、以空集比对。供列表和总览复用。
      */
     private boolean isIndexStale(
             AdminAiKnowledgeDocumentEntity entity, Map<Long, List<AgentModelSelection>> selectionCache) {
         if (!AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED.equals(entity.getIndexStatus())) {
             return false;
         }
-        Long ownerId = ownerAgentId(entity);
-        long cacheKey = entity.getBaseId() != null
-                ? entity.getBaseId()
-                : ownerId == null ? 0L : -ownerId;
+        long cacheKey = entity.getBaseId() == null ? 0L : entity.getBaseId();
         // 类集按空间原生登记取（Issue #209 UoW-3）；无空间的存量行没有当前
         // 类集可比，以空集比对：记有类名即 stale、未记则不 stale（与
         // matchesStored 对空集的口径自洽）。
@@ -1414,8 +1509,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             }
         } catch (RuntimeException ex) {
             log.warn(
-                    "KB location segments skipped (agentId={}, documentId={})",
-                    entity.getAgentId(),
+                    "KB location segments skipped (baseId={}, documentId={})",
+                    entity.getBaseId(),
                     entity.getId(),
                     ex);
         }
@@ -1462,8 +1557,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             return objectStorageService.get(entity.getStorageBucket(), entity.getStorageKey());
         } catch (RuntimeException ex) {
             log.warn(
-                    "KB original read failed (agentId={}, documentId={}); indexing without location",
-                    entity.getAgentId(),
+                    "KB original read failed (baseId={}, documentId={}); indexing without location",
+                    entity.getBaseId(),
                     entity.getId(),
                     ex);
             return null;

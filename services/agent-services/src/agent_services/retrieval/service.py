@@ -725,6 +725,13 @@ class RetrievalService:
             return []
         return list(await list_ids(base_id=base_id))
 
+    async def count_indexed_chunks(self, *, base_id: str) -> int:
+        """该空间的块行总数（全部嵌入类表求和），供 Java 对账。store 未实现时回 0。"""
+        count = getattr(self._store, "count_chunks", None)
+        if count is None:
+            return 0
+        return int(await count(base_id=base_id))
+
     def _resolve_rerank_model(self, selection: ModelSelection | None) -> Model | None:
         """请求里的模型入口优先；建不起来再用测试注入或进程 AI_MODEL。"""
         if selection is not None:

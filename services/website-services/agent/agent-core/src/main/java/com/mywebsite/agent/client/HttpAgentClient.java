@@ -20,6 +20,7 @@ import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentReembedPrepareRequest;
 import com.mywebsite.agent.dto.AgentReembedPrepareResult;
 import com.mywebsite.agent.dto.AgentRetrievalDocument;
+import com.mywebsite.agent.dto.AgentRetrievalPartitionStats;
 import com.mywebsite.agent.dto.AgentRetrievalHit;
 import com.mywebsite.agent.dto.AgentRetrievalSearchRequest;
 import com.mywebsite.agent.dto.AgentRetrievalSearchResult;
@@ -519,6 +520,13 @@ public class HttpAgentClient implements AgentClient {
 
     @Override
     public List<AgentIndexedDocument> listIndexedDocuments(String baseId) {
+        return retrievalPartitionStats(baseId).sourceIds().stream()
+                .map(sourceId -> new AgentIndexedDocument(sourceId, List.of()))
+                .toList();
+    }
+
+    @Override
+    public AgentRetrievalPartitionStats retrievalPartitionStats(String baseId) {
         if (!StringUtils.hasText(baseId)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
@@ -526,23 +534,24 @@ public class HttpAgentClient implements AgentClient {
         String path = "/internal/v1/retrieval/documents?baseId="
                 + java.net.URLEncoder.encode(baseId, StandardCharsets.UTF_8);
         JsonNode body = exchangeWithRetry("GET", path, null);
-        // 契约体是 {ok, data:{baseId, sourceIds:[...]}}：取 data（同 search 口径），
-        // 执行层只回 source 清单，embeddingClasses 留空集。
+        // 契约体是 {ok, data:{baseId, sourceIds:[...], chunkCount}}：取 data（同 search 口径）。
         JsonNode payload = body.path("data").isObject() ? body.path("data") : body;
         if (!payload.isObject()) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR);
         }
-        JsonNode sourceIds = payload.get("sourceIds");
-        if (sourceIds == null || !sourceIds.isArray()) {
-            return List.of();
-        }
-        List<AgentIndexedDocument> documents = new ArrayList<>();
-        for (JsonNode entry : sourceIds) {
-            if (entry.isTextual() && StringUtils.hasText(entry.asText())) {
-                documents.add(new AgentIndexedDocument(entry.asText(), List.of()));
+        List<String> sourceIds = new ArrayList<>();
+        JsonNode sourceIdNodes = payload.get("sourceIds");
+        if (sourceIdNodes != null && sourceIdNodes.isArray()) {
+            for (JsonNode entry : sourceIdNodes) {
+                if (entry.isTextual() && StringUtils.hasText(entry.asText())) {
+                    sourceIds.add(entry.asText());
+                }
             }
         }
-        return List.copyOf(documents);
+        return new AgentRetrievalPartitionStats(
+                payload.path("baseId").asText(baseId),
+                sourceIds,
+                payload.path("chunkCount").asLong(0));
     }
 
     @Override

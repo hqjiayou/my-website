@@ -16,6 +16,11 @@ UoW-3 追加：嵌入类集按空间下发（spaces 取代请求级一份类集�
 UoW-4 追加：#202 字面降级按空间口径复核。
 
 - 全部空间嵌入失败时，每空间各自走纯字面降级、双空间仍各出命中，degraded 置位。
+
+UoW-5 追加：已索引清单端点带 chunkCount，供 Java 全量重建对账。
+
+- chunkCount 是该空间在全部嵌入类表中的块行总数（逐类求和，sheet_rows 不计）；
+- 空空间 chunkCount 为 0，整空间清理后回 0。
 """
 
 from conftest import TOKEN_HEADER, make_settings
@@ -202,10 +207,29 @@ async def test_rename_partition_columns_migrates_chunks_and_sheet_rows() -> None
 def test_base_delete_and_indexed_list_endpoints() -> None:
     service, _store = _service()
     client = TestClient(create_app(make_settings(), retrieval_service=service))
+
+    # 空空间：source 清单为空、chunkCount 为 0。
+    listed = client.get(
+        "/internal/v1/retrieval/documents",
+        headers=TOKEN_HEADER,
+        params={"baseId": "9"},
+    )
+    assert listed.status_code == 200
+    assert listed.json() == {
+        "ok": True,
+        "data": {"baseId": "9", "sourceIds": [], "chunkCount": 0},
+    }
+
     created = client.put(
         "/internal/v1/retrieval/documents",
         headers=TOKEN_HEADER,
         json={"baseId": "9", "sourceId": "kb:1", "title": "t", "content": "alpha facts"},
+    )
+    assert created.status_code == 200
+    created = client.put(
+        "/internal/v1/retrieval/documents",
+        headers=TOKEN_HEADER,
+        json={"baseId": "9", "sourceId": "kb:2", "title": "t", "content": "beta facts"},
     )
     assert created.status_code == 200
 
@@ -215,7 +239,11 @@ def test_base_delete_and_indexed_list_endpoints() -> None:
         params={"baseId": "9"},
     )
     assert listed.status_code == 200
-    assert listed.json() == {"ok": True, "data": {"baseId": "9", "sourceIds": ["kb:1"]}}
+    # 两篇各 1 块：chunkCount 与写入块数逐项对得上。
+    assert listed.json() == {
+        "ok": True,
+        "data": {"baseId": "9", "sourceIds": ["kb:1", "kb:2"], "chunkCount": 2},
+    }
 
     deleted = client.delete("/internal/v1/retrieval/bases/9", headers=TOKEN_HEADER)
     assert deleted.status_code == 200
@@ -225,6 +253,7 @@ def test_base_delete_and_indexed_list_endpoints() -> None:
         params={"baseId": "9"},
     )
     assert listed.json()["data"]["sourceIds"] == []
+    assert listed.json()["data"]["chunkCount"] == 0
     # 删后检索也无命中（整空间清理落到了每个分区表）。
     hits = client.post(
         "/internal/v1/retrieval/search",
@@ -232,6 +261,64 @@ def test_base_delete_and_indexed_list_endpoints() -> None:
         json={"spaces": [{"baseId": "9"}], "query": "alpha"},
     )
     assert hits.json()["hits"] == []
+
+
+async def test_pg_count_chunks_sums_all_class_tables() -> None:
+    """真 store 的 count_chunks：逐类表 COUNT 求和，sheet_rows 不计入。"""
+
+    class _CountConn:
+        def __init__(self, counts: dict[str, int]) -> None:
+            self.counts = counts
+            self.count_sql: list[tuple[str, tuple[object, ...]]] = []
+
+        async def fetch(self, sql: str, *args: object):
+            # _list_class_tables 的 pg_catalog 查询：类表即 counts 的键。
+            return [{"relname": name} for name in sorted(self.counts)]
+
+        async def fetchval(self, sql: str, *args: object):
+            self.count_sql.append((sql, args))
+            for name, count in self.counts.items():
+                if sql == f"SELECT COUNT(*) FROM agent_retrieval.{name} WHERE base_id = $1":
+                    return count
+            raise AssertionError(f"unexpected count sql: {sql}")
+
+    class _Pool:
+        def __init__(self, conn: _CountConn) -> None:
+            self._conn = conn
+
+        def acquire(self) -> object:
+            conn = self._conn
+
+            class _Acquire:
+                async def __aenter__(self) -> _CountConn:
+                    return conn
+
+                async def __aexit__(self, *exc: object) -> bool:
+                    return False
+
+            return _Acquire()
+
+    store = PgVectorRetrievalStore("postgresql://unused", dimensions=3)
+    conn = _CountConn({"chunks": 3, "chunks_d768": 5, "chunks_d3072": 2})
+
+    async def _fake_pool() -> _Pool:
+        return _Pool(conn)
+
+    store._get_pool = _fake_pool  # noqa: SLF001 — 与存量迁移测试同法替换连接池
+    assert await store.count_chunks(base_id="9") == 10
+    # 每张类表恰好查一次、键都是该空间，且从未碰 sheet_rows。
+    assert len(conn.count_sql) == 3
+    assert all(args == ("9",) for _sql, args in conn.count_sql)
+    assert all("sheet_rows" not in sql for sql, _args in conn.count_sql)
+
+    # 空空间：类表都在、行数为 0 → 总数为 0。
+    empty_conn = _CountConn({"chunks": 0, "chunks_d768": 0})
+
+    async def _fake_empty_pool() -> _Pool:
+        return _Pool(empty_conn)
+
+    store._get_pool = _fake_empty_pool  # noqa: SLF001
+    assert await store.count_chunks(base_id="9") == 0
 
 
 class _PerClassStore(FakeStore):

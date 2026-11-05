@@ -16,14 +16,13 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
     public static final String INDEX_STATUS_INDEXED = "INDEXED";
     public static final String INDEX_STATUS_FAILED = "FAILED";
 
-    private Long agentId;
     private String title;
     private String content;
     private String status;
     private String indexStatus;
     private String indexError;
     private java.time.OffsetDateTime indexedAt;
-    /** 所有者分区已成功写入的嵌入类名。多类换行分隔；NULL=未索引过或用了进程默认嵌入模型。 */
+    /** 所属空间分区已成功写入的嵌入类名。多类换行分隔；NULL=未索引过或用了进程默认嵌入模型。 */
     private String indexEmbeddingSpec;
     private Long baseId;
     private String sourceFormat;
@@ -41,14 +40,6 @@ public class AdminAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public void setBaseId(Long baseId) {
         this.baseId = baseId;
-    }
-
-    public Long getAgentId() {
-        return agentId;
-    }
-
-    public void setAgentId(Long agentId) {
-        this.agentId = agentId;
     }
 
     public String getTitle() {

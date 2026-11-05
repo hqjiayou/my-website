@@ -299,6 +299,7 @@ export default {
       none: '(none)',
       link: 'Share',
       unlink: 'Unshare',
+      unlinkConfirm: 'Stop sharing this base with {{name}}? That site will no longer search these documents.',
       linked: 'Shared; documents synced to the target site',
       unlinked: 'Unshared; documents removed from the target site',
       embeddingTitle: 'Embedding classes (per knowledge space)',

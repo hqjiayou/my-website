@@ -445,6 +445,8 @@ class RetrievalStore(Protocol):
 
     async def list_indexed_source_ids(self, *, base_id: str) -> list[str]: ...
 
+    async def count_chunks(self, *, base_id: str) -> int: ...
+
     async def prune_document_classes(
         self, *, base_id: str, source_id: str, keep_models: list[str]
     ) -> None: ...
@@ -970,6 +972,25 @@ class PgVectorRetrievalStore:
                 )
                 found.update(str(row["source_id"]) for row in rows)
         return sorted(found)
+
+    async def count_chunks(self, *, base_id: str) -> int:
+        """该空间在全部嵌入类表中的块行总数，供存量对账（文档/块/spec 三数）。
+
+        只数 chunks 类表：sheet_rows 是结构化行、不是块，不计入（与
+        list_indexed_source_ids 把结构化行并入 source 集的口径刻意不同）。
+        """
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            total = 0
+            tables = await self._list_class_tables(conn)
+            for table in tables:
+                qualified = qualified_chunks_table(table)
+                count = await conn.fetchval(
+                    f"SELECT COUNT(*) FROM {qualified} WHERE base_id = $1",
+                    base_id,
+                )
+                total += int(count or 0)
+        return total
 
     async def prune_document_classes(
         self, *, base_id: str, source_id: str, keep_models: list[str]

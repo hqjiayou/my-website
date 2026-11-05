@@ -543,6 +543,36 @@ class HttpAgentClientTest {
     }
 
     @Test
+    void retrievalPartitionStatsParsesChunkCountEnvelope() throws IOException {
+        // 分区统计（Issue #209 UoW-5）：与清单同一端点，data 增 chunkCount（源文档的块行数合计）
+        server.createContext("/internal/v1/retrieval/documents", exchange -> {
+            write(
+                    exchange,
+                    200,
+                    "{\"ok\":true,\"data\":{\"baseId\":\"9\",\"sourceIds\":[\"kb:1\",\"kb:2\"],\"chunkCount\":7}}");
+        });
+
+        var stats = client.retrievalPartitionStats("9");
+
+        assertThat(stats.baseId()).isEqualTo("9");
+        assertThat(stats.sourceIds()).containsExactly("kb:1", "kb:2");
+        assertThat(stats.chunkCount()).isEqualTo(7L);
+    }
+
+    @Test
+    void retrievalPartitionStatsDefaultsChunkCountWhenFieldMissing() throws IOException {
+        // 旧版执行层未回 chunkCount 时按 0 计，不得因缺字段失败（滚动部署窗口）
+        server.createContext("/internal/v1/retrieval/documents", exchange -> {
+            write(exchange, 200, "{\"ok\":true,\"data\":{\"baseId\":\"9\",\"sourceIds\":[]}}");
+        });
+
+        var stats = client.retrievalPartitionStats("9");
+
+        assertThat(stats.sourceIds()).isEmpty();
+        assertThat(stats.chunkCount()).isEqualTo(0L);
+    }
+
+    @Test
     void deleteRetrievalDocumentSendsBaseIdQueryParam() throws IOException {
         // 单篇删除换键（Issue #209 UoW-2）：query 参数 agentId → baseId
         java.util.concurrent.atomic.AtomicReference<String> seenQuery = new java.util.concurrent.atomic.AtomicReference<>();

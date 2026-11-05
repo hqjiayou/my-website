@@ -9,12 +9,10 @@ public class AgentAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     public static final String STATUS_ACTIVE = "ACTIVE";
 
-    private Long agentId;
-
     /**
-     * 所属知识空间（V29 列，admin 侧写入）。文档只属一个空间：Issue #209 UoW-1 起
-     * {@code agentId} 停写，站点侧一切文档可见性过滤按本列对 agent 可达空间集
-     * （创建∪订阅）判定（UoW-4 定稿），{@code agentId} 只剩存量留痕。
+     * 所属知识空间（V29 列，admin 侧写入）。文档只属一个空间：站点侧一切文档
+     * 可见性过滤按本列对 agent 可达空间集（创建∪订阅）判定（Issue #209 UoW-4
+     * 定稿）；文档原 {@code agent_id} 列已随 UoW-5 的 Flyway V62 删除。
      */
     private Long baseId;
 
@@ -32,14 +30,6 @@ public class AgentAiKnowledgeDocumentEntity extends AbstractAuditableEntity {
 
     /** 原始文件名（V28 列，admin 侧写入）；枚举元数据回给模型辨认文档。 */
     private String originalFilename;
-
-    public Long getAgentId() {
-        return agentId;
-    }
-
-    public void setAgentId(Long agentId) {
-        this.agentId = agentId;
-    }
 
     public Long getBaseId() {
         return baseId;
