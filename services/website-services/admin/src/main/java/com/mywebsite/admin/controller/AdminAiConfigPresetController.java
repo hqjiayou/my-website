@@ -24,8 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * AI 配置预设 CRUD（Issue #211 UoW-8）。权限码复用 ai-prompt 现有口径
- * （{@code admin:ai-prompt:read}，与 AdminAiPromptController 的读写同码一致），
- * 不新增 RBAC 种子；页面随 #213 A1 落，本单只交后端。
+ * （{@code admin:ai-prompt:read}，与旧 prompt-profile 读写同码一致，该端点已于
+ * #213 UoW-D 退役），不新增 RBAC 种子；管理页面见 #213 UoW-C。
  */
 @RestController
 @RequestMapping("/api/admin/ai/config-presets")

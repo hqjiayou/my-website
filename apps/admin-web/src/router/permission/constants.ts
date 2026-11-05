@@ -22,4 +22,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   [ROUTES.ai.prompts]: PERMISSION_CODES.aiPromptRead,
   [ROUTES.ai.knowledgeBases]: PERMISSION_CODES.aiKbList,
   [ROUTES.ai.conversations]: PERMISSION_CODES.aiConversationList,
+  [ROUTES.ai.modelEntries]: PERMISSION_CODES.aiModelRead,
+  [ROUTES.ai.chainPresets]: PERMISSION_CODES.aiModelRead,
+  [ROUTES.ai.configPresets]: PERMISSION_CODES.aiPromptRead,
 }

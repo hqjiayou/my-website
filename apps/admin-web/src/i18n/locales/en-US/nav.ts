@@ -8,6 +8,7 @@ export default {
   },
   groups: {
     myApp: 'My applications',
+    platform: 'Platform',
   },
   items: {
     dashboard: 'Overview',
@@ -29,6 +30,9 @@ export default {
     contents: 'Page Contents',
     files: 'File Assets',
     aiSettings: 'Model entries',
+    aiChainPresets: 'Chain presets',
+    aiConfigPresets: 'Config presets',
+    aiPlatformSettings: 'AI settings',
     proxyServices: 'API keys',
     aiUsage: 'AI usage',
     aiPrompts: 'Prompt Settings',

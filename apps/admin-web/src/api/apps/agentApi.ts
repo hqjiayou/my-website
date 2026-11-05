@@ -11,7 +11,9 @@ import type {
   AgentListItem,
   AgentListQuery,
   AgentRuntimeStatus,
+  UpdateAgentConfigPresetInput,
   UpdateAgentInput,
+  UpdateAgentKindInput,
   UpdateAgentStatusInput,
 } from '@/types/site'
 import { SITE_TYPE_VALUES } from '@/types/site'
@@ -69,6 +71,23 @@ const agentHttpService = {
       .then(unwrapData)
   },
 
+  /** 类型（kind）专属改写（#213）：body {kind, version}，乐观锁同 status 端点。 */
+  updateAgentKind(id: number, input: UpdateAgentKindInput): Promise<AgentDetail> {
+    return httpClient
+      .put<HttpMessageBody<AgentDetail>, UpdateAgentKindInput>(`/admin/agents/${id}/kind`, input)
+      .then(unwrapData)
+  },
+
+  /** 配置预设引用专属改写（#213）：configPresetId 为 null 即清除引用。 */
+  updateAgentConfigPreset(id: number, input: UpdateAgentConfigPresetInput): Promise<AgentDetail> {
+    return httpClient
+      .put<HttpMessageBody<AgentDetail>, UpdateAgentConfigPresetInput>(
+        `/admin/agents/${id}/config-preset`,
+        input,
+      )
+      .then(unwrapData)
+  },
+
   getAgentRuntimeStatus(id: number): Promise<AgentRuntimeStatus> {
     return deriveAgentRuntimeStatus(id)
   },
@@ -82,10 +101,13 @@ export const agentApi = {
   updateSite: agentHttpService.updateSite,
   deleteSite: agentHttpService.deleteSite,
   updateAgentStatus: agentHttpService.updateAgentStatus,
+  updateAgentKind: agentHttpService.updateAgentKind,
+  updateAgentConfigPreset: agentHttpService.updateAgentConfigPreset,
   getAgentRuntimeStatus: agentHttpService.getAgentRuntimeStatus,
 }
 
 export type {
+  AgentKind,
   CreateAgentInput,
   PageResult,
   AgentDetail,
@@ -94,13 +116,16 @@ export type {
   AgentRuntimeStatus,
   AgentStatus,
   AgentType,
+  UpdateAgentConfigPresetInput,
   UpdateAgentInput,
+  UpdateAgentKindInput,
   UpdateAgentStatusInput,
 } from '@/types/site'
 
 export type { Site } from '@/types/site'
 
 export {
+  AGENT_KIND_VALUES,
   SITE_STATUS,
   SITE_STATUS_VALUES,
   SITE_TYPE_VALUES,

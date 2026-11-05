@@ -1,18 +1,39 @@
 export default {
   list: {
     title: 'Agents',
-    description: 'One agent, one setup. Open it to edit chat, knowledge, and basics.',
+    description: 'Kind and all three associations at a glance — edit associations inline, open the workspace for chat, knowledge, and basics.',
     createSite: 'New',
     empty: 'No agents yet',
     permissionHint: 'Button visibility is controlled by permissions; backend authorization is the source of truth.',
     columns: {
       agentName: 'Name',
       agentType: 'Type',
+      agentKind: 'Kind',
+      associations: 'Associations',
       industry: 'Industry',
       domain: 'Default Domain',
       status: 'Status',
       updatedAt: 'Updated At',
       actions: 'Actions',
+    },
+    kind: {
+      SITE: 'Site',
+      AI_ONLY: 'AI only',
+    },
+    associations: {
+      subscriptions: 'Spaces',
+      chainPreset: 'Chain preset',
+      configPreset: 'Config preset',
+      none: 'None',
+      manageSubscriptions: 'Manage subscriptions',
+    },
+    subscriptions: {
+      title: 'Manage subscriptions',
+      hint: 'Check to subscribe, uncheck to unsubscribe — effective immediately. Own spaces are the creator row and cannot be unsubscribed.',
+      empty: 'No knowledge spaces yet',
+      own: 'Own',
+      owner: 'Creator {{name}}',
+      documents: '{{count}} docs',
     },
     filters: {
       allStatus: 'All statuses',
@@ -33,6 +54,11 @@ export default {
       statusUpdated: 'Status updated',
       deleted: 'Deleted',
       confirmDelete: 'Delete "{{name}}"?',
+      kindUpdated: 'Kind updated',
+      chainPresetUpdated: 'Chain preset reference updated',
+      configPresetUpdated: 'Config preset reference updated',
+      subscribed: 'Subscribed',
+      unsubscribed: 'Unsubscribed',
     },
   },
   create: {

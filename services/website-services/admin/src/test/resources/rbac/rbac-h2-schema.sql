@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS agent (
     agent_code           VARCHAR(64) NOT NULL,
     agent_name           VARCHAR(255) NOT NULL,
     agent_type           VARCHAR(32) NOT NULL,
+    agent_kind           VARCHAR(16) NOT NULL DEFAULT 'SITE',
     status              VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
     default_domain      VARCHAR(255),
     description         TEXT,

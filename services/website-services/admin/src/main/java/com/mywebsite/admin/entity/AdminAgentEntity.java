@@ -15,6 +15,8 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
     private String agentCode;
     private String agentName;
     private String agentType;
+    /** V65：类型维度（#213）：SITE＝站点型 / AI_ONLY＝纯 AI 型；与 agentType（自由文本用途标签）无关。 */
+    private String agentKind;
     private String status;
     private String defaultDomain;
     private String description;
@@ -48,6 +50,14 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
 
     public void setAgentType(String agentType) {
         this.agentType = agentType;
+    }
+
+    public String getAgentKind() {
+        return agentKind;
+    }
+
+    public void setAgentKind(String agentKind) {
+        this.agentKind = agentKind;
     }
 
     public String getStatus() {

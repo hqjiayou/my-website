@@ -1,20 +1,5 @@
 /** 对齐 Admin AI Prompt / KB / Conversation / Preview DTO（FORCE REAL）。 */
 
-export interface AiPromptProfile {
-  id: number | null
-  agentId: number
-  systemPrompt: string | null
-  temperature: number | null
-  version: number | null
-  updatedAt: string | null
-}
-
-export interface UpdateAiPromptProfileInput {
-  systemPrompt?: string | null
-  temperature?: number | null
-  version?: number | null
-}
-
 /** proxy-services 进程状态。不含管理密钥与客户端 key。 */
 export interface ProxyServicesStatus {
   name: string
@@ -267,6 +252,36 @@ export interface AiChainPresetWriteInput {
 export interface AiAgentChainPreset {
   agentId: number
   chainPresetId: number | null
+}
+
+/**
+ * AI 配置预设（Issue #211 UoW-8 后端、#213 UoW-C 管理页）：命名预设＝一组
+ * systemPrompt 覆盖＋temperature＋默认 skill 集，agent 以 configPresetId 引用一份。
+ * 删除为软删：引用它的 agent 解析时回退为无配置（服务端既有口径）。
+ */
+export interface AiConfigPreset {
+  id: number
+  name: string
+  systemPrompt: string | null
+  temperature: number | null
+  defaultSkillIds: string[]
+  version: number
+  updatedAt: string
+}
+
+export interface AiConfigPresetCreateInput {
+  name: string
+  systemPrompt?: string | null
+  temperature?: number | null
+  defaultSkillIds?: string[]
+}
+
+export interface AiConfigPresetUpdateInput {
+  name: string
+  systemPrompt?: string | null
+  temperature?: number | null
+  defaultSkillIds?: string[]
+  version: number
 }
 
 /** 经验条目状态（与后端 agent_experience_lesson.status 状态机一致，Issue #184）。 */

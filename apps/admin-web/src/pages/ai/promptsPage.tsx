@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 
 import { AdminPageHeader } from '@/components/admin'
-import { AgentAiPromptPanel } from '@/pages/agents/agentAiPromptPanel'
+import { AgentAiConfigPresetPanel } from '@/pages/agents/agentAiConfigPresetPanel'
 
 import { AiAgentScope } from './aiAgentScope'
 
@@ -14,7 +14,7 @@ export function AiPromptsPage() {
       <AiAgentScope>
         {(agentId) => (
           <div className="rounded-[14px] border border-admin bg-admin-surface p-5">
-            <AgentAiPromptPanel agentId={agentId} />
+            <AgentAiConfigPresetPanel agentId={agentId} />
           </div>
         )}
       </AiAgentScope>

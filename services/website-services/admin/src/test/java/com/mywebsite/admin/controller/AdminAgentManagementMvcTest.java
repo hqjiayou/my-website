@@ -14,7 +14,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.admin.dto.AdminAppearanceDtos.AdminAppearanceConfigV1Dto;
+import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentConfigPresetUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentCreateRequest;
+import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentKindUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentStatusUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentUpdateRequest;
 import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
@@ -418,6 +420,112 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         Map<String, Object> row = jdbcTemplate.queryForMap(
                 "SELECT deleted FROM " + table + " WHERE id = ?", id);
         assertThat(row.get("deleted")).as(table + " id=" + id).isEqualTo(false);
+    }
+
+    @Test
+    void kindEndpointDefaultsToSiteAndValidatesEnumAndVersion() throws Exception {
+        String token = tokenFor(500L);
+        long id = createAgent(token, "kind_ep");
+
+        // 创建缺省 kind=SITE，详情带出 agentKind 与 chainPresetId 两列（#213）。
+        mockMvc.perform(get("/api/admin/agents/" + id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.agentKind").value("SITE"));
+
+        mockMvc.perform(put("/api/admin/agents/" + id + "/kind")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminAgentKindUpdateRequest("AI_ONLY", 0))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.agentKind").value("AI_ONLY"))
+                .andExpect(jsonPath("$.data.version").value(1));
+
+        // 封闭枚举外的值 → 400。
+        mockMvc.perform(put("/api/admin/agents/" + id + "/kind")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminAgentKindUpdateRequest("HYBRID", 1))))
+                .andExpect(status().isBadRequest());
+
+        // version 过期 → 409（乐观锁口径同 status 端点）。
+        mockMvc.perform(put("/api/admin/agents/" + id + "/kind")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminAgentKindUpdateRequest("SITE", 0))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void configPresetEndpointSetsClearsAndRejectsMissingPreset() throws Exception {
+        String token = tokenFor(500L);
+        long id = createAgent(token, "cfg_ep");
+        jdbcTemplate.update("INSERT INTO agent_ai_config_preset (id, name) VALUES (920001, '预设甲')");
+
+        mockMvc.perform(put("/api/admin/agents/" + id + "/config-preset")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminAgentConfigPresetUpdateRequest(920001L))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.configPresetId").value(920001));
+
+        // 预设不存在 → 404（与链预设改引用的 requirePreset 同口径）。
+        mockMvc.perform(put("/api/admin/agents/" + id + "/config-preset")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminAgentConfigPresetUpdateRequest(920404L))))
+                .andExpect(status().isNotFound());
+
+        // null 即清除引用：直查落库值断言，不依赖 JSON null 序列化口径。
+        mockMvc.perform(put("/api/admin/agents/" + id + "/config-preset")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminAgentConfigPresetUpdateRequest(null))))
+                .andExpect(status().isOk());
+        Object cleared = jdbcTemplate.queryForObject(
+                "SELECT config_preset_id FROM agent WHERE id = ?", Object.class, id);
+        assertThat(cleared).isNull();
+    }
+
+    @Test
+    void listItemsCarryAssociationSummary() throws Exception {
+        String token = tokenFor(500L);
+        String agentCode = "sum_ep_" + Long.toHexString(System.nanoTime());
+        MvcResult created = mockMvc.perform(post("/api/admin/agents")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(
+                                new AdminAgentCreateRequest(agentCode, "Summary", "GYOSEISHOSHI", null, null, null))))
+                .andExpect(status().isOk())
+                .andReturn();
+        long id = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
+
+        jdbcTemplate.update("INSERT INTO agent_ai_chain_preset (id, name) VALUES (920011, '链甲')");
+        jdbcTemplate.update("INSERT INTO agent_ai_config_preset (id, name) VALUES (920012, '预设乙')");
+        jdbcTemplate.update(
+                "UPDATE agent SET chain_preset_id = 920011, config_preset_id = 920012 WHERE id = ?", id);
+        jdbcTemplate.update(
+                "INSERT INTO agent_ai_knowledge_base (id, created_by_agent_id, name) VALUES (920021, ?, '空间一')",
+                id);
+        jdbcTemplate.update(
+                "INSERT INTO agent_ai_knowledge_base (id, created_by_agent_id, name) VALUES (920022, ?, '空间二')",
+                id);
+        jdbcTemplate.update(
+                "INSERT INTO agent_ai_knowledge_base_subscription (base_id, agent_id) VALUES (920021, ?)", id);
+        jdbcTemplate.update(
+                "INSERT INTO agent_ai_knowledge_base_subscription (base_id, agent_id) VALUES (920022, ?)", id);
+
+        // 关联摘要：kind 缺省 SITE、订阅数＝订阅表行数（2，含创建者行口径）、两类预设名解析出。
+        mockMvc.perform(get("/api/admin/agents")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .param("agentType", "GYOSEISHOSHI"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(
+                                "$.data.records[?(@.agentCode == '%s' && @.agentKind == 'SITE'"
+                                        + " && @.subscriptionCount == 2"
+                                        + " && @.chainPresetId == 920011 && @.chainPresetName == '链甲'"
+                                        + " && @.configPresetId == 920012 && @.configPresetName == '预设乙')]"
+                                        .formatted(agentCode))
+                        .exists());
     }
 
     @Test

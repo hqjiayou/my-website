@@ -5,6 +5,14 @@ import type { AppearanceConfigV1 } from '@/types/appearance'
 /** 站点用途标签：自由字符串（预设见 SITE_TYPE_PRESETS，亦可自订），不再是行业闭集。 */
 export type AgentType = string
 
+/**
+ * agent 类型维度（Issue #213 UoW-A，后端 `agent_kind`）：封闭二值，与上面的
+ * 用途标签 `agentType` 互不相关——agentType 是创建时填的自由文本标签。
+ */
+export type AgentKind = 'SITE' | 'AI_ONLY'
+
+export const AGENT_KIND_VALUES: AgentKind[] = ['SITE', 'AI_ONLY']
+
 export type AgentStatus = 'ACTIVE' | 'DISABLED'
 
 export const SITE_TYPE_PRESETS: string[] = ['PERSONAL', 'PORTFOLIO', 'BLOG', 'KNOWLEDGE', 'TOOL', 'OTHER']
@@ -49,6 +57,16 @@ export interface AgentListItem {
   version: number
   createdAt: string
   updatedAt: string
+  /** 类型维度（#213）：SITE＝站点型 / AI_ONLY＝纯 AI 型。 */
+  agentKind: AgentKind
+  /** 订阅知识空间数（订阅表行数，含创建者行，#209 口径）。 */
+  subscriptionCount: number
+  /** 引用的对话链预设；name 解析不到（预设已删）时为 null、id 照实。 */
+  chainPresetId: number | null
+  chainPresetName: string | null
+  /** 引用的 AI 配置预设；name 解析不到（预设已删）时为 null、id 照实。 */
+  configPresetId: number | null
+  configPresetName: string | null
 }
 
 export interface AgentDetail {
@@ -56,9 +74,12 @@ export interface AgentDetail {
   agentCode: string
   agentName: string
   agentType: string
+  agentKind: AgentKind
   status: string
   defaultDomain: string | null
   description: string | null
+  configPresetId: number | null
+  chainPresetId: number | null
   version: number
   createdAt: string
   updatedAt: string
@@ -75,6 +96,8 @@ export interface CreateAgentInput {
   defaultDomain?: string
   description?: string
   appearance?: AppearanceConfigV1
+  /** 类型维度（#213）：缺省由服务端落 SITE。 */
+  agentKind?: AgentKind
 }
 
 export interface UpdateAgentInput {
@@ -83,11 +106,24 @@ export interface UpdateAgentInput {
   defaultDomain?: string
   description?: string
   version: number
+  /** 类型维度（#213）：缺省时服务端保留原值。 */
+  agentKind?: AgentKind
 }
 
 export interface UpdateAgentStatusInput {
   status: string
   version: number
+}
+
+/** 类型（kind）专属改写（#213）：乐观锁口径同 status 端点。 */
+export interface UpdateAgentKindInput {
+  kind: AgentKind
+  version: number
+}
+
+/** 配置预设引用专属改写（#213）：configPresetId 为 null 即清除引用。 */
+export interface UpdateAgentConfigPresetInput {
+  configPresetId: number | null
 }
 
 /**

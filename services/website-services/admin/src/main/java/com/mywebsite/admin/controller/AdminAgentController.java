@@ -1,7 +1,9 @@
 package com.mywebsite.admin.controller;
 
+import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentConfigPresetUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentCreateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentDetailDto;
+import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentKindUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListItemDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListQuery;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentStatusUpdateRequest;
@@ -91,5 +93,23 @@ public class AdminAgentController {
             @PathVariable long id, @Valid @RequestBody AdminAgentStatusUpdateRequest request) {
         return ResponseEntity.ok(
                 new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAgentService.updateStatus(id, request)));
+    }
+
+    @PutMapping("/{id}/kind")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:list')")
+    @Operation(summary = "变更站点类型（kind：SITE=站点型 / AI_ONLY=纯 AI 型）")
+    public ResponseEntity<HttpMessageBody<AdminAgentDetailDto>> updateKind(
+            @PathVariable long id, @Valid @RequestBody AdminAgentKindUpdateRequest request) {
+        return ResponseEntity.ok(
+                new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAgentService.updateKind(id, request)));
+    }
+
+    @PutMapping("/{id}/config-preset")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:agent:list')")
+    @Operation(summary = "保存站点的配置预设引用（null 为清除引用）")
+    public ResponseEntity<HttpMessageBody<AdminAgentDetailDto>> updateConfigPreset(
+            @PathVariable long id, @RequestBody AdminAgentConfigPresetUpdateRequest request) {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAgentService.updateConfigPreset(id, request)));
     }
 }

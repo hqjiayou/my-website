@@ -8,8 +8,11 @@ import {
   FolderKanban,
   LayoutDashboard,
   Layers3,
+  ListOrdered,
   MessageSquare,
   Palette,
+  Settings2,
+  SlidersHorizontal,
   Zap,
 } from 'lucide-react'
 
@@ -73,9 +76,21 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'ai',
     titleKey: 'sections.ai',
     entries: [
-      { labelKey: 'items.aiSettings', path: ROUTES.ai.settings, icon: Bot },
+      {
+        // 平台区（Issue #213 UoW-C）：跨站共享资源归组——知识空间、模型入口、
+        // 链预设、配置预设、媒体库（路由仍在运营区文件页，只在此归组呈现）。
+        id: 'group-platform',
+        labelKey: 'groups.platform',
+        children: [
+          { labelKey: 'items.aiKnowledgeBases', path: ROUTES.ai.knowledgeBases, icon: BookOpen },
+          { labelKey: 'items.aiSettings', path: ROUTES.ai.modelEntries, icon: Bot },
+          { labelKey: 'items.aiChainPresets', path: ROUTES.ai.chainPresets, icon: ListOrdered },
+          { labelKey: 'items.aiConfigPresets', path: ROUTES.ai.configPresets, icon: SlidersHorizontal },
+          { labelKey: 'items.files', path: ROUTES.operation.files, icon: FolderKanban },
+        ],
+      },
+      { labelKey: 'items.aiPlatformSettings', path: ROUTES.ai.settings, icon: Settings2 },
       { labelKey: 'items.aiPrompts', path: ROUTES.ai.prompts, icon: Braces },
-      { labelKey: 'items.aiKnowledgeBases', path: ROUTES.ai.knowledgeBases, icon: BookOpen },
       { labelKey: 'items.aiConversations', path: ROUTES.ai.conversations, icon: MessageSquare },
     ],
   },

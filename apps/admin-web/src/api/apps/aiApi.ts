@@ -30,6 +30,9 @@ import type {
   AiAgentChainPreset,
   AiChainPreset,
   AiChainPresetWriteInput,
+  AiConfigPreset,
+  AiConfigPresetCreateInput,
+  AiConfigPresetUpdateInput,
   AiMcpConfig,
   AiMcpSelection,
   AiMcpServerEntryInput,
@@ -46,7 +49,6 @@ import type {
   ProxyServicesLoginStatus,
   ProxyServicesStatus,
   ProxyServicesUsage,
-  AiPromptProfile,
   AiMcpReady,
   AiRuntime,
   CreateAiKnowledgeInput,
@@ -54,7 +56,6 @@ import type {
   GatewayAccessKeyIssueInput,
   GatewayAccessKeyIssueResponse,
   UpdateAiKnowledgeInput,
-  UpdateAiPromptProfileInput,
 } from '@/types/ai'
 import { ApiError } from '@/utils/http/apiError'
 import { httpClient } from '@/utils/http/axios'
@@ -175,6 +176,33 @@ export const aiApi = {
   deleteChainPreset(id: number): Promise<void> {
     return httpClient
       .delete<HttpMessageBody<null | void>>(`/admin/ai/chain-presets/${id}`)
+      .then(unwrapVoid)
+  },
+
+  /** AI 配置预设（Issue #211 UoW-8 后端、#213 UoW-C 页面）：平台区 CRUD；删除为软删，引用方解析时回退无配置。 */
+  listConfigPresets(): Promise<AiConfigPreset[]> {
+    return httpClient.get<HttpMessageBody<AiConfigPreset[]>>('/admin/ai/config-presets').then(unwrapData)
+  },
+
+  getConfigPreset(id: number): Promise<AiConfigPreset> {
+    return httpClient.get<HttpMessageBody<AiConfigPreset>>(`/admin/ai/config-presets/${id}`).then(unwrapData)
+  },
+
+  createConfigPreset(input: AiConfigPresetCreateInput): Promise<AiConfigPreset> {
+    return httpClient
+      .post<HttpMessageBody<AiConfigPreset>, AiConfigPresetCreateInput>('/admin/ai/config-presets', input)
+      .then(unwrapData)
+  },
+
+  updateConfigPreset(id: number, input: AiConfigPresetUpdateInput): Promise<AiConfigPreset> {
+    return httpClient
+      .put<HttpMessageBody<AiConfigPreset>, AiConfigPresetUpdateInput>(`/admin/ai/config-presets/${id}`, input)
+      .then(unwrapData)
+  },
+
+  deleteConfigPreset(id: number): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null | void>>(`/admin/ai/config-presets/${id}`)
       .then(unwrapVoid)
   },
 
@@ -350,21 +378,6 @@ export const aiApi = {
       .post<HttpMessageBody<GatewayAccessKey>, Record<string, never>>(
         `/admin/ai/gateway-access-keys/${id}/revoke`,
         {},
-      )
-      .then(unwrapData)
-  },
-
-  getPromptProfile(agentId: number): Promise<AiPromptProfile> {
-    return httpClient
-      .get<HttpMessageBody<AiPromptProfile>>(`${aiBase(agentId)}/prompt-profile`)
-      .then(unwrapData)
-  },
-
-  upsertPromptProfile(agentId: number, input: UpdateAiPromptProfileInput): Promise<AiPromptProfile> {
-    return httpClient
-      .put<HttpMessageBody<AiPromptProfile>, UpdateAiPromptProfileInput>(
-        `${aiBase(agentId)}/prompt-profile`,
-        input,
       )
       .then(unwrapData)
   },

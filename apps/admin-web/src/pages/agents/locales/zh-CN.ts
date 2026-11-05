@@ -1,18 +1,39 @@
 export default {
   list: {
     title: '智能体',
-    description: '每个智能体一份配置。打开即可改对话、知识和基础信息。',
+    description: '类型与三类关联一屏看清，关联可直接在行内改；打开进工作台调对话、知识和基础信息。',
     createSite: '新建',
     empty: '还没有智能体',
     permissionHint: '按钮可见性由当前账号 permissions 控制，最终以后端鉴权为准。',
     columns: {
       agentName: '名称',
       agentType: '类型',
+      agentKind: '类型',
+      associations: '关联',
       industry: '行业类型',
       domain: '默认域名',
       status: '状态',
       updatedAt: '更新时间',
       actions: '操作',
+    },
+    kind: {
+      SITE: '站点型',
+      AI_ONLY: '纯 AI 型',
+    },
+    associations: {
+      subscriptions: '订阅空间',
+      chainPreset: '链预设',
+      configPreset: '配置预设',
+      none: '未引用',
+      manageSubscriptions: '管理订阅',
+    },
+    subscriptions: {
+      title: '订阅管理',
+      hint: '勾选即订阅、取消即退订，改完立即生效；自有空间是创建者行，不可退订。',
+      empty: '暂无知识空间',
+      own: '自有',
+      owner: '创建者 {{name}}',
+      documents: '{{count}} 篇文档',
     },
     filters: {
       allStatus: '全部状态',
@@ -33,6 +54,11 @@ export default {
       statusUpdated: '状态已更新',
       deleted: '已删除',
       confirmDelete: '确定删除「{{name}}」？',
+      kindUpdated: '类型已更新',
+      chainPresetUpdated: '链预设引用已更新',
+      configPresetUpdated: '配置预设引用已更新',
+      subscribed: '已订阅',
+      unsubscribed: '已退订',
     },
   },
   create: {
