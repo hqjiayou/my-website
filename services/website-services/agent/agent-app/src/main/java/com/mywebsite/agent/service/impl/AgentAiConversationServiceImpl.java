@@ -41,6 +41,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -585,7 +586,10 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
         try {
             List<String> parsed = objectMapper.readValue(
                     preset.getDefaultSkillIds(), new TypeReference<List<String>>() {});
-            List<String> skills = parsed.stream().filter(Objects::nonNull).toList();
+            // 保序去重：写侧（admin 配置预设）已规范化，读侧再兜一层——绕过管理面
+            // 直写 DB 的重复 id 不原样重复下发执行层。
+            List<String> skills =
+                    new ArrayList<>(new LinkedHashSet<>(parsed.stream().filter(Objects::nonNull).toList()));
             return skills.isEmpty() ? null : List.copyOf(skills);
         } catch (JsonProcessingException ex) {
             log.warn(

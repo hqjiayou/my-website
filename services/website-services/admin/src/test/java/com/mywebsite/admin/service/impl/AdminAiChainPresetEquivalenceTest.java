@@ -137,7 +137,8 @@ class AdminAiChainPresetEquivalenceTest {
         AdminAiChainPresetServiceImpl chainPresetService = new AdminAiChainPresetServiceImpl(
                 chainPresetMapper, modelEntryMapper, agentMapper, new ObjectMapper());
         service = new AdminAiModelEntryServiceImpl(
-                modelEntryMapper, cipher, embeddingClassService, chainPresetService);
+                modelEntryMapper, cipher, embeddingClassService, chainPresetService,
+                chainPresetMapper, new ObjectMapper());
         lenient().when(cipher.decrypt(any())).thenAnswer(invocation -> {
             String raw = invocation.getArgument(0);
             return raw != null && raw.startsWith("enc:") ? raw.substring(4) : raw;

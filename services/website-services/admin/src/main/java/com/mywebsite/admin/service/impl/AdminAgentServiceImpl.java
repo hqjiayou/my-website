@@ -1,6 +1,7 @@
 package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mywebsite.admin.constant.AdminAgentConstants;
@@ -97,8 +98,9 @@ public class AdminAgentServiceImpl implements AdminAgentService {
 
     @Override
     public PageResult<AdminAgentListItemDto> listSites(AdminAgentListQuery query) {
+        // 下限钳到 1：pageNum=0/负数时分页插件行为未定义，与 pageSize 上限同风格在组装处收口。
         int pageNum = query != null && query.pageNum() != null
-                ? query.pageNum()
+                ? Math.max(query.pageNum(), 1)
                 : AdminAgentConstants.DEFAULT_PAGE_NUM;
         int pageSize = query != null && query.pageSize() != null
                 ? Math.min(query.pageSize(), AdminAgentConstants.MAX_PAGE_SIZE)
@@ -139,18 +141,35 @@ public class AdminAgentServiceImpl implements AdminAgentService {
                 (int) page.getSize());
     }
 
-    /** 订阅数＝订阅表行数（含空间创建者行，#209 口径）；一次按 agent id 集查回后内存计数。 */
+    /** 订阅数＝订阅表行数（含空间创建者行，#209 口径）；按 agent id 集聚合 COUNT/GROUP BY 一次查回。 */
     private Map<Long, Long> subscriptionCounts(List<AdminAgentEntity> agents) {
         if (agents.isEmpty()) {
             return Map.of();
         }
         List<Long> agentIds = agents.stream().map(AdminAgentEntity::getId).toList();
+        QueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity> wrapper = new QueryWrapper<>();
+        wrapper.select("agent_id", "COUNT(*) AS subscription_count")
+                .in("agent_id", agentIds)
+                .groupBy("agent_id");
         Map<Long, Long> counts = new HashMap<>();
-        subscriptionMapper
-                .selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseSubscriptionEntity>()
-                        .in(AdminAiKnowledgeBaseSubscriptionEntity::getAgentId, agentIds))
-                .forEach(row -> counts.merge(row.getAgentId(), 1L, Long::sum));
+        for (Map<String, Object> row : subscriptionMapper.selectMaps(wrapper)) {
+            Object agentId = columnValue(row, "agent_id");
+            Object count = columnValue(row, "subscription_count");
+            if (agentId instanceof Number && count instanceof Number) {
+                counts.put(((Number) agentId).longValue(), ((Number) count).longValue());
+            }
+        }
         return counts;
+    }
+
+    /** selectMaps 的列键大小写随驱动而异（PG 小写、H2 大写），按不区分大小写取列值。 */
+    private static Object columnValue(Map<String, Object> row, String column) {
+        for (Map.Entry<String, Object> entry : row.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(column)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     /** 预设名批量解析：id 集一次查回；查不到的 id 不入表（组装时 name 落 null、id 照实）。 */
@@ -218,7 +237,13 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         }
         agent.setDefaultDomain(blankToNull(request.defaultDomain()));
         agent.setDescription(blankToNull(request.description()));
-        agent.setConfigPresetId(request.configPresetId());
+        // 非空引用须校验预设存在（口径同 updateConfigPreset）：不校验会撞
+        // fk_agent_config_preset 外键变 500，而非与专属端点一致的 404。
+        Long configPresetId = request.configPresetId();
+        if (configPresetId != null && configPresetMapper.selectById(configPresetId) == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        agent.setConfigPresetId(configPresetId);
         agent.setVersion(request.version());
         int updated = adminAgentMapper.updateById(agent);
         if (updated == 0) {
@@ -296,8 +321,9 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     /** 类型（kind）专属改写（#213）：封闭枚举校验＋乐观锁，口径与 updateStatus 一致。 */
     @Override
     public AdminAgentDetailDto updateKind(long id, AdminAgentKindUpdateRequest request) {
-        requireAgentKind(request.kind());
+        // 先验 agent 存在、再验枚举：不存在的 agent 一律 404，不因 kind 非法先报 400。
         AdminAgentEntity agent = requireSite(id);
+        requireAgentKind(request.kind());
         agent.setAgentKind(request.kind());
         agent.setVersion(request.version());
         int updated = adminAgentMapper.updateById(agent);
