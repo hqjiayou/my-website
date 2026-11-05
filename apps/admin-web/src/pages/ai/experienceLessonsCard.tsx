@@ -414,6 +414,7 @@ function ExtractPanel({ onDone }: { onDone: () => void }) {
     <div className="space-y-2 rounded-lg border border-admin px-4 py-3">
       <h4 className="text-sm font-medium text-admin">{t('settings.experience.extractTitle')}</h4>
       <p className="text-sm text-admin-muted">{t('settings.experience.extractDescription')}</p>
+      <p className="text-sm text-admin-muted">{t('settings.experience.extractModeNote')}</p>
       <form
         className="flex flex-wrap items-end gap-2"
         onSubmit={(event) => {

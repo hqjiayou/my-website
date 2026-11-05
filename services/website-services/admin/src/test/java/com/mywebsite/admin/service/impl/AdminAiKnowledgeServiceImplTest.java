@@ -557,11 +557,35 @@ class AdminAiKnowledgeServiceImplTest {
     }
 
     @Test
-    void transcribeScannedPdfReturnsEmptyWhenChainEmpty() {
+    void transcribeScannedPdfThrowsModeNoEntryWhenSelectedChainEmpty() {
+        // 所选模式（KEY）链为空、CLI 链有入口：报模式无入口，绝不跨模式补 CLI 链（Issue #208）。
         when(modelEntryService.selectionChain(7L, "KEY")).thenReturn(List.of());
-        when(modelEntryService.selectionChain(7L, "CLI")).thenReturn(List.of());
 
-        assertThat(service.transcribeScannedPdf(7L, new byte[] {1})).isEmpty();
+        assertThatThrownBy(() -> service.transcribeScannedPdf(7L, "KEY", new byte[] {1}))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> {
+                            assertThat(ex.getCode()).isEqualTo(ErrorCode.MODE_NO_AVAILABLE_ENTRY.getCode());
+                            assertThat(ex.getMessageKey())
+                                    .isEqualTo(ErrorCode.MODE_NO_AVAILABLE_ENTRY.getMessageKey());
+                            assertThat(ex.getMessageArgs()).containsExactly("KEY");
+                        });
+        verify(modelEntryService, never()).selectionChain(anyLong(), eq("CLI"));
+        verify(agentClient, never()).ocrPdf(any());
+    }
+
+    @Test
+    void transcribeRejectsMissingOrInvalidMode() {
+        for (String bad : new String[] {null, "", "  ", "AUTO"}) {
+            assertThatThrownBy(() -> service.transcribeScannedPdf(7L, bad, new byte[] {1}))
+                    .isInstanceOfSatisfying(
+                            BusinessException.class,
+                            ex -> {
+                                assertThat(ex.getCode()).isEqualTo(ErrorCode.BAD_REQUEST.getCode());
+                                assertThat(ex.getMessageKey()).isEqualTo("admin.ai.kb.mode.invalid");
+                            });
+        }
+        verify(modelEntryService, never()).selectionChain(anyLong(), any());
         verify(agentClient, never()).ocrPdf(any());
     }
 
@@ -583,7 +607,7 @@ class AdminAiKnowledgeServiceImplTest {
                 .when(agentClient)
                 .ocrPdf(any());
 
-        assertThat(service.transcribeScannedPdf(7L, pdf)).isEqualTo("转写文本");
+        assertThat(service.transcribeScannedPdf(7L, "KEY", pdf)).isEqualTo("转写文本");
 
         assertThat(sent.get().model()).isEqualTo(primary);
         assertThat(sent.get().fallbackModels()).containsExactly(fallback);
@@ -591,11 +615,17 @@ class AdminAiKnowledgeServiceImplTest {
     }
 
     @Test
-    void transcribeImageReturnsEmptyWhenChainEmpty() {
-        when(modelEntryService.selectionChain(7L, "KEY")).thenReturn(List.of());
+    void transcribeImageThrowsModeNoEntryWhenSelectedChainEmpty() {
         when(modelEntryService.selectionChain(7L, "CLI")).thenReturn(List.of());
 
-        assertThat(service.transcribeImage(7L, new byte[] {1}, "image/png")).isEmpty();
+        assertThatThrownBy(() -> service.transcribeImage(7L, "CLI", new byte[] {1}, "image/png"))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> {
+                            assertThat(ex.getCode()).isEqualTo(ErrorCode.MODE_NO_AVAILABLE_ENTRY.getCode());
+                            assertThat(ex.getMessageArgs()).containsExactly("CLI");
+                        });
+        verify(modelEntryService, never()).selectionChain(anyLong(), eq("KEY"));
         verify(agentClient, never()).ocrImage(any());
     }
 
@@ -603,7 +633,8 @@ class AdminAiKnowledgeServiceImplTest {
     void transcribeImageSendsChainMediaTypeAndReturnsTrimmedText() {
         AgentModelSelection primary = new AgentModelSelection("google:gemini", "k", null);
         byte[] png = new byte[] {(byte) 0x89, 'P', 'N', 'G'};
-        when(modelEntryService.selectionChain(7L, "KEY")).thenReturn(List.of(primary));
+        // 选 CLI 就只走 CLI 链（小写入参先归一化），KEY 链不被咨询。
+        when(modelEntryService.selectionChain(7L, "CLI")).thenReturn(List.of(primary));
         java.util.concurrent.atomic.AtomicReference<
                         com.mywebsite.agent.dto.AgentOcrImageRequest>
                 sent = new java.util.concurrent.atomic.AtomicReference<>();
@@ -615,19 +646,40 @@ class AdminAiKnowledgeServiceImplTest {
                 .when(agentClient)
                 .ocrImage(any());
 
-        assertThat(service.transcribeImage(7L, png, "image/png")).isEqualTo("图片文字");
+        assertThat(service.transcribeImage(7L, "cli", png, "image/png")).isEqualTo("图片文字");
+        verify(modelEntryService, never()).selectionChain(anyLong(), eq("KEY"));
         assertThat(sent.get().model()).isEqualTo(primary);
         assertThat(sent.get().mediaType()).isEqualTo("image/png");
         assertThat(sent.get().contentBase64()).isEqualTo(Base64.getEncoder().encodeToString(png));
     }
 
     @Test
-    void transcribeScannedPdfSwallowsClientFailure() {
+    void transcribeScannedPdfMapsClientFailureToTranscribeFailed() {
+        // 调用失败与「无入口」「返回空」分列：抛 FILE_TRANSCRIBE_FAILED（503），文案参数带失败性质。
         when(modelEntryService.selectionChain(7L, "KEY"))
                 .thenReturn(List.of(new AgentModelSelection("google:gemini", "k", null)));
         when(agentClient.ocrPdf(any())).thenThrow(new BusinessException(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED));
 
-        assertThat(service.transcribeScannedPdf(7L, new byte[] {1})).isEmpty();
+        assertThatThrownBy(() -> service.transcribeScannedPdf(7L, "KEY", new byte[] {1}))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> {
+                            assertThat(ex.getCode())
+                                    .isEqualTo(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getCode());
+                            assertThat(ex.getMessageKey()).isEqualTo("admin.ai.kb.file.transcribe.failed");
+                            assertThat(ex.getMessageArgs())
+                                    .containsExactly(ErrorCode.EXTERNAL_DEPENDENCY_BLOCKED.getMessageKey());
+                        });
+    }
+
+    @Test
+    void transcribeScannedPdfReturnsEmptyOnlyWhenResultTextEmpty() {
+        // 只有转写结果本身为空才回空串（上传侧据此报 FILE_EMPTY），失败不再混进来。
+        when(modelEntryService.selectionChain(7L, "KEY"))
+                .thenReturn(List.of(new AgentModelSelection("google:gemini", "k", null)));
+        when(agentClient.ocrPdf(any())).thenReturn(new AgentOcrPdfResult("   ", "google:gemini"));
+
+        assertThat(service.transcribeScannedPdf(7L, "KEY", new byte[] {1})).isEmpty();
     }
 
     // ---------- index_embedding_spec 落库 ----------

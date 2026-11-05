@@ -148,6 +148,7 @@ export default {
       extractTitle: '从近期对话提炼',
       extractDescription:
         '按失败信号（工具失败 / 检索落空 / 高工具消耗）预筛近期正式对话，再逐批提炼成候选；产出只落待审、不会自动生效，提炼失败的轮次会在汇总里如实计数。',
+      extractModeNote: '提炼是批处理，固定走 Key 模式的模型链（不会改走 CLI）；Key 链无可用入口时整组如实计入失败。',
       windowDays: '回看天数',
       maxTurns: '候选轮上限',
       extract: '提炼近期对话',

@@ -494,6 +494,8 @@ export default {
       titleLabel: 'Title',
       contentLabel: 'Content',
       uploadHint: 'Dozens of formats (documents, sheets, slides, ebooks, text, code, data), up to 10 MB. Everything is stored as Markdown. Scanned PDFs are transcribed automatically by the site AI model.',
+      uploadModeLabel: 'Transcription mode',
+      uploadTranscribeHint: 'Images and scanned PDFs are transcribed by a model on the selected mode chain; plain-text files do not call a model.',
       invalidExtension: 'Unsupported file format.',
       fileTooLarge: 'File must be 10 MB or smaller.',
       uploaded: 'File uploaded; indexing in background',

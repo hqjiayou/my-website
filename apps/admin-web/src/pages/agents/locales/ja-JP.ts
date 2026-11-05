@@ -494,6 +494,8 @@ export default {
       titleLabel: 'タイトル',
       contentLabel: '本文',
       uploadHint: 'ドキュメント/表計算/スライド/電子書籍/テキスト/コード/データなど数十形式対応、最大 10 MB。取り込み時に Markdown へ統一します。スキャン版 PDF はサイトの AI モデルが自動で文字起こしします。',
+      uploadModeLabel: '文字起こしモード',
+      uploadTranscribeHint: '画像とスキャン版 PDF は選択したモードのモデルで文字起こしします。テキストファイルではモデルを呼びません。',
       invalidExtension: '対応していないファイル形式です。',
       fileTooLarge: 'ファイルサイズは 10 MB 以下にしてください。',
       uploaded: 'アップロード完了。インデックスはバックグラウンドで進行中',

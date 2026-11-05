@@ -362,11 +362,14 @@ export const aiApi = {
   uploadKnowledgeDocument(
     agentId: number,
     file: File,
+    mode: 'CLI' | 'KEY',
     title?: string,
     baseId?: number | null,
   ): Promise<AiKnowledgeDetail> {
     const form = new FormData()
     form.append('file', file)
+    // mode 必填（Issue #208）：图片/扫描 PDF 的转写只走所选模式的链
+    form.append('mode', mode)
     const trimmed = title?.trim()
     if (trimmed) {
       form.append('title', trimmed)
@@ -386,10 +389,12 @@ export const aiApi = {
   uploadKnowledgeArchive(
     agentId: number,
     file: File,
+    mode: 'CLI' | 'KEY',
     baseId?: number | null,
   ): Promise<AiKnowledgeArchiveResult> {
     const form = new FormData()
     form.append('file', file)
+    form.append('mode', mode)
     if (baseId != null) {
       form.append('baseId', String(baseId))
     }
