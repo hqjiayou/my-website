@@ -8,7 +8,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from agent_services.app import create_app
-from agent_services.retrieval.service import RetrievalService
+from agent_services.retrieval.service import RetrievalService, RetrievalSpace
 from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.chat import ChatRequest
 from agent_services.schemas.retrieval import RetrievalSearchRequest
@@ -118,8 +118,10 @@ def test_rank_merge_sums_places_and_ignores_cosine_values() -> None:
 
 
 def test_legacy_search_request_omits_embedding_classes() -> None:
-    body = RetrievalSearchRequest.model_validate({"baseIds": ["1"], "query": "hours"})
-    assert body.embedding_classes is None
+    body = RetrievalSearchRequest.model_validate(
+        {"spaces": [{"baseId": "1"}], "query": "hours"}
+    )
+    assert body.spaces[0].embedding_classes is None
     chat = ChatRequest.model_validate({"agentId": "1", "message": "hi"})
     assert chat.embedding_classes is None
 
@@ -132,18 +134,18 @@ def test_embedding_class_cap_is_four_after_alias_dedup() -> None:
         {"embeddingSpec": "openai:text-embedding-3-large", "apiKey": "d"},
         {"embeddingSpec": "openai:embed-extra", "apiKey": "e"},
     ]
-    # google 与 google-gla 是同一类，去重后仍是 4 类。
+    # google 与 google-gla 是同一类，去重后仍是 4 类（上限按空间各自算）。
     kept = RetrievalSearchRequest.model_validate(
-        {"baseIds": ["1"], "query": "q", "embeddingClasses": four}
+        {"spaces": [{"baseId": "1", "embeddingClasses": four}], "query": "q"}
     )
-    assert kept.embedding_classes is not None
-    assert len(kept.embedding_classes) == 4
-    assert kept.embedding_classes[0].embedding_spec == "google-gla:gemini-embedding-001"
+    assert kept.spaces[0].embedding_classes is not None
+    assert len(kept.spaces[0].embedding_classes) == 4
+    assert kept.spaces[0].embedding_classes[0].embedding_spec == "google-gla:gemini-embedding-001"
 
     fifth = four + [{"embeddingSpec": "openai:one-more", "apiKey": "f"}]
     with pytest.raises(ValidationError):
         RetrievalSearchRequest.model_validate(
-            {"baseIds": ["1"], "query": "q", "embeddingClasses": fifth}
+            {"spaces": [{"baseId": "1", "embeddingClasses": fifth}], "query": "q"}
         )
 
 
@@ -153,7 +155,7 @@ def test_search_endpoint_rejects_more_than_four_classes() -> None:
     response = _search_client(service).post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"baseIds": ["1"], "query": "q", "embeddingClasses": classes},
+        json={"spaces": [{"baseId": "1", "embeddingClasses": classes}], "query": "q"},
     )
     assert response.status_code == 400
     assert response.json()["errorCode"] == "BAD_REQUEST"
@@ -226,13 +228,17 @@ async def test_two_classes_merge_by_rank_then_rerank() -> None:
         rerank_cutoff=False,
     )
     hits = await service.search(
-        base_ids=["1"],
+        spaces=[
+            RetrievalSpace(
+                "1",
+                [
+                    EmbeddingClass("openai:a", _ClassEmbedder(0.1)),
+                    EmbeddingClass("openai:b", _ClassEmbedder(0.2)),
+                ],
+            )
+        ],
         query="q",
         top_k=1,
-        embedding_classes=[
-            EmbeddingClass("openai:a", _ClassEmbedder(0.1)),
-            EmbeddingClass("openai:b", _ClassEmbedder(0.2)),
-        ],
     )
     assert calls == [1]
     assert [hit.source_id for hit in hits] == ["kb:second"]
@@ -256,13 +262,17 @@ async def test_relative_trim_stays_inside_each_class() -> None:
     )
     service = RetrievalService(None, store, min_score=0, score_ratio_floor=0.7, rerank_enabled=False)
     hits = await service.retrieve_chunks(
-        base_ids=["1"],
+        spaces=[
+            RetrievalSpace(
+                "1",
+                _classes(
+                    ("openai:a", _ClassEmbedder(0.1)),
+                    ("openai:b", _ClassEmbedder(0.2)),
+                ),
+            )
+        ],
         query="q",
         top_k=4,
-        embedding_classes=_classes(
-            ("openai:a", _ClassEmbedder(0.1)),
-            ("openai:b", _ClassEmbedder(0.2)),
-        ),
     )
     assert [hit.source_id for hit in hits] == ["kb:mid", "kb:top", "kb:near"]
     assert service.degraded is False
@@ -284,13 +294,17 @@ async def test_rank_score_is_not_passed_through_absolute_threshold() -> None:
         None, store, min_score=0.35, score_ratio_floor=0.7, rerank_enabled=False
     )
     hits = await service.retrieve_chunks(
-        base_ids=["1"],
+        spaces=[
+            RetrievalSpace(
+                "1",
+                _classes(
+                    ("openai:a", _ClassEmbedder(0.1)),
+                    ("openai:b", _ClassEmbedder(0.2)),
+                ),
+            )
+        ],
         query="q",
         top_k=4,
-        embedding_classes=_classes(
-            ("openai:a", _ClassEmbedder(0.1)),
-            ("openai:b", _ClassEmbedder(0.2)),
-        ),
     )
     assert "kb:r3" in [hit.source_id for hit in hits]
 
@@ -309,10 +323,9 @@ async def test_one_class_keeps_current_cosine_and_coverage_score() -> None:
 
     service = RetrievalService(None, Both(), rerank_enabled=False)
     hits = await service.search(
-        base_ids=["7"],
+        spaces=[RetrievalSpace("7", _classes(("openai:a", _ClassEmbedder(0.1))))],
         query="XJ-900",
         top_k=4,
-        embedding_classes=_classes(("openai:a", _ClassEmbedder(0.1))),
     )
     assert [(hit.source_id, hit.score) for hit in hits] == [("kb:code", 1.0)]
 
@@ -322,9 +335,8 @@ async def test_one_class_embed_failure_falls_back_to_lexical_and_degrades() -> N
     store = _ClassStore({})
     service = RetrievalService(None, store, rerank_enabled=False)
     hits = await service.retrieve_chunks(
-        base_ids=["7"],
+        spaces=[RetrievalSpace("7", _classes(("openai:a", _ClassEmbedder(0.1, fail=True))))],
         query="XJ-900",
-        embedding_classes=_classes(("openai:a", _ClassEmbedder(0.1, fail=True))),
     )
     assert [hit.source_id for hit in hits] == ["kb:code"]
     assert service.degraded is True
@@ -335,13 +347,17 @@ async def test_partial_class_failure_keeps_other_classes_and_lexical() -> None:
     store = _ClassStore({"openai:a": [RetrievedChunk("kb:vec", 0, "vector hit", 0.8)]})
     service = RetrievalService(None, store, min_score=0, score_ratio_floor=0, rerank_enabled=False)
     hits = await service.retrieve_chunks(
-        base_ids=["7"],
+        spaces=[
+            RetrievalSpace(
+                "7",
+                _classes(
+                    ("openai:a", _ClassEmbedder(0.1)),
+                    ("openai:b", _ClassEmbedder(0.2, fail=True)),
+                ),
+            )
+        ],
         query="XJ-900",
         top_k=4,
-        embedding_classes=_classes(
-            ("openai:a", _ClassEmbedder(0.1)),
-            ("openai:b", _ClassEmbedder(0.2, fail=True)),
-        ),
     )
     assert service.degraded is True
     assert {hit.source_id for hit in hits} == {"kb:vec", "kb:code"}
@@ -353,12 +369,16 @@ async def test_all_class_embed_failures_fall_back_to_lexical() -> None:
     store = _ClassStore({"openai:a": [RetrievedChunk("kb:vec", 0, "vector hit", 0.8)]})
     service = RetrievalService(None, store, rerank_enabled=False)
     hits = await service.retrieve_chunks(
-        base_ids=["7"],
+        spaces=[
+            RetrievalSpace(
+                "7",
+                _classes(
+                    ("openai:a", _ClassEmbedder(0.1, fail=True)),
+                    ("openai:b", _ClassEmbedder(0.2, fail=True)),
+                ),
+            )
+        ],
         query="XJ-900",
-        embedding_classes=_classes(
-            ("openai:a", _ClassEmbedder(0.1, fail=True)),
-            ("openai:b", _ClassEmbedder(0.2, fail=True)),
-        ),
     )
     assert [hit.source_id for hit in hits] == ["kb:code"]
     assert service.degraded is True
@@ -507,16 +527,20 @@ def test_search_endpoint_uses_each_registered_class(monkeypatch: pytest.MonkeyPa
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
         json={
-            "baseIds": ["1"],
+            "spaces": [
+                {
+                    "baseId": "1",
+                    "embeddingClasses": [
+                        {"embeddingSpec": "openai:text-embedding-3-small", "apiKey": "sk-a"},
+                        {
+                            "embeddingSpec": "google-gla:gemini-embedding-001",
+                            "apiKey": "sk-b",
+                        },
+                    ],
+                }
+            ],
             "query": "q",
             "topK": 2,
-            "embeddingClasses": [
-                {"embeddingSpec": "openai:text-embedding-3-small", "apiKey": "sk-a"},
-                {
-                    "embeddingSpec": "google-gla:gemini-embedding-001",
-                    "apiKey": "sk-b",
-                },
-            ],
         },
     )
     assert response.status_code == 200
@@ -546,7 +570,7 @@ def test_legacy_single_embedding_request_still_searches_one_class(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
         json={
-            "baseIds": ["1"],
+            "spaces": [{"baseId": "1"}],
             "query": "q",
             "embeddingSpec": "openai:text-embedding-3-small",
             "apiKey": "sk-old",
@@ -623,11 +647,15 @@ async def test_lexical_search_receives_only_the_requested_classes() -> None:
     store = Recording()
     service = RetrievalService(None, store, rerank_enabled=False)
     await service.search(
-        base_ids=["7"],
+        spaces=[
+            RetrievalSpace(
+                "7",
+                _classes(
+                    ("openai:a", _ClassEmbedder(0.1)),
+                    ("openai:b", _ClassEmbedder(0.2, fail=True)),
+                ),
+            )
+        ],
         query="XJ-900",
-        embedding_classes=_classes(
-            ("openai:a", _ClassEmbedder(0.1)),
-            ("openai:b", _ClassEmbedder(0.2, fail=True)),
-        ),
     )
     assert store.lexical_models == ["openai:a", "openai:b"]

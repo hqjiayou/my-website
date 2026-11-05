@@ -10,6 +10,7 @@ from agent_services.agent.knowledge_tools import (
 from agent_services.agent.prompt_builder import build_prompt_parts
 from agent_services.agent.todo_tools import TodoStore
 from agent_services.agent.toolset_factory import build_execution_toolsets
+from agent_services.retrieval.service import RetrievalSpace
 from agent_services.retrieval.store import RetrievedChunk
 
 _GUIDANCE_MARKER = "search_site_knowledge tool first"
@@ -23,8 +24,8 @@ class _FakeRetrieval:
         self._fail = fail
         self._partial = partial
 
-    async def retrieve_chunks(self, *, base_ids: list[str], query: str, **kwargs: object) -> list[RetrievedChunk]:
-        self.calls.append((list(base_ids), query))
+    async def retrieve_chunks(self, *, spaces: list[RetrievalSpace], query: str, **kwargs: object) -> list[RetrievedChunk]:
+        self.calls.append(([space.base_id for space in spaces], query))
         self.kwargs.append(dict(kwargs))
         if self._fail:
             raise RuntimeError("boom")

@@ -58,6 +58,7 @@ from agent_services.retrieval.service import (
     ReembedPrepared,
     RetrievalChunkLimitExceeded,
     RetrievalService,
+    RetrievalSpace,
 )
 from agent_services.schemas.chat import (
     MAX_MCP_SERVER_NAME_LENGTH,
@@ -1031,7 +1032,6 @@ async def list_retrieval_documents(request: Request, baseId: str) -> dict[str, o
 @router.post("/retrieval/search")
 async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> dict[str, object]:
     """内部知识检索。嵌入或向量库失败时沿用 retrieve_chunks 的 degraded，不回 500。"""
-    base_ids = body.base_ids
     query = body.query.strip()
     if not query:
         raise InternalApiError(
@@ -1039,25 +1039,27 @@ async def search_retrieval(request: Request, body: RetrievalSearchRequest) -> di
             error_code="BAD_REQUEST",
             message="query must not be blank.",
         )
-    if not base_ids:
+    if not body.spaces:
         raise InternalApiError(
             status_code=400,
             error_code="BAD_REQUEST",
-            message="baseIds is required.",
+            message="spaces is required.",
         )
     service = _require_retrieval_service(request)
-    embedding_classes = _embedding_classes_for(request, body.embedding_classes)
+    # 类集按空间解析（Issue #209 UoW-3）：每个空间用自己登记的那份凭证建类；
+    # 未带类集的空间在服务层落请求级 spec 嵌入器、再落进程默认类。
     chunks = await service.retrieve_chunks(
-        base_ids=base_ids,
+        spaces=[
+            RetrievalSpace(
+                base_id=space.base_id,
+                embedding_classes=_embedding_classes_for(request, space.embedding_classes),
+            )
+            for space in body.spaces
+        ],
         query=query,
         top_k=body.top_k,
-        embedder=(
-            None
-            if embedding_classes
-            else _request_embedder(request, body.embedding_spec, body.api_key, body.base_url)
-        ),
-        embedding_model=None if embedding_classes else body.embedding_spec,
-        embedding_classes=embedding_classes,
+        embedder=_request_embedder(request, body.embedding_spec, body.api_key, body.base_url),
+        embedding_model=body.embedding_spec,
         model_selection=body.model_selection,
     )
     payload = RetrievalSearchResponse(

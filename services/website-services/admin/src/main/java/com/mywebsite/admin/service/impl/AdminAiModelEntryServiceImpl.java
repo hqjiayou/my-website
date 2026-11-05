@@ -190,8 +190,8 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
      * 读物化），与 agent-app 同一份实现，不再在本侧扫入口推算。
      */
     @Override
-    public List<AgentModelSelection> embeddingClasses(long agentId) {
-        return embeddingClassService.embeddingClasses(agentId);
+    public List<AgentModelSelection> embeddingClassesForSpace(long baseId) {
+        return embeddingClassService.embeddingClassesForSpace(baseId);
     }
 
     /** 实体→中立快照：解密在本侧完成（解不出为 null），规则引擎只吃快照。 */

@@ -29,7 +29,7 @@ from agent_services.schemas.stream import AgentStreamEvent
 class _FakeRetrieval:
     degraded = False
 
-    async def retrieve_chunks(self, *, base_ids: list[str], query: str, **_kwargs: object) -> list[RetrievedChunk]:
+    async def retrieve_chunks(self, *, spaces: list, query: str, **_kwargs: object) -> list[RetrievedChunk]:
         return [RetrievedChunk(source_id="kb:1", chunk_index=2, content="KB-FACT", score=0.9)]
 
 

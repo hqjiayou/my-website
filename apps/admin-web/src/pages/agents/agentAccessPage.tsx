@@ -6,7 +6,6 @@ import { toast } from 'sonner'
 
 import { aiApi } from '@/api'
 import { adminFieldClass, adminGhostButtonClass, adminPrimaryButtonClass } from '@/components/admin/controls'
-import { EmbeddingRegistrationCard } from '@/pages/ai/embeddingRegistrationCard'
 import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
 import type { AiModelEntry, AiModelEntryWriteInput, ProxyServicesPublishedAccount } from '@/types/ai'
@@ -110,7 +109,6 @@ export function AgentAccessPage() {
           canUpdate={canUpdate}
         />
       </div>
-      <EmbeddingRegistrationCard agentId={site.id} />
     </section>
   )
 }

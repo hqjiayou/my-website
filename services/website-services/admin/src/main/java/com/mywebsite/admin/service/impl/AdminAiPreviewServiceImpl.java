@@ -146,7 +146,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             emitter.complete();
             return emitter;
         }
-        List<AgentModelSelection> embeddingClasses = modelEntryService.embeddingClasses(agentId);
+        List<AgentModelSelection> embeddingClasses = embeddingClassesForAgent(agentId);
         AgentModelSelection embedding = embeddingClasses == null || embeddingClasses.isEmpty()
                 ? null
                 : embeddingClasses.get(0);
@@ -264,6 +264,23 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
      * 对话同一展开口径。向量分区键已改 base，执行层据此跨空间检索。失败隔离同
      * MCP 选择：查库失败只记日志、按无空间继续，不拖垮试聊；无空间时返回 null。
      */
+    /**
+     * 试聊请求级的嵌入类集（Issue #209 UoW-3）：与正式对话同口径——按可检索
+     * 空间分别解析登记类集（空间行优先、全站补充）后并集去重，展开序即类
+     * 优先级、{@code dedupe} 兜底上限 4 类。无可检索空间时为空列表。
+     */
+    private List<AgentModelSelection> embeddingClassesForAgent(long agentId) {
+        List<String> baseIds = knowledgeBaseIds(agentId);
+        if (baseIds == null || baseIds.isEmpty()) {
+            return List.of();
+        }
+        List<AgentModelSelection> union = new ArrayList<>();
+        for (String baseId : baseIds) {
+            union.addAll(modelEntryService.embeddingClassesForSpace(Long.parseLong(baseId)));
+        }
+        return AgentEmbeddingClassUtils.dedupe(union);
+    }
+
     private List<String> knowledgeBaseIds(long agentId) {
         try {
             java.util.LinkedHashSet<Long> baseIds = new java.util.LinkedHashSet<>();

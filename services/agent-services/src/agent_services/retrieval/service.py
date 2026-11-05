@@ -121,6 +121,19 @@ class EmbeddingClass:
     client: EmbeddingClient | None
 
 
+@dataclass(frozen=True)
+class RetrievalSpace:
+    """一次检索中的一个知识空间，带它自己的登记嵌入类集（Issue #209 UoW-3）。
+
+    嵌入登记是空间级的：同一请求里每个空间用各自的类集检索，不再有一份
+    请求级类集套给所有空间。embedding_classes 为 None 或空 = 该空间未单独
+    登记类，检索时落请求级嵌入器/进程默认类，与未登记口径一致。
+    """
+
+    base_id: str
+    embedding_classes: list[EmbeddingClass] | None = None
+
+
 DEFAULT_TOP_K = 4
 DEFAULT_MIN_SCORE = RETRIEVAL_MIN_SCORE_DEFAULT
 DEFAULT_SCORE_RATIO_FLOOR = RETRIEVAL_SCORE_RATIO_FLOOR_DEFAULT
@@ -961,16 +974,19 @@ class RetrievalService:
 
     async def _search_spaces(
         self,
-        classes: list[EmbeddingClass],
+        spaces: list[RetrievalSpace],
         *,
-        base_ids: list[str],
         query: str,
         top_k: int,
         model_selection: ModelSelection | None,
+        embedder: EmbeddingClient | None,
+        embedding_model: str | None,
     ) -> list[RetrievedChunk]:
-        """多空间：各空间独立走完单空间管线（分数门/相对裁剪/per-source 上限在
-        空间内先行），再按名次合并（merge_by_rank，与多类合并同一先例），合并后
-        per-source 上限按全局口径再收一遍，最后统一走一次 rerank 收尾。
+        """多空间：各空间带自己登记的类集独立走完单空间管线（分数门/相对裁剪/
+        per-source 上限在空间内先行），再按名次合并（merge_by_rank，与多类合并
+        同一先例），合并后 per-source 上限按全局口径再收一遍，最后统一走一次
+        rerank 收尾。类集在空间内解析：某空间的类集解析失败与它的检索失败
+        同等对待（跳过并标不完整），不连累其它空间。
 
         单个空间硬失败（store 异常等）跳过并标不完整；全部空间失败才上抛，
         由 retrieve_chunks 整次降级——与多类「一类失败跳过、全部失败才落空」同口径。
@@ -978,23 +994,26 @@ class RetrievalService:
         paths: list[list[RetrievedChunk]] = []
         failures = 0
         last_error: Exception | None = None
-        for base_id in base_ids:
+        for space in spaces:
             try:
+                classes = self._resolve_classes(
+                    embedder, space.embedding_classes, embedding_model
+                )
                 fused = await self._fused_for_base(
-                    classes, base_id=base_id, query=query, top_k=top_k
+                    classes, base_id=space.base_id, query=query, top_k=top_k
                 )
             except Exception as exc:  # noqa: BLE001 — 一空间失败跳过，其它空间继续
                 failures += 1
                 last_error = exc
                 logger.warning(
                     "retrieval search failed for base %s (%s); skipping its hits",
-                    base_id,
+                    space.base_id,
                     type(exc).__name__,
                 )
                 continue
             if fused:
                 paths.append(fused)
-        if failures == len(base_ids) and last_error is not None:
+        if failures == len(spaces) and last_error is not None:
             raise last_error
         if failures:
             self._retrieval_incomplete = True
@@ -1006,60 +1025,65 @@ class RetrievalService:
     async def search(
         self,
         *,
-        base_ids: list[str],
+        spaces: list[RetrievalSpace],
         query: str,
         top_k: int = DEFAULT_TOP_K,
         embedder: EmbeddingClient | None = None,
         model_selection: ModelSelection | None = None,
         embedding_model: str | None = None,
-        embedding_classes: list[EmbeddingClass] | None = None,
     ) -> list[RetrievedChunk]:
         self._rerank_applied = False
         self._retrieval_incomplete = False
-        bases: list[str] = []
+        normalized: list[RetrievalSpace] = []
         seen: set[str] = set()
-        for raw in base_ids:
-            base_id = raw.strip()
-            if base_id and base_id not in seen:
-                seen.add(base_id)
-                bases.append(base_id)
-        if not bases:
+        for space in spaces:
+            base_id = space.base_id.strip()
+            if not base_id or base_id in seen:
+                continue
+            seen.add(base_id)
+            normalized.append(
+                RetrievalSpace(base_id=base_id, embedding_classes=space.embedding_classes)
+            )
+        if not normalized:
             return []
-        classes = self._resolve_classes(embedder, embedding_classes, embedding_model)
-        if len(bases) == 1:
+        if len(normalized) == 1:
+            space = normalized[0]
+            classes = self._resolve_classes(
+                embedder, space.embedding_classes, embedding_model
+            )
             if len(classes) == 1:
                 return await self._search_one(
                     classes[0],
-                    base_id=bases[0],
+                    base_id=space.base_id,
                     query=query,
                     top_k=top_k,
                     model_selection=model_selection,
                 )
             return await self._search_many(
                 classes,
-                base_id=bases[0],
+                base_id=space.base_id,
                 query=query,
                 top_k=top_k,
                 model_selection=model_selection,
             )
         return await self._search_spaces(
-            classes,
-            base_ids=bases,
+            normalized,
             query=query,
             top_k=top_k,
             model_selection=model_selection,
+            embedder=embedder,
+            embedding_model=embedding_model,
         )
 
     async def retrieve_chunks(
         self,
         *,
-        base_ids: list[str],
+        spaces: list[RetrievalSpace],
         query: str,
         top_k: int = DEFAULT_TOP_K,
         embedder: EmbeddingClient | None = None,
         model_selection: ModelSelection | None = None,
         embedding_model: str | None = None,
-        embedding_classes: list[EmbeddingClass] | None = None,
     ) -> list[RetrievedChunk]:
         """与 retrieve_context 同一条降级路径：嵌入或向量库失败时返回空列表并置 degraded。
 
@@ -1068,13 +1092,12 @@ class RetrievalService:
         """
         try:
             chunks = await self.search(
-                base_ids=base_ids,
+                spaces=spaces,
                 query=query,
                 top_k=top_k,
                 embedder=embedder,
                 model_selection=model_selection,
                 embedding_model=embedding_model,
-                embedding_classes=embedding_classes,
             )
         except Exception as exc:  # noqa: BLE001
             self._degraded = True
@@ -1090,8 +1113,11 @@ class RetrievalService:
         """chat 检索增强：失败降级为无上下文（派生索引问题不阻断对话），记录日志。
 
         最近一次失败置 degraded 并记下异常类型名；成功则清除。返回值仍是上下文列表。
+        空间不带类集：逐空间落进程默认类（retrieve_context 本就没有凭证入参）。
         """
-        chunks = await self.retrieve_chunks(base_ids=base_ids, query=query)
+        chunks = await self.retrieve_chunks(
+            spaces=[RetrievalSpace(base_id=base_id) for base_id in base_ids], query=query
+        )
         return [chunk.content for chunk in chunks]
 
     async def close(self) -> None:

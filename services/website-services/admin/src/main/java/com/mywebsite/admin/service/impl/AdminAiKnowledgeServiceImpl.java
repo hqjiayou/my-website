@@ -680,12 +680,16 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
     }
 
     /**
-     * 文档所属空间的嵌入类集（Issue #209 UoW-2 过渡口径）：分区键已改 base，类集
-     * 过渡期取空间创建者的登记类集（与 UoW-1 的所有者推导同源）；UoW-3 把登记
-     * 本身迁到空间后，此处改按 base 解析、同步形状不变。
+     * 文档所属空间的嵌入类集（Issue #209 UoW-3 起为空间原生登记）：分区键与
+     * 登记 scope 同为 base，类集只由空间自己的登记（空间行优先、全站平台默认
+     * 补充）决定，不再经创建者推导。无空间归属的文档没有类集——同步路径对无
+     * 空间文档已先行按 PENDING 返回，走不到这里，空列表只是防御。
      */
     private List<AgentModelSelection> spaceClasses(AdminAiKnowledgeDocumentEntity entity) {
-        return registeredClasses(ownerAgentId(entity));
+        if (entity.getBaseId() == null) {
+            return List.of();
+        }
+        return registeredClassesForSpace(entity.getBaseId());
     }
 
     @Override
@@ -820,20 +824,17 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
             return new AdminAiKnowledgeReembedResultDto(0, 0, null, false, List.of(), REEMBED_SUCCESS);
         }
 
-        // 空间 → 创建者（类集过渡口径按创建者登记取，见 spaceClasses）；创建者按空间缓存复用
+        // 空间 → 创建者映射只供冲突/失败 DTO 的归属标注（对外沿用 agentId 字段）；
+        // 类集按空间原生登记逐空间取（Issue #209 UoW-3，见 spaceClasses）。
         Map<Long, Long> creatorByBase = new LinkedHashMap<>();
         for (AdminAiKnowledgeBaseEntity base :
                 baseMapper.selectList(new LambdaQueryWrapper<AdminAiKnowledgeBaseEntity>())) {
             creatorByBase.put(base.getId(), base.getCreatedByAgentId());
         }
-        Map<Long, List<AgentModelSelection>> classesByCreator = new LinkedHashMap<>();
         Map<Long, List<AgentModelSelection>> classesByBase = new LinkedHashMap<>();
         boolean multiClass = false;
         for (Long baseId : documentsByBase.keySet()) {
-            Long creatorId = creatorByBase.get(baseId);
-            List<AgentModelSelection> classes = creatorId == null
-                    ? List.of()
-                    : classesByCreator.computeIfAbsent(creatorId, this::registeredClasses);
+            List<AgentModelSelection> classes = registeredClassesForSpace(baseId);
             classesByBase.put(baseId, classes);
             if (classes.size() > 1) {
                 multiClass = true;
@@ -870,7 +871,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 }
             }
             if (new LinkedHashSet<>(dimensionsByBase.values()).size() > 1) {
-                // 冲突以空间创建者标注（维度由创建者的登记类集决定，对外 DTO 沿用 agentId 字段）
+                // 冲突以空间创建者标注（对外 DTO 沿用 agentId 字段，值取空间创建者）
                 List<AdminAiKnowledgeReembedConflictDto> conflicts = new ArrayList<>();
                 for (Map.Entry<Long, Integer> entry : dimensionsByBase.entrySet()) {
                     Long creatorId = creatorByBase.get(entry.getKey());
@@ -1102,8 +1103,8 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
                 classesComplete ? Boolean.TRUE : null);
     }
 
-    private List<AgentModelSelection> registeredClasses(long agentId) {
-        List<AgentModelSelection> classes = modelEntryService.embeddingClasses(agentId);
+    private List<AgentModelSelection> registeredClassesForSpace(long baseId) {
+        List<AgentModelSelection> classes = modelEntryService.embeddingClassesForSpace(baseId);
         return classes == null ? List.of() : classes;
     }
 
@@ -1127,7 +1128,7 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
 
     /**
      * 落库索引结果（定向更新四列，不动乐观锁 version）：INDEXED 时写 indexedAt、清 error，
-     * 并把 indexEmbeddingSpec 落为当次所有者分区已登记的嵌入类名（没有登记时写 NULL）；
+     * 并把 indexEmbeddingSpec 落为当次空间已登记的嵌入类名（没有登记时写 NULL）；
      * FAILED 时保留上次 indexedAt/indexEmbeddingSpec 只记 error；
      * PENDING（未在索引中）清 indexedAt/indexEmbeddingSpec 两者。
      * 同步更新内存实体，让本次请求的返回 DTO 立刻反映新状态。
@@ -1174,8 +1175,14 @@ public class AdminAiKnowledgeServiceImpl implements AdminAiKnowledgeService {
         long cacheKey = entity.getBaseId() != null
                 ? entity.getBaseId()
                 : ownerId == null ? 0L : -ownerId;
-        List<AgentModelSelection> current =
-                selectionCache.computeIfAbsent(cacheKey, key -> registeredClasses(ownerId));
+        // 类集按空间原生登记取（Issue #209 UoW-3）；无空间的存量行没有当前
+        // 类集可比，以空集比对：记有类名即 stale、未记则不 stale（与
+        // matchesStored 对空集的口径自洽）。
+        List<AgentModelSelection> current = selectionCache.computeIfAbsent(
+                cacheKey,
+                key -> entity.getBaseId() == null
+                        ? List.of()
+                        : registeredClassesForSpace(entity.getBaseId()));
         return !AgentEmbeddingClassUtils.matchesStored(entity.getIndexEmbeddingSpec(), current);
     }
 

@@ -2,9 +2,11 @@ package com.mywebsite.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mywebsite.agent.dto.AgentModelSelection;
+import com.mywebsite.agent.entity.AgentAiKnowledgeBaseEntity;
 import com.mywebsite.agent.entity.AgentAiModelEntryEntity;
 import com.mywebsite.agent.entity.AgentEmbeddingClassEntity;
 import com.mywebsite.agent.entity.AgentEmbeddingClassMaterializationEntity;
+import com.mywebsite.agent.mapper.AgentAiKnowledgeBaseMapper;
 import com.mywebsite.agent.mapper.AgentAiModelEntryMapper;
 import com.mywebsite.agent.mapper.AgentEmbeddingClassMapper;
 import com.mywebsite.agent.mapper.AgentEmbeddingClassMaterializationMapper;
@@ -27,14 +29,18 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 /**
- * 嵌入类登记读取与首次读物化（Issue #126 UoW-2）。
+ * 嵌入类登记读取与首次读物化（Issue #126 UoW-2；scope 于 Issue #209 UoW-3
+ * 由站点改知识空间）。
  *
  * <p>物化等价性：旧推算把站点与全站入口一次扫描、一次 dedupe（站点优先）；
  * 这里按 scope 分别物化（每 scope 内按旧扫描序——默认在前、id 升序——逐类取
- * 第一个能组装出凭证的入口为胜者），读取时再按站点行在前、全站行在后合并
- * dedupe。两侧的类集合与顺序逐字一致，包括 {@code google-gla:} 与
- * {@code google:} 跨 scope 撞类时站点胜出：全站 scope 照常物化自己的那一行，
- * 只是合并 dedupe 时被站点同名类压掉。
+ * 第一个能组装出凭证的入口为胜者），读取时再按空间行在前、全站行在后合并
+ * dedupe。空间 scope 的旧推算输入是该空间创建者的站点入口：UoW-3 前空间
+ * 文档经创建者的站点 scope 解析类集，V61 又把创建者的存量登记行扇出到其
+ * 每个空间，因此「读时物化（从创建者入口推算）」与「迁移扇出（复制创建者
+ * 登记行）」对同一空间给出同一类集，两种到达登记态的路径不互相矛盾。
+ * {@code google-gla:} 与 {@code google:} 跨 scope 撞类时空间胜出：全站 scope
+ * 照常物化自己的那一行，只是合并 dedupe 时被空间同名类压掉。
  */
 @Service
 public class AgentEmbeddingClassServiceImpl implements AgentEmbeddingClassService {
@@ -42,32 +48,35 @@ public class AgentEmbeddingClassServiceImpl implements AgentEmbeddingClassServic
     private static final Logger log = LoggerFactory.getLogger(AgentEmbeddingClassServiceImpl.class);
 
     private static final String GLOBAL_SCOPE_KEY = "GLOBAL";
-    private static final String AGENT_SCOPE_PREFIX = "AGENT:";
+    private static final String SPACE_SCOPE_PREFIX = "SPACE:";
 
     private final AgentEmbeddingClassMapper registrationMapper;
     private final AgentEmbeddingClassMaterializationMapper materializationMapper;
     private final AgentAiModelEntryMapper modelEntryMapper;
+    private final AgentAiKnowledgeBaseMapper knowledgeBaseMapper;
     private final ModelEntryCipher cipher;
 
     public AgentEmbeddingClassServiceImpl(
             AgentEmbeddingClassMapper registrationMapper,
             AgentEmbeddingClassMaterializationMapper materializationMapper,
             AgentAiModelEntryMapper modelEntryMapper,
+            AgentAiKnowledgeBaseMapper knowledgeBaseMapper,
             ModelEntryCipher cipher) {
         this.registrationMapper = registrationMapper;
         this.materializationMapper = materializationMapper;
         this.modelEntryMapper = modelEntryMapper;
+        this.knowledgeBaseMapper = knowledgeBaseMapper;
         this.cipher = cipher;
     }
 
     @Override
     @Transactional
-    public List<AgentModelSelection> embeddingClasses(long agentId) {
-        ensureMaterialized(agentId);
-        ensureMaterialized(null);
+    public List<AgentModelSelection> embeddingClassesForSpace(long baseId) {
+        ensureMaterializedForSpace(baseId);
+        ensureMaterializedGlobal();
 
         List<AgentEmbeddingClassEntity> rows = new ArrayList<>();
-        rows.addAll(selectScopeRows(agentId));
+        rows.addAll(selectScopeRows(baseId));
         rows.addAll(selectScopeRows(null));
         if (rows.isEmpty()) {
             return List.of();
@@ -90,17 +99,20 @@ public class AgentEmbeddingClassServiceImpl implements AgentEmbeddingClassServic
     /**
      * 该 scope 未物化过时，把旧推算在该 scope 的输出写成登记行并落 marker，
      * 与随后的读取同事务。marker 已存在则什么都不做——登记行（含被人工
-     * 删空的状态）就是唯一真相源。
+     * 删空的状态）就是唯一真相源。胜者推算经 {@code winnersSupplier} 惰性
+     * 求值：marker 已在时不扫入口、不解密，与 #126 原实现的短路口径一致。
      */
-    private void ensureMaterialized(Long agentId) {
-        String scopeKey = agentId == null ? GLOBAL_SCOPE_KEY : AGENT_SCOPE_PREFIX + agentId;
+    private void ensureMaterialized(
+            String scopeKey,
+            java.util.function.Supplier<List<AgentAiModelEntryEntity>> winnersSupplier,
+            Long rowBaseId) {
         if (materializationMapper.selectById(scopeKey) != null) {
             return;
         }
-        List<AgentAiModelEntryEntity> winners = legacyScopeWinners(agentId);
+        List<AgentAiModelEntryEntity> winners = winnersSupplier.get();
         for (int i = 0; i < winners.size(); i++) {
             AgentEmbeddingClassEntity row = new AgentEmbeddingClassEntity();
-            row.setAgentId(agentId);
+            row.setBaseId(rowBaseId);
             row.setEntryId(winners.get(i).getId());
             row.setEnabled(true);
             row.setSortOrder(i);
@@ -117,7 +129,32 @@ public class AgentEmbeddingClassServiceImpl implements AgentEmbeddingClassServic
     }
 
     /**
-     * 旧推算在单个 scope 内的胜者入口：按旧扫描序（默认在前、id 升序）遍历
+     * 空间 scope 的物化：旧推算输入是空间创建者的站点入口（见类注释的等价性
+     * 说明）。空间不存在或创建者为空时无可推算，仍落 marker 把该 scope 钉为
+     * 「已物化、无空间行」，避免每次读都重试解析。
+     */
+    private void ensureMaterializedForSpace(long baseId) {
+        ensureMaterialized(
+                SPACE_SCOPE_PREFIX + baseId,
+                () -> {
+                    Long creatorId = creatorOf(baseId);
+                    return creatorId == null ? List.of() : legacyScopeWinners(creatorId);
+                },
+                baseId);
+    }
+
+    /** 全站 scope 的物化：输入是全站入口（agent_id 为 NULL），与 #126 口径不变。 */
+    private void ensureMaterializedGlobal() {
+        ensureMaterialized(GLOBAL_SCOPE_KEY, () -> legacyScopeWinners(null), null);
+    }
+
+    private Long creatorOf(long baseId) {
+        AgentAiKnowledgeBaseEntity base = knowledgeBaseMapper.selectById(baseId);
+        return base == null ? null : base.getCreatedByAgentId();
+    }
+
+    /**
+     * 旧推算在单个入口 scope 内的胜者入口：按旧扫描序（默认在前、id 升序）遍历
      * 启用入口，只取 mode=KEY、{@code embeddingSpec} 非空且凭证能组装出的，
      * 按规范化类键保留第一个（＝旧 {@code appendEmbeddings}＋{@code dedupe}
      * 在该 scope 内的结果），上限与 dedupe 同为 {@code MAX_EMBEDDING_CLASSES}。
@@ -166,15 +203,15 @@ public class AgentEmbeddingClassServiceImpl implements AgentEmbeddingClassServic
     // ------------------------------------------------------------------
 
     /** 该 scope 启用的登记行：sort_order 升序、同序按 id 升序。 */
-    private List<AgentEmbeddingClassEntity> selectScopeRows(Long agentId) {
+    private List<AgentEmbeddingClassEntity> selectScopeRows(Long baseId) {
         LambdaQueryWrapper<AgentEmbeddingClassEntity> query = new LambdaQueryWrapper<AgentEmbeddingClassEntity>()
                 .eq(AgentEmbeddingClassEntity::getEnabled, true)
                 .orderByAsc(AgentEmbeddingClassEntity::getSortOrder)
                 .orderByAsc(AgentEmbeddingClassEntity::getId);
-        if (agentId == null) {
-            query.isNull(AgentEmbeddingClassEntity::getAgentId);
+        if (baseId == null) {
+            query.isNull(AgentEmbeddingClassEntity::getBaseId);
         } else {
-            query.eq(AgentEmbeddingClassEntity::getAgentId, agentId);
+            query.eq(AgentEmbeddingClassEntity::getBaseId, baseId);
         }
         List<AgentEmbeddingClassEntity> rows = registrationMapper.selectList(query);
         return rows == null ? List.of() : rows;

@@ -16,6 +16,7 @@ import { PERMISSION_CODES } from '@/types/rbac'
 import { isApiError } from '@/utils/http/apiError'
 
 import { AiAgentScope } from './aiAgentScope'
+import { EmbeddingRegistrationCard } from './embeddingRegistrationCard'
 
 export function AiKnowledgeBasesPage() {
   const { t } = useTranslation('aiAdmin')
@@ -117,6 +118,7 @@ function KnowledgeBasesAdminSection() {
   const { t } = useTranslation('aiAdmin')
   const queryClient = useQueryClient()
   const [linkTargets, setLinkTargets] = useState<Record<number, string>>({})
+  const [embeddingBaseId, setEmbeddingBaseId] = useState<number | null>(null)
   const basesQuery = useQuery({
     queryKey: ['ai-knowledge-bases-all'],
     queryFn: () => aiApi.listAllKnowledgeBases(),
@@ -156,6 +158,7 @@ function KnowledgeBasesAdminSection() {
   if (bases.length === 0) {
     return null
   }
+  const selectedBase = bases.find((base) => base.id === embeddingBaseId) ?? bases[0]
   return (
     <article className="mb-4 rounded-xl border border-admin bg-admin-surface p-5">
       <h2 className="text-sm font-semibold text-admin">{t('knowledgeBases.bases.title')}</h2>
@@ -245,6 +248,25 @@ function KnowledgeBasesAdminSection() {
             </div>
           )
         })}
+      </div>
+      <div className="mt-5 border-t border-admin pt-4">
+        <h3 className="text-sm font-semibold text-admin">{t('knowledgeBases.bases.embeddingTitle')}</h3>
+        <p className="mt-1 text-xs text-admin-muted">{t('knowledgeBases.bases.embeddingHint')}</p>
+        <select
+          className="mt-3 w-72 max-w-full rounded-lg border border-admin bg-admin-surface px-2 py-1.5 text-sm text-admin"
+          value={selectedBase.id}
+          onChange={(event) => setEmbeddingBaseId(Number(event.target.value))}
+          aria-label={t('knowledgeBases.bases.embeddingPick')}
+        >
+          {bases.map((base) => (
+            <option key={base.id} value={base.id}>
+              {base.name} · {t('knowledgeBases.bases.owner')} {base.ownerAgentName ?? `#${base.agentId}`}
+            </option>
+          ))}
+        </select>
+        <div className="mt-3">
+          <EmbeddingRegistrationCard key={selectedBase.id} baseId={selectedBase.id} />
+        </div>
       </div>
     </article>
   )

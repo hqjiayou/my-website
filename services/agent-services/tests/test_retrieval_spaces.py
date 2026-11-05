@@ -6,6 +6,12 @@
 - complete 差集清理按（空间, 文档）键，不误删另一空间的同源文档；
 - 存量列改名迁移（agent_id → base_id）对 fake conn 的幂等行为；
 - 整空间清理与已索引清单两个新内部端点。
+
+UoW-3 追加：嵌入类集按空间下发（spaces 取代请求级一份类集）。
+
+- 两空间登记不同类集时，各自只用自己的类集命中，串用即无命中；
+- search 端点把类集逐空间解析下发（全链）；
+- spaces 空/空白/缺失的拒绝口径与旧 baseIds 一致；同 id 空间去重保序。
 """
 
 from conftest import TOKEN_HEADER, make_settings
@@ -13,8 +19,9 @@ from fastapi.testclient import TestClient
 from test_retrieval import FakeEmbedder, FakeStore, _service
 
 from agent_services.app import create_app
-from agent_services.retrieval.service import EmbeddingClass
-from agent_services.retrieval.store import PgVectorRetrievalStore
+from agent_services.retrieval.service import EmbeddingClass, RetrievalSpace
+from agent_services.retrieval.store import PgVectorRetrievalStore, RetrievedChunk
+from agent_services.schemas.retrieval import RetrievalSearchRequest
 
 
 async def test_document_written_once_into_its_single_space() -> None:
@@ -28,7 +35,7 @@ async def test_document_written_once_into_its_single_space() -> None:
     assert list(store.docs) == [("10", "kb:1")]
     assert sum(len(chunks) for chunks in store.docs.values()) == 1
     # 两个 agent 都订阅空间 10 时，读路径仍是这一个空间——不会出现第二份。
-    hits = await service.retrieve_chunks(base_ids=["10"], query="alpha")
+    hits = await service.retrieve_chunks(spaces=[RetrievalSpace("10")], query="alpha")
     assert [(hit.source_id, hit.base_id) for hit in hits] == [("kb:1", "10")]
 
 
@@ -39,7 +46,9 @@ async def test_multi_space_retrieve_merges_by_rank_with_base_ids() -> None:
     await service.upsert_document(base_id="A", source_id="kb:2", title="t", content="alpha two")
     await service.upsert_document(base_id="B", source_id="kb:3", title="t", content="alpha three")
 
-    hits = await service.retrieve_chunks(base_ids=["A", "B"], query="alpha", top_k=4)
+    hits = await service.retrieve_chunks(
+        spaces=[RetrievalSpace("A"), RetrievalSpace("B")], query="alpha", top_k=4
+    )
     assert [hit.source_id for hit in hits] == ["kb:1", "kb:3", "kb:2"]
     assert [hit.base_id for hit in hits] == ["A", "B", "A"]
     # 跨空间不重复：每个（空间, 文档, 块）只出现一次。
@@ -72,12 +81,14 @@ async def test_multi_space_skips_hard_failed_space_and_degrades() -> None:
 
     service, _store = _service(OneBaseDown())
     await service.upsert_document(base_id="up", source_id="kb:1", title="t", content="alpha facts")
-    hits = await service.retrieve_chunks(base_ids=["down", "up"], query="alpha")
+    hits = await service.retrieve_chunks(
+        spaces=[RetrievalSpace("down"), RetrievalSpace("up")], query="alpha"
+    )
     assert [hit.source_id for hit in hits] == ["kb:1"]
     assert service.degraded is True
 
     # 全部空间硬失败：整次降级为空（与单空间失败同口径）。
-    hits = await service.retrieve_chunks(base_ids=["down"], query="alpha")
+    hits = await service.retrieve_chunks(spaces=[RetrievalSpace("down")], query="alpha")
     assert hits == []
     assert service.degraded is True
 
@@ -210,6 +221,170 @@ def test_base_delete_and_indexed_list_endpoints() -> None:
     hits = client.post(
         "/internal/v1/retrieval/search",
         headers=TOKEN_HEADER,
-        json={"baseIds": ["9"], "query": "alpha"},
+        json={"spaces": [{"baseId": "9"}], "query": "alpha"},
     )
     assert hits.json()["hits"] == []
+
+
+class _PerClassStore(FakeStore):
+    """按（空间, 类）记账的 store：向量 search 只回该空间该类名下写过的文档，
+    并记录每次向量检索实际用的 (base_id, embedding_model)。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.class_searches: list[tuple[str, str]] = []
+
+    async def search(self, *, base_id, embedding, top_k, embedding_model: str = ""):
+        self.class_searches.append((base_id, embedding_model))
+        results: list[RetrievedChunk] = []
+        for (sid, source_id), chunks in self.docs.items():
+            if sid != base_id:
+                continue
+            if embedding_model not in self.doc_models.get((sid, source_id), set()):
+                continue
+            for i, content in enumerate(chunks[:top_k]):
+                results.append(
+                    RetrievedChunk(
+                        source_id=source_id,
+                        chunk_index=i,
+                        content=content,
+                        score=0.9,
+                        base_id=base_id,
+                    )
+                )
+        return results[:top_k]
+
+
+async def test_each_space_searches_with_its_own_classes() -> None:
+    """UoW-3：空间 A 登记类 X、空间 B 登记类 Y，各自只用自己的类集命中。
+
+    A 的文档只有 X 类行、B 的文档只有 Y 类行：双空间检索双源命中，
+    且 store 侧断言每空间只被以自己的类名搜过；A 错用 Y 类集时无命中
+    （字面通道恒空），证明类集按空间隔离、没有串用。
+    """
+    service, store = _service(_PerClassStore())
+    class_x = EmbeddingClass("openai:x", FakeEmbedder())
+    class_y = EmbeddingClass("openai:y", FakeEmbedder())
+    await service.upsert_document(
+        base_id="A",
+        source_id="kb:1",
+        title="t",
+        content="alpha facts",
+        embedding_classes=[class_x],
+    )
+    await service.upsert_document(
+        base_id="B",
+        source_id="kb:2",
+        title="t",
+        content="alpha facts",
+        embedding_classes=[class_y],
+    )
+
+    hits = await service.retrieve_chunks(
+        spaces=[RetrievalSpace("A", [class_x]), RetrievalSpace("B", [class_y])],
+        query="alpha",
+    )
+    assert {(hit.base_id, hit.source_id) for hit in hits} == {("A", "kb:1"), ("B", "kb:2")}
+    assert sorted(store.class_searches) == [("A", "openai:x"), ("B", "openai:y")]
+
+    store.class_searches.clear()
+    hits = await service.retrieve_chunks(
+        spaces=[RetrievalSpace("A", [class_y])], query="alpha"
+    )
+    assert hits == []
+    assert store.class_searches == [("A", "openai:y")]
+
+
+def test_search_endpoint_applies_classes_per_space(monkeypatch) -> None:
+    """端点全链：spaces 里逐空间的 embeddingClasses 被各自解析下发。
+
+    A 的文档只有 X 类行、B 的文档只有 Y 类行；端点按空间下发类集后双源
+    命中，store 记录证明 A 只以 X 搜、B 只以 Y 搜。
+    """
+    service, store = _service(_PerClassStore())
+
+    def fake_create(*, spec: str, api_key: str | None, base_url: str | None, dimensions: int):
+        return FakeEmbedder(), None
+
+    monkeypatch.setattr(
+        "agent_services.api.internal.create_embedding_client_for", fake_create
+    )
+    client = TestClient(create_app(make_settings(), retrieval_service=service))
+    for base_id, source_id, spec in (("A", "kb:1", "openai:x"), ("B", "kb:2", "openai:y")):
+        created = client.put(
+            "/internal/v1/retrieval/documents",
+            headers=TOKEN_HEADER,
+            json={
+                "baseId": base_id,
+                "sourceId": source_id,
+                "title": "t",
+                "content": "alpha facts",
+                "embeddingClasses": [{"embeddingSpec": spec, "apiKey": "k"}],
+            },
+        )
+        assert created.status_code == 200
+    store.class_searches.clear()
+    response = client.post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={
+            "spaces": [
+                {"baseId": "A", "embeddingClasses": [{"embeddingSpec": "openai:x", "apiKey": "ka"}]},
+                {"baseId": "B", "embeddingClasses": [{"embeddingSpec": "openai:y", "apiKey": "kb"}]},
+            ],
+            "query": "alpha",
+        },
+    )
+    assert response.status_code == 200
+    hits = response.json()["hits"]
+    assert {(hit["baseId"], hit["sourceId"]) for hit in hits} == {
+        ("A", "kb:1"),
+        ("B", "kb:2"),
+    }
+    assert sorted(store.class_searches) == [("A", "openai:x"), ("B", "openai:y")]
+
+
+async def test_empty_spaces_retrieve_returns_nothing() -> None:
+    service, _store = _service()
+    assert await service.retrieve_chunks(spaces=[], query="alpha") == []
+    # 空白 id 在服务层同样被丢弃：结果为空而不是报错、也不置降级。
+    assert await service.retrieve_chunks(spaces=[RetrievalSpace("  ")], query="alpha") == []
+    assert service.degraded is False
+
+
+def test_search_request_dedupes_spaces_by_base_id() -> None:
+    body = RetrievalSearchRequest.model_validate(
+        {
+            "spaces": [{"baseId": " 9 "}, {"baseId": "9"}, {"baseId": "7"}],
+            "query": "q",
+        }
+    )
+    assert [space.base_id for space in body.spaces] == ["9", "7"]
+
+
+def test_search_endpoint_rejects_empty_or_blank_spaces() -> None:
+    service, _store = _service()
+    client = TestClient(create_app(make_settings(), retrieval_service=service))
+    empty = client.post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"spaces": [], "query": "alpha"},
+    )
+    assert empty.status_code == 400
+    assert empty.json()["errorCode"] == "BAD_REQUEST"
+    # 空白 baseId 被 schema 归一化丢弃，归一化后为空集，同口径 400。
+    blank = client.post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"spaces": [{"baseId": "  "}], "query": "alpha"},
+    )
+    assert blank.status_code == 400
+    assert blank.json()["errorCode"] == "BAD_REQUEST"
+    # 缺 spaces 字段：校验错误，与旧缺 baseIds 时同为 400 BAD_REQUEST。
+    missing = client.post(
+        "/internal/v1/retrieval/search",
+        headers=TOKEN_HEADER,
+        json={"query": "alpha"},
+    )
+    assert missing.status_code == 400
+    assert missing.json()["errorCode"] == "BAD_REQUEST"

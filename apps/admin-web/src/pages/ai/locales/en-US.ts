@@ -63,10 +63,10 @@ export default {
     chainModeEmpty: 'No default entry configured for this mode; unavailable in the Portal.',
     embeddingRegistration: {
       title: 'Embedding class registration',
-      descriptionSite:
-        'Knowledge vectors are indexed and searched per registered class; order is priority, at most 4 classes. This is the site registration: it wins over the global registration, which merges in as a fallback. A class comes from the embedding spec of the chosen API key entry, and the key stays on the entry — changing the key for the same spec needs no re-embedding.',
+      descriptionSpace:
+        'Knowledge vectors are indexed and searched per registered class; order is priority, at most 4 classes. This is the registration of this knowledge space: it wins over the global registration, which merges in as a fallback. A class comes from the embedding spec of the chosen API key entry, and the key stays on the entry — changing the key for the same spec needs no re-embedding.',
       descriptionGlobal:
-        'The global registration: agents without their own registration use this one. Knowledge vectors are indexed and searched per registered class; order is priority, at most 4 classes. A class comes from the embedding spec of the chosen API key entry, and the key stays on the entry — changing the key for the same spec needs no re-embedding.',
+        'The global registration: knowledge spaces without their own registration use this one. Knowledge vectors are indexed and searched per registered class; order is priority, at most 4 classes. A class comes from the embedding spec of the chosen API key entry, and the key stays on the entry — changing the key for the same spec needs no re-embedding.',
       empty: 'No embedding classes registered yet. Without any registration, knowledge vectors use the service embedding model.',
       loadError: 'The embedding class registration could not be loaded.',
       entryMissing: 'The registered entry was deleted',
@@ -82,7 +82,7 @@ export default {
       limitReached: 'At most 4 embedding classes can be registered.',
       duplicateClass: 'Class {{className}} is already registered: the same embedding spec can only be registered once (google-gla: and google: count as the same class).',
       orphanBlocksSave: 'Some registered entries were deleted. Remove those rows before saving.',
-      boundOther: 'bound to another agent',
+      boundOther: 'bound to an agent',
       reset: 'Discard changes',
       save: 'Save registration',
       saving: 'Saving…',
@@ -301,6 +301,10 @@ export default {
       unlink: 'Unshare',
       linked: 'Shared; documents synced to the target site',
       unlinked: 'Unshared; documents removed from the target site',
+      embeddingTitle: 'Embedding classes (per knowledge space)',
+      embeddingHint:
+        'Registration is kept per knowledge space: pick a space to edit its embedding classes. The space registration wins; the global registration (kept on the AI settings page) merges in as a fallback.',
+      embeddingPick: 'Pick a knowledge space',
     },
     reembed: {
       action: 'Re-embed all knowledge',

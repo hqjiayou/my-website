@@ -109,10 +109,10 @@ class AdminAiKnowledgeServiceImplTest {
                 document(1L, 12L, AdminAiKnowledgeDocumentEntity.STATUS_DISABLED),
                 document(2L, 21L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE),
                 document(2L, 22L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
-        // 文档按空间分组（helper 口径：agent 1→空间 901、agent 2→空间 902），类集按空间创建者取
+        // 文档按空间分组（helper 口径：agent 1→空间 901、agent 2→空间 902），类集按空间原生登记取（stub 键为空间 id）
         when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L), base(902L, 2L)));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection));
-        when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of(selection));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection));
+        when(modelEntryService.embeddingClassesForSpace(902L)).thenReturn(List.of(selection));
         when(agentClient.prepareReembed(selection, false))
                 .thenReturn(new AgentReembedPrepareResult(3, 3, false));
 
@@ -137,8 +137,8 @@ class AdminAiKnowledgeServiceImplTest {
                 document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE),
                 document(2L, 21L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
         when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L), base(902L, 2L)));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(first));
-        when(modelEntryService.embeddingClasses(2L)).thenReturn(List.of(second));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(first));
+        when(modelEntryService.embeddingClassesForSpace(902L)).thenReturn(List.of(second));
         when(agentClient.prepareReembed(first, false)).thenReturn(new AgentReembedPrepareResult(3, 3, false));
         when(agentClient.prepareReembed(second, false))
                 .thenThrow(new AgentDimensionChangeRequiredException(4, 3));
@@ -158,7 +158,7 @@ class AdminAiKnowledgeServiceImplTest {
         when(knowledgeMapper.selectList(any()))
                 .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
         when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L)));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection));
         when(agentClient.prepareReembed(selection, false))
                 .thenThrow(new AgentDimensionChangeRequiredException(8, 3));
         when(agentClient.prepareReembed(selection, true))
@@ -182,7 +182,7 @@ class AdminAiKnowledgeServiceImplTest {
                 document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE),
                 document(1L, 22L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
         when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L)));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection));
         when(agentClient.prepareReembed(selection, false))
                 .thenReturn(new AgentReembedPrepareResult(3, 3, false));
         org.mockito.Mockito.doAnswer(invocation -> {
@@ -213,7 +213,7 @@ class AdminAiKnowledgeServiceImplTest {
         when(knowledgeMapper.selectList(any()))
                 .thenReturn(List.of(document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE)));
         when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L)));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection));
         when(agentClient.prepareReembed(selection, false))
                 .thenReturn(new AgentReembedPrepareResult(3, 3, false));
         org.mockito.Mockito.doThrow(new BusinessException(
@@ -433,7 +433,7 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
 
         service.reindexDocument(1L, 11L);
 
@@ -491,7 +491,7 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity refreshed = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         refreshed.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_INDEXED);
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(failed));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
         when(knowledgeMapper.selectById(11L)).thenReturn(refreshed);
         when(knowledgeMapper.update(any(), any())).thenReturn(1);
 
@@ -531,7 +531,7 @@ class AdminAiKnowledgeServiceImplTest {
         org.mockito.Mockito.lenient()
                 .when(subscriptionMapper.selectList(any()))
                 .thenReturn(List.of(link));
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(modelEntryService.embeddingClassesForSpace(9L)).thenReturn(List.of(selection("openai:embed-a")));
         when(knowledgeMapper.update(any(), any())).thenReturn(1);
 
         service.createDocument(
@@ -568,7 +568,7 @@ class AdminAiKnowledgeServiceImplTest {
         saved.setContent("c");
         saved.setStatus(AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         when(knowledgeMapper.selectById(any())).thenReturn(saved);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(modelEntryService.embeddingClassesForSpace(9L)).thenReturn(List.of(selection("openai:embed-a")));
         when(knowledgeMapper.update(any(), any())).thenReturn(1);
 
         var detail = service.createDocument(
@@ -600,7 +600,7 @@ class AdminAiKnowledgeServiceImplTest {
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(baseMapper.selectById(5L)).thenReturn(base);
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(modelEntryService.embeddingClassesForSpace(5L)).thenReturn(List.of(selection("openai:embed-a")));
 
         var detail = service.reindexDocument(1L, 11L);
 
@@ -873,7 +873,7 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
 
         var detail = service.reindexDocument(1L, 11L);
 
@@ -887,7 +887,7 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of());
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of());
 
         var detail = service.reindexDocument(1L, 11L);
 
@@ -901,7 +901,7 @@ class AdminAiKnowledgeServiceImplTest {
         AdminAiKnowledgeDocumentEntity doc = document(1L, 11L, AdminAiKnowledgeDocumentEntity.STATUS_ACTIVE);
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
 
         service.reindexDocument(1L, 11L);
         assertThat(doc.getIndexEmbeddingSpec()).isEqualTo("openai:embed-a");
@@ -948,7 +948,7 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexEmbeddingSpec("openai:embed-a");
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-b")));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-b")));
 
         assertThat(service.getDocument(1L, 11L).indexStale()).isTrue();
     }
@@ -960,7 +960,7 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexEmbeddingSpec("openai:embed-a");
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-a")));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-a")));
 
         assertThat(service.getDocument(1L, 11L).indexStale()).isFalse();
     }
@@ -973,7 +973,7 @@ class AdminAiKnowledgeServiceImplTest {
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
 
         assertThat(service.getDocument(1L, 11L).indexStale()).isFalse();
-        verify(modelEntryService, never()).embeddingClasses(anyLong());
+        verify(modelEntryService, never()).embeddingClassesForSpace(anyLong());
     }
 
     @Test
@@ -983,7 +983,7 @@ class AdminAiKnowledgeServiceImplTest {
         doc.setIndexEmbeddingSpec("openai:embed-a");
         when(adminAgentMapper.selectById(1L)).thenReturn(new com.mywebsite.admin.entity.AdminAgentEntity());
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-b")));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-b")));
 
         assertThat(service.getDocument(1L, 11L).indexStale()).isTrue();
 
@@ -1005,14 +1005,14 @@ class AdminAiKnowledgeServiceImplTest {
         failedDoc.setIndexStatus(AdminAiKnowledgeDocumentEntity.INDEX_STATUS_FAILED);
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(staleDoc, freshDoc, failedDoc));
         when(adminAgentMapper.selectList(any())).thenReturn(List.of());
-        when(modelEntryService.embeddingClasses(1L)).thenReturn(List.of(selection("openai:embed-b")));
+        when(modelEntryService.embeddingClassesForSpace(901L)).thenReturn(List.of(selection("openai:embed-b")));
 
         var overview = service.knowledgeOverview();
 
         // staleDoc 记录 embed-a、当前 selection 是 embed-b → stale；freshDoc 记录与当前一致 → 不 stale；
         // failedDoc 非 INDEXED，恒不计入。
         assertThat(overview.staleDocuments()).isEqualTo(1);
-        verify(modelEntryService, times(1)).embeddingClasses(1L);
+        verify(modelEntryService, times(1)).embeddingClassesForSpace(901L);
     }
 
     @Test
@@ -1024,7 +1024,7 @@ class AdminAiKnowledgeServiceImplTest {
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
         doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
                 .when(modelEntryService)
-                .embeddingClasses(1L);
+                .embeddingClassesForSpace(901L);
 
         assertThat(service.getDocument(1L, 11L).indexStale()).isTrue();
     }
@@ -1038,7 +1038,7 @@ class AdminAiKnowledgeServiceImplTest {
         when(knowledgeMapper.selectById(11L)).thenReturn(doc);
         doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
                 .when(modelEntryService)
-                .embeddingClasses(1L);
+                .embeddingClassesForSpace(901L);
 
         var detail = service.reindexDocument(1L, 11L);
 
@@ -1062,7 +1062,7 @@ class AdminAiKnowledgeServiceImplTest {
         when(knowledgeMapper.updateById(any(AdminAiKnowledgeDocumentEntity.class))).thenReturn(1);
         doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
                 .when(modelEntryService)
-                .embeddingClasses(1L);
+                .embeddingClassesForSpace(901L);
 
         service.updateDocument(
                 1L,
@@ -1087,7 +1087,7 @@ class AdminAiKnowledgeServiceImplTest {
         when(baseMapper.selectList(any())).thenReturn(List.of(base(901L, 1L)));
         doReturn(List.of(selection("openai:embed-a"), selection("openai:embed-b")))
                 .when(modelEntryService)
-                .embeddingClasses(1L);
+                .embeddingClassesForSpace(901L);
 
         var result = service.reembedAll();
 

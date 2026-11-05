@@ -27,6 +27,7 @@ from agent_services.agent.subagent import (
 from agent_services.agent.todo_tools import TodoStore, build_todo_toolset
 from agent_services.agent.toolset_factory import build_execution_toolsets
 from agent_services.agent.weather_tools import build_weather_toolset
+from agent_services.retrieval.service import RetrievalSpace
 from agent_services.retrieval.store import RetrievedChunk
 from agent_services.schemas.stream import AgentStreamEventType
 
@@ -37,8 +38,8 @@ class _FakeRetrieval:
         self.degraded = False
         self._content = content
 
-    async def retrieve_chunks(self, *, base_ids: list[str], query: str, **_kwargs: object) -> list[RetrievedChunk]:
-        self.calls.append((list(base_ids), query))
+    async def retrieve_chunks(self, *, spaces: list[RetrievalSpace], query: str, **_kwargs: object) -> list[RetrievedChunk]:
+        self.calls.append(([space.base_id for space in spaces], query))
         return [RetrievedChunk(source_id="kb:1", chunk_index=2, content=self._content, score=0.9)]
 
 

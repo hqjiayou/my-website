@@ -85,22 +85,22 @@ class AdminAiModelEntryServiceImplTest {
     // 这里只钉委托本身（顺序即登记序，消费方取首元的口径在知识服务侧钉死）。
     // 单值接口 embeddingSelection 已于 UoW-5 退役删除。
     @Test
-    void embeddingClassesDelegateToRegistrationService() {
+    void embeddingClassesForSpaceDelegateToRegistrationService() {
         List<AgentModelSelection> registered =
                 List.of(
                         new AgentModelSelection(
                                 "google:gemini-3-flash-preview", "key-5", null, "google:gemini-embedding-001"),
                         new AgentModelSelection("openai:chat", "key-9", null, "openai:text-embedding-3-small"));
-        when(embeddingClassService.embeddingClasses(10L)).thenReturn(registered);
+        when(embeddingClassService.embeddingClassesForSpace(10L)).thenReturn(registered);
 
-        assertThat(service.embeddingClasses(10L)).isSameAs(registered);
+        assertThat(service.embeddingClassesForSpace(10L)).isSameAs(registered);
     }
 
     @Test
-    void embeddingClassesIsEmptyWhenNoRegisteredClasses() {
-        when(embeddingClassService.embeddingClasses(10L)).thenReturn(List.of());
+    void embeddingClassesForSpaceIsEmptyWhenNoRegisteredClasses() {
+        when(embeddingClassService.embeddingClassesForSpace(10L)).thenReturn(List.of());
 
-        assertThat(service.embeddingClasses(10L)).isEmpty();
+        assertThat(service.embeddingClassesForSpace(10L)).isEmpty();
     }
 
     @Test

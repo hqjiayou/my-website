@@ -1,7 +1,9 @@
 """agent_retrieval 派生索引同步契约（Java AgentRetrievalDocument 对应）。
 
 分区键是知识空间 baseId（Issue #209 UoW-2 起取代 agentId）：文档只属一个
-空间、只写一份；检索请求带空间集 baseIds，跨空间由服务层按名次合并。
+空间、只写一份；检索请求带空间集 spaces，跨空间由服务层按名次合并。
+嵌入登记是空间级的（UoW-3 起）：类集随每个空间下发，不再有请求级的一份
+类集套给所有空间。
 """
 
 from pydantic import BaseModel, Field, field_validator
@@ -82,39 +84,19 @@ class RetrievalUpsertRequest(BaseModel):
         return limit_embedding_class_specs(value)
 
 
-class RetrievalSearchRequest(BaseModel):
-    """POST /internal/v1/retrieval/search。
+class RetrievalSearchSpace(BaseModel):
+    """一次检索中的一个知识空间（Issue #209 UoW-3）。
 
-    query 上限与文档 content 相同（MAX_CONTENT_LENGTH），避免一次检索塞进整库正文。
-    topK 缺省为 RetrievalService 的 DEFAULT_TOP_K；大于 20 时夹制到 20。
+    embeddingClasses 是该空间登记的嵌入类集；省略/为空表示该空间未单独登记，
+    检索时落请求级 embeddingSpec 嵌入器、再落进程默认类。
     """
 
-    base_ids: list[str] = Field(alias="baseIds", max_length=MAX_SEARCH_BASES)
-    query: str = Field(max_length=MAX_CONTENT_LENGTH)
-    top_k: int = Field(default=DEFAULT_TOP_K, alias="topK")
-    embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
-    api_key: str | None = Field(default=None, alias="apiKey", max_length=4096)
-    base_url: str | None = Field(default=None, alias="baseUrl", max_length=512)
+    base_id: str = Field(alias="baseId", max_length=MAX_BASE_ID_LENGTH)
     embedding_classes: list[EmbeddingClassCredentials] | None = Field(
         default=None, alias="embeddingClasses"
     )
-    # 与 chat 的 model 同一形状。Java 知识检索目前只带 embedding 凭证，缺省时 rerank 用进程 AI_MODEL。
-    model_selection: ModelSelection | None = Field(default=None, alias="model")
 
     model_config = {"populate_by_name": True}
-
-    @field_validator("base_ids")
-    @classmethod
-    def normalize_base_ids(cls, value: list[str]) -> list[str]:
-        """去空白、去重、保序。空集是否拒绝由端点按旧 agentId 口径回 400。"""
-        normalized: list[str] = []
-        seen: set[str] = set()
-        for item in value:
-            base_id = item.strip()
-            if base_id and base_id not in seen:
-                seen.add(base_id)
-                normalized.append(base_id)
-        return normalized
 
     @field_validator("embedding_classes")
     @classmethod
@@ -122,6 +104,42 @@ class RetrievalSearchRequest(BaseModel):
         cls, value: list[EmbeddingClassCredentials] | None
     ) -> list[EmbeddingClassCredentials] | None:
         return limit_embedding_class_specs(value)
+
+
+class RetrievalSearchRequest(BaseModel):
+    """POST /internal/v1/retrieval/search。
+
+    query 上限与文档 content 相同（MAX_CONTENT_LENGTH），避免一次检索塞进整库正文。
+    topK 缺省为 RetrievalService 的 DEFAULT_TOP_K；大于 20 时夹制到 20。
+    embeddingSpec/apiKey/baseUrl 是请求级兜底凭证，只给未带类集的空间用。
+    """
+
+    spaces: list[RetrievalSearchSpace] = Field(max_length=MAX_SEARCH_BASES)
+    query: str = Field(max_length=MAX_CONTENT_LENGTH)
+    top_k: int = Field(default=DEFAULT_TOP_K, alias="topK")
+    embedding_spec: str | None = Field(default=None, alias="embeddingSpec", max_length=256)
+    api_key: str | None = Field(default=None, alias="apiKey", max_length=4096)
+    base_url: str | None = Field(default=None, alias="baseUrl", max_length=512)
+    # 与 chat 的 model 同一形状。Java 知识检索目前只带 embedding 凭证，缺省时 rerank 用进程 AI_MODEL。
+    model_selection: ModelSelection | None = Field(default=None, alias="model")
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("spaces")
+    @classmethod
+    def normalize_spaces(cls, value: list[RetrievalSearchSpace]) -> list[RetrievalSearchSpace]:
+        """baseId 去空白、按 baseId 去重、保序；空白 id 的空间丢弃。
+
+        空集是否拒绝由端点回 400（与旧 baseIds 口径一致）。
+        """
+        normalized: list[RetrievalSearchSpace] = []
+        seen: set[str] = set()
+        for item in value:
+            base_id = item.base_id.strip()
+            if base_id and base_id not in seen:
+                seen.add(base_id)
+                normalized.append(item.model_copy(update={"base_id": base_id}))
+        return normalized
 
     @field_validator("top_k")
     @classmethod

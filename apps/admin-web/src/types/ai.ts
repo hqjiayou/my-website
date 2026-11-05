@@ -129,7 +129,7 @@ export interface AiModelEntryWriteInput {
  */
 export interface AiEmbeddingClass {
   id: number
-  agentId: number | null
+  baseId: number | null
   entryId: number
   entryDisplayName: string | null
   embeddingSpec: string | null

@@ -152,9 +152,9 @@ export const aiApi = {
       .then(unwrapVoid)
   },
 
-  /** 嵌入类登记（Issue #126）：agentId 省略＝全站 scope；行内 spec/类键由服务端从入口解析。 */
-  listEmbeddingClasses(agentId?: number): Promise<AiEmbeddingClass[]> {
-    const qs = toQueryString({ agentId })
+  /** 嵌入类登记（Issue #126；scope 于 Issue #209 UoW-3 改知识空间）：baseId 省略＝全站 scope；行内 spec/类键由服务端从入口解析。 */
+  listEmbeddingClasses(baseId?: number): Promise<AiEmbeddingClass[]> {
+    const qs = toQueryString({ baseId })
     return httpClient
       .get<HttpMessageBody<AiEmbeddingClass[]>>(`/admin/ai/embedding-classes${qs}`)
       .then(unwrapData)
@@ -162,10 +162,10 @@ export const aiApi = {
 
   /** 整表保存：有序 items 整体替换该 scope 的登记，空列表＝清空。 */
   replaceEmbeddingClasses(
-    agentId: number | undefined,
+    baseId: number | undefined,
     items: AiEmbeddingClassSaveItem[],
   ): Promise<AiEmbeddingClass[]> {
-    const qs = toQueryString({ agentId })
+    const qs = toQueryString({ baseId })
     return httpClient
       .put<HttpMessageBody<AiEmbeddingClass[]>, { items: AiEmbeddingClassSaveItem[] }>(
         `/admin/ai/embedding-classes${qs}`,

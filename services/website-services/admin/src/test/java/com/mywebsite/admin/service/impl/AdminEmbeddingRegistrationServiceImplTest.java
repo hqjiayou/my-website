@@ -9,9 +9,9 @@ import static org.mockito.Mockito.when;
 
 import com.mywebsite.admin.dto.AdminEmbeddingClassDtos.AdminEmbeddingClassDto;
 import com.mywebsite.admin.dto.AdminEmbeddingClassDtos.AdminEmbeddingClassSaveRequest;
-import com.mywebsite.admin.entity.AdminAgentEntity;
+import com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
-import com.mywebsite.admin.mapper.AdminAgentMapper;
+import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.agent.entity.AgentEmbeddingClassEntity;
 import com.mywebsite.agent.mapper.AgentEmbeddingClassMapper;
@@ -33,7 +33,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>登记 Mapper 用内存假实现驱动（insert/delete/selectList 作用于同一份列表），
  * 使「保存后再读」的往返断言成立；scope 过滤本身由 wrapper 表达，假实现按
- * agent_id 字段模拟同一过滤口径。
+ * base_id 字段模拟同一过滤口径。
  */
 class AdminEmbeddingRegistrationServiceImplTest {
 
@@ -58,14 +58,14 @@ class AdminEmbeddingRegistrationServiceImplTest {
                     invocation.getArgument(0);
             java.util.stream.Stream<AgentEmbeddingClassEntity> stream = store.stream();
             if (wrapper.getSqlSegment().contains("IS NULL")) {
-                stream = stream.filter(row -> row.getAgentId() == null);
+                stream = stream.filter(row -> row.getBaseId() == null);
             } else {
-                Long agentIdParam = wrapper.getParamNameValuePairs().values().stream()
+                Long baseIdParam = wrapper.getParamNameValuePairs().values().stream()
                         .filter(Long.class::isInstance)
                         .map(Long.class::cast)
                         .findFirst()
                         .orElse(null);
-                stream = stream.filter(row -> agentIdParam != null && agentIdParam.equals(row.getAgentId()));
+                stream = stream.filter(row -> baseIdParam != null && baseIdParam.equals(row.getBaseId()));
             }
             return stream.sorted(Comparator.comparing(AgentEmbeddingClassEntity::getSortOrder)
                             .thenComparing(AgentEmbeddingClassEntity::getId))
@@ -92,14 +92,15 @@ class AdminEmbeddingRegistrationServiceImplTest {
             return ids.stream().map(entries::get).filter(java.util.Objects::nonNull).toList();
         });
 
-        AdminAgentMapper adminAgentMapper = mock(AdminAgentMapper.class);
-        when(adminAgentMapper.selectById(anyLong())).thenAnswer(invocation -> {
-            AdminAgentEntity agent = new AdminAgentEntity();
-            agent.setId(invocation.getArgument(0));
-            return agent;
+        AdminAiKnowledgeBaseMapper knowledgeBaseMapper = mock(AdminAiKnowledgeBaseMapper.class);
+        when(knowledgeBaseMapper.selectById(anyLong())).thenAnswer(invocation -> {
+            AdminAiKnowledgeBaseEntity base = new AdminAiKnowledgeBaseEntity();
+            base.setId(invocation.getArgument(0));
+            return base;
         });
 
-        service = new AdminEmbeddingRegistrationServiceImpl(registrationMapper, modelEntryMapper, adminAgentMapper);
+        service = new AdminEmbeddingRegistrationServiceImpl(
+                registrationMapper, modelEntryMapper, knowledgeBaseMapper);
     }
 
     private AdminAiModelEntryEntity entry(long id, String mode, String embeddingSpec) {
@@ -222,19 +223,38 @@ class AdminEmbeddingRegistrationServiceImplTest {
     }
 
     @Test
-    void listOfGlobalScopeAndSiteScopeAreSeparateRows() {
+    void listOfGlobalScopeAndSpaceScopeAreSeparateRows() {
         entry(1L, "KEY", "openai:a");
         entry(2L, "KEY", "openai:b");
         service.replaceRegistrations(null, save(1L));
         service.replaceRegistrations(9L, save(2L));
-        // 两 scope 互不影响：各读各的，行上的 agent_id 如实落 scope。
+        // 两 scope 互不影响：各读各的，行上的 base_id 如实落 scope。
         assertThat(service.listRegistrations(null))
                 .extracting(AdminEmbeddingClassDto::entryId)
                 .containsExactly(1L);
         assertThat(service.listRegistrations(9L))
                 .extracting(AdminEmbeddingClassDto::entryId)
                 .containsExactly(2L);
-        assertThat(store).extracting(AgentEmbeddingClassEntity::getAgentId).containsExactly(null, 9L);
+        assertThat(store).extracting(AgentEmbeddingClassEntity::getBaseId).containsExactly(null, 9L);
+    }
+
+    @Test
+    void listRejectsUnknownKnowledgeBase() {
+        // scope 指向不存在的空间时 404；全站 scope（null）不做存在性校验。
+        AdminAiKnowledgeBaseMapper emptyBaseMapper = mock(AdminAiKnowledgeBaseMapper.class);
+        when(emptyBaseMapper.selectById(anyLong())).thenReturn(null);
+        AdminEmbeddingRegistrationServiceImpl strictService = new AdminEmbeddingRegistrationServiceImpl(
+                mock(AgentEmbeddingClassMapper.class),
+                mock(AdminAiModelEntryMapper.class),
+                emptyBaseMapper);
+        assertThatThrownBy(() -> strictService.listRegistrations(404L))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
+        assertThatThrownBy(() -> strictService.replaceRegistrations(404L, save()))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
     }
 
     @Test
