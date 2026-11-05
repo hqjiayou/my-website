@@ -8,10 +8,13 @@ import { toast } from 'sonner'
 import {
   MEDIA_ACCEPT,
   MEDIA_ALLOWED_CONTENT_TYPES,
+  MEDIA_SCOPE,
   MEDIA_STATUS,
   mediaApi,
   type MediaListItem,
   type MediaListQuery,
+  type MediaListView,
+  type MediaScope,
 } from '@/api'
 import { DataTable, type DataTableColumn } from '@/components/admin'
 import { cn } from '@/lib/cn'
@@ -43,7 +46,13 @@ export function AgentFilesPage() {
   const canDownload = useHasPermission(PERMISSION_CODES.mediaDownload)
   const canDelete = useHasPermission(PERMISSION_CODES.mediaDelete)
 
-  const [filters, setFilters] = useState<MediaListQuery>({ pageNum: 1, pageSize: 20 })
+  const [view, setView] = useState<MediaListView>('library')
+  const [filters, setFilters] = useState<MediaListQuery>({ pageNum: 1, pageSize: 20, view: 'library' })
+
+  function switchView(next: MediaListView) {
+    setView(next)
+    setFilters((prev) => ({ ...prev, pageNum: 1, view: next }))
+  }
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['sites', site.id, 'media', filters],
@@ -84,6 +93,34 @@ export function AgentFilesPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
+  const referenceMutation = useMutation({
+    mutationFn: (id: number) => mediaApi.referenceMedia(site.id, id),
+    onSuccess: () => {
+      toast.success(t('filesManagement.messages.referenced'))
+      void queryClient.invalidateQueries({ queryKey: ['sites', site.id, 'media'] })
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  const unreferenceMutation = useMutation({
+    mutationFn: (id: number) => mediaApi.unreferenceMedia(site.id, id),
+    onSuccess: () => {
+      toast.success(t('filesManagement.messages.unreferenced'))
+      void queryClient.invalidateQueries({ queryKey: ['sites', site.id, 'media'] })
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  const scopeMutation = useMutation({
+    mutationFn: ({ id, scope }: { id: number; scope: MediaScope }) =>
+      mediaApi.setMediaScope(site.id, id, scope),
+    onSuccess: () => {
+      toast.success(t('filesManagement.messages.scopeUpdated'))
+      void queryClient.invalidateQueries({ queryKey: ['sites', site.id, 'media'] })
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
   function onPickFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
@@ -106,7 +143,15 @@ export function AgentFilesPage() {
         cell: (item) => (
           <div>
             <p className="font-medium text-foreground">{item.originalFilename}</p>
-            <p className="mt-1 text-xs text-muted-foreground">#{item.id}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              #{item.id}
+              {item.scope === MEDIA_SCOPE.PLATFORM ? ` · ${t('filesManagement.scope.platform')}` : ''}
+            </p>
+            {item.agentId !== site.id ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t('filesManagement.source.fromAgent', { agentId: item.agentId })}
+              </p>
+            ) : null}
           </div>
         ),
       },
@@ -142,44 +187,95 @@ export function AgentFilesPage() {
       {
         id: 'actions',
         header: t('filesManagement.columns.actions'),
-        cell: (item) => (
-          <div className="flex flex-wrap gap-2">
-            {canDownload ? (
-              <button
-                type="button"
-                disabled={item.status !== MEDIA_STATUS.READY || previewMutation.isPending}
-                onClick={() => previewMutation.mutate(item.id)}
-                className="rounded-md border border-primary/35 bg-info-muted px-2.5 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {t('filesManagement.actions.preview')}
-              </button>
-            ) : null}
-            {canDelete ? (
-              <button
-                type="button"
-                disabled={deleteMutation.isPending}
-                onClick={() => {
-                  if (
-                    !window.confirm(
-                      t('filesManagement.messages.confirmDelete', {
-                        name: item.originalFilename,
-                      }),
-                    )
-                  ) {
-                    return
+        cell: (item) => {
+          const own = item.agentId === site.id
+          return (
+            <div className="flex flex-wrap gap-2">
+              {canDownload ? (
+                <button
+                  type="button"
+                  disabled={item.status !== MEDIA_STATUS.READY || previewMutation.isPending}
+                  onClick={() => previewMutation.mutate(item.id)}
+                  className="rounded-md border border-primary/35 bg-info-muted px-2.5 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t('filesManagement.actions.preview')}
+                </button>
+              ) : null}
+              {canDelete && !own && !item.referenced ? (
+                <button
+                  type="button"
+                  disabled={referenceMutation.isPending}
+                  onClick={() => referenceMutation.mutate(item.id)}
+                  className="rounded-md border border-primary/35 px-2.5 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t('filesManagement.actions.reference')}
+                </button>
+              ) : null}
+              {canDelete && !own && item.referenced ? (
+                <button
+                  type="button"
+                  disabled={unreferenceMutation.isPending}
+                  onClick={() => unreferenceMutation.mutate(item.id)}
+                  className="rounded-md border border-warning/35 px-2.5 py-1.5 text-xs font-medium text-warning-emphasis transition hover:bg-warning-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t('filesManagement.actions.unreference')}
+                </button>
+              ) : null}
+              {canDelete && own ? (
+                <button
+                  type="button"
+                  disabled={scopeMutation.isPending}
+                  onClick={() =>
+                    scopeMutation.mutate({
+                      id: item.id,
+                      scope:
+                        item.scope === MEDIA_SCOPE.PLATFORM ? MEDIA_SCOPE.AGENT : MEDIA_SCOPE.PLATFORM,
+                    })
                   }
-                  deleteMutation.mutate(item.id)
-                }}
-                className="rounded-md border border-danger/35 px-2.5 py-1.5 text-xs font-medium text-danger-emphasis transition hover:bg-danger-muted disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {t('filesManagement.actions.delete')}
-              </button>
-            ) : null}
-          </div>
-        ),
+                  className="rounded-md border border-primary/35 px-2.5 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {item.scope === MEDIA_SCOPE.PLATFORM
+                    ? t('filesManagement.actions.setScopeAgent')
+                    : t('filesManagement.actions.setScopePlatform')}
+                </button>
+              ) : null}
+              {canDelete && own ? (
+                <button
+                  type="button"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        t('filesManagement.messages.confirmDelete', {
+                          name: item.originalFilename,
+                        }),
+                      )
+                    ) {
+                      return
+                    }
+                    deleteMutation.mutate(item.id)
+                  }}
+                  className="rounded-md border border-danger/35 px-2.5 py-1.5 text-xs font-medium text-danger-emphasis transition hover:bg-danger-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t('filesManagement.actions.delete')}
+                </button>
+              ) : null}
+            </div>
+          )
+        },
       },
     ],
-    [canDelete, canDownload, deleteMutation, previewMutation, t],
+    [
+      canDelete,
+      canDownload,
+      deleteMutation,
+      previewMutation,
+      referenceMutation,
+      scopeMutation,
+      site.id,
+      t,
+      unreferenceMutation,
+    ],
   )
 
   return (
@@ -216,6 +312,24 @@ export function AgentFilesPage() {
             </button>
           </>
         </PermissionGate>
+      </div>
+
+      <div className="mb-3 flex flex-wrap gap-2">
+        {(['library', 'platform'] as MediaListView[]).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => switchView(v)}
+            className={cn(
+              'rounded-md border px-3 py-1.5 text-xs font-medium transition',
+              view === v
+                ? 'border-primary/40 bg-primary/10 text-primary'
+                : 'border-border bg-background text-muted-foreground hover:bg-muted',
+            )}
+          >
+            {t(`filesManagement.views.${v}`)}
+          </button>
+        ))}
       </div>
 
       <DataTable

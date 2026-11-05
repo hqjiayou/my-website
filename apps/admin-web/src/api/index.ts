@@ -27,6 +27,7 @@ export {
   mediaApi,
   MEDIA_ACCEPT,
   MEDIA_ALLOWED_CONTENT_TYPES,
+  MEDIA_SCOPE,
   MEDIA_STATUS,
   MEDIA_STATUS_VALUES,
 } from './apps/mediaApi'
@@ -51,7 +52,9 @@ export type {
   MediaDetail,
   MediaListItem,
   MediaListQuery,
+  MediaListView,
   MediaPreview,
+  MediaScope,
   MediaStatus,
 } from './apps/mediaApi'
 export type {

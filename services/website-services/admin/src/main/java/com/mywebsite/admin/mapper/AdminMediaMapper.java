@@ -1,6 +1,7 @@
 package com.mywebsite.admin.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mywebsite.admin.entity.AdminMediaEntity;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -12,6 +13,75 @@ import org.apache.ibatis.annotations.Update;
 /** 映射 {@code media_file}。 */
 @Mapper
 public interface AdminMediaMapper extends BaseMapper<AdminMediaEntity> {
+
+    /**
+     * 列表投影行：媒体列加 {@code referenced}（该行是否经 {@code media_reference} 引用可见，
+     * 而非来源站自有）。
+     */
+    record AdminMediaListRow(
+            Long id,
+            Long agentId,
+            String originalFilename,
+            String contentType,
+            String extension,
+            Long fileSize,
+            String status,
+            String scope,
+            OffsetDateTime createdAt,
+            OffsetDateTime updatedAt,
+            boolean referenced) {}
+
+    /**
+     * 本站库视图分页：来源站文件＋本站已引用文件，一条 SQL 分页（total 由分页拦截器同查）。
+     */
+    @Select(
+            """
+            <script>
+            SELECT m.id AS id, m.site_id AS agent_id, m.original_filename AS original_filename,
+                   m.content_type AS content_type, m.extension AS extension,
+                   m.file_size AS file_size, m.status AS status, m.scope AS scope,
+                   m.created_at AS created_at, m.updated_at AS updated_at,
+                   (m.site_id &lt;&gt; #{agentId}) AS referenced
+            FROM media_file m
+            WHERE m.deleted = FALSE
+              AND (m.site_id = #{agentId}
+                   OR EXISTS (SELECT 1 FROM media_reference r
+                              WHERE r.media_id = m.id AND r.agent_id = #{agentId}))
+              <if test="contentTypePrefix != null and contentTypePrefix != ''">
+              AND m.content_type LIKE CONCAT(#{contentTypePrefix}, '%')
+              </if>
+            ORDER BY m.id DESC
+            </script>
+            """)
+    Page<AdminMediaListRow> selectLibraryPage(
+            Page<AdminMediaListRow> page,
+            @Param("agentId") long agentId,
+            @Param("contentTypePrefix") String contentTypePrefix);
+
+    /** 平台库视图分页：全部 {@code scope='PLATFORM'} 文件；{@code referenced} 表示本站已引用。 */
+    @Select(
+            """
+            <script>
+            SELECT m.id AS id, m.site_id AS agent_id, m.original_filename AS original_filename,
+                   m.content_type AS content_type, m.extension AS extension,
+                   m.file_size AS file_size, m.status AS status, m.scope AS scope,
+                   m.created_at AS created_at, m.updated_at AS updated_at,
+                   EXISTS (SELECT 1 FROM media_reference r
+                           WHERE r.media_id = m.id AND r.agent_id = #{agentId}) AS referenced
+            FROM media_file m
+            WHERE m.deleted = FALSE
+              AND m.scope = 'PLATFORM'
+              <if test="contentTypePrefix != null and contentTypePrefix != ''">
+              AND m.content_type LIKE CONCAT(#{contentTypePrefix}, '%')
+              </if>
+            ORDER BY m.id DESC
+            </script>
+            """)
+    Page<AdminMediaListRow> selectPlatformPage(
+            Page<AdminMediaListRow> page,
+            @Param("agentId") long agentId,
+            @Param("contentTypePrefix") String contentTypePrefix);
+
 
     /**
      * Orphan 扫尾：绕过 {@code @TableLogic}，包含已软删行与超时 FAILED/UPLOADING；

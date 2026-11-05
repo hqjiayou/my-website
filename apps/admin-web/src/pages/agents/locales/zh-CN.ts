@@ -349,6 +349,16 @@ export default {
   filesManagement: {
     description: '管理当前站点的媒体资源（jpeg / png / webp / pdf）。',
     empty: '暂无媒体文件',
+    views: {
+      library: '本站库',
+      platform: '平台库',
+    },
+    scope: {
+      platform: '平台可见',
+    },
+    source: {
+      fromAgent: '来源站点 #{{agentId}}',
+    },
     columns: {
       filename: '文件名',
       contentType: '类型',
@@ -367,6 +377,10 @@ export default {
       uploading: '上传中…',
       preview: '预览',
       delete: '删除',
+      reference: '引用',
+      unreference: '取消引用',
+      setScopePlatform: '设为平台可见',
+      setScopeAgent: '收回平台可见',
     },
     hints: {
       whitelist: '仅支持 jpeg、png、webp、pdf。',
@@ -378,6 +392,9 @@ export default {
       confirmDelete: '确定删除「{{name}}」？',
       invalidType: '不支持的文件类型，仅允许 jpeg / png / webp / pdf。',
       previewFailed: '无法获取预览链接',
+      referenced: '已引用到本站库',
+      unreferenced: '已取消引用',
+      scopeUpdated: '可见范围已更新',
     },
   },
   contentManagement: {

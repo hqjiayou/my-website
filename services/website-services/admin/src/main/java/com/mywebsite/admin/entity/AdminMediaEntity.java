@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.time.OffsetDateTime;
 
-/** 站点媒体元数据（表 {@code media_file}）。 */
+/** 平台媒体元数据（表 {@code media_file}）；{@code agentId}（site_id）为上传来源留痕，非归属。 */
 @TableName("media_file")
 public class AdminMediaEntity extends AbstractAuditableEntity {
 
@@ -20,6 +20,8 @@ public class AdminMediaEntity extends AbstractAuditableEntity {
     private Long fileSize;
     private String sha256;
     private String visibility;
+    /** 可见范围：AGENT=仅来源站与引用站可见 / PLATFORM=平台可见（V57）。 */
+    private String scope;
     private String status;
     /** 对象存储已清理时间；非空表示不再进入 orphan 候选。 */
     private OffsetDateTime objectPurgedAt;
@@ -94,6 +96,14 @@ public class AdminMediaEntity extends AbstractAuditableEntity {
 
     public void setVisibility(String visibility) {
         this.visibility = visibility;
+    }
+
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
     }
 
     public String getStatus() {
