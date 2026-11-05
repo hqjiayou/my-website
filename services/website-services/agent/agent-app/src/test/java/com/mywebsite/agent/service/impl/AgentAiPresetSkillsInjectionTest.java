@@ -14,8 +14,12 @@ import com.mywebsite.agent.dto.AgentPromptProfile;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.entity.AgentAiConversationEntity;
 import com.mywebsite.agent.entity.AgentAiModelEntryEntity;
+import com.mywebsite.agent.entity.AgentAiChainPresetEntity;
+import com.mywebsite.agent.entity.AgentEntity;
+import com.mywebsite.agent.mapper.AgentAiChainPresetMapper;
 import com.mywebsite.agent.mapper.AgentAiKnowledgeDocumentMapper;
 import com.mywebsite.agent.mapper.AgentAiModelEntryMapper;
+import com.mywebsite.agent.mapper.AgentMapper;
 import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.agent.service.AgentAiConversationService;
 import com.mywebsite.agent.service.AgentAiConversationService.ChatPreparation;
@@ -80,6 +84,12 @@ class AgentAiPresetSkillsInjectionTest {
     @Mock
     private ExecutorService agentAiStreamExecutor;
 
+    @Mock
+    private AgentMapper agentMapper;
+
+    @Mock
+    private AgentAiChainPresetMapper chainPresetMapper;
+
     private AgentAiServiceImpl service;
 
     @BeforeEach
@@ -99,7 +109,9 @@ class AgentAiPresetSkillsInjectionTest {
                 Mockito.mock(AgentUsageService.class),
                 Mockito.mock(AgentEmbeddingClassService.class),
                 Mockito.mock(AgentExperienceLessonService.class),
-                Mockito.mock(AgentMcpSelectionService.class));
+                Mockito.mock(AgentMcpSelectionService.class),
+                agentMapper,
+                chainPresetMapper);
         String subject = SubjectCodes.formatAgentUserSubject(200L);
         AuthContext.set(new AuthenticatedUser(TokenAudience.AGENT, subject, "u", 10L, Set.of()));
         when(rateLimitService.tryAcquire(10L, subject)).thenReturn(true);
@@ -119,7 +131,17 @@ class AgentAiPresetSkillsInjectionTest {
         globalDefault.setApiKey("enc:key-1");
         globalDefault.setEnabled(true);
         globalDefault.setDefaultEntry(true);
-        when(modelEntryMapper.selectList(any())).thenReturn(List.of(), List.of(globalDefault));
+        // #210 UoW-7 合并适配：组链改吃 agent 引用的对话链预设——agent 10 引用预设 501，
+        // 成员只有入口 1（即原全站默认），链与旧两层口径下等价。
+        AgentEntity chainAgent = new AgentEntity();
+        chainAgent.setId(10L);
+        chainAgent.setChainPresetId(501L);
+        when(agentMapper.selectById(10L)).thenReturn(chainAgent);
+        AgentAiChainPresetEntity chainPreset = new AgentAiChainPresetEntity();
+        chainPreset.setId(501L);
+        chainPreset.setEntryIds("[1]");
+        when(chainPresetMapper.selectById(501L)).thenReturn(chainPreset);
+        when(modelEntryMapper.selectBatchIds(any())).thenReturn(List.of(globalDefault));
         when(agentClient.chat(any()))
                 .thenReturn(new AgentChatResponse(
                         "reply", "77", "LIVE", List.of(), AgentRunMeta.EMPTY, List.of(), List.of()));
