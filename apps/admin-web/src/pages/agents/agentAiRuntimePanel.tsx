@@ -192,12 +192,12 @@ function McpSelectionSection({
   ]
 
   return (
-    <section className="mt-3 rounded-xl border border-border bg-card-muted/40 p-4">
+    <section className="mt-3 rounded-xl border border-admin bg-admin-surface p-4">
       <div className="mb-3 flex items-center gap-2">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-info-muted text-info-emphasis">
           <Wrench className="h-4 w-4" aria-hidden />
         </span>
-        <h3 className="text-sm font-semibold text-foreground">
+        <h3 className="text-sm font-semibold text-admin">
           {t('aiWorkspace.runtime.mcpSelection.title')}
         </h3>
       </div>
@@ -378,13 +378,13 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
     <div>
       {header}
       <div className="grid gap-3 md:grid-cols-2">
-        <section className="rounded-xl border border-border bg-card-muted/40 p-4">
+        <section className="rounded-xl border border-admin bg-admin-surface p-4">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Server className="h-4 w-4" aria-hidden />
             </span>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-foreground">{t('aiWorkspace.runtime.provider')}</h3>
+              <h3 className="text-sm font-semibold text-admin">{t('aiWorkspace.runtime.provider')}</h3>
               <p className="truncate font-mono text-xs text-muted-foreground">
                 {status.provider ? modelIdFromSpec(status.provider) : '—'}
               </p>
@@ -411,12 +411,12 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
           ) : null}
         </section>
 
-        <section className="rounded-xl border border-border bg-card-muted/40 p-4">
+        <section className="rounded-xl border border-admin bg-admin-surface p-4">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-info-muted text-info-emphasis">
               <Wrench className="h-4 w-4" aria-hidden />
             </span>
-            <h3 className="text-sm font-semibold text-foreground">MCP</h3>
+            <h3 className="text-sm font-semibold text-admin">MCP</h3>
             <span className={cn('ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium', mcpTone.chip)}>
               <span className={cn('h-1.5 w-1.5 rounded-full', mcpTone.dot)} aria-hidden />
               {status.mcpStatus ?? '—'}
@@ -448,12 +448,12 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
           <McpReadyProbe agentId={agentId} />
         </section>
 
-        <section className="rounded-xl border border-border bg-card-muted/40 p-4">
+        <section className="rounded-xl border border-admin bg-admin-surface p-4">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning-muted text-warning-emphasis">
               <Activity className="h-4 w-4" aria-hidden />
             </span>
-            <h3 className="text-sm font-semibold text-foreground">{t('aiWorkspace.runtime.limits.title')}</h3>
+            <h3 className="text-sm font-semibold text-admin">{t('aiWorkspace.runtime.limits.title')}</h3>
           </div>
           <div className="space-y-3">
             {LIMIT_KEYS.map((key) => (
@@ -467,12 +467,12 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
           </div>
         </section>
 
-        <section className="rounded-xl border border-border bg-card-muted/40 p-4">
+        <section className="rounded-xl border border-admin bg-admin-surface p-4">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-success-muted text-success-emphasis">
               <Sparkles className="h-4 w-4" aria-hidden />
             </span>
-            <h3 className="text-sm font-semibold text-foreground">{t('aiWorkspace.preview.skills.title')}</h3>
+            <h3 className="text-sm font-semibold text-admin">{t('aiWorkspace.preview.skills.title')}</h3>
             {skillsQuery.data ? (
               <span className="ml-auto rounded-md bg-card px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
                 {skillsQuery.data.length}

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Settings2, X } from 'lucide-react'
+import { Loader2, Settings2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
@@ -10,6 +10,7 @@ import { FormDialog } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFieldClass,
+  adminFilterFieldClass,
   adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
@@ -19,6 +20,8 @@ import { ROUTES } from '@/router/config/routePaths'
 import { PermissionGate } from '@/router/permission'
 import type { AiAgentPromptConfig } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
+
+import { SkillCatalogItem } from './agentAiSkillCatalog'
 
 type Draft = {
   systemPrompt: string
@@ -84,6 +87,8 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
     (draft.systemPrompt !== serverDraft.systemPrompt ||
       draft.temperature !== serverDraft.temperature ||
       draft.defaultSkillIds.join(',') !== serverDraft.defaultSkillIds.join(','))
+  // temperature 非法（非数或超出 0–2）走字段级错误：错误文字替换字段下帮助位，不再只弹 toast。
+  const temperatureInvalid = current != null && parseTemperature(current.temperature) === undefined
   const templates = templatesQuery.data ?? []
   const skillCatalog = skillsQuery.data ?? []
 
@@ -153,14 +158,14 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
     if (!current) return
     const temperatureValue = parseTemperature(current.temperature)
     if (temperatureValue === undefined) {
-      toast.error(t('prompts.temperatureInvalid'))
+      // 非法时字段下已显示错误文字（temperatureInvalid），此处只拦截提交。
       return
     }
     saveMutation.mutate({ ...current, temperatureValue })
   }
 
   if (configQuery.isPending) {
-    return <p className="text-sm text-muted-foreground">{tSites('aiWorkspace.loading')}</p>
+    return <p className="text-sm text-admin-muted">{tSites('aiWorkspace.loading')}</p>
   }
   if (configQuery.isError || !current || !server) {
     return (
@@ -175,19 +180,19 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-muted-foreground">{t('prompts.hint')}</p>
+      <p className="text-xs text-admin-muted">{t('prompts.hint')}</p>
 
       <div>
-        <p className="text-xs font-medium text-muted-foreground">{t('prompts.sourceLabel')}</p>
-        <p className="mt-1.5 text-sm text-foreground">
+        <p className="text-xs font-medium text-admin-muted">{t('prompts.sourceLabel')}</p>
+        <p className="mt-1.5 text-sm text-admin">
           {server.promptTemplateId == null
             ? t('prompts.sourceNone')
             : (server.promptTemplateName ?? `#${server.promptTemplateId}`)}
         </p>
       </div>
 
-      <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">{t('prompts.systemPrompt')}</span>
+      <label className="block space-y-1.5">
+        <span className="text-xs font-medium text-admin-muted">{t('prompts.systemPrompt')}</span>
         <textarea
           className={adminFieldClass}
           rows={8}
@@ -196,40 +201,50 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
           placeholder={t('prompts.systemPromptHint')}
           onChange={(event) => setDraft({ ...current, systemPrompt: event.target.value })}
         />
-        <span className="block text-right text-xs text-muted-foreground">
-          {current.systemPrompt.length} / 8000
+        <span className="flex items-baseline justify-between gap-2">
+          <span className="text-xs text-admin-muted">{t('prompts.systemPromptHint')}</span>
+          <span className="shrink-0 text-xs text-admin-muted">
+            {current.systemPrompt.length} / 8000
+          </span>
         </span>
       </label>
 
-      <label className="block space-y-1">
-        <span className="text-xs font-medium text-muted-foreground">{t('prompts.temperature')}</span>
+      <label className="block space-y-1.5">
+        <span className="text-xs font-medium text-admin-muted">{t('prompts.temperature')}</span>
         <input
-          className={adminFieldClass}
+          className={adminFilterFieldClass}
           type="number"
           min={0}
           max={2}
           step={0.1}
-          style={{ maxWidth: 200 }}
           value={current.temperature}
           placeholder={t('prompts.temperatureHint')}
+          aria-invalid={temperatureInvalid || undefined}
           onChange={(event) => setDraft({ ...current, temperature: event.target.value })}
         />
+        {temperatureInvalid ? (
+          <span className="block text-xs text-danger-emphasis">{t('prompts.temperatureInvalid')}</span>
+        ) : (
+          <span className="block text-xs text-admin-muted">{t('prompts.temperatureHint')}</span>
+        )}
       </label>
 
       <div className="space-y-2">
-        <span className="text-xs font-medium text-muted-foreground">{t('prompts.defaultSkills')}</span>
+        <span className="text-xs font-medium text-admin-muted">{t('prompts.defaultSkills')}</span>
         {current.defaultSkillIds.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('prompts.noSkills')}</p>
+          <p className="text-sm text-admin-muted">{t('prompts.noSkills')}</p>
         ) : (
           <ul className="flex flex-wrap gap-1.5">
             {current.defaultSkillIds.map((skillId) => (
               <li
                 key={skillId}
-                className="flex items-center gap-1 rounded bg-card-muted px-2 py-1 font-mono text-xs text-foreground"
+                className="admin-status-tag inline-flex items-center gap-1.5 rounded-full bg-admin-surface-muted px-2 text-xs font-medium text-admin"
               >
-                {skillId}
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-admin-muted-foreground" aria-hidden />
+                <span className="font-mono">{skillId}</span>
                 <button
                   type="button"
+                  className="admin-focus-ring -mr-1 inline-flex rounded-full p-0.5 text-admin-muted transition hover:bg-admin-surface hover:text-admin-danger"
                   aria-label={t('prompts.removeSkill')}
                   onClick={() => toggleSkill(skillId)}
                 >
@@ -240,26 +255,24 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
           </ul>
         )}
         {skillCatalog.length > 0 ? (
-          <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+          <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-admin p-2">
             {skillCatalog.map((skill) => (
-              <label key={skill.id} className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+              <div key={skill.id} className="flex items-start gap-2">
                 <input
                   type="checkbox"
-                  className="admin-check mt-0.5"
+                  className="admin-check mt-0.5 shrink-0"
                   checked={current.defaultSkillIds.includes(skill.id)}
                   onChange={() => toggleSkill(skill.id)}
+                  aria-label={skill.id}
                 />
-                <span className="min-w-0">
-                  <span className="font-mono text-xs">{skill.id}</span>
-                  {skill.description ? (
-                    <span className="block truncate text-xs text-muted-foreground">{skill.description}</span>
-                  ) : null}
-                </span>
-              </label>
+                <div className="min-w-0 flex-1">
+                  <SkillCatalogItem id={skill.id} version={skill.version} description={skill.description} />
+                </div>
+              </div>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">{t('prompts.catalogUnavailable')}</p>
+          <p className="text-xs text-admin-muted">{t('prompts.catalogUnavailable')}</p>
         )}
         <div className="flex gap-2">
           <input
@@ -293,16 +306,16 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
             disabled={!dirty || saveMutation.isPending}
             onClick={submitDraft}
           >
-            {saveMutation.isPending ? t('prompts.saving') : t('prompts.save')}
+            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+            {t('prompts.save')}
           </button>
         </PermissionGate>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-        <span className="text-xs font-medium text-muted-foreground">{t('prompts.templateLabel')}</span>
+      <div className="flex flex-wrap items-center gap-2 border-t border-admin pt-3">
+        <span className="text-xs font-medium text-admin-muted">{t('prompts.templateLabel')}</span>
         <select
-          className={adminFieldClass}
-          style={{ maxWidth: 260 }}
+          className={adminFilterFieldClass}
           value={templateSelection}
           disabled={templatesQuery.isPending}
           onChange={(event) => setTemplateSelection(event.target.value)}
@@ -326,8 +339,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
           </button>
         </PermissionGate>
         <input
-          className={adminFieldClass}
-          style={{ maxWidth: 200 }}
+          className={adminFilterFieldClass}
           value={templateName}
           onChange={(event) => setTemplateName(event.target.value)}
           placeholder={t('prompts.templateNamePlaceholder')}

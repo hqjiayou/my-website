@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Link2, X } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, Link2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -13,6 +13,7 @@ import {
   adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
+  adminSecondaryButtonSmClass,
 } from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { PermissionGate } from '@/router/permission'
@@ -136,7 +137,7 @@ function ChainModeRow({
             ))}
           </div>
         ) : currentIds.length === 0 ? (
-          <p className="pt-2 text-sm text-muted-foreground">{t('aiWorkspace.chainPreset.noMembers')}</p>
+          <p className="pt-2 text-sm text-admin-muted">{t('aiWorkspace.chainPreset.noMembers')}</p>
         ) : (
           <div className="flex flex-1 flex-wrap items-center gap-2">
             {currentIds.flatMap((entryId, index) => {
@@ -253,8 +254,8 @@ function ChainModeRow({
         </PermissionGate>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-        <span className="text-xs font-medium text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 border-t border-admin pt-3">
+        <span className="text-xs font-medium text-admin-muted">
           {t('aiWorkspace.chainPreset.templateLabel')}
         </span>
         <select
@@ -348,6 +349,7 @@ function ChainModeRow({
  */
 export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
   const { t } = useTranslation('sites')
+  const { t: tCommon } = useTranslation('common')
 
   const chainQuery = useQuery({
     queryKey: ['sites', agentId, 'ai', 'chain'],
@@ -366,17 +368,34 @@ export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
   const entryById = new Map(entries.map((entry) => [entry.id, entry]))
   const presets = presetsQuery.data ?? []
 
+  const retryLoad = () => {
+    if (chainQuery.isError) void chainQuery.refetch()
+    if (entriesQuery.isError) void entriesQuery.refetch()
+  }
+
   return (
-    <section className="mt-3 rounded-xl border border-border bg-card-muted/40 p-4">
+    <section className="mt-3 rounded-xl border border-admin bg-admin-surface p-4">
       <div className="mb-3 flex items-center gap-2">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-info-muted text-info-emphasis">
-          <Link2 className="h-4 w-4" aria-hidden />
+          <Link2 className="h-4.5 w-4.5" aria-hidden />
         </span>
-        <h3 className="text-sm font-semibold text-foreground">{t('aiWorkspace.chainPreset.title')}</h3>
+        <h3 className="text-base font-semibold text-admin">{t('aiWorkspace.chainPreset.title')}</h3>
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">{t('aiWorkspace.chainPreset.hint')}</p>
+      <p className="mb-3 text-xs text-admin-muted">{t('aiWorkspace.chainPreset.hint')}</p>
       {chainQuery.isError || entriesQuery.isError ? (
-        <p className="text-sm text-danger-emphasis">{t('aiWorkspace.chainPreset.loadError')}</p>
+        <div className="flex items-center gap-2.5 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
+          <AlertCircle className="h-4.5 w-4.5 shrink-0 text-danger-emphasis" aria-hidden />
+          <p className="min-w-0 flex-1 text-sm text-danger-emphasis">
+            {t('aiWorkspace.chainPreset.loadError')}
+          </p>
+          <button
+            type="button"
+            className={cn(adminSecondaryButtonSmClass, 'shrink-0')}
+            onClick={retryLoad}
+          >
+            {tCommon('table.retry')}
+          </button>
+        </div>
       ) : (
         <div className="space-y-5">
           {ROW_ORDER.map((rowMode) => (

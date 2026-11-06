@@ -143,13 +143,13 @@ export function EmbeddingRegistrationCard({ baseId }: { baseId?: number }) {
   }
 
   return (
-    <article className="rounded-xl border border-border bg-card p-5">
+    <article className="rounded-xl border border-admin bg-admin-surface p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-foreground">
+          <h3 className="text-sm font-semibold text-admin">
             {t('settings.embeddingRegistration.title')}
           </h3>
-          <span className="rounded-md bg-card-muted px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+          <span className="rounded-md bg-admin-surface-muted px-2 py-0.5 font-mono text-[11px] tabular-nums text-admin-muted">
             {rows.length}/{MAX_EMBEDDING_CLASSES}
           </span>
         </div>
@@ -178,7 +178,7 @@ export function EmbeddingRegistrationCard({ baseId }: { baseId?: number }) {
           </div>
         ) : null}
       </div>
-      <p className="mb-4 max-w-3xl text-xs leading-5 text-muted-foreground">
+      <p className="mb-4 max-w-3xl text-xs leading-5 text-admin-muted">
         {t(
           baseId == null
             ? 'settings.embeddingRegistration.descriptionGlobal'
@@ -187,13 +187,13 @@ export function EmbeddingRegistrationCard({ baseId }: { baseId?: number }) {
       </p>
 
       {registrationQuery.isPending || entriesQuery.isPending ? (
-        <p className="text-sm text-muted-foreground">{t('loading')}</p>
+        <p className="text-sm text-admin-muted">{t('loading')}</p>
       ) : registrationQuery.isError || entriesQuery.isError ? (
         <p className="text-sm text-danger-emphasis">{t('settings.embeddingRegistration.loadError')}</p>
       ) : (
         <div className="space-y-3">
           {rows.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-card-muted/40 px-3 py-4 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-admin bg-admin-surface-muted px-3 py-4 text-sm text-admin-muted">
               {t('settings.embeddingRegistration.empty')}
             </div>
           ) : (
@@ -201,16 +201,16 @@ export function EmbeddingRegistrationCard({ baseId }: { baseId?: number }) {
               {rows.map((row, index) => (
                 <li
                   key={row.entryId}
-                  className="flex items-center gap-3 rounded-lg border border-border bg-card-muted/30 px-3 py-2.5 text-sm"
+                  className="flex items-center gap-3 rounded-lg border border-admin bg-admin-surface-muted px-3 py-2.5 text-sm"
                 >
-                  <span className="w-6 shrink-0 text-center font-mono text-xs text-muted-foreground">
+                  <span className="w-6 shrink-0 text-center font-mono text-xs text-admin-muted">
                     {index + 1}
                   </span>
                   <span className="min-w-0 flex-1">
                     {row.className != null ? (
                       <>
                         <span className="flex flex-wrap items-center gap-2">
-                          <span className="truncate font-mono text-[13px] font-medium text-foreground">
+                          <span className="truncate font-mono text-[13px] font-medium text-admin">
                             {row.className}
                           </span>
                           {!row.enabled ? (
@@ -221,7 +221,7 @@ export function EmbeddingRegistrationCard({ baseId }: { baseId?: number }) {
                             />
                           ) : null}
                         </span>
-                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                        <span className="mt-0.5 block truncate text-xs text-admin-muted">
                           {row.entryDisplayName} · {row.embeddingSpec}
                         </span>
                       </>
@@ -230,13 +230,13 @@ export function EmbeddingRegistrationCard({ baseId }: { baseId?: number }) {
                         <span className="font-medium text-danger-emphasis">
                           {t('settings.embeddingRegistration.entryMissing')}
                         </span>
-                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                        <span className="mt-0.5 block text-xs text-admin-muted">
                           {t('settings.embeddingRegistration.entryMissingHint', { entryId: row.entryId })}
                         </span>
                       </>
                     )}
                   </span>
-                  <label className="flex shrink-0 items-center gap-2 text-xs text-foreground">
+                  <label className="flex shrink-0 items-center gap-2 text-xs text-admin">
                     <input
                       type="checkbox"
                       className="admin-check"
@@ -294,8 +294,8 @@ export function EmbeddingRegistrationCard({ baseId }: { baseId?: number }) {
           )}
 
           <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
-            <div className="rounded-lg border border-border bg-card-muted/30 p-3">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">
+            <div className="rounded-lg border border-admin bg-admin-surface-muted p-3">
+              <p className="mb-2 text-xs font-medium text-admin-muted">
                 {t('settings.embeddingRegistration.addLabel')}
               </p>
               <div className="flex flex-wrap items-center gap-2">
@@ -324,7 +324,7 @@ export function EmbeddingRegistrationCard({ baseId }: { baseId?: number }) {
                   {t('settings.embeddingRegistration.add')}
                 </button>
               </div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              <p className="mt-2 text-xs leading-5 text-admin-muted">
                 {candidates.length === 0
                   ? t('settings.embeddingRegistration.noCandidates')
                   : t('settings.embeddingRegistration.addHint', {

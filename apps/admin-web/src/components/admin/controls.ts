@@ -18,6 +18,10 @@ export const adminPrimaryButtonClass =
 export const adminSecondaryButtonClass =
   `inline-flex items-center justify-center gap-1.5 rounded-lg border border-admin bg-admin-surface px-3 text-sm font-medium text-admin transition hover:bg-admin-surface-muted disabled:cursor-not-allowed disabled:opacity-60 admin-control ${adminFocusRing}`
 
+/** 次按钮 sm 档（28）：Alert 重试、行内次级操作等紧凑场景；与 md 档同一视觉家族。 */
+export const adminSecondaryButtonSmClass =
+  `inline-flex h-7 items-center justify-center gap-1 rounded-md border border-admin bg-admin-surface px-2 text-xs font-medium text-admin transition hover:bg-admin-surface-muted disabled:cursor-not-allowed disabled:opacity-40 ${adminFocusRing}`
+
 export const adminGhostButtonClass =
   `inline-flex items-center gap-1 rounded-md border border-admin bg-admin-surface px-2 py-1 text-xs text-admin transition hover:bg-admin-surface-muted disabled:cursor-not-allowed disabled:opacity-40 ${adminFocusRing}`
 

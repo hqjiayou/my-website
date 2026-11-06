@@ -40,7 +40,7 @@ export function SkillCatalogItem({
     <div>
       <button
         type="button"
-        className="flex w-full items-center gap-1 text-left"
+        className="admin-focus-ring flex w-full items-center gap-1 rounded-md text-left"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
       >

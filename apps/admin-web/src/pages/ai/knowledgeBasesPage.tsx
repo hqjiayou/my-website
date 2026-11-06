@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 
 import { agentApi } from '@/api'
 import { aiApi } from '@/api/apps/aiApi'
-import { AdminPageHeader, FormDialog } from '@/components/admin'
+import { AdminPageHeader, FormDialog, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFormActionsClass,
@@ -80,7 +80,7 @@ export function AiKnowledgeBasesPage() {
         </div>
       ) : null}
       {result ? (
-        <div className="mb-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground">
+        <div className="mb-4 rounded-lg border border-admin bg-admin-surface px-4 py-3 text-sm text-admin">
           <p>{t('knowledgeBases.reembed.usage')}</p>
           <p className="mt-2">
             {t('knowledgeBases.reembed.sites')} {result.sites}
@@ -109,7 +109,7 @@ export function AiKnowledgeBasesPage() {
       ) : null}
       <KnowledgeOverviewSection />
       <KnowledgeBasesAdminSection />
-      <article className="rounded-xl border border-border bg-card p-5">
+      <article className="rounded-xl border border-admin bg-admin-surface p-5">
         <AiAgentScope>{(agentId) => <AgentAiKnowledgePanel agentId={agentId} />}</AiAgentScope>
       </article>
       {confirmingReembed ? (
@@ -216,9 +216,7 @@ function KnowledgeBasesAdminSection() {
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-semibold text-admin">{base.name}</span>
                   {base.isDefault ? (
-                    <span className="rounded-full bg-admin-surface-muted px-1.5 py-0.5 text-xs text-admin-muted">
-                      {t('knowledgeBases.bases.defaultBadge')}
-                    </span>
+                    <StatusTag status="DEFAULT" tone="neutral" label={t('knowledgeBases.bases.defaultBadge')} />
                   ) : null}
                   <span className="text-xs text-admin-muted">
                     {t('knowledgeBases.bases.owner')} {base.ownerAgentName ?? `#${base.agentId}`}
@@ -401,21 +399,26 @@ function BaseDocumentsList({ baseId, ownerAgentId }: { baseId: number; ownerAgen
           <FileText className="h-3.5 w-3.5 shrink-0 text-admin-muted" />
           <span className="min-w-0 flex-1 truncate text-xs text-admin">{item.title}</span>
           <span
-            className={cn(
-              'shrink-0 rounded-full px-2 py-0.5 text-xs',
-              item.indexStatus === 'INDEXED'
-                ? 'bg-success-muted text-success-emphasis'
-                : item.indexStatus === 'FAILED'
-                  ? 'bg-danger-muted text-danger-emphasis'
-                  : 'bg-admin-surface-muted text-admin-muted',
-            )}
+            className="shrink-0"
             title={item.indexStatus === 'FAILED' ? (item.indexError ?? undefined) : undefined}
           >
-            {item.indexStatus === 'INDEXED'
-              ? t('knowledgeBases.overview.indexed')
-              : item.indexStatus === 'FAILED'
-                ? t('knowledgeBases.overview.failed')
-                : t('knowledgeBases.overview.pending')}
+            <StatusTag
+              status={item.indexStatus}
+              tone={
+                item.indexStatus === 'INDEXED'
+                  ? 'active'
+                  : item.indexStatus === 'FAILED'
+                    ? 'danger'
+                    : 'warning'
+              }
+              label={
+                item.indexStatus === 'INDEXED'
+                  ? t('knowledgeBases.overview.indexed')
+                  : item.indexStatus === 'FAILED'
+                    ? t('knowledgeBases.overview.failed')
+                    : t('knowledgeBases.overview.pending')
+              }
+            />
           </span>
         </li>
       ))}
