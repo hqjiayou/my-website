@@ -502,7 +502,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             List<String> parsed =
                     objectMapper.readValue(agent.getDefaultSkillIds(), new TypeReference<List<String>>() {});
             List<String> skills = normalizeSkills(parsed);
-            return skills.isEmpty() ? null : skills;
+            return skills == null || skills.isEmpty() ? null : skills;
         } catch (JsonProcessingException ex) {
             log.warn("agent {} has malformed default_skill_ids, preview treated as no default skills", agentId, ex);
             return null;

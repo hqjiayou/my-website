@@ -595,6 +595,9 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
         try {
             List<String> parsed = objectMapper.readValue(
                     agent.getDefaultSkillIds(), new TypeReference<List<String>>() {});
+            if (parsed == null) {
+                return null;
+            }
             // 保序去重：写侧（admin Prompt 配置）已规范化，读侧再兜一层——绕过管理面
             // 直写 DB 的重复 id 不原样重复下发执行层。
             List<String> skills =

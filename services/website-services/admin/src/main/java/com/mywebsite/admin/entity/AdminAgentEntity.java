@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
+import java.math.BigDecimal;
 
 /**
  * Admin 侧对平台 {@code agent} 表的双映射实体（与 agent-core {@code AgentEntity} 同表不同模块）。
@@ -34,7 +35,7 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
 
     /** V70：本地副本温度（0–2）；NULL 用 Provider 默认。须 ALWAYS 同上。 */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
-    private java.math.BigDecimal promptTemperature;
+    private BigDecimal promptTemperature;
 
     /** V70：来源模板留痕（套用/另存时写入）；仅记录出处，模板变更不联动本地副本。须 ALWAYS 同上。 */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
@@ -160,11 +161,11 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
         this.promptSystemPrompt = promptSystemPrompt;
     }
 
-    public java.math.BigDecimal getPromptTemperature() {
+    public BigDecimal getPromptTemperature() {
         return promptTemperature;
     }
 
-    public void setPromptTemperature(java.math.BigDecimal promptTemperature) {
+    public void setPromptTemperature(BigDecimal promptTemperature) {
         this.promptTemperature = promptTemperature;
     }
 

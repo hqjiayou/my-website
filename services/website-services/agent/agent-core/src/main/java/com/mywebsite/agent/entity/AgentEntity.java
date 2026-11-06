@@ -2,6 +2,7 @@ package com.mywebsite.agent.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
+import java.math.BigDecimal;
 
 @TableName("agent")
 public class AgentEntity extends AbstractAuditableEntity {
@@ -23,7 +24,7 @@ public class AgentEntity extends AbstractAuditableEntity {
     private String promptSystemPrompt;
 
     /** V70：本地副本温度（0–2）；NULL 用 Provider 默认。 */
-    private java.math.BigDecimal promptTemperature;
+    private BigDecimal promptTemperature;
 
     /** V70：来源模板留痕；仅记录出处，模板变更不联动本地副本。 */
     private Long promptTemplateId;
@@ -144,11 +145,11 @@ public class AgentEntity extends AbstractAuditableEntity {
         this.promptSystemPrompt = promptSystemPrompt;
     }
 
-    public java.math.BigDecimal getPromptTemperature() {
+    public BigDecimal getPromptTemperature() {
         return promptTemperature;
     }
 
-    public void setPromptTemperature(java.math.BigDecimal promptTemperature) {
+    public void setPromptTemperature(BigDecimal promptTemperature) {
         this.promptTemperature = promptTemperature;
     }
 
