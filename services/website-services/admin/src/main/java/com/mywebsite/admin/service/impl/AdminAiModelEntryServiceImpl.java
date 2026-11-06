@@ -165,18 +165,18 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
 
     /**
      * 组链规则在 agent-core 的 {@code ModelChainResolver}（Issue #132，与 agent-app
-     * 共用同一份实现）；这里只做预设成员加载、实体→快照映射与结果回译，规则不在
+     * 共用同一份实现）；这里只做自有链成员加载、实体→快照映射与结果回译，规则不在
      * 本类重复。
      *
-     * <p>链预设落地后（Issue #210 UoW-7）链由 agent 引用的对话链预设决定：按预设
-     * 的有序 entry ids 取入口（已删除的自动落选、停用的过滤，成员顺序即预设序），
-     * 交 {@code ModelChainResolver.resolvePresetChain} 按既有规则组链（mode 过滤、
+     * <p>链内置化后（Issue #214 UoW-3）链由 agent 自有字段决定：按模式取该 agent
+     * 的有序 entry ids（已删除的自动落选、停用的过滤，成员顺序即名单序），交
+     * {@code ModelChainResolver.resolveMemberChain} 按既有规则组链（mode 过滤、
      * 默认/备援序、坏主用整链空）。UoW-6 的来源分层过渡组链整体退役，
-     * {@code source_agent_id} 只作来源标注、不再参与组链。agent 未引用预设时链为空。
+     * {@code source_agent_id} 只作来源标注、不再参与组链。agent 未配该模式链时链为空。
      */
     private List<ChainLink> chainLinks(long agentId, String mode) {
         String normalized = chainMode(mode);
-        List<Long> entryIds = chainPresetService.referencedEntryIds(agentId);
+        List<Long> entryIds = chainPresetService.ownChainEntryIds(agentId, normalized);
         if (entryIds.isEmpty()) {
             return List.of();
         }
@@ -191,7 +191,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
                 members.add(entry);
             }
         }
-        return ModelChainResolver.resolvePresetChain(snapshots(members), normalized).stream()
+        return ModelChainResolver.resolveMemberChain(snapshots(members), normalized).stream()
                 .map(link -> new ChainLink(link.id(), link.displayName(), link.selection()))
                 .toList();
     }

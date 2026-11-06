@@ -23,9 +23,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 对话链预设 CRUD（Issue #210 UoW-7）。权限码复用模型入口口径
- * （{@code admin:ai-model:read}，与 AdminAiModelEntryController 的读写同码一致），
- * 不新增 RBAC 种子。被 agent 引用的预设删除会被服务层拦截并报明确错误。
+ * 对话链模板库 CRUD（Issue #210 UoW-7 引入，#214 UoW-3 降级为模板）。权限码复用
+ * 模型入口口径（{@code admin:ai-model:read}，与 AdminAiModelEntryController 的读写
+ * 同码一致），不新增 RBAC 种子。模板不再被 agent 引用（套用是拷贝），删除无拦截；
+ * agent 自有链的读写见 {@code AdminAgentChainController}。
  */
 @RestController
 @RequestMapping("/api/admin/ai/chain-presets")
@@ -75,7 +76,7 @@ public class AdminAiChainPresetController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
-    @Operation(summary = "软删对话链预设（被 agent 引用时拦截报错）")
+    @Operation(summary = "软删链模板（模板不被引用，无引用拦截）")
     public ResponseEntity<HttpMessageBody<Void>> delete(@PathVariable long id) {
         chainPresetService.deletePreset(id);
         return ResponseEntity.ok(new HttpMessageBody<>(ResponseMessages.SUCCESS, null));
