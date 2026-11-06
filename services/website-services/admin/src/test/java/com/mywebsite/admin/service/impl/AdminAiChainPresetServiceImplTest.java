@@ -272,7 +272,7 @@ class AdminAiChainPresetServiceImplTest {
 
     @Test
     void updateAgentChainRejectsUnknownModeAndMissingAgent() {
-        when(agentMapper.selectById(10L)).thenReturn(agent(10L, null, null));
+        // 模式校验先于 agent 加载（requireMode 在 requireAgent 之前），故此处不打 agent 桩。
         assertThatThrownBy(() -> service.updateAgentChain(10L, "BOGUS", List.of()))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
