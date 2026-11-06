@@ -34,7 +34,6 @@ export default {
     aiMcpServers: 'MCP 服务器',
     aiSkills: 'Skills 货架',
     aiPlatformSettings: 'AI 设置',
-    proxyServices: 'API 管理',
     aiUsage: 'AI 用量',
     aiPrompts: 'Prompt 配置',
     aiKnowledgeBases: '知识库',

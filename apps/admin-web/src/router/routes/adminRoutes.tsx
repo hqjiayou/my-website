@@ -74,10 +74,6 @@ const OperationFilesPage = lazyNamed(
 
 const AiSettingsPage = lazyNamed(() => import('@/pages/ai/settingsPage'), 'AiSettingsPage')
 const AiUsagePage = lazyNamed(() => import('@/pages/ai/usagePage'), 'AiUsagePage')
-const ProxyServicesPage = lazyNamed(
-  () => import('@/pages/ai/proxyServicesPage'),
-  'ProxyServicesPage',
-)
 const AiPromptsPage = lazyNamed(() => import('@/pages/ai/promptsPage'), 'AiPromptsPage')
 const AiKnowledgeBasesPage = lazyNamed(
   () => import('@/pages/ai/knowledgeBasesPage'),
@@ -135,7 +131,6 @@ export const adminRoutes = (
 
     <Route path={ROUTES.apps.sites} element={<AgentsPage />} />
     <Route path={ROUTES.apps.agentCreate} element={<AgentCreatePage />} />
-    <Route path={ROUTES.apps.api} element={<ProxyServicesPage />} />
     <Route path={ROUTES.apps.agentDetailPattern} element={<AgentWorkspaceLayout />}>
       <Route index element={<Navigate to="agent" replace />} />
       <Route path="overview" element={<RedirectToAgent />} />
