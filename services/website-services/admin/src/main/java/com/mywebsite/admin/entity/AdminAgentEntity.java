@@ -25,9 +25,6 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
     private String description;
     /** V8：选用模板；可空。 */
     private Long templateId;
-    /** V60：引用的 AI 配置预设（#211）；#214 UoW-4 起停用（Prompt 改存本地副本，见下），列保留待 UoW-7 评估删除。 */
-    @TableField(updateStrategy = FieldStrategy.ALWAYS)
-    private Long configPresetId;
 
     /** V70：Prompt 本地副本（#214 UoW-4）；NULL＝未配置。清空副本须写 null，须 ALWAYS。 */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
@@ -44,10 +41,6 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
     /** V70：自有默认 skill 集（有序 JSON 数组文本）；NULL/空＝无自有集，解析回退 env 兜底。须 ALWAYS 同上。 */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String defaultSkillIds;
-
-    /** V63：引用的对话链预设；#214 UoW-3 起停用（链改存自有字段，见下），列保留待 UoW-7 评估删除。 */
-    @TableField(updateStrategy = FieldStrategy.ALWAYS)
-    private Long chainPresetId;
 
     /** V69：自有对话链·KEY 模式有序 entry_ids（JSON 数组文本）；NULL＝该模式未配链。清空链须写 null，须 ALWAYS。 */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
@@ -121,14 +114,6 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
         this.templateId = templateId;
     }
 
-    public Long getChainPresetId() {
-        return chainPresetId;
-    }
-
-    public void setChainPresetId(Long chainPresetId) {
-        this.chainPresetId = chainPresetId;
-    }
-
     public String getChainKeyEntryIds() {
         return chainKeyEntryIds;
     }
@@ -143,14 +128,6 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
 
     public void setChainCliEntryIds(String chainCliEntryIds) {
         this.chainCliEntryIds = chainCliEntryIds;
-    }
-
-    public Long getConfigPresetId() {
-        return configPresetId;
-    }
-
-    public void setConfigPresetId(Long configPresetId) {
-        this.configPresetId = configPresetId;
     }
 
     public String getPromptSystemPrompt() {

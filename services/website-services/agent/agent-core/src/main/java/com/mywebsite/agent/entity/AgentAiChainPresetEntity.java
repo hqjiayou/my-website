@@ -8,7 +8,8 @@ import com.mywebsite.infra.entity.AbstractAuditableEntity;
  * 有序模型入口集合，用途 v1 只有 {@code CHAT}（对话）。#210 时代 agent 以
  * {@code chain_preset_id} 引用它组链；#214 UoW-3 链内置化后降级为<b>模板库</b>
  * ——组链只读 agent 自有链字段，本表只被 admin 模板 CRUD 与「载入/另存」读写，
- * 套用是拷贝、与 agent 脱钩。与 admin {@code AdminAiChainPresetEntity} 同表双映射。
+ * 套用是拷贝、与 agent 脱钩；引用列已于 #214 UoW-7（Flyway V72）删除。与 admin
+ * {@code AdminAiChainPresetEntity} 同表双映射。
  */
 @TableName("agent_ai_chain_preset")
 public class AgentAiChainPresetEntity extends AbstractAuditableEntity {

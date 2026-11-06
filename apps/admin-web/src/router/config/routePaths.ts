@@ -67,6 +67,10 @@ export const ROUTES = {
     sites: '/sites',
     appsSites: '/apps/sites',
     proxyServices: '/ai/proxy-services',
+    /** #214 UoW-3 撤页：对话链模板区现居模型 API 管理页。 */
+    chainPresets: '/ai/chain-presets',
+    /** #214 UoW-4 撤页：配置预设退役，Prompt 模板独立成页。 */
+    configPresets: '/ai/config-presets',
     ai: '/ai',
     settings: '/settings',
   },
