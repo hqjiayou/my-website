@@ -1,7 +1,9 @@
 package com.mywebsite.admin.controller;
 
+import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiCliEntrySyncReportDto;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryDto;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryWriteRequest;
+import com.mywebsite.admin.service.AdminAiCliEntrySyncService;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.common.api.HttpMessageBody;
 import com.mywebsite.common.api.ResponseMessages;
@@ -28,9 +30,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminAiModelEntryController {
 
     private final AdminAiModelEntryService adminAiModelEntryService;
+    private final AdminAiCliEntrySyncService adminAiCliEntrySyncService;
 
-    public AdminAiModelEntryController(AdminAiModelEntryService adminAiModelEntryService) {
+    public AdminAiModelEntryController(
+            AdminAiModelEntryService adminAiModelEntryService,
+            AdminAiCliEntrySyncService adminAiCliEntrySyncService) {
         this.adminAiModelEntryService = adminAiModelEntryService;
+        this.adminAiCliEntrySyncService = adminAiCliEntrySyncService;
     }
 
     @GetMapping
@@ -39,6 +45,14 @@ public class AdminAiModelEntryController {
     public ResponseEntity<HttpMessageBody<List<AdminAiModelEntryDto>>> list() {
         return ResponseEntity.ok(
                 new HttpMessageBody<>(ResponseMessages.SUCCESS, adminAiModelEntryService.listEntries()));
+    }
+
+    @PostMapping("/sync-cli")
+    @PreAuthorize("@adminPermissionChecker.hasPermission('admin:ai-model:read')")
+    @Operation(summary = "按 CLI 代理当前账号/模型清单同步派生条目（Issue #214 UoW-2）")
+    public ResponseEntity<HttpMessageBody<AdminAiCliEntrySyncReportDto>> syncCli() {
+        return ResponseEntity.ok(new HttpMessageBody<>(
+                ResponseMessages.SUCCESS, adminAiCliEntrySyncService.syncFromProxy()));
     }
 
     @PostMapping

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { Zap } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -17,6 +18,8 @@ import { PermissionGate, useHasPermission } from '@/router/permission'
 import type { AiModelEntry, AiModelEntryWriteInput } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 import { modelIdFromSpec } from '@/utils/modelSpec'
+
+import { ProxyServicesCliPanel } from './proxyServicesPage'
 
 type Draft = {
   id: number | null
@@ -92,14 +95,49 @@ function cliModels(account: { provider: string; modelIds: string[] }) {
 }
 
 /**
- * 模型入口管理（Issue #213 UoW-C 从 AI 设置页拆出）：入口列表＋编辑表单本体，
- * 逻辑与文案（settings.*）与拆分前逐字一致，仅宿主由设置页改为独立页。
+ * 模型入口管理（Issue #213 UoW-C 从 AI 设置页拆出；Issue #214 UoW-2 改为
+ * 「模型 API 管理」的来源×模型形态）：左栏来源（直连按 KEY 条目的协议前缀
+ * 聚合、代理来源一个），右栏该来源的模型行；CLI 派生行带标记且只读，
+ * 代理来源选中时下方给出代理账号管理面板（ProxyServicesCliPanel 复用）。
+ * 人工条目的编辑表单与文案（settings.*）与拆分前一致。
  */
 export function ModelEntriesCard() {
   const { t } = useTranslation('aiAdmin')
   const queryClient = useQueryClient()
   const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [selectedSource, setSelectedSource] = useState<string | null>(null)
+
+  // 页面挂载同步一次 CLI 派生条目（Issue #214 UoW-2）：派生行随代理侧
+  // 账号/模型构成自动物化；同步失败不打断页面，派生行保持现状。
+  const syncRan = useRef(false)
+  useEffect(() => {
+    if (syncRan.current) return
+    syncRan.current = true
+    aiApi
+      .syncCliModelEntries()
+      .then((report) => {
+        void queryClient.invalidateQueries({ queryKey: ['ai', 'model-entries'] })
+        if (!report.proxyReady) {
+          toast.info(t('modelManagement.syncProxyUnavailable'))
+        } else if (
+          report.created + report.reactivated + report.deactivated > 0 ||
+          report.skippedNoClientKey > 0
+        ) {
+          toast.success(
+            t('modelManagement.syncSummary', {
+              created: report.created,
+              reactivated: report.reactivated,
+              deactivated: report.deactivated,
+              skipped: report.skippedNoClientKey,
+            }),
+          )
+        }
+      })
+      .catch(() => {
+        // 同步端点失败时静默：入口列表仍可用，派生行下次打开页面再同步。
+      })
+  }, [queryClient, t])
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['ai', 'model-entries'],
@@ -174,6 +212,25 @@ export function ModelEntriesCard() {
   }
 
   const entries = data ?? []
+  // 来源聚合（Issue #214 UoW-2）：直连来源按 KEY 条目的 spec 协议前缀聚合，
+  // 代理来源只有一个；来源只是呈现分组，不落库。
+  const directGroups = new Map<string, AiModelEntry[]>()
+  for (const entry of entries) {
+    if ((entry.mode ?? 'KEY') === 'CLI') continue
+    const prefix = entry.modelSpec.split(':')[0]?.trim().toLowerCase() || 'other'
+    const group = directGroups.get(prefix) ?? []
+    group.push(entry)
+    directGroups.set(prefix, group)
+  }
+  const cliEntries = entries.filter((entry) => (entry.mode ?? 'KEY') === 'CLI')
+  const sourceIds = [...directGroups.keys()].map((prefix) => `direct:${prefix}`)
+  const activeSourceId =
+    selectedSource != null && (selectedSource === 'proxy' || sourceIds.includes(selectedSource))
+      ? selectedSource
+      : (sourceIds[0] ?? 'proxy')
+  const activeDirectPrefix = activeSourceId.startsWith('direct:') ? activeSourceId.slice(7) : null
+  const activeEntries =
+    activeSourceId === 'proxy' ? cliEntries : (directGroups.get(activeDirectPrefix ?? '') ?? [])
   const aliasTrimmed = draft?.alias.trim() ?? ''
   const aliasInvalid = aliasTrimmed !== '' && !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(aliasTrimmed.toLowerCase())
   const cliAccounts = (usageQuery.data?.accounts ?? []).filter(
@@ -213,73 +270,138 @@ export function ModelEntriesCard() {
   return (
     <>
       <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
-        {entries.length === 0 ? <p className="text-sm text-admin-muted">{t('settings.empty')}</p> : null}
-        <ul className="space-y-2">
-          {entries.map((entry) => {
-            const tile = familyTile(entry.modelSpec)
-            const entryMode = entry.mode ?? 'KEY'
-            return (
-              <li key={entry.id} className="flex items-stretch gap-2">
+        <div className="grid items-start gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+          <div className="flex flex-col gap-0.5" aria-label={t('modelManagement.sourcesTitle')}>
+            {[...directGroups.entries()].map(([prefix, group]) => {
+              const tile = familyTile(`${prefix}:x`)
+              const active = activeSourceId === `direct:${prefix}`
+              return (
                 <button
+                  key={prefix}
                   type="button"
-                  className="flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-admin-surface-muted admin-focus-ring"
-                  onClick={() => setDraft(draftFromEntry(entry))}
+                  aria-pressed={active}
+                  onClick={() => setSelectedSource(`direct:${prefix}`)}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-[10px] border border-transparent px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
+                    active && 'admin-active-inset border-admin bg-admin-surface shadow-sm',
+                  )}
                 >
                   <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md text-sm font-bold', tile.className)}>
                     {tile.letter}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-admin">
-                        {entryMode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
-                      </span>
-                      {entry.alias ? (
-                        <span className="rounded-md bg-admin-surface-muted px-1.5 py-0.5 font-mono text-xs text-admin-muted">
-                          {entry.alias}
-                        </span>
-                      ) : null}
+                    <span className="block truncate text-sm font-semibold text-admin">{prefix}</span>
+                    <span className="mt-0.5 block truncate text-xs text-admin-muted">
+                      {t('modelManagement.directSource')} · {t('modelManagement.modelsCount', { count: group.length })}
                     </span>
-                    <span className="mt-0.5 block truncate font-mono text-xs text-admin-muted">
-                      {entryMode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
-                      {entryMode !== 'CLI' && entry.embeddingSpec ? ` · ${entry.embeddingSpec}` : ''}
-                    </span>
-                  </span>
-                  <span className="flex flex-wrap items-center justify-end gap-1.5">
-                    {entry.defaultEntry ? (
-                      <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
-                        {entryMode === 'CLI' ? t('settings.defaultBadgeCli') : t('settings.defaultBadgeKey')}
-                      </span>
-                    ) : null}
-                    <span
-                      className={cn(
-                        'rounded-full px-2 py-0.5 text-xs font-medium',
-                        entryMode === 'CLI' ? 'bg-[rgb(var(--chart-4)/.12)] text-chart-4' : 'bg-[rgb(var(--chart-1)/.12)] text-chart-1',
-                      )}
-                    >
-                      {entryMode === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
-                    </span>
-                    {!entry.enabled ? <StatusTag status="DISABLED" tone="danger" label={t('settings.disabledBadge')} /> : null}
-                    {entry.apiKeyConfigured ? (
-                      <span className="rounded-md bg-admin-surface-muted px-1.5 py-0.5 font-mono text-xs text-admin-muted">
-                        {entry.apiKeyHint}
-                      </span>
-                    ) : null}
                   </span>
                 </button>
-                {canUpdate && entry.enabled && !entry.defaultEntry ? (
-                  <button
-                    type="button"
-                    className={cn(adminGhostButtonClass, 'shrink-0')}
-                    disabled={setDefaultMutation.isPending}
-                    onClick={() => setDefaultMutation.mutate(entry)}
-                  >
-                    {t('settings.setDefault')}
-                  </button>
-                ) : null}
-              </li>
-            )
-          })}
-        </ul>
+              )
+            })}
+            <button
+              type="button"
+              aria-pressed={activeSourceId === 'proxy'}
+              onClick={() => setSelectedSource('proxy')}
+              className={cn(
+                'flex w-full items-center gap-3 rounded-[10px] border border-transparent px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
+                activeSourceId === 'proxy' && 'admin-active-inset border-admin bg-admin-surface shadow-sm',
+              )}
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md bg-[rgb(var(--chart-4)/.12)] text-chart-4">
+                <Zap className="h-4 w-4" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-admin">{t('modelManagement.proxySource')}</span>
+                <span className="mt-0.5 block truncate text-xs text-admin-muted">
+                  {t('modelManagement.proxyAccounts', { count: cliAccounts.length })} ·{' '}
+                  {t('modelManagement.modelsCount', { count: cliEntries.length })}
+                </span>
+              </span>
+            </button>
+          </div>
+          <div className="min-w-0">
+            {activeEntries.length === 0 ? (
+              <p className="text-sm text-admin-muted">
+                {activeSourceId === 'proxy' ? t('modelManagement.noCliModels') : t('settings.empty')}
+              </p>
+            ) : null}
+            <ul className="space-y-2">
+              {activeEntries.map((entry) => {
+                const tile = familyTile(entry.modelSpec)
+                const entryMode = entry.mode ?? 'KEY'
+                return (
+                  <li key={entry.id} className="flex items-stretch gap-2">
+                    <button
+                      type="button"
+                      className="flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-admin-surface-muted admin-focus-ring"
+                      onClick={() =>
+                        entry.derived
+                          ? toast.info(t('modelManagement.derivedNote'))
+                          : setDraft(draftFromEntry(entry))
+                      }
+                    >
+                      <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md text-sm font-bold', tile.className)}>
+                        {tile.letter}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-admin">
+                            {entryMode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
+                          </span>
+                          {entry.alias ? (
+                            <span className="rounded-md bg-admin-surface-muted px-1.5 py-0.5 font-mono text-xs text-admin-muted">
+                              {entry.alias}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="mt-0.5 block truncate font-mono text-xs text-admin-muted">
+                          {entryMode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.modelSpec}
+                          {entryMode !== 'CLI' && entry.embeddingSpec ? ` · ${entry.embeddingSpec}` : ''}
+                        </span>
+                      </span>
+                      <span className="flex flex-wrap items-center justify-end gap-1.5">
+                        {entry.defaultEntry ? (
+                          <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+                            {entryMode === 'CLI' ? t('settings.defaultBadgeCli') : t('settings.defaultBadgeKey')}
+                          </span>
+                        ) : null}
+                        <span
+                          className={cn(
+                            'rounded-full px-2 py-0.5 text-xs font-medium',
+                            entryMode === 'CLI' ? 'bg-[rgb(var(--chart-4)/.12)] text-chart-4' : 'bg-[rgb(var(--chart-1)/.12)] text-chart-1',
+                          )}
+                        >
+                          {entryMode === 'CLI' ? t('settings.modeCli') : t('settings.modeKey')}
+                        </span>
+                        {entry.derived ? (
+                          <span className="rounded-full bg-admin-surface-muted px-2 py-0.5 text-xs font-medium text-admin-muted">
+                            {t('modelManagement.derivedBadge')}
+                          </span>
+                        ) : null}
+                        {!entry.enabled ? <StatusTag status="DISABLED" tone="danger" label={t('settings.disabledBadge')} /> : null}
+                        {entry.apiKeyConfigured ? (
+                          <span className="rounded-md bg-admin-surface-muted px-1.5 py-0.5 font-mono text-xs text-admin-muted">
+                            {entry.apiKeyHint}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                    {canUpdate && entry.enabled && !entry.defaultEntry && !entry.derived ? (
+                      <button
+                        type="button"
+                        className={cn(adminGhostButtonClass, 'shrink-0')}
+                        disabled={setDefaultMutation.isPending}
+                        onClick={() => setDefaultMutation.mutate(entry)}
+                      >
+                        {t('settings.setDefault')}
+                      </button>
+                    ) : null}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </div>
         <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
           <button
             type="button"
@@ -290,6 +412,8 @@ export function ModelEntriesCard() {
           </button>
         </PermissionGate>
       </article>
+
+      {activeSourceId === 'proxy' ? <ProxyServicesCliPanel /> : null}
 
       {draft ? (
         <form
