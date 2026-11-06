@@ -284,6 +284,7 @@ CREATE TABLE IF NOT EXISTS agent_model_entry (
     is_default          BOOLEAN NOT NULL DEFAULT FALSE,
     mode                VARCHAR(16) NOT NULL DEFAULT 'KEY',
     alias               VARCHAR(64),
+    derived_source      VARCHAR(32),
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by          BIGINT,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
