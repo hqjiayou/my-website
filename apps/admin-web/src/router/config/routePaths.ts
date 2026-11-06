@@ -49,7 +49,7 @@ export const ROUTES = {
     knowledgeBases: '/ai/knowledge-bases',
     conversations: '/ai/conversations',
     modelEntries: '/ai/model-entries',
-    configPresets: '/ai/config-presets',
+    promptTemplates: '/ai/prompt-templates',
   },
   config: {
     params: '/config/params',

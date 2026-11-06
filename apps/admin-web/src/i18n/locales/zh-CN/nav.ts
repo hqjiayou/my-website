@@ -30,7 +30,7 @@ export default {
     contents: '页面内容',
     files: '文件管理',
     aiSettings: '模型 API 管理',
-    aiConfigPresets: '配置预设',
+    aiPromptTemplates: 'Prompt 模板',
     aiPlatformSettings: 'AI 设置',
     proxyServices: 'API 管理',
     aiUsage: 'AI 用量',

@@ -278,33 +278,49 @@ export interface AiAgentChain {
 export type AiChainMode = 'KEY' | 'CLI'
 
 /**
- * AI 配置预设（Issue #211 UoW-8 后端、#213 UoW-C 管理页）：命名预设＝一组
- * systemPrompt 覆盖＋temperature＋默认 skill 集，agent 以 configPresetId 引用一份。
- * 删除为软删：引用它的 agent 解析时回退为无配置（服务端既有口径）。
+ * Prompt 模板（Issue #214 UoW-4）：命名提示词资产＝名称＋systemPrompt＋temperature，
+ * 不带 skill 集。agent 套用即拷贝为本地副本、之后互不联动；删除为软删，
+ * 已套用 agent 的本地副本不受影响。
  */
-export interface AiConfigPreset {
+export interface AiPromptTemplate {
   id: number
   name: string
   systemPrompt: string | null
   temperature: number | null
-  defaultSkillIds: string[]
   version: number
   updatedAt: string
 }
 
-export interface AiConfigPresetCreateInput {
+export interface AiPromptTemplateCreateInput {
   name: string
   systemPrompt?: string | null
   temperature?: number | null
-  defaultSkillIds?: string[]
 }
 
-export interface AiConfigPresetUpdateInput {
+export interface AiPromptTemplateUpdateInput {
   name: string
   systemPrompt?: string | null
   temperature?: number | null
-  defaultSkillIds?: string[]
   version: number
+}
+
+/**
+ * agent 的 Prompt 配置（Issue #214 UoW-4）：本地副本（systemPrompt/temperature，
+ * 解析真相源）＋来源模板留痕（id＋名，名解析不到时为 null）＋自有默认 skill 集。
+ */
+export interface AiAgentPromptConfig {
+  agentId: number
+  systemPrompt: string | null
+  temperature: number | null
+  promptTemplateId: number | null
+  promptTemplateName: string | null
+  defaultSkillIds: string[]
+}
+
+export interface AiAgentPromptConfigUpdateInput {
+  systemPrompt?: string | null
+  temperature?: number | null
+  defaultSkillIds?: string[]
 }
 
 /** 经验条目状态（与后端 agent_experience_lesson.status 状态机一致，Issue #184）。 */

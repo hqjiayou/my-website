@@ -46,11 +46,12 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 预设默认集下发（Issue #211 UoW-9）：组装快照的 presetSkills 原样进入正式对话
- * 请求的 skills 字段；无预设时 skills 为 null，报文与旧版一致（Python env 兜底）。
+ * 自有默认集下发（Issue #211 UoW-9 引入、#214 UoW-4 改存 agent 自有字段）：
+ * 组装快照的 defaultSkills 原样进入正式对话请求的 skills 字段；无自有集时
+ * skills 为 null，报文与旧版一致（Python env 兜底）。
  */
 @ExtendWith(MockitoExtension.class)
-class AgentAiPresetSkillsInjectionTest {
+class AgentAiDefaultSkillsInjectionTest {
 
     @Mock
     private AgentClient agentClient;
@@ -146,17 +147,17 @@ class AgentAiPresetSkillsInjectionTest {
     }
 
     @Test
-    void presetSkillsAreSentAsRequestSkills() {
+    void defaultSkillsAreSentAsRequestSkills() {
         stubPreparation(List.of("skill-b", "skill-a", "unknown-x"));
 
         AgentChatRequest request = capturedRequest();
 
         assertThat(request.skills()).containsExactly("skill-b", "skill-a", "unknown-x");
-        assertThat(request.promptProfile()).isEqualTo(new AgentPromptProfile("预设提示", null));
+        assertThat(request.promptProfile()).isEqualTo(new AgentPromptProfile("本地提示", null));
     }
 
     @Test
-    void withoutPresetSkillsRequestSkillsStayNull() {
+    void withoutDefaultSkillsRequestSkillsStayNull() {
         stubPreparation(null);
 
         AgentChatRequest request = capturedRequest();
@@ -164,7 +165,7 @@ class AgentAiPresetSkillsInjectionTest {
         assertThat(request.skills()).isNull();
     }
 
-    private void stubPreparation(List<String> presetSkills) {
+    private void stubPreparation(List<String> defaultSkills) {
         AgentAiConversationEntity conversation = new AgentAiConversationEntity();
         conversation.setId(77L);
         conversation.setAgentId(10L);
@@ -173,9 +174,9 @@ class AgentAiPresetSkillsInjectionTest {
                 .thenReturn(new ChatPreparation(
                         conversation,
                         List.of(),
-                        presetSkills == null ? null : new AgentPromptProfile("预设提示", null),
+                        defaultSkills == null ? null : new AgentPromptProfile("本地提示", null),
                         List.of(),
-                        presetSkills));
+                        defaultSkills));
     }
 
     private AgentChatRequest capturedRequest() {

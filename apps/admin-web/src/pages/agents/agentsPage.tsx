@@ -28,10 +28,11 @@ const inlineSelectClass =
 
 /**
  * 智能体列表（Issue #213 UoW-B）：由「进站自动跳转」改为表格页——类型（kind）
- * 与三类关联（订阅空间数／链预设／配置预设）一屏看清，且都能行内直接改，
- * 不必进资源本体页：kind 走专属端点（带 version 乐观锁），链预设／配置预设
- * 走各自的引用端点，订阅走知识库 link/unlink（以空间为 base、行 agent 为 target）。
- * 自由文本的用途标签 agentType 只作名称下的小字展示，与 kind 分开、不混。
+ * 与三类关联（订阅空间数／对话链／Prompt）一屏看清：kind 走专属端点行内改
+ * （带 version 乐观锁），订阅走知识库 link/unlink（以空间为 base、行 agent 为
+ * target）；对话链与 Prompt 已内置化（#214 UoW-3／UoW-4），列表只读摘要，
+ * 编辑在工作台内完成。自由文本的用途标签 agentType 只作名称下的小字展示，
+ * 与 kind 分开、不混。
  */
 export function AgentsPage() {
   const { t } = useTranslation('sites')
@@ -53,11 +54,6 @@ export function AgentsPage() {
         agentType: agentTypeFilter || undefined,
       }),
   })
-  const configPresetsQuery = useQuery({
-    queryKey: ['ai', 'config-presets'],
-    queryFn: () => aiApi.listConfigPresets(),
-  })
-
   const invalidateSites = () => {
     void queryClient.invalidateQueries({ queryKey: ['sites'] })
   }
@@ -76,35 +72,8 @@ export function AgentsPage() {
     },
   })
 
-  const configPresetMutation = useMutation({
-    mutationFn: (input: { id: number; configPresetId: number | null }) =>
-      agentApi.updateAgentConfigPreset(input.id, { configPresetId: input.configPresetId }),
-    onSuccess: () => {
-      toast.success(t('list.messages.configPresetUpdated'))
-      invalidateSites()
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : t('list.messages.configPresetUpdated'))
-      invalidateSites()
-    },
-  })
-
-  const configPresets = configPresetsQuery.data ?? []
   const records = sitesQuery.data?.records ?? []
   const total = sitesQuery.data?.total ?? 0
-
-  /** 预设下拉选项：当前引用若已不在列表里（预设被删），用列表项自带的 id＋名补一条，保证显示不丢。 */
-  function presetOptions(
-    currentId: number | null,
-    currentName: string | null,
-    presets: { id: number; name: string }[],
-  ) {
-    const options = presets.map((preset) => ({ id: preset.id, name: preset.name }))
-    if (currentId != null && !options.some((option) => option.id === currentId)) {
-      options.push({ id: currentId, name: currentName ?? `#${currentId}` })
-    }
-    return options
-  }
 
   const columns: DataTableColumn<AgentListItem>[] = [
     {
@@ -184,29 +153,17 @@ export function AgentsPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-16 shrink-0 text-xs text-admin-muted">{t('list.associations.configPreset')}</span>
-            <select
-              className={inlineSelectClass}
-              aria-label={t('list.associations.configPreset')}
-              value={row.configPresetId != null ? String(row.configPresetId) : ''}
-              disabled={
-                !canUpdate ||
-                (configPresetMutation.isPending && configPresetMutation.variables?.id === row.id)
-              }
-              onChange={(event) =>
-                configPresetMutation.mutate({
-                  id: row.id,
-                  configPresetId: event.target.value === '' ? null : Number(event.target.value),
-                })
-              }
-            >
-              <option value="">{t('list.associations.none')}</option>
-              {presetOptions(row.configPresetId, row.configPresetName, configPresets).map((option) => (
-                <option key={option.id} value={String(option.id)}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
+            <span className="w-16 shrink-0 text-xs text-admin-muted">{t('list.associations.prompt')}</span>
+            {/* Prompt 已内置化（#214 UoW-4）：列表只读摘要来源模板/本地副本与自有技能数，编辑在工作台提示词面板。 */}
+            <span className="inline-flex items-center gap-1 rounded bg-admin-surface-muted px-1.5 py-0.5 text-xs text-admin">
+              {row.promptTemplateName ??
+                (row.promptConfigured ? t('list.associations.promptLocal') : t('list.associations.none'))}
+            </span>
+            {row.defaultSkillCount > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded bg-admin-surface-muted px-1.5 py-0.5 text-xs text-admin">
+                {t('list.associations.promptSkills', { count: row.defaultSkillCount })}
+              </span>
+            ) : null}
           </div>
         </div>
       ),

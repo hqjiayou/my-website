@@ -23,15 +23,15 @@ import com.mywebsite.admin.entity.AdminAiConversationEntity;
 import com.mywebsite.admin.entity.AdminAiMessageEntity;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.entity.AdminAgentEntity;
-import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
 import com.mywebsite.admin.entity.AdminAiPromptProfileEntity;
+import com.mywebsite.admin.entity.AdminAiPromptTemplateEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
-import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiConversationMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
 import com.mywebsite.admin.mapper.AdminAiMessageMapper;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.admin.mapper.AdminAiPromptProfileMapper;
+import com.mywebsite.admin.mapper.AdminAiPromptTemplateMapper;
 import com.mywebsite.admin.testsupport.AbstractAdminSpringBootTest;
 import com.mywebsite.admin.testsupport.AdminTestJwtSigner;
 import com.mywebsite.agent.client.AgentClient;
@@ -88,7 +88,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
     private AdminAiPromptProfileMapper promptProfileMapper;
 
     @Autowired
-    private AdminAiConfigPresetMapper configPresetMapper;
+    private AdminAiPromptTemplateMapper promptTemplateMapper;
 
     @Autowired
     private AdminAgentMapper adminAgentMapper;
@@ -154,13 +154,15 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         legacyProfile.setTemperature(new java.math.BigDecimal("0.2"));
         promptProfileMapper.insert(legacyProfile);
 
-        // Issue #211：给该 agent 挂一个共享配置预设，删 agent 后预设须存活。
-        AdminAiConfigPresetEntity preset = new AdminAiConfigPresetEntity();
-        preset.setName("preset-for-delete-agent");
-        preset.setSystemPrompt("shop");
-        configPresetMapper.insert(preset);
+        // Issue #214 UoW-4：给该 agent 套用一份 Prompt 模板（本地副本＋留痕），
+        // 删 agent 后模板须存活（模板是平台资源、不随 agent 删除）。
+        AdminAiPromptTemplateEntity template = new AdminAiPromptTemplateEntity();
+        template.setName("template-for-delete-agent");
+        template.setSystemPrompt("shop");
+        promptTemplateMapper.insert(template);
         AdminAgentEntity agentRow = adminAgentMapper.selectById(agentId);
-        agentRow.setConfigPresetId(preset.getId());
+        agentRow.setPromptSystemPrompt("shop");
+        agentRow.setPromptTemplateId(template.getId());
         adminAgentMapper.updateById(agentRow);
 
         ObjectNode knowledge = MAPPER.createObjectNode();
@@ -185,12 +187,12 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
 
         assertThat(knowledgeDocumentMapper.selectById(docId)).isNull();
         // Issue #211 起口径变更：旧 profile 表已是退役数据（解析停读），删
-        // agent 不再清旧行，行保留待 #213 退役迁移统一清理；共享配置预设是
-        // 平台资源，同样不得被删 agent 级联删除。
+        // agent 不再清旧行，行保留待 #213 退役迁移统一清理；Prompt 模板是
+        // 平台资源（#214 UoW-4），同样不得被删 agent 级联删除。
         assertThat(promptProfileMapper.selectCount(new LambdaQueryWrapper<AdminAiPromptProfileEntity>()
                         .eq(AdminAiPromptProfileEntity::getAgentId, agentId)))
                 .isEqualTo(1);
-        assertThat(configPresetMapper.selectById(preset.getId())).isNotNull();
+        assertThat(promptTemplateMapper.selectById(template.getId())).isNotNull();
         assertThat(conversationMapper.selectById(conversationId)).isNull();
         assertThat(messageMapper.selectCount(new LambdaQueryWrapper<AdminAiMessageEntity>()
                         .eq(AdminAiMessageEntity::getConversationId, conversationId)))

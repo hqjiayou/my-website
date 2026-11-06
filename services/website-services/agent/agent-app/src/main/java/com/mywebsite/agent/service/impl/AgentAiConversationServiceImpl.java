@@ -21,12 +21,10 @@ import com.mywebsite.agent.dto.AgentAiMessageDto;
 import com.mywebsite.agent.dto.AgentAiSearchHitDto;
 import com.mywebsite.agent.dto.AgentAiShareDto;
 import com.mywebsite.agent.dto.AgentAiSharedConversationDto;
-import com.mywebsite.agent.entity.AgentAiConfigPresetEntity;
 import com.mywebsite.agent.entity.AgentAiConversationEntity;
 import com.mywebsite.agent.entity.AgentAiConversationShareEntity;
 import com.mywebsite.agent.entity.AgentAiMessageEntity;
 import com.mywebsite.agent.entity.AgentEntity;
-import com.mywebsite.agent.mapper.AgentAiConfigPresetMapper;
 import com.mywebsite.agent.mapper.AgentAiConversationMapper;
 import com.mywebsite.agent.mapper.AgentAiConversationShareMapper;
 import com.mywebsite.agent.mapper.AgentAiMessageMapper;
@@ -77,7 +75,6 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
     private final AgentAiConversationMapper conversationMapper;
     private final AgentAiMessageMapper messageMapper;
     private final AgentMapper agentMapper;
-    private final AgentAiConfigPresetMapper configPresetMapper;
     private final AgentAiConversationShareMapper shareMapper;
     private final ObjectMapper objectMapper;
 
@@ -85,13 +82,11 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
             AgentAiConversationMapper conversationMapper,
             AgentAiMessageMapper messageMapper,
             AgentMapper agentMapper,
-            AgentAiConfigPresetMapper configPresetMapper,
             AgentAiConversationShareMapper shareMapper,
             ObjectMapper objectMapper) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.agentMapper = agentMapper;
-        this.configPresetMapper = configPresetMapper;
         this.shareMapper = shareMapper;
         this.objectMapper = objectMapper;
     }
@@ -109,13 +104,13 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
             conversation.setAgentUserId(agentUserId);
             history = List.of();
         }
-        AgentAiConfigPresetEntity preset = resolveConfigPreset(agentId);
+        AgentEntity agent = agentMapper.selectById(agentId);
         return new ChatPreparation(
                 conversation,
                 history,
-                toPromptProfile(preset),
+                toPromptProfile(agent),
                 readTodos(conversation),
-                presetSkillIds(preset));
+                ownSkillIds(agent));
     }
 
     @Override
@@ -564,62 +559,57 @@ public class AgentAiConversationServiceImpl implements AgentAiConversationServic
         }
     }
 
-    private static AgentPromptProfile toPromptProfile(AgentAiConfigPresetEntity preset) {
-        if (preset == null) {
+    /**
+     * Prompt 本地副本解析（Issue #214 UoW-4）：直接读 agent 行上的本地副本
+     * （{@code prompt_system_prompt}／{@code prompt_temperature}，来源留痕
+     * {@code prompt_template_id}）。回退口径定死：三者皆空（含 agent 行不存在）
+     * 返回 null、不记日志——这是未配置的常态，与旧「无预设返回 null」逐字
+     * 一致；任一非空即组装 profile，含 V70 从名称型预设拷出的「只有留痕、
+     * prompt 与温度皆空」形态（旧解析下预设行存在同样返回非 null profile）。
+     * 配置预设与旧表 {@code agent_ai_prompt_profile} 自本单起停读。
+     */
+    private static AgentPromptProfile toPromptProfile(AgentEntity agent) {
+        if (agent == null
+                || (agent.getPromptTemplateId() == null
+                        && !StringUtils.hasText(agent.getPromptSystemPrompt())
+                        && agent.getPromptTemperature() == null)) {
             return null;
         }
-        Double temperature = preset.getTemperature() == null ? null : preset.getTemperature().doubleValue();
-        return new AgentPromptProfile(preset.getSystemPrompt(), temperature);
+        Double temperature =
+                agent.getPromptTemperature() == null ? null : agent.getPromptTemperature().doubleValue();
+        return new AgentPromptProfile(agent.getPromptSystemPrompt(), temperature);
     }
 
     /**
-     * 预设默认 skill 集（Issue #211 UoW-9）：{@code default_skill_ids} 是有序 JSON
-     * 数组文本，解析后原序透传——未知 id 不在 Java 侧过滤，处置政策只有一个点
-     * （Python {@code agent_skills_unknown_policy}）。无预设、空集或脏 JSON 一律
-     * 返回 null：请求 skills 字段缺席，Python env 默认兜底逐字不变；脏 JSON 记
+     * agent 自有默认 skill 集（Issue #211 UoW-9 引入、#214 UoW-4 改读自有字段）：
+     * {@code default_skill_ids} 是有序 JSON 数组文本，解析后原序透传——未知 id
+     * 不在 Java 侧过滤，处置政策只有一个点（Python
+     * {@code agent_skills_unknown_policy}）。无自有集、空集或脏 JSON 一律返回
+     * null：请求 skills 字段缺席，Python env 默认兜底逐字不变；脏 JSON 记
      * warn，不拖垮对话主流程。
      */
-    private List<String> presetSkillIds(AgentAiConfigPresetEntity preset) {
-        if (preset == null || !StringUtils.hasText(preset.getDefaultSkillIds())) {
+    private List<String> ownSkillIds(AgentEntity agent) {
+        if (agent == null || !StringUtils.hasText(agent.getDefaultSkillIds())) {
             return null;
         }
         try {
             List<String> parsed = objectMapper.readValue(
-                    preset.getDefaultSkillIds(), new TypeReference<List<String>>() {});
-            // 保序去重：写侧（admin 配置预设）已规范化，读侧再兜一层——绕过管理面
+                    agent.getDefaultSkillIds(), new TypeReference<List<String>>() {});
+            if (parsed == null) {
+                return null;
+            }
+            // 保序去重：写侧（admin Prompt 配置）已规范化，读侧再兜一层——绕过管理面
             // 直写 DB 的重复 id 不原样重复下发执行层。
             List<String> skills =
                     new ArrayList<>(new LinkedHashSet<>(parsed.stream().filter(Objects::nonNull).toList()));
             return skills.isEmpty() ? null : List.copyOf(skills);
         } catch (JsonProcessingException ex) {
             log.warn(
-                    "config preset {} has malformed default_skill_ids, treated as no preset skills",
-                    preset.getId(),
+                    "agent {} has malformed default_skill_ids, treated as no default skills",
+                    agent.getId(),
                     ex);
             return null;
         }
-    }
-
-    /**
-     * 配置预设解析（Issue #211 UoW-8）：agent → {@code config_preset_id} → 预设行。
-     * 回退口径定死：agent 无引用（含 agent 行不存在）返回 null、不记日志——这是
-     * 未配置的常态，与旧「无 profile 返回 null」逐字一致；引用悬空或预设已软删
-     * （{@code @TableLogic} 下 selectById 同样查不到）属异常态，返回 null 并记
-     * warn。旧表 {@code agent_ai_prompt_profile} 自本单起停读。
-     */
-    private AgentAiConfigPresetEntity resolveConfigPreset(long agentId) {
-        AgentEntity agent = agentMapper.selectById(agentId);
-        if (agent == null || agent.getConfigPresetId() == null) {
-            return null;
-        }
-        AgentAiConfigPresetEntity preset = configPresetMapper.selectById(agent.getConfigPresetId());
-        if (preset == null) {
-            log.warn(
-                    "agent {} references config preset {} which is missing or deleted; falling back to no profile",
-                    agentId,
-                    agent.getConfigPresetId());
-        }
-        return preset;
     }
 
     private List<AgentTodoItem> readTodos(AgentAiConversationEntity conversation) {

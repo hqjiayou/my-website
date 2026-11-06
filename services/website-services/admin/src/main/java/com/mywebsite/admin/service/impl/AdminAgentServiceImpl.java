@@ -6,7 +6,6 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mywebsite.admin.constant.AdminAgentConstants;
 import com.mywebsite.admin.constant.AdminAgentMessageKeys;
-import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentConfigPresetUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentCreateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentDetailDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentKindUpdateRequest;
@@ -18,11 +17,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.admin.entity.AdminAgentEntity;
-import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity;
+import com.mywebsite.admin.entity.AdminAiPromptTemplateEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
-import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper;
+import com.mywebsite.admin.mapper.AdminAiPromptTemplateMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
 
@@ -67,7 +66,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     private final AgentUserMemoryMapper agentUserMemoryMapper;
     private final AgentAiConversationShareMapper conversationShareMapper;
     private final AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper;
-    private final AdminAiConfigPresetMapper configPresetMapper;
+    private final AdminAiPromptTemplateMapper promptTemplateMapper;
     private final ObjectMapper objectMapper;
 
     public AdminAgentServiceImpl(
@@ -81,7 +80,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
             AgentUserMemoryMapper agentUserMemoryMapper,
             AgentAiConversationShareMapper conversationShareMapper,
             AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper,
-            AdminAiConfigPresetMapper configPresetMapper,
+            AdminAiPromptTemplateMapper promptTemplateMapper,
             ObjectMapper objectMapper) {
         this.adminAgentMapper = adminAgentMapper;
         this.adminAppearanceService = adminAppearanceService;
@@ -93,7 +92,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         this.agentUserMemoryMapper = agentUserMemoryMapper;
         this.conversationShareMapper = conversationShareMapper;
         this.subscriptionMapper = subscriptionMapper;
-        this.configPresetMapper = configPresetMapper;
+        this.promptTemplateMapper = promptTemplateMapper;
         this.objectMapper = objectMapper;
     }
 
@@ -123,17 +122,17 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         Page<AdminAgentEntity> page =
                 adminAgentMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         List<AdminAgentEntity> records = page.getRecords();
-        // 关联摘要（#213；链部分 #214 UoW-3 改）：订阅数与配置预设名按本页 id 集批量
-        // 预载后内存组装，避免逐行查询；对话链已内置化，列表只回两模式成员数（自有
-        // 链字段直接在 agent 行上，逐行解析计数即可）。
+        // 关联摘要（#213；链部分 #214 UoW-3 改、Prompt 部分 UoW-4 改）：订阅数与来源
+        // 模板名按本页 id 集批量预载后内存组装，避免逐行查询；对话链与 Prompt 副本
+        // 都已内置化，成员数/已配置标记直接由 agent 行字段逐行解析计得。
         Map<Long, Long> subscriptionCounts = subscriptionCounts(records);
-        Map<Long, String> configPresetNames = presetNames(
-                records.stream().map(AdminAgentEntity::getConfigPresetId).collect(Collectors.toSet()),
-                configPresetMapper,
-                AdminAiConfigPresetEntity::getName);
+        Map<Long, String> promptTemplateNames = presetNames(
+                records.stream().map(AdminAgentEntity::getPromptTemplateId).collect(Collectors.toSet()),
+                promptTemplateMapper,
+                AdminAiPromptTemplateEntity::getName);
         return new PageResult<>(
                 records.stream()
-                        .map(entity -> toListItem(entity, subscriptionCounts, configPresetNames))
+                        .map(entity -> toListItem(entity, subscriptionCounts, promptTemplateNames))
                         .toList(),
                 page.getTotal(),
                 (int) page.getCurrent(),
@@ -151,6 +150,30 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         } catch (JsonProcessingException ex) {
             return 0;
         }
+    }
+
+    /** 自有技能集成员数：同链计数的字符串数组版，脏值按 0 计。 */
+    private int skillCount(String rawSkillIds) {
+        if (!StringUtils.hasText(rawSkillIds)) {
+            return 0;
+        }
+        try {
+            List<String> ids = objectMapper.readValue(rawSkillIds, new TypeReference<List<String>>() {});
+            return ids == null ? 0 : ids.size();
+        } catch (JsonProcessingException ex) {
+            return 0;
+        }
+    }
+
+    /**
+     * 本地副本存在性（与解析口径一致，见 agent-app 组装）：留痕、prompt 文本、
+     * 温度任一非空即视为已配置——含「只从模板拷了名称型预设、prompt 与温度皆空」
+     * 的存量形态（旧解析下同样返回非 null 的 profile）。
+     */
+    private static boolean promptConfigured(AdminAgentEntity entity) {
+        return entity.getPromptTemplateId() != null
+                || StringUtils.hasText(entity.getPromptSystemPrompt())
+                || entity.getPromptTemperature() != null;
     }
 
     /** 订阅数＝订阅表行数（含空间创建者行，#209 口径）；按 agent id 集聚合 COUNT/GROUP BY 一次查回。 */
@@ -184,7 +207,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         return null;
     }
 
-    /** 预设名批量解析：id 集一次查回；查不到的 id 不入表（组装时 name 落 null、id 照实）。 */
+    /** 模板名批量解析：id 集一次查回；查不到的 id 不入表（组装时 name 落 null、id 照实）。 */
     private static <E extends AbstractAuditableEntity> Map<Long, String> presetNames(
             Set<Long> presetIds, BaseMapper<E> mapper, Function<E, String> nameExtractor) {
         Set<Long> ids = presetIds.stream().filter(Objects::nonNull).collect(Collectors.toSet());
@@ -249,13 +272,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         }
         agent.setDefaultDomain(blankToNull(request.defaultDomain()));
         agent.setDescription(blankToNull(request.description()));
-        // 非空引用须校验预设存在（口径同 updateConfigPreset）：不校验会撞
-        // fk_agent_config_preset 外键变 500，而非与专属端点一致的 404。
-        Long configPresetId = request.configPresetId();
-        if (configPresetId != null && configPresetMapper.selectById(configPresetId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND);
-        }
-        agent.setConfigPresetId(configPresetId);
         agent.setVersion(request.version());
         int updated = adminAgentMapper.updateById(agent);
         if (updated == 0) {
@@ -272,9 +288,9 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         adminAppearanceService.softDeleteByAgentId(id);
         adminContentService.softDeleteByAgentId(id);
         adminMediaService.softDeleteByAgentId(id);
-        // #211 UoW-8 起不再级联 Prompt 配置：旧 profile 表停写（退役另行），
-        // 配置预设是多 agent 共享资源、绝不随单个 agent 删除；本 agent 只清引用
-        // （下方 setConfigPresetId(null)），引用它的其他 agent 不受影响。
+        // Prompt 配置不再级联：旧 profile 表停写（退役另行）；Prompt 模板是平台
+        // 资源、绝不随单个 agent 删除（#214 UoW-4）。agent 行上的本地副本与自有
+        // 技能集是 agent 自有数据，随 agent 行本身软删，不需单独清理。
         adminAiKnowledgeService.softDeleteByAgentId(id);
         adminAiConversationService.softDeleteByAgentId(id);
         // 级联补全（#141 UoW-2）：成员关系、用户长期记忆、会话分享，漏删会残留成员行。
@@ -298,7 +314,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
                                 .eq(AgentAiConversationShareEntity::getAgentId, id)),
                 conversationShareMapper,
                 now);
-        agent.setConfigPresetId(null);
         agent.setDeletedAt(now);
         adminAgentMapper.updateById(agent);
         int deleted = adminAgentMapper.deleteById(id);
@@ -341,25 +356,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         int updated = adminAgentMapper.updateById(agent);
         if (updated == 0) {
             throw new BusinessException(ErrorCode.CONFLICT.getCode(), AdminAgentMessageKeys.AGENT_VERSION_CONFLICT);
-        }
-        return toDetail(requireSite(id));
-    }
-
-    /**
-     * 配置预设引用专属改写（#213）：形态仿链预设改引用——null 即清除引用；非空时
-     * 预设须存在（含未软删），与链预设 requirePreset 同口径抛裸 NOT_FOUND。
-     */
-    @Override
-    public AdminAgentDetailDto updateConfigPreset(long id, AdminAgentConfigPresetUpdateRequest request) {
-        AdminAgentEntity agent = requireSite(id);
-        Long presetId = request == null ? null : request.configPresetId();
-        if (presetId != null && configPresetMapper.selectById(presetId) == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND);
-        }
-        agent.setConfigPresetId(presetId);
-        int updated = adminAgentMapper.updateById(agent);
-        if (updated == 0) {
-            throw new BusinessException(ErrorCode.CONFLICT);
         }
         return toDetail(requireSite(id));
     }
@@ -414,7 +410,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     private AdminAgentListItemDto toListItem(
             AdminAgentEntity entity,
             Map<Long, Long> subscriptionCounts,
-            Map<Long, String> configPresetNames) {
+            Map<Long, String> promptTemplateNames) {
         return new AdminAgentListItemDto(
                 entity.getId(),
                 entity.getAgentCode(),
@@ -429,8 +425,12 @@ public class AdminAgentServiceImpl implements AdminAgentService {
                 subscriptionCounts.getOrDefault(entity.getId(), 0L),
                 chainMemberCount(entity.getChainKeyEntryIds()),
                 chainMemberCount(entity.getChainCliEntryIds()),
-                entity.getConfigPresetId(),
-                entity.getConfigPresetId() == null ? null : configPresetNames.get(entity.getConfigPresetId()));
+                entity.getPromptTemplateId(),
+                entity.getPromptTemplateId() == null
+                        ? null
+                        : promptTemplateNames.get(entity.getPromptTemplateId()),
+                promptConfigured(entity),
+                skillCount(entity.getDefaultSkillIds()));
     }
 
     private AdminAgentDetailDto toDetail(AdminAgentEntity entity) {
@@ -443,7 +443,7 @@ public class AdminAgentServiceImpl implements AdminAgentService {
                 entity.getStatus(),
                 entity.getDefaultDomain(),
                 entity.getDescription(),
-                entity.getConfigPresetId(),
+                entity.getPromptTemplateId(),
                 entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());

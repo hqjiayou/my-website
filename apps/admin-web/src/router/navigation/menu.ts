@@ -11,7 +11,6 @@ import {
   MessageSquare,
   Palette,
   Settings2,
-  SlidersHorizontal,
   Zap,
 } from 'lucide-react'
 
@@ -77,13 +76,13 @@ export const NAV_SECTIONS: NavSection[] = [
     entries: [
       {
         // 平台区（Issue #213 UoW-C）：跨站共享资源归组——知识空间、模型入口、
-        // 配置预设、媒体库（路由仍在运营区文件页，只在此归组呈现）。
+        // Prompt 模板、媒体库（路由仍在运营区文件页，只在此归组呈现）。
         id: 'group-platform',
         labelKey: 'groups.platform',
         children: [
           { labelKey: 'items.aiKnowledgeBases', path: ROUTES.ai.knowledgeBases, icon: BookOpen },
           { labelKey: 'items.aiSettings', path: ROUTES.ai.modelEntries, icon: Bot },
-          { labelKey: 'items.aiConfigPresets', path: ROUTES.ai.configPresets, icon: SlidersHorizontal },
+          { labelKey: 'items.aiPromptTemplates', path: ROUTES.ai.promptTemplates, icon: FileText },
           { labelKey: 'items.files', path: ROUTES.operation.files, icon: FolderKanban },
         ],
       },

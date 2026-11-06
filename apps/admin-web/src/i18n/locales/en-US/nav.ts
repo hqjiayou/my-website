@@ -30,7 +30,7 @@ export default {
     contents: 'Page Contents',
     files: 'File Assets',
     aiSettings: 'Model API management',
-    aiConfigPresets: 'Config presets',
+    aiPromptTemplates: 'Prompt templates',
     aiPlatformSettings: 'AI settings',
     proxyServices: 'API keys',
     aiUsage: 'AI usage',

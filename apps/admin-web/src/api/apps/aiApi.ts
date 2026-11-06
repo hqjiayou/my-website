@@ -28,12 +28,14 @@ import type {
   AiExperienceLessonListItem,
   AiExperienceLessonStatus,
   AiAgentChain,
+  AiAgentPromptConfig,
+  AiAgentPromptConfigUpdateInput,
   AiChainMode,
   AiChainPreset,
   AiChainPresetWriteInput,
-  AiConfigPreset,
-  AiConfigPresetCreateInput,
-  AiConfigPresetUpdateInput,
+  AiPromptTemplate,
+  AiPromptTemplateCreateInput,
+  AiPromptTemplateUpdateInput,
   AiMcpConfig,
   AiMcpSelection,
   AiMcpServerEntryInput,
@@ -188,31 +190,73 @@ export const aiApi = {
       .then(unwrapVoid)
   },
 
-  /** AI 配置预设（Issue #211 UoW-8 后端、#213 UoW-C 页面）：平台区 CRUD；删除为软删，引用方解析时回退无配置。 */
-  listConfigPresets(): Promise<AiConfigPreset[]> {
-    return httpClient.get<HttpMessageBody<AiConfigPreset[]>>('/admin/ai/config-presets').then(unwrapData)
+  /** Prompt 模板（Issue #214 UoW-4）：工具组平台资产 CRUD；删除为软删，已套用 agent 的本地副本不受影响。 */
+  listPromptTemplates(): Promise<AiPromptTemplate[]> {
+    return httpClient.get<HttpMessageBody<AiPromptTemplate[]>>('/admin/ai/prompt-templates').then(unwrapData)
   },
 
-  getConfigPreset(id: number): Promise<AiConfigPreset> {
-    return httpClient.get<HttpMessageBody<AiConfigPreset>>(`/admin/ai/config-presets/${id}`).then(unwrapData)
-  },
-
-  createConfigPreset(input: AiConfigPresetCreateInput): Promise<AiConfigPreset> {
+  getPromptTemplate(id: number): Promise<AiPromptTemplate> {
     return httpClient
-      .post<HttpMessageBody<AiConfigPreset>, AiConfigPresetCreateInput>('/admin/ai/config-presets', input)
+      .get<HttpMessageBody<AiPromptTemplate>>(`/admin/ai/prompt-templates/${id}`)
       .then(unwrapData)
   },
 
-  updateConfigPreset(id: number, input: AiConfigPresetUpdateInput): Promise<AiConfigPreset> {
+  createPromptTemplate(input: AiPromptTemplateCreateInput): Promise<AiPromptTemplate> {
     return httpClient
-      .put<HttpMessageBody<AiConfigPreset>, AiConfigPresetUpdateInput>(`/admin/ai/config-presets/${id}`, input)
+      .post<HttpMessageBody<AiPromptTemplate>, AiPromptTemplateCreateInput>('/admin/ai/prompt-templates', input)
       .then(unwrapData)
   },
 
-  deleteConfigPreset(id: number): Promise<void> {
+  updatePromptTemplate(id: number, input: AiPromptTemplateUpdateInput): Promise<AiPromptTemplate> {
     return httpClient
-      .delete<HttpMessageBody<null | void>>(`/admin/ai/config-presets/${id}`)
+      .put<HttpMessageBody<AiPromptTemplate>, AiPromptTemplateUpdateInput>(
+        `/admin/ai/prompt-templates/${id}`,
+        input,
+      )
+      .then(unwrapData)
+  },
+
+  deletePromptTemplate(id: number): Promise<void> {
+    return httpClient
+      .delete<HttpMessageBody<null | void>>(`/admin/ai/prompt-templates/${id}`)
       .then(unwrapVoid)
+  },
+
+  /** agent 的 Prompt 配置（Issue #214 UoW-4）：本地副本＋来源留痕＋自有默认 skill 集。 */
+  getAgentPromptConfig(agentId: number): Promise<AiAgentPromptConfig> {
+    return httpClient.get<HttpMessageBody<AiAgentPromptConfig>>(`${aiBase(agentId)}/prompt`).then(unwrapData)
+  },
+
+  /** 整表保存本地副本与自有技能集：空白 prompt/空集为清空；不改来源留痕。 */
+  updateAgentPromptConfig(
+    agentId: number,
+    input: AiAgentPromptConfigUpdateInput,
+  ): Promise<AiAgentPromptConfig> {
+    return httpClient
+      .put<HttpMessageBody<AiAgentPromptConfig>, AiAgentPromptConfigUpdateInput>(
+        `${aiBase(agentId)}/prompt`,
+        input,
+      )
+      .then(unwrapData)
+  },
+
+  /** 从模板套用：模板的 prompt 部分拷入本地副本（覆盖），自有技能集不动。 */
+  loadAgentPromptTemplate(agentId: number, templateId: number): Promise<AiAgentPromptConfig> {
+    return httpClient
+      .post<HttpMessageBody<AiAgentPromptConfig>, { templateId: number }>(
+        `${aiBase(agentId)}/prompt/load-template`,
+        { templateId },
+      )
+      .then(unwrapData)
+  },
+
+  /** 把本地副本另存为模板（返回新建模板，留痕指向它）。 */
+  saveAgentPromptAsTemplate(agentId: number, name: string): Promise<AiPromptTemplate> {
+    return httpClient
+      .post<HttpMessageBody<AiPromptTemplate>, { name: string }>(`${aiBase(agentId)}/prompt/save-as-template`, {
+        name,
+      })
+      .then(unwrapData)
   },
 
   /** agent 自有对话链（Issue #214 UoW-3）：按模式各一份有序 entry id 名单。 */

@@ -5,18 +5,17 @@ import com.mywebsite.infra.entity.AbstractAuditableEntity;
 import java.math.BigDecimal;
 
 /**
- * AI 配置预设（表 {@code agent_ai_config_preset}，Issue #211 UoW-8）：命名的
- * Prompt＋默认 skill 集，agent 以 {@code config_preset_id} 引用、多 agent 可共享。
- * 与 agent-core {@code AgentAiConfigPresetEntity} 同表双映射。
+ * Prompt 模板（表 {@code agent_prompt_template}，Issue #214 UoW-4）：命名的
+ * 提示词资产（名称＋system prompt＋temperature）。agent 套用即拷贝为本地
+ * 副本、之后互不联动；模板不带 skill 集（技能归 agent 自有集，性质不同，
+ * 自配置预设拆分起分开维护）。
  */
-@TableName("agent_ai_config_preset")
-public class AdminAiConfigPresetEntity extends AbstractAuditableEntity {
+@TableName("agent_prompt_template")
+public class AdminAiPromptTemplateEntity extends AbstractAuditableEntity {
 
     private String name;
     private String systemPrompt;
     private BigDecimal temperature;
-    /** 默认 skill id 的 JSON 数组文本（有序）；NULL/空＝无预设默认集。 */
-    private String defaultSkillIds;
 
     public String getName() {
         return name;
@@ -40,13 +39,5 @@ public class AdminAiConfigPresetEntity extends AbstractAuditableEntity {
 
     public void setTemperature(BigDecimal temperature) {
         this.temperature = temperature;
-    }
-
-    public String getDefaultSkillIds() {
-        return defaultSkillIds;
-    }
-
-    public void setDefaultSkillIds(String defaultSkillIds) {
-        this.defaultSkillIds = defaultSkillIds;
     }
 }
