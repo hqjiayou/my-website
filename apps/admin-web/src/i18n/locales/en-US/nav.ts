@@ -29,7 +29,7 @@ export default {
     styleSettings: 'Style Settings',
     contents: 'Page Contents',
     files: 'File Assets',
-    aiSettings: 'Model entries',
+    aiSettings: 'Model API management',
     aiChainPresets: 'Chain presets',
     aiConfigPresets: 'Config presets',
     aiPlatformSettings: 'AI settings',
