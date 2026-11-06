@@ -5,9 +5,10 @@ import com.mywebsite.infra.entity.AbstractAuditableEntity;
 
 /**
  * Admin 侧对平台 {@code agent_ai_chain_preset} 表的双映射实体（与 agent-core
- * {@code AgentAiChainPresetEntity} 同表不同模块）。对话链预设（Issue #210
- * UoW-7）：命名的有序模型入口集合，用途 v1 只有 {@code CHAT}；agent 以
- * {@code chain_preset_id} 引用、多 agent 可共享。
+ * {@code AgentAiChainPresetEntity} 同表不同模块）。对话链模板（Issue #210
+ * UoW-7 引入，#214 UoW-3 起降级为模板库）：命名的有序模型入口集合，用途 v1
+ * 只有 {@code CHAT}；套用即拷贝到 agent 自有链字段、之后互不联动（原
+ * {@code chain_preset_id} 引用列已于 #214 UoW-7／Flyway V72 删除）。
  */
 @TableName("agent_ai_chain_preset")
 public class AdminAiChainPresetEntity extends AbstractAuditableEntity {

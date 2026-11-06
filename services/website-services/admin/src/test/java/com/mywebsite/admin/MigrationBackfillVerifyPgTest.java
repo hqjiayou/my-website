@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
 import java.util.List;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -22,11 +23,14 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * ① V57：每个未删空间都有一行创建者订阅；
  * ② V61：嵌入登记按空间扇出，类集（entry_id 集合）与原 agent-scope 行一致；
  * ③ V64：agent_ai_knowledge_document.agent_id 列已删；
- * ④ V63：链预设按「专属在前、平台在后（段内默认在前、id 升序）」生成并回填引用；
+ * ④ V63：链预设按「专属在前、平台在后（段内默认在前、id 升序）」逐 agent 生成
+ * （引用列已于 V72 删除，生成结果经预设行内容与 ⑤ 的自有链共同钉死）；
  * ⑤ V69：自有链按模式拆分拷贝——KEY 链＝预设中 KEY 成员保序、CLI 链＝CLI 成员保序；
  * ⑥ V70：profile→预设（V60）→模板＋本地副本两跳平移后 prompt 逐字等价，无 profile
  * 的 agent 副本保持全空；另以 V69 为起点单独验证预设的 skills 部分拷入自有集、
- * 共享预设各 agent 各持一份、未引用/引用已删预设不回填。
+ * 共享预设各 agent 各持一份、未引用/引用已删预设不回填；
+ * ⑦ V72：退役引用列 chain_preset_id／config_preset_id 及其 FK 已删（生效值已在
+ * ⑤⑥ 拷入 agent 自有字段，删列不改变解析结果）。
  *
  * <p>执行：{@code mvn test -Ppersistence-verify-pg -pl admin -am -Dtest=MigrationBackfillVerifyPgTest}
  */
@@ -107,17 +111,25 @@ class MigrationBackfillVerifyPgTest {
                 Integer.class);
         assertThat(documentAgentIdColumns).isZero();
 
-        // ④ V63 生成＋回填：引用非空，成员序＝专属（默认在前、id 升序）→平台。
-        Long chainPresetId = jdbc.queryForObject(
-                "SELECT chain_preset_id FROM agent WHERE id = ?", Long.class, AGENT_ID);
-        assertThat(chainPresetId).isNotNull();
-        String entryIdsJson = jdbc.queryForObject(
-                "SELECT entry_ids FROM agent_ai_chain_preset WHERE id = ?", String.class, chainPresetId);
-        List<Long> presetEntryIds =
-                new ObjectMapper().readValue(entryIdsJson, new TypeReference<List<Long>>() {});
-        assertThat(presetEntryIds)
-                .containsExactly(
-                        OWN_DEFAULT_ENTRY_ID, OWN_CLI_ENTRY_ID, OWN_ALT_ENTRY_ID, PLATFORM_ENTRY_ID);
+        // ④ V63 生成预设：逐 agent 生成（同列表去重）——AGENT 的名单＝专属
+        // （默认在前、id 升序）→平台，PROFILE_AGENT 无专属入口、只有平台链。
+        // 引用列 chain_preset_id 已于 V72 删除，生成结果改由预设行内容本身
+        // 钉死，并由 ⑤ 的自有链拆分结果反证回填确实作用到了 AGENT 头上。
+        List<String> generatedPresetJsons = jdbc.queryForList(
+                "SELECT entry_ids FROM agent_ai_chain_preset", String.class);
+        List<List<Long>> generatedPresets = new ArrayList<>();
+        for (String presetJson : generatedPresetJsons) {
+            generatedPresets.add(
+                    new ObjectMapper().readValue(presetJson, new TypeReference<List<Long>>() {}));
+        }
+        assertThat(generatedPresets)
+                .containsExactlyInAnyOrder(
+                        List.of(
+                                OWN_DEFAULT_ENTRY_ID,
+                                OWN_CLI_ENTRY_ID,
+                                OWN_ALT_ENTRY_ID,
+                                PLATFORM_ENTRY_ID),
+                        List.of(PLATFORM_ENTRY_ID));
 
         // ⑤ V69 拆分拷贝：KEY 链只含预设里的 KEY 成员（保预设序），CLI 链只含 CLI 成员。
         String chainKeyJson = jdbc.queryForObject(
@@ -161,13 +173,29 @@ class MigrationBackfillVerifyPgTest {
                                 + " AND default_skill_ids IS NULL",
                         Integer.class, AGENT_ID))
                 .isEqualTo(1);
+
+        // ⑦ V72：两列退役引用已删（生效值已在 ⑤⑥ 拷入自有字段，删列后
+        // 解析结果不变）；两 FK 随列删除一并消失。
+        Integer retiredReferenceColumns = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns"
+                        + " WHERE table_name = 'agent'"
+                        + " AND column_name IN ('chain_preset_id', 'config_preset_id')",
+                Integer.class);
+        assertThat(retiredReferenceColumns).isZero();
+        Integer retiredReferenceConstraints = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.table_constraints"
+                        + " WHERE table_name = 'agent'"
+                        + " AND constraint_name IN ('fk_agent_chain_preset', 'fk_agent_config_preset')",
+                Integer.class);
+        assertThat(retiredReferenceConstraints).isZero();
     }
 
     /**
      * V70 预设拆分（以 V69 为起点）：未删预设逐条生成同名模板；引用 agent 把
      * prompt 拷为本地副本、skills 拷入自有集、留痕指向生成模板；共享预设的
      * 多个 agent 各持一份且留痕同指一条模板；未引用与引用已删预设的 agent
-     * 保持全空；已删预设不生成模板；config_preset_id 列值原样保留（停用不清空）。
+     * 保持全空；已删预设不生成模板；引用列 config_preset_id 已于 V72（UoW-7）
+     * 删除，迁到最新后副本即唯一真相。
      */
     @Test
     void stagedMigrationFromV69SplitsConfigPresetsIntoTemplatesAndOwnCopies() throws Exception {
@@ -252,11 +280,15 @@ class MigrationBackfillVerifyPgTest {
             assertThat(jdbc.queryForObject(
                             "SELECT prompt_template_id FROM agent WHERE id = ?", Long.class, agentId))
                     .isEqualTo(sharedTemplateId);
-            // 列保留口径：config_preset_id 值不动（运行时停读，删除留 UoW-7）。
-            assertThat(jdbc.queryForObject(
-                            "SELECT config_preset_id FROM agent WHERE id = ?", Long.class, agentId))
-                    .isEqualTo(presetShared);
         }
+
+        // V72（UoW-7）：引用列 config_preset_id 已删——上面逐 agent 的副本
+        // 四项断言即删列后仍成立的等价钉子，本库迁到最新后该列同样不存在。
+        assertThat(jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM information_schema.columns"
+                                + " WHERE table_name = 'agent' AND column_name = 'config_preset_id'",
+                        Integer.class))
+                .isZero();
 
         // 未引用与引用已删预设的 agent：四字段全空，兜底集不固化。
         for (long agentId : new long[] {agentBare, agentStale}) {

@@ -15,7 +15,8 @@ import java.util.List;
  *       agent 引用，可自由删除。</li>
  *   <li><b>agent 自有链</b>：链的生效形态，存 agent 行的两个字段（按模式各一份
  *       有序 entry_ids，V69）。正式对话、试聊、转写、提炼的组链都只读自有链；
- *       原 {@code chain_preset_id} 引用自本步起停止读写（列保留待 UoW-7 评估）。</li>
+ *       原 {@code chain_preset_id} 引用自 UoW-3 起停止读写、已于 UoW-7
+ *       （Flyway V72）删列。</li>
  * </ul>
  */
 public interface AdminAiChainPresetService {

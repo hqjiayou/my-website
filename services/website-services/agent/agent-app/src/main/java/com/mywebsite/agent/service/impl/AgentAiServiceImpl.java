@@ -829,9 +829,9 @@ public class AgentAiServiceImpl implements AgentAiService {
      * 链内置化后（Issue #214 UoW-3）链取自 agent 自有字段：按模式各一份有序
      * entry ids（V69），按名单序取启用入口交 {@code resolveMemberChain} 组链；首元是
      * 主用（名单序内第一个默认），主用坏掉整链为空（ADR-0004）；agent 未配该模式
-     * 链时链为空。#210 的链预设引用（chain_preset_id）自本步起不再参与解析，
-     * 预设降级为模板（套用即拷贝）。UoW-6 的来源分层过渡组链整体退役，
-     * {@code source_agent_id} 不再参与组链。
+     * 链时链为空。#210 的链预设引用（chain_preset_id）自 UoW-3 起不再参与解析、
+     * 列已于 UoW-7（Flyway V72）删除，预设降级为模板（套用即拷贝）。UoW-6 的
+     * 来源分层过渡组链整体退役，{@code source_agent_id} 不再参与组链。
      */
     private List<ChainLink> loadModelChainLinks(long agentId, String mode) {
         List<Long> entryIds = ownChainEntryIds(agentId, mode);
