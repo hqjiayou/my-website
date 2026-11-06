@@ -92,6 +92,21 @@ export interface AiModelEntry {
   mode: string
   /** 网关路由别名；null 表示未设置。服务端校验 `^[a-z0-9][a-z0-9_-]{1,63}$`（会转小写）。 */
   alias: string | null
+  /** 派生行标记（Issue #214 UoW-2）：derivedSource 非空＝由来源自动派生，管理面只读。 */
+  derived: boolean
+  /** 派生来源：'PROXY'＝CLI 代理派生；人工登记为 null。 */
+  derivedSource: string | null
+}
+
+/** CLI 派生条目同步报告（Issue #214 UoW-2）。status: OK / PROXY_UNAVAILABLE / NO_CLIENT_KEY。 */
+export interface AiCliEntrySyncReport {
+  status: string
+  proxyReady: boolean
+  created: number
+  reactivated: number
+  deactivated: number
+  unchanged: number
+  skippedNoClientKey: number
 }
 
 export interface AiModelEntryWriteInput {

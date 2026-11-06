@@ -36,6 +36,7 @@ import type {
   AiMcpConfig,
   AiMcpSelection,
   AiMcpServerEntryInput,
+  AiCliEntrySyncReport,
   AiModelEntry,
   AiModelEntryWriteInput,
   AiRuntimeConfig,
@@ -136,6 +137,13 @@ export const aiApi = {
 
   listModelEntries(): Promise<AiModelEntry[]> {
     return httpClient.get<HttpMessageBody<AiModelEntry[]>>('/admin/ai/model-entries').then(unwrapData)
+  },
+
+  /** CLI 派生条目同步（Issue #214 UoW-2）：按代理当前账号/模型清单物化派生行，返回计数报告。 */
+  syncCliModelEntries(): Promise<AiCliEntrySyncReport> {
+    return httpClient
+      .post<HttpMessageBody<AiCliEntrySyncReport>, Record<string, never>>('/admin/ai/model-entries/sync-cli', {})
+      .then(unwrapData)
   },
 
   createModelEntry(input: AiModelEntryWriteInput): Promise<AiModelEntry> {

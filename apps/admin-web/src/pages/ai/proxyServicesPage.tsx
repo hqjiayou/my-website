@@ -135,6 +135,70 @@ function shownModelIds(provider: string, modelIds: string[] | null | undefined) 
 
 export function ProxyServicesPage() {
   const { t } = useTranslation('aiAdmin')
+  const [panel, setPanel] = useState<'cli' | 'key'>('cli')
+  const statusQuery = useQuery({
+    queryKey: ['admin', 'proxy-services'],
+    queryFn: () => aiApi.getProxyServices(),
+  })
+  const status = statusQuery.data
+
+  return (
+    <div className="space-y-6">
+      <AdminPageHeader
+        className="mb-0"
+        title={t('proxyServices.title')}
+        description={t('proxyServices.description')}
+        action={
+          status ? (
+            status.reachable ? (
+              <span className="admin-status-tag inline-flex items-center gap-1.5 rounded-full bg-admin-success-muted px-2 text-xs font-medium text-admin-success">
+                <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-admin-success" />
+                {t('proxyServices.reachable')}
+              </span>
+            ) : (
+              <StatusTag status="warning" tone="warning" label={t('proxyServices.unreachable')} />
+            )
+          ) : null
+        }
+      />
+
+      <div className="inline-flex rounded-[10px] bg-admin-surface-muted p-[3px]" role="tablist">
+        {(
+          [
+            ['cli', t('proxyServices.cliTitle')],
+            ['key', t('proxyServices.keyTitle')],
+          ] as const
+        ).map(([key, label]) => {
+          const active = panel === key
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setPanel(key)}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-sm font-medium transition admin-focus-ring',
+                active ? 'bg-admin-surface font-semibold text-admin shadow-sm' : 'text-admin-muted hover:text-admin',
+              )}
+            >
+              {label}
+            </button>
+          )
+        })}
+      </div>
+      {panel === 'key' ? <ApiKeyColumn /> : <ProxyServicesCliPanel />}
+    </div>
+  )
+}
+
+/**
+ * CLI 代理面板本体（账号、登录、客户端 key、模型清单与 pacing）：原
+ * ProxyServicesPage 的 CLI 部分整体搬运（Issue #214 UoW-2 起同时被
+ * 「模型 API 管理」页的代理来源详情复用），逻辑与文案未改。
+ */
+export function ProxyServicesCliPanel() {
+  const { t } = useTranslation('aiAdmin')
   const queryClient = useQueryClient()
   const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
   const [creating, setCreating] = useState(false)
@@ -143,7 +207,6 @@ export function ProxyServicesPage() {
   const [createdKey, setCreatedKey] = useState<string | null>(null)
   const [pendingLogin, setPendingLogin] = useState<PendingLogin | null>(null)
   const [selectedName, setSelectedName] = useState<string | null>(null)
-  const [panel, setPanel] = useState<'cli' | 'key'>('cli')
   const namesAtLogin = useRef<string[] | null>(null)
 
   const statusQuery = useQuery({
@@ -280,55 +343,10 @@ export function ProxyServicesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <AdminPageHeader
-        className="mb-0"
-        title={t('proxyServices.title')}
-        description={t('proxyServices.description')}
-        action={
-          status ? (
-            status.reachable ? (
-              <span className="admin-status-tag inline-flex items-center gap-1.5 rounded-full bg-admin-success-muted px-2 text-xs font-medium text-admin-success">
-                <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-admin-success" />
-                {t('proxyServices.reachable')}
-              </span>
-            ) : (
-              <StatusTag status="warning" tone="warning" label={t('proxyServices.unreachable')} />
-            )
-          ) : null
-        }
-      />
+    <>
 
-      <div className="inline-flex rounded-[10px] bg-admin-surface-muted p-[3px]" role="tablist">
-        {(
-          [
-            ['cli', t('proxyServices.cliTitle')],
-            ['key', t('proxyServices.keyTitle')],
-          ] as const
-        ).map(([key, label]) => {
-          const active = panel === key
-          return (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setPanel(key)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-sm font-medium transition admin-focus-ring',
-                active ? 'bg-admin-surface font-semibold text-admin shadow-sm' : 'text-admin-muted hover:text-admin',
-              )}
-            >
-              {label}
-            </button>
-          )
-        })}
-      </div>
-
-      {panel === 'key' ? <ApiKeyColumn /> : null}
-
-      {panel === 'cli' && statusQuery.isLoading ? <p className="text-sm text-admin-muted">{t('loading')}</p> : null}
-      {panel === 'cli' && statusQuery.isError ? (
+      {statusQuery.isLoading ? <p className="text-sm text-admin-muted">{t('loading')}</p> : null}
+      {statusQuery.isError ? (
         <p className="text-sm text-danger-emphasis">
           {t('error')}{' '}
           <button type="button" className="underline" onClick={() => statusQuery.refetch()}>
@@ -337,7 +355,7 @@ export function ProxyServicesPage() {
         </p>
       ) : null}
 
-      {panel === 'cli' && status && !status.reachable ? (
+      {status && !status.reachable ? (
         <section className="admin-content-data rounded-xl border border-dashed border-admin bg-admin-surface px-6 py-8">
           <p className="text-base font-medium text-admin">{t('proxyServices.unreachable')}</p>
           <p className="mt-2 font-mono text-sm text-admin-muted">{status.baseUrl || t('proxyServices.port')}</p>
@@ -345,11 +363,11 @@ export function ProxyServicesPage() {
         </section>
       ) : null}
 
-      {panel === 'cli' && status?.reachable && !status.managementConfigured ? (
+      {status?.reachable && !status.managementConfigured ? (
         <p className="text-sm text-warning-emphasis text-warning-emphasis">{t('proxyServices.managementOff')}</p>
       ) : null}
 
-      {panel === 'cli' && canManage && status ? (
+      {canManage && status ? (
         <>
           <section className="overflow-hidden rounded-xl border border-admin bg-admin-surface">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-admin px-4 py-3">
@@ -634,7 +652,7 @@ export function ProxyServicesPage() {
           </form>
         </FormDialog>
       ) : null}
-    </div>
+    </>
   )
 }
 
