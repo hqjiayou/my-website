@@ -86,6 +86,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
         AdminAiModelEntryEntity entry = requireEntry(id);
+        requireNotDerived(entry);
         boolean asDefault = asDefault(request);
         if (asDefault) {
             // 默认位在该入口自己的来源 × 模式内互斥（与 V62 的来源唯一索引同口径）。
@@ -114,6 +115,7 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
     @Transactional
     public void deleteEntry(long id) {
         AdminAiModelEntryEntity entry = requireEntry(id);
+        requireNotDerived(entry);
         entry.setDeletedAt(OffsetDateTime.now(ZoneOffset.UTC));
         modelEntryMapper.updateById(entry);
         modelEntryMapper.deleteById(id);
@@ -250,6 +252,17 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
         return entry;
     }
 
+    /**
+     * 派生行只读（Issue #214 UoW-2）：derived_source 非空的条目由同步维护，
+     * 人工改/删一律 409 拦截，文案走 admin.ai.model-entry.derived-read-only。
+     */
+    private void requireNotDerived(AdminAiModelEntryEntity entry) {
+        if (StringUtils.hasText(entry.getDerivedSource())) {
+            throw new BusinessException(
+                    ErrorCode.CONFLICT.getCode(), "admin.ai.model-entry.derived-read-only");
+        }
+    }
+
     /** 停用的入口不能占着默认位，否则下一条无法标成默认。 */
     private static boolean asDefault(AdminAiModelEntryWriteRequest request) {
         return Boolean.TRUE.equals(request.enabled()) && Boolean.TRUE.equals(request.defaultEntry());
@@ -358,7 +371,9 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
                 entry.getVersion(),
                 entry.getUpdatedAt(),
                 normalizeMode(entry.getMode()),
-                entry.getAlias());
+                entry.getAlias(),
+                StringUtils.hasText(entry.getDerivedSource()),
+                entry.getDerivedSource());
     }
 
     private static String normalizeOptionalSpec(String raw) {

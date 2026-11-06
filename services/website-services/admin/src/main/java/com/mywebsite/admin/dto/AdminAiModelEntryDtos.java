@@ -28,7 +28,9 @@ public final class AdminAiModelEntryDtos {
             Integer version,
             OffsetDateTime updatedAt,
             String mode,
-            String alias) {}
+            String alias,
+            boolean derived,
+            String derivedSource) {}
 
     /** 写入请求不再带 agent 作用域：入口一律平台注册（Issue #210 UoW-6）。 */
     public record AdminAiModelEntryWriteRequest(
@@ -42,4 +44,19 @@ public final class AdminAiModelEntryDtos {
             Integer version,
             @Size(max = 16) String mode,
             @Size(max = 64) String alias) {}
+
+    /**
+     * CLI 派生条目同步报告（Issue #214 UoW-2）。{@code status} 为 OK /
+     * PROXY_UNAVAILABLE（代理不可达或管理面未配置，未做任何变更）/
+     * NO_CLIENT_KEY（代理就绪但无客户端 key，新模型只能跳过）。
+     * {@code deactivated} 是代理侧已消失模型被停用的派生行数（不硬删）。
+     */
+    public record AdminAiCliEntrySyncReportDto(
+            String status,
+            boolean proxyReady,
+            int created,
+            int reactivated,
+            int deactivated,
+            int unchanged,
+            int skippedNoClientKey) {}
 }

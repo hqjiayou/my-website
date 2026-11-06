@@ -41,6 +41,9 @@ public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String alias;
 
+    /** 派生来源标记（Issue #214 UoW-2）：null＝人工登记；PROXY＝CLI 代理派生（管理面只读）。 */
+    private String derivedSource;
+
     public String getDisplayName() {
         return displayName;
     }
@@ -127,5 +130,13 @@ public class AdminAiModelEntryEntity extends AbstractAuditableEntity {
 
     public void setAlias(String alias) {
         this.alias = alias;
+    }
+
+    public String getDerivedSource() {
+        return derivedSource;
+    }
+
+    public void setDerivedSource(String derivedSource) {
+        this.derivedSource = derivedSource;
     }
 }
