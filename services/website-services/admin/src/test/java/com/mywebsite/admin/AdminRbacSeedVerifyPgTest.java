@@ -90,7 +90,6 @@ class AdminRbacSeedVerifyPgTest {
             "admin:ai-conversation:list",
             "admin:ai-model:read",
             "admin:ai-model:update",
-            "admin:menu:ai.proxyservices",
             "admin:menu:ai.usage",
             "admin:menu:ai.modelentries",
             "admin:menu:model",
@@ -106,7 +105,7 @@ class AdminRbacSeedVerifyPgTest {
      */
     private static final int EXPECTED_FLYWAY_VERSION_COUNT = countFlywayMigrationFiles();
 
-    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 63; // V67 菜单重组后 61；V70 工具组 +1 Prompt 模板菜单（61→62）；V71 工具组 +1 Skills 货架菜单（62→63）
+    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 62; // V67 菜单重组后 61；V70 工具组 +1 Prompt 模板菜单（61→62）；V71 工具组 +1 Skills 货架菜单（62→63）；V73 退役「API 管理」菜单（63→62）
 
     private static int countFlywayMigrationFiles() {
         Resource[] resources;
@@ -197,14 +196,14 @@ class AdminRbacSeedVerifyPgTest {
                 """,
                 Long.class);
         assertThat(appsSitesMenu.get("parent_id")).isEqualTo(appsParentId);
-        Map<String, Object> apiMenu = jdbcTemplate.queryForMap(
+        // 「API 管理」菜单已于 V73 退役：无未删行、角色绑定随之撤除（计数断言已覆盖绑定集）。
+        Integer retiredApiMenu = jdbcTemplate.queryForObject(
                 """
-                SELECT route_path, parent_id
-                FROM admin_permission
+                SELECT COUNT(*) FROM admin_permission
                 WHERE permission_code = 'admin:menu:ai.proxyservices' AND deleted = FALSE
-                """);
-        assertThat(apiMenu.get("route_path")).isEqualTo("/agent/api");
-        assertThat(apiMenu.get("parent_id")).isEqualTo(appsParentId);
+                """,
+                Integer.class);
+        assertThat(retiredApiMenu).isZero();
 
         List<Map<String, Object>> adminBindings = jdbcTemplate.queryForList(
                 """
