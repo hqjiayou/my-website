@@ -9,7 +9,7 @@ import { StatusTag } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
-import type { AiRuntimeLimits, AiRuntimeStatus } from '@/types/ai'
+import type { AiChainMode, AiModelEntry, AiRuntimeLimits, AiRuntimeStatus } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 
 import { SkillCatalogItem } from './agentAiSkillCatalog'
@@ -32,19 +32,50 @@ function modelFace(spec: string) {
   return { family, name }
 }
 
-/** 模型链节点：主用节点描边高亮，备援节点为普通底色，均带表示在线的小圆点。 */
-function ChainNode({ main, children }: { main?: boolean; children: ReactNode }) {
+/**
+ * 组链节点卡（DESIGN_SYSTEM §10 组链可视化）：名称＋模型两行呈现；每行首个节点
+ * 为主用（主色边＋5% 底＋主用标签），已停用节点虚线边＋55% 透明。
+ */
+function ChainNode({
+  name,
+  model,
+  main,
+  disabled,
+  mainLabel,
+}: {
+  name: string
+  model: string
+  main?: boolean
+  disabled?: boolean
+  mainLabel: string
+}) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold',
-        main
-          ? 'border-[rgb(var(--primary)/.4)] bg-[rgb(var(--primary)/.08)] text-[rgb(var(--primary))]'
-          : 'border-admin bg-admin-surface-muted text-admin',
+        'min-w-0 rounded-[10px] border px-3 py-2',
+        main ? 'border-primary/50 bg-primary/5' : 'border-admin bg-admin-surface',
+        disabled && 'border-dashed opacity-55',
       )}
     >
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-admin-success" />
-      {children}
+      <span className="flex items-center gap-1.5">
+        <span className="truncate text-[13px] font-semibold text-admin">{name}</span>
+        {main ? (
+          <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+            {mainLabel}
+          </span>
+        ) : null}
+      </span>
+      <span className="block truncate text-xs text-admin-muted">{model}</span>
+    </span>
+  )
+}
+
+/** 组链节点间连接件：横线＋线下触发条件小字（§10 定案形态，不以图标代替）。 */
+function ChainConnector({ label }: { label: string }) {
+  return (
+    <span className="flex flex-col items-center gap-1 self-center px-1">
+      <span className="w-8 border-t border-admin" />
+      <span className="whitespace-nowrap text-xs text-admin-muted">{label}</span>
     </span>
   )
 }
@@ -122,6 +153,18 @@ export function AgentOverviewPage() {
     queryFn: () => aiApi.getAgentPromptConfig(site.id),
     enabled: canPrompt,
   })
+  // 组链可视化（§10）的按模式数据：agent 自有链的 key/cli 两份有序 entry id 名单，
+  // join 平台模型条目取名称/模型/启停（与对话链编辑器同源同 queryKey）。
+  const chainQuery = useQuery({
+    queryKey: ['sites', site.id, 'ai', 'chain'],
+    queryFn: () => aiApi.getAgentChain(site.id),
+    enabled: canPrompt,
+  })
+  const modelEntriesQuery = useQuery({
+    queryKey: ['ai', 'model-entries'],
+    queryFn: () => aiApi.listModelEntries(),
+    enabled: canPrompt,
+  })
   const knowledgeQuery = useQuery({
     queryKey: ['sites', site.id, 'ai', 'knowledge', 'overview'],
     queryFn: () => aiApi.listKnowledgeDocuments(site.id, { pageNum: 1, pageSize: 100 }),
@@ -151,16 +194,49 @@ export function AgentOverviewPage() {
         .filter(Boolean)
         .join(' · ')
     : undefined
+  const chainEntryById = new Map((modelEntriesQuery.data ?? []).map((entry) => [entry.id, entry]))
+  const chainRows = (['KEY', 'CLI'] as AiChainMode[])
+    .map((mode) => ({
+      mode,
+      entries: (chainQuery.data
+        ? mode === 'KEY'
+          ? chainQuery.data.keyEntryIds
+          : chainQuery.data.cliEntryIds
+        : []
+      )
+        .map((id) => chainEntryById.get(id))
+        .filter((entry): entry is AiModelEntry => entry != null),
+    }))
+    .filter((row) => row.entries.length > 0)
   const modelChainReady =
-    canPrompt && !runtimeQuery.isPending && runtime != null && runtime.reachable && runtimeStatus != null && configuredModel != null
+    canPrompt &&
+    !runtimeQuery.isPending &&
+    runtime != null &&
+    runtime.reachable &&
+    runtimeStatus != null &&
+    chainQuery.data != null &&
+    modelEntriesQuery.data != null &&
+    chainRows.length > 0
   const modelValueNode = modelChainReady ? (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <ChainNode main>{modelFace(configuredModel as string).name}</ChainNode>
-      {runtimeStatus!.fallbackProviders.map((spec) => (
-        <Fragment key={spec}>
-          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-admin-muted" />
-          <ChainNode>{modelFace(spec).name}</ChainNode>
-        </Fragment>
+    <div className="space-y-2">
+      {chainRows.map((row) => (
+        <div key={row.mode} className="flex items-center gap-2">
+          <span className="w-16 shrink-0 text-xs font-semibold uppercase text-admin-muted">{row.mode}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {row.entries.map((entry, index) => (
+              <Fragment key={entry.id}>
+                {index > 0 ? <ChainConnector label={t('agentOverview.model.fallbackTrigger')} /> : null}
+                <ChainNode
+                  name={entry.displayName}
+                  model={modelFace(entry.modelSpec).name}
+                  main={index === 0}
+                  disabled={!entry.enabled}
+                  mainLabel={t('aiWorkspace.chainPreset.primaryMark')}
+                />
+              </Fragment>
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   ) : (
@@ -244,7 +320,7 @@ export function AgentOverviewPage() {
             icon={Zap}
             label={t('agentOverview.cards.modelChain')}
             value={modelValueNode}
-            sub={modelDetail}
+            sub={modelChainReady ? undefined : modelDetail}
             footerLabel={t('agentOverview.actions.openRuntime')}
             to={ROUTES.apps.agentRuntime(site.id)}
           />

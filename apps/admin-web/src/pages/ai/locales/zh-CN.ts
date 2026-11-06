@@ -92,6 +92,7 @@ export default {
       add: '新建模板',
       empty: '暂无模板。',
       noMembers: '（无成员）',
+      chainTrigger: '限流 / 5xx 时',
       edit: '编辑',
       delete: '删除',
       editorNew: '新建链模板',

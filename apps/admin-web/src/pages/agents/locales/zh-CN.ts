@@ -214,6 +214,7 @@ export default {
       status: '状态',
       fallbacks: '备援',
       noFallback: '无',
+      fallbackTrigger: '限流 / 5xx 时',
     },
     prompt: {
       configured: '已配置',
@@ -678,8 +679,6 @@ export default {
       chainPreset: {
         title: '对话链',
         hint: '本智能体自有的对话链，按模式各一份：名单顺序即组链顺序，名单内第一个默认入口是主用、其余按序备援，备援不跨模式；某模式名单为空即该模式无链、对话会被拦截。模板在模型页维护，载入是拷贝——载入后改模板不影响本链。',
-        tabKey: 'Key 链',
-        tabCli: 'CLI 链',
         noMembers: '无成员',
         addPlaceholder: '选择要加入的入口…',
         add: '加入',
@@ -687,7 +686,9 @@ export default {
         moveDown: '下移',
         remove: '移除',
         defaultMark: '默认',
+        primaryMark: '主用',
         disabledMark: '停用',
+        chainTrigger: '限流 / 5xx 时',
         save: '保存',
         saved: '对话链已保存',
         loadError: '对话链加载失败。',

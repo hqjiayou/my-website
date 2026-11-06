@@ -94,6 +94,7 @@ export default {
       add: '新規テンプレート',
       empty: 'テンプレートはまだありません。',
       noMembers: '（メンバーなし）',
+      chainTrigger: 'レート制限 / 5xx 時',
       edit: '編集',
       delete: '削除',
       editorNew: 'チェーンテンプレートを新規作成',

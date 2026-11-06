@@ -94,6 +94,7 @@ export default {
       add: 'New template',
       empty: 'No templates yet.',
       noMembers: '(no members)',
+      chainTrigger: 'On rate limit / 5xx',
       edit: 'Edit',
       delete: 'Delete',
       editorNew: 'New chain template',

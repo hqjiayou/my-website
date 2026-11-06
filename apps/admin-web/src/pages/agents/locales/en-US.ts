@@ -215,6 +215,7 @@ export default {
       status: 'Status',
       fallbacks: 'Fallbacks',
       noFallback: 'None',
+      fallbackTrigger: 'On rate limit / 5xx',
     },
     prompt: {
       configured: 'Configured',
@@ -681,8 +682,6 @@ export default {
       chainPreset: {
         title: 'Chat chain',
         hint: 'This agent\'s own chat chain, one ordered list per mode: list order is chain order, the first default entry in the list is the primary and the rest are fallbacks in order; fallbacks never cross modes. An empty list means no chain for that mode and chat is blocked. Templates are maintained on the Models page; loading one copies it in — later template edits do not affect this chain.',
-        tabKey: 'Key chain',
-        tabCli: 'CLI chain',
         noMembers: 'No members',
         addPlaceholder: 'Select an entry to add…',
         add: 'Add',
@@ -690,7 +689,9 @@ export default {
         moveDown: 'Move down',
         remove: 'Remove',
         defaultMark: 'default',
+        primaryMark: 'Primary',
         disabledMark: 'disabled',
+        chainTrigger: 'On rate limit / 5xx',
         save: 'Save',
         saved: 'Chat chain saved',
         loadError: 'Failed to load the chat chain.',

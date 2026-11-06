@@ -214,6 +214,7 @@ export default {
       status: 'ステータス',
       fallbacks: 'フォールバック',
       noFallback: 'なし',
+      fallbackTrigger: 'レート制限 / 5xx 時',
     },
     prompt: {
       configured: '設定済み',
@@ -681,8 +682,6 @@ export default {
       chainPreset: {
         title: 'チャットチェーン',
         hint: 'このエージェント自身のチャットチェーンです。モードごとに1つの順序付きリストを持ち、リスト順がチェーン順、リスト内で最初のデフォルト入口が主用、残りが順にフォールバックします。フォールバックはモードを跨ぎません。リストが空のモードはチェーンなしとなり、チャットはブロックされます。テンプレートはモデルページで管理し、読み込みはコピーです。読み込み後にテンプレートを変更しても本チェーンには影響しません。',
-        tabKey: 'Key チェーン',
-        tabCli: 'CLI チェーン',
         noMembers: 'メンバーなし',
         addPlaceholder: '追加する入口を選択…',
         add: '追加',
@@ -690,7 +689,9 @@ export default {
         moveDown: '下へ',
         remove: '削除',
         defaultMark: 'デフォルト',
+        primaryMark: '主用',
         disabledMark: '無効',
+        chainTrigger: 'レート制限 / 5xx 時',
         save: '保存',
         saved: 'チャットチェーンを保存しました',
         loadError: 'チャットチェーンの読み込みに失敗しました。',
