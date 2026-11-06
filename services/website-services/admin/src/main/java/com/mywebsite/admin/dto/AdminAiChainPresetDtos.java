@@ -10,7 +10,7 @@ public final class AdminAiChainPresetDtos {
 
     private AdminAiChainPresetDtos() {}
 
-    /** 对话链预设（Issue #210 UoW-7）。{@code entryIds} 为有序成员入口 id 集，空列表＝无成员。 */
+    /** 对话链模板（Issue #210 UoW-7 引入，#214 UoW-3 降级为模板）。{@code entryIds} 为有序成员入口 id 集，空列表＝无成员。 */
     public record AdminAiChainPresetDto(
             Long id,
             String name,
