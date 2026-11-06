@@ -29,7 +29,7 @@ export default {
     styleSettings: '风格设置',
     contents: '页面内容',
     files: '文件管理',
-    aiSettings: '模型入口',
+    aiSettings: '模型 API 管理',
     aiChainPresets: '链预设',
     aiConfigPresets: '配置预设',
     aiPlatformSettings: 'AI 设置',

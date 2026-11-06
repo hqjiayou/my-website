@@ -2,12 +2,19 @@ import type { LucideIcon } from 'lucide-react'
 import {
   AppWindow,
   BarChart3,
+  Blocks,
   Circle,
+  Cpu,
+  FileText,
   Layers,
   LayoutDashboard,
+  Link2,
   Menu,
+  PlugZap,
+  Server,
   Settings2,
   Shield,
+  SlidersHorizontal,
   Users,
   Zap,
 } from 'lucide-react'
@@ -46,6 +53,13 @@ const ICON_MAP: Record<string, LucideIcon> = {
   apps: AppWindow,
   zap: Zap,
   chart: BarChart3,
+  cpu: Cpu,
+  server: Server,
+  link: Link2,
+  sliders: SlidersHorizontal,
+  'file-text': FileText,
+  blocks: Blocks,
+  plug: PlugZap,
 }
 
 function mapBackendIcon(icon: string | null | undefined): LucideIcon {
