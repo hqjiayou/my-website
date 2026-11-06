@@ -120,6 +120,42 @@ class AdminAiChainPresetServiceImplTest {
     }
 
     @Test
+    void updatePresetDropsDanglingStoredMemberOnSave() {
+        // 存量成员 1 已被删（批量查询只返 2）：改名保存应剔除 1 后成功，而非 400。
+        when(modelEntryMapper.selectBatchIds(any())).thenReturn(List.of(entry(2L)));
+        when(chainPresetMapper.selectById(7L)).thenReturn(preset(7L, "[1,2]"));
+        List<AdminAiChainPresetEntity> savedHolder = new java.util.ArrayList<>();
+        when(chainPresetMapper.updateById(any(AdminAiChainPresetEntity.class)))
+                .thenAnswer(invocation -> {
+                    savedHolder.add(invocation.getArgument(0));
+                    return 1;
+                });
+
+        service.updatePreset(7L, new AdminAiChainPresetUpdateRequest("renamed", List.of(1L, 2L), 0));
+
+        assertThat(savedHolder.get(0).getEntryIds()).isEqualTo("[2]");
+    }
+
+    @Test
+    void updatePresetRejectsNewMissingMember() {
+        // 请求新引入的不存在 id 3（不在存量成员里）仍须 ENTRY_NOT_FOUND。
+        when(modelEntryMapper.selectBatchIds(any())).thenReturn(List.of(entry(2L)));
+        when(chainPresetMapper.selectById(7L)).thenReturn(preset(7L, "[2]"));
+
+        assertThatThrownBy(() -> service.updatePreset(
+                        7L, new AdminAiChainPresetUpdateRequest("renamed", List.of(2L, 3L), 0)))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> {
+                            assertThat(ex.getCode()).isEqualTo(ErrorCode.BAD_REQUEST.getCode());
+                            assertThat(ex.getMessageKey())
+                                    .isEqualTo(AdminAiChainPresetMessageKeys.ENTRY_NOT_FOUND);
+                            assertThat(ex.getMessageArgs()).containsExactly(3L);
+                        });
+        verify(chainPresetMapper, never()).updateById(any(AdminAiChainPresetEntity.class));
+    }
+
+    @Test
     void updatePresetAppliesMembersAndReportsVersionConflict() {
         when(modelEntryMapper.selectBatchIds(any())).thenReturn(List.of(entry(2L)));
         when(chainPresetMapper.selectById(7L)).thenReturn(preset(7L, "[1]"));

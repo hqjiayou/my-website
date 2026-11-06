@@ -1,15 +1,9 @@
 package com.mywebsite.admin.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mywebsite.admin.constant.AdminAiModelEntryMessageKeys;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryDto;
 import com.mywebsite.admin.dto.AdminAiModelEntryDtos.AdminAiModelEntryWriteRequest;
-import com.mywebsite.admin.entity.AdminAiChainPresetEntity;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
-import com.mywebsite.admin.mapper.AdminAiChainPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiModelEntryMapper;
 import com.mywebsite.admin.service.AdminAiChainPresetService;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
@@ -26,8 +20,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,28 +28,20 @@ import org.springframework.util.StringUtils;
 @Service
 public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
 
-    private static final Logger log = LoggerFactory.getLogger(AdminAiModelEntryServiceImpl.class);
-
     private final AdminAiModelEntryMapper modelEntryMapper;
     private final ModelEntryCipher cipher;
     private final AgentEmbeddingClassService embeddingClassService;
     private final AdminAiChainPresetService chainPresetService;
-    private final AdminAiChainPresetMapper chainPresetMapper;
-    private final ObjectMapper objectMapper;
 
     public AdminAiModelEntryServiceImpl(
             AdminAiModelEntryMapper modelEntryMapper,
             ModelEntryCipher cipher,
             AgentEmbeddingClassService embeddingClassService,
-            AdminAiChainPresetService chainPresetService,
-            AdminAiChainPresetMapper chainPresetMapper,
-            ObjectMapper objectMapper) {
+            AdminAiChainPresetService chainPresetService) {
         this.modelEntryMapper = modelEntryMapper;
         this.cipher = cipher;
         this.embeddingClassService = embeddingClassService;
         this.chainPresetService = chainPresetService;
-        this.chainPresetMapper = chainPresetMapper;
-        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -130,43 +114,9 @@ public class AdminAiModelEntryServiceImpl implements AdminAiModelEntryService {
     @Transactional
     public void deleteEntry(long id) {
         AdminAiModelEntryEntity entry = requireEntry(id);
-        long referencing = countPresetsReferencing(id);
-        if (referencing > 0) {
-            // 与删预设的引用守卫同口径：被链预设引用时先拦截，避免预设留下悬空
-            // 成员 id（运行时虽静默跳过，但预设再保存会因成员不存在报 400）。
-            throw new BusinessException(
-                    ErrorCode.CONFLICT.getCode(), AdminAiModelEntryMessageKeys.ENTRY_REFERENCED, referencing);
-        }
         entry.setDeletedAt(OffsetDateTime.now(ZoneOffset.UTC));
         modelEntryMapper.updateById(entry);
         modelEntryMapper.deleteById(id);
-    }
-
-    /** 引用计数：预设总数小，全量加载未软删预设逐个解析 entry_ids JSON 计数（口径同链预设侧读法）。 */
-    private long countPresetsReferencing(long entryId) {
-        long referencing = 0;
-        for (AdminAiChainPresetEntity preset :
-                chainPresetMapper.selectList(new LambdaQueryWrapper<AdminAiChainPresetEntity>())) {
-            if (readEntryIds(preset).contains(entryId)) {
-                referencing++;
-            }
-        }
-        return referencing;
-    }
-
-    /** 脏 JSON 不阻断删除守卫：按无成员处理并记 warn（同链预设侧的容脏口径）。 */
-    private List<Long> readEntryIds(AdminAiChainPresetEntity preset) {
-        String raw = preset.getEntryIds();
-        if (!StringUtils.hasText(raw)) {
-            return List.of();
-        }
-        try {
-            List<Long> parsed = objectMapper.readValue(raw, new TypeReference<List<Long>>() {});
-            return parsed == null ? List.of() : parsed;
-        } catch (JsonProcessingException ex) {
-            log.warn("chain preset {} has malformed entry_ids, treated as empty", preset.getId(), ex);
-            return List.of();
-        }
     }
 
     @Override

@@ -86,9 +86,12 @@ public class AdminAiChainPresetServiceImpl implements AdminAiChainPresetService 
     @Override
     @Transactional
     public AdminAiChainPresetDto updatePreset(long id, AdminAiChainPresetUpdateRequest request) {
-        List<Long> entryIds = normalizeEntryIds(request.entryIds());
-        requireEntriesExist(entryIds);
         AdminAiChainPresetEntity preset = requirePreset(id);
+        // 成员可能已被删（删入口不设引用守卫、运行时本就静默跳过缺失成员）：请求里
+        // 仍带着的存量悬空成员在保存时顺手剔除，否则改个名都会被 ENTRY_NOT_FOUND
+        // 卡住；请求新引入的不存在 id 仍按 ENTRY_NOT_FOUND 拒绝（与 create 同口径）。
+        List<Long> entryIds =
+                dropDanglingStoredMembers(normalizeEntryIds(request.entryIds()), readEntryIds(preset));
         preset.setName(request.name().trim());
         preset.setEntryIds(writeEntryIds(entryIds));
         preset.setVersion(request.version());
@@ -170,6 +173,32 @@ public class AdminAiChainPresetServiceImpl implements AdminAiChainPresetService 
     }
 
     /** 成员必须全部是现存（未删除）入口；停用入口可入预设（组链时过滤、启用后自动回链）。 */
+    /**
+     * 更新专用校验：已存在成员保留；存量成员（在预设原 entry_ids 里）若已被删则
+     * 剔除并记日志；其余不存在的 id 视为新引入的坏引用，抛 ENTRY_NOT_FOUND。
+     */
+    private List<Long> dropDanglingStoredMembers(List<Long> entryIds, List<Long> storedIds) {
+        if (entryIds.isEmpty()) {
+            return entryIds;
+        }
+        Set<Long> found = new LinkedHashSet<>();
+        for (AdminAiModelEntryEntity entry : modelEntryMapper.selectBatchIds(entryIds)) {
+            found.add(entry.getId());
+        }
+        List<Long> kept = new ArrayList<>();
+        for (Long entryId : entryIds) {
+            if (found.contains(entryId)) {
+                kept.add(entryId);
+            } else if (storedIds.contains(entryId)) {
+                log.warn("chain preset member {} no longer exists; dropping it on update", entryId);
+            } else {
+                throw new BusinessException(
+                        ErrorCode.BAD_REQUEST.getCode(), AdminAiChainPresetMessageKeys.ENTRY_NOT_FOUND, entryId);
+            }
+        }
+        return kept;
+    }
+
     private void requireEntriesExist(List<Long> entryIds) {
         if (entryIds.isEmpty()) {
             return;
