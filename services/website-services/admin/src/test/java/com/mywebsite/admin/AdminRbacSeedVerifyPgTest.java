@@ -97,7 +97,8 @@ class AdminRbacSeedVerifyPgTest {
             "admin:menu:tools",
             "admin:menu:stats",
             "admin:menu:ai.mcpservers",
-            "admin:menu:ai.prompttemplates");
+            "admin:menu:ai.prompttemplates",
+            "admin:menu:ai.skills");
 
     /**
      * 不硬编码总数：运行时统计 infra 迁移目录（{@code classpath:db/migration}，与本类
@@ -105,7 +106,7 @@ class AdminRbacSeedVerifyPgTest {
      */
     private static final int EXPECTED_FLYWAY_VERSION_COUNT = countFlywayMigrationFiles();
 
-    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 62; // V67 菜单重组后 61；V70 工具组 +1 Prompt 模板菜单（61→62）
+    private static final int EXPECTED_ACTIVE_PERMISSION_COUNT = 63; // V67 菜单重组后 61；V70 工具组 +1 Prompt 模板菜单（61→62）；V71 工具组 +1 Skills 货架菜单（62→63）
 
     private static int countFlywayMigrationFiles() {
         Resource[] resources;

@@ -291,6 +291,23 @@ export interface AiPromptTemplate {
   updatedAt: string
 }
 
+/** Skills 货架条目（Issue #214 UoW-6）：agent-services 文件定义的元数据，只读。 */
+export interface AiSkillCatalogItem {
+  id: string
+  description: string | null
+  version: string | null
+  license: string | null
+  compatibility: string | null
+  metadata: Record<string, string>
+  allowedTools: string[]
+}
+
+/** 平台技能目录快照：目录全量＋B 层自选开关的进程实际状态（只展示、不可改）。 */
+export interface AiSkillCatalog {
+  skills: AiSkillCatalogItem[]
+  skillsSelfSelectEnabled: boolean
+}
+
 export interface AiPromptTemplateCreateInput {
   name: string
   systemPrompt?: string | null

@@ -130,6 +130,24 @@ def test_skills_catalog_endpoint(tmp_path: Path) -> None:
     assert body["ok"] is True
     assert body["data"]["skills"][0]["id"] == "alpha"
     assert body["data"]["skills"][0]["description"] == "Alpha"
+    # 自选开关随目录回报进程实际状态：默认关（#214 UoW-6 货架页展示用）。
+    assert body["data"]["skills_self_select_enabled"] is False
+
+
+def test_skills_catalog_endpoint_reports_self_select_enabled(tmp_path: Path) -> None:
+    clear_skills_cache()
+    _write_skill(tmp_path, "alpha", "Body", frontmatter="description: Alpha")
+    app = create_app(
+        settings=make_settings(
+            ai_model="test",
+            agent_skills_dir=str(tmp_path),
+            agent_default_skills="",
+            agent_skills_self_select_enabled=True,
+        ),
+        model_handle=ModelHandle(model=TestModel(), spec="test", blocked_reason=None),
+    )
+    body = TestClient(app).get("/internal/v1/skills", headers=TOKEN_HEADER).json()
+    assert body["data"]["skills_self_select_enabled"] is True
 
 
 def test_chat_includes_skills_applied_and_missing(tmp_path: Path) -> None:

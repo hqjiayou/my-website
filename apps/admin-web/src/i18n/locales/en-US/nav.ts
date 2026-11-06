@@ -32,6 +32,7 @@ export default {
     aiSettings: 'Model API management',
     aiPromptTemplates: 'Prompt templates',
     aiMcpServers: 'MCP servers',
+    aiSkills: 'Skills shelf',
     aiPlatformSettings: 'AI settings',
     proxyServices: 'API keys',
     aiUsage: 'AI usage',

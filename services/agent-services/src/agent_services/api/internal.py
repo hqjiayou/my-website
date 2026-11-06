@@ -385,7 +385,8 @@ async def list_skills(request: Request) -> dict[str, object]:
                 allowed_tools=list(item.allowed_tools),
             )
             for item in catalog
-        ]
+        ],
+        skills_self_select_enabled=request.app.state.settings.agent_skills_self_select_enabled,
     )
     return {"ok": True, "data": payload.model_dump(by_alias=True)}
 

@@ -19,6 +19,7 @@ import com.mywebsite.agent.dto.AgentIndexedDocument;
 import com.mywebsite.agent.dto.AgentRuntimeConfigPayload;
 import com.mywebsite.agent.dto.AgentRuntimeConfigPushResult;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
+import com.mywebsite.agent.dto.AgentSkillCatalog;
 import com.mywebsite.agent.dto.AgentSkillSummary;
 import java.util.List;
 
@@ -44,6 +45,12 @@ public interface AgentClient {
 
     /** agent-services 技能目录（平台能力，与站点无关）。 */
     List<AgentSkillSummary> listSkills();
+
+    /**
+     * 技能目录全量快照（Issue #214 UoW-6）：条目元数据全量＋自选开关进程状态，
+     * 供平台货架页；与 {@link #listSkills()} 同一 Python 端点，旧方法口径不变。
+     */
+    AgentSkillCatalog skillCatalog();
 
     /**
      * 流式 chat：转发 agent-services 的应用层 SSE 事件。
