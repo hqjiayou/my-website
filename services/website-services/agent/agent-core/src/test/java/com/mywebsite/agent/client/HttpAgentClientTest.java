@@ -14,6 +14,7 @@ import com.mywebsite.agent.dto.AgentModelSelection;
 import com.mywebsite.agent.dto.AgentPingResponse;
 import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
+import com.mywebsite.agent.dto.AgentSkillCatalog;
 import com.mywebsite.agent.dto.AgentSkillSummary;
 import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.agent.properties.AgentProperties;
@@ -393,6 +394,44 @@ class HttpAgentClientTest {
                 "{\"ok\":true,\"data\":{\"skills\":[{\"id\":\"orchestration\",\"description\":\"plan\",\"version\":\"1\"}]}}"));
 
         assertThat(client.listSkills()).containsExactly(new AgentSkillSummary("orchestration", "plan", "1"));
+    }
+
+    @Test
+    void skillCatalogMapsFullMetadataAndSelfSelectFlag() throws IOException {
+        server.createContext("/internal/v1/skills", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"data\":{\"skills_self_select_enabled\":true,\"skills\":[{"
+                        + "\"id\":\"orchestration\",\"description\":\"plan\",\"version\":\"1\","
+                        + "\"license\":\"Apache-2.0\",\"compatibility\":null,\"metadata\":{\"tier\":\"core\"},"
+                        + "\"allowed_tools\":[\"load_skill\",\"read_skill_reference\"]}]}}"));
+
+        AgentSkillCatalog catalog = client.skillCatalog();
+
+        assertThat(catalog.skillsSelfSelectEnabled()).isTrue();
+        assertThat(catalog.skills()).containsExactly(new AgentSkillCatalog.Entry(
+                "orchestration",
+                "plan",
+                "1",
+                "Apache-2.0",
+                null,
+                java.util.Map.of("tier", "core"),
+                java.util.List.of("load_skill", "read_skill_reference")));
+    }
+
+    @Test
+    void skillCatalogDefaultsSelfSelectOffWhenFieldAbsent() throws IOException {
+        // 旧版 agent-services 未回报 skills_self_select_enabled 时按关处理。
+        server.createContext("/internal/v1/skills", exchange -> write(
+                exchange,
+                200,
+                "{\"ok\":true,\"data\":{\"skills\":[{\"id\":\"orchestration\",\"description\":\"plan\",\"version\":\"1\"}]}}"));
+
+        AgentSkillCatalog catalog = client.skillCatalog();
+
+        assertThat(catalog.skillsSelfSelectEnabled()).isFalse();
+        assertThat(catalog.skills()).hasSize(1);
+        assertThat(catalog.skills().get(0).allowedTools()).isEmpty();
     }
 
     @Test

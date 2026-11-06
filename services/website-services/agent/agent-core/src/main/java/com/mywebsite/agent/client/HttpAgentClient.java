@@ -28,6 +28,7 @@ import com.mywebsite.agent.dto.AgentRunMeta;
 import com.mywebsite.agent.dto.AgentRuntimeConfigPayload;
 import com.mywebsite.agent.dto.AgentRuntimeConfigPushResult;
 import com.mywebsite.agent.dto.AgentRuntimeStatus;
+import com.mywebsite.agent.dto.AgentSkillCatalog;
 import com.mywebsite.agent.dto.AgentSkillSummary;
 import com.mywebsite.agent.dto.AgentTodoItem;
 import com.mywebsite.agent.properties.AgentProperties;
@@ -369,6 +370,17 @@ public class HttpAgentClient implements AgentClient {
         ensureTokenConfigured();
         JsonNode body = exchangeWithRetry("GET", "/internal/v1/skills", null);
         return readList(body.path("data").get("skills"), AgentSkillSummary.class);
+    }
+
+    @Override
+    public AgentSkillCatalog skillCatalog() {
+        ensureTokenConfigured();
+        JsonNode body = exchangeWithRetry("GET", "/internal/v1/skills", null);
+        JsonNode data = body.path("data");
+        List<AgentSkillCatalog.Entry> skills = readList(data.get("skills"), AgentSkillCatalog.Entry.class);
+        // 旧版 agent-services 未回报该字段时按关处理（与 HarnessFiles 未回报口径一致）。
+        boolean selfSelectEnabled = data.path("skills_self_select_enabled").asBoolean(false);
+        return new AgentSkillCatalog(skills, selfSelectEnabled);
     }
 
     private <T> List<T> readList(JsonNode node, Class<T> elementType) {
