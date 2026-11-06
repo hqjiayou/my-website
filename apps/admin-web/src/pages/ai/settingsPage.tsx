@@ -23,7 +23,6 @@ import { PERMISSION_CODES } from '@/types/rbac'
 
 import { EmbeddingRegistrationCard } from './embeddingRegistrationCard'
 import { ExperienceLessonsCard } from './experienceLessonsCard'
-import { McpServersCard } from './mcpServersCard'
 
 type GatewayKeyStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED'
 
@@ -492,7 +491,7 @@ function RuntimeConfigCard() {
   )
 }
 
-/** 已拆到平台区独立页的资源（模型入口／链预设）在原位置留的跳转卡（Issue #213 UoW-C）。 */
+/** 已拆到平台区独立页的资源（模型入口／链预设／MCP 注册表）在原位置留的跳转卡（Issue #213 UoW-C；MCP 为 #214 UoW-5）。 */
 function MovedOutLinkCard(props: { title: string; hint: string; to: string }) {
   const { t } = useTranslation('aiAdmin')
   return (
@@ -511,7 +510,7 @@ function MovedOutLinkCard(props: { title: string; hint: string; to: string }) {
 
 /**
  * AI 设置页（Issue #213 UoW-C 瘦身后）：只留平台运行类设置——网关访问 Key、
- * 运行配置、MCP 注册表、经验沉淀、全站嵌入类登记。模型入口与链预设已拆为
+ * 运行配置、经验沉淀、全站嵌入类登记。模型入口、链预设与 MCP 注册表已拆为
  * 平台区独立页，本页在原位置留跳转卡。
  */
 export function AiSettingsPage() {
@@ -531,7 +530,11 @@ export function AiSettingsPage() {
 
         <RuntimeConfigCard />
 
-        <McpServersCard />
+        <MovedOutLinkCard
+          title={t('settings.mcp.title')}
+          hint={t('settings.movedMcpHint')}
+          to={ROUTES.ai.mcpServers}
+        />
 
         <ExperienceLessonsCard />
 

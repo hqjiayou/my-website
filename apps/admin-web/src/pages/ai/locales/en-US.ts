@@ -23,9 +23,10 @@ export default {
   },
   settings: {
     pageTitle: 'AI settings',
-    pageDescription: 'Platform runtime settings: gateway access keys, runtime configuration, the MCP registry, experience lessons and the site-wide embedding class registration. Model entries and chain presets moved to their own pages in the Platform area.',
+    pageDescription: 'Platform runtime settings: gateway access keys, runtime configuration, experience lessons and the site-wide embedding class registration. Model entries, chain presets and the MCP registry moved to their own pages in the Platform area.',
     movedEntriesHint: 'Model entries moved to a dedicated page in the Platform area (model specs and API keys per mode).',
     movedChainPresetsHint: 'Chat chain templates now live in the chain section of the Model API page (templates are copied into an agent\'s own chain when loaded).',
+    movedMcpHint: 'The MCP server registry moved to a dedicated page in the Tools group (shared platform-wide, on the same config version and push pipeline as the runtime configuration).',
     movedGo: 'Open',
     title: 'Model entries',
     description: 'Keep model specs and API keys per mode. Chat preview calls only that mode’s default entry. Portal chat may continue with other entries in the same mode.',

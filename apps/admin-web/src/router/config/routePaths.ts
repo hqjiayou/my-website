@@ -50,6 +50,7 @@ export const ROUTES = {
     conversations: '/ai/conversations',
     modelEntries: '/ai/model-entries',
     promptTemplates: '/ai/prompt-templates',
+    mcpServers: '/ai/mcp-servers',
   },
   config: {
     params: '/config/params',

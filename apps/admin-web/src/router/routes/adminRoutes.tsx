@@ -95,6 +95,10 @@ const AiPromptTemplatesPage = lazyNamed(
   () => import('@/pages/ai/promptTemplatesPage'),
   'AiPromptTemplatesPage',
 )
+const AiMcpServersPage = lazyNamed(
+  () => import('@/pages/ai/mcpServersPage'),
+  'AiMcpServersPage',
+)
 
 const ParamsConfigPage = lazyNamed(
   () => import('@/pages/config/paramsConfigPage'),
@@ -157,6 +161,7 @@ export const adminRoutes = (
     <Route path={ROUTES.ai.conversations} element={<AiConversationsPage />} />
     <Route path={ROUTES.ai.modelEntries} element={<AiModelEntriesPage />} />
     <Route path={ROUTES.ai.promptTemplates} element={<AiPromptTemplatesPage />} />
+    <Route path={ROUTES.ai.mcpServers} element={<AiMcpServersPage />} />
 
     <Route path={ROUTES.config.params} element={<ParamsConfigPage />} />
     <Route path={ROUTES.governance.analytics} element={<AnalyticsPage />} />
