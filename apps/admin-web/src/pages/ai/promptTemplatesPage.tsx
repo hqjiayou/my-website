@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertCircle, FileText } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -6,12 +7,14 @@ import { toast } from 'sonner'
 import { aiApi } from '@/api/apps/aiApi'
 import { AdminPageHeader, FormDialog } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
   adminFieldClass,
   adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
+  adminSecondaryButtonSmClass,
 } from '@/components/admin/controls'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import type { AiPromptTemplate } from '@/types/ai'
@@ -101,14 +104,17 @@ export function AiPromptTemplatesPage() {
   function submitDraft() {
     if (!draft) return
     const temperatureValue = parseTemperature(draft.temperature)
-    if (temperatureValue === undefined) {
-      toast.error(t('promptTemplates.temperatureInvalid'))
-      return
-    }
+    if (temperatureValue === undefined) return
     saveMutation.mutate({ ...draft, temperatureValue })
   }
 
+  function openNewDraft() {
+    setDraft({ id: null, name: '', systemPrompt: '', temperature: '', version: null })
+  }
+
   const templates = templatesQuery.data ?? []
+  const nameMissing = draft != null && draft.name.trim() === ''
+  const temperatureInvalid = draft != null && parseTemperature(draft.temperature) === undefined
 
   return (
     <section className="admin-content-data">
@@ -117,22 +123,48 @@ export function AiPromptTemplatesPage() {
         <div className="flex items-start justify-between gap-3">
           <p className="text-sm text-admin-muted">{t('promptTemplates.hint')}</p>
           <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
-            <button
-              type="button"
-              className={adminPrimaryButtonClass}
-              onClick={() => setDraft({ id: null, name: '', systemPrompt: '', temperature: '', version: null })}
-            >
+            <button type="button" className={adminPrimaryButtonClass} onClick={openNewDraft}>
               {t('promptTemplates.add')}
             </button>
           </PermissionGate>
         </div>
 
         {templatesQuery.isPending ? (
-          <p className="text-sm text-admin-muted">{t('loading')}</p>
+          <div className="space-y-2" aria-hidden>
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="h-11 animate-pulse rounded-lg bg-admin-surface-muted" />
+            ))}
+          </div>
         ) : templatesQuery.isError ? (
-          <p className="text-sm text-danger-emphasis">{t('promptTemplates.loadFailed')}</p>
+          <div
+            role="alert"
+            className="flex items-center gap-3 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3"
+          >
+            <AlertCircle className="h-[18px] w-[18px] shrink-0 text-danger-emphasis" />
+            <p className="min-w-0 flex-1 text-sm text-danger-emphasis">
+              {t('promptTemplates.loadFailed')}
+            </p>
+            <button
+              type="button"
+              className={adminSecondaryButtonSmClass}
+              onClick={() => void templatesQuery.refetch()}
+            >
+              {t('retry')}
+            </button>
+          </div>
         ) : templates.length === 0 ? (
-          <p className="text-sm text-admin-muted">{t('promptTemplates.empty')}</p>
+          <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+            <span className="admin-empty-mark">
+              <FileText className="h-6 w-6" />
+            </span>
+            <p className="text-sm font-medium text-admin">{t('promptTemplates.empty')}</p>
+            <p className="text-xs text-admin-muted">{t('promptTemplates.emptyHint')}</p>
+            <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
+              <button type="button" className={`${adminPrimaryButtonClass} mt-2`} onClick={openNewDraft}>
+                {t('promptTemplates.add')}
+              </button>
+            </PermissionGate>
+          </div>
         ) : (
           <ul className="space-y-2">
             {templates.map((template) => (
@@ -146,15 +178,14 @@ export function AiPromptTemplatesPage() {
                     ? template.systemPrompt.trim()
                     : t('promptTemplates.noPrompt')}
                 </span>
-                <span className="flex flex-wrap items-center gap-1 text-xs text-admin-muted">
-                  <span className="rounded bg-admin-surface px-1.5 py-0.5">
+                <span className="flex flex-wrap items-center gap-x-2 text-xs tabular-nums text-admin-muted">
+                  <span>
                     {t('promptTemplates.temperatureTag', {
                       value: template.temperature == null ? '—' : String(template.temperature),
                     })}
                   </span>
-                  <span className="rounded bg-admin-surface px-1.5 py-0.5">
-                    {new Date(template.updatedAt).toLocaleString()}
-                  </span>
+                  <span aria-hidden>·</span>
+                  <span>{new Date(template.updatedAt).toLocaleString()}</span>
                 </span>
                 <span className="ml-auto flex gap-1">
                   <button
@@ -187,17 +218,23 @@ export function AiPromptTemplatesPage() {
           onClose={() => setDraft(null)}
         >
           <div className="space-y-4">
-            <label className="block space-y-1">
-              <span className="text-xs font-medium text-admin-muted">{t('promptTemplates.name')}</span>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-admin-muted">
+                {t('promptTemplates.name')} <span className="text-danger-emphasis">*</span>
+              </span>
               <input
                 className={adminFieldClass}
                 value={draft.name}
                 maxLength={255}
+                aria-invalid={nameMissing}
                 onChange={(event) => setDraft({ ...draft, name: event.target.value })}
               />
+              <span className="mt-1 block min-h-4 text-xs text-danger-emphasis">
+                {nameMissing ? t('promptTemplates.nameRequired') : null}
+              </span>
             </label>
-            <label className="block space-y-1">
-              <span className="text-xs font-medium text-admin-muted">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-admin-muted">
                 {t('promptTemplates.systemPrompt')}
               </span>
               <textarea
@@ -208,12 +245,12 @@ export function AiPromptTemplatesPage() {
                 placeholder={t('promptTemplates.systemPromptHint')}
                 onChange={(event) => setDraft({ ...draft, systemPrompt: event.target.value })}
               />
-              <span className="block text-right text-xs text-admin-muted">
+              <span className="mt-1 block text-right text-xs text-admin-muted">
                 {draft.systemPrompt.length} / 8000
               </span>
             </label>
-            <label className="block space-y-1">
-              <span className="text-xs font-medium text-admin-muted">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-admin-muted">
                 {t('promptTemplates.temperature')}
               </span>
               <input
@@ -223,9 +260,20 @@ export function AiPromptTemplatesPage() {
                 max={2}
                 step={0.1}
                 value={draft.temperature}
-                placeholder={t('promptTemplates.temperatureHint')}
+                aria-invalid={temperatureInvalid}
+                aria-describedby="prompt-template-temperature-note"
                 onChange={(event) => setDraft({ ...draft, temperature: event.target.value })}
               />
+              <span
+                id="prompt-template-temperature-note"
+                className={`mt-1 block min-h-4 text-xs ${
+                  temperatureInvalid ? 'text-danger-emphasis' : 'text-admin-muted'
+                }`}
+              >
+                {temperatureInvalid
+                  ? t('promptTemplates.temperatureInvalid')
+                  : t('promptTemplates.temperatureHint')}
+              </span>
             </label>
             <div className={adminFormActionsClass}>
               <button type="button" className={adminSecondaryButtonClass} onClick={() => setDraft(null)}>
@@ -234,7 +282,7 @@ export function AiPromptTemplatesPage() {
               <button
                 type="button"
                 className={adminPrimaryButtonClass}
-                disabled={!canUpdate || draft.name.trim() === '' || saveMutation.isPending}
+                disabled={!canUpdate || nameMissing || temperatureInvalid || saveMutation.isPending}
                 onClick={submitDraft}
               >
                 {saveMutation.isPending ? t('promptTemplates.saving') : t('promptTemplates.save')}
@@ -261,7 +309,7 @@ export function AiPromptTemplatesPage() {
             </button>
             <button
               type="button"
-              className={adminPrimaryButtonClass}
+              className={adminDangerButtonMdClass}
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleting.id)}
             >

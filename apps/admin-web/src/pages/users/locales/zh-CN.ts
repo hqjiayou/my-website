@@ -29,6 +29,7 @@ export default {
       disable: '停用',
       assignRoles: '分配角色',
       delete: '删除',
+      cancel: '取消',
     },
     badges: {
       self: '当前账号',
@@ -37,6 +38,7 @@ export default {
     messages: {
       statusUpdated: '用户状态已更新',
       deleted: '用户已删除',
+      deleteConfirmTitle: '删除用户',
       confirmDelete: '确定删除用户「{{username}}」？',
       restrictedSelf: '不能停用、删除或修改自己的角色。',
       restrictedProtected: '持有 super_admin 的用户受保护，不可停用、删除或修改角色。',

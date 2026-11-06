@@ -41,6 +41,7 @@ export default {
     created: 'メニューを作成しました。ロール管理で割り当てると、そのロールのサイドバーに表示されます。',
     updated: 'メニューを更新しました',
     deleted: 'メニューを削除しました',
+    deleteConfirmTitle: 'メニューを削除',
     confirmDelete: 'メニュー「{{name}}」を削除しますか？',
   },
 } as const

@@ -28,6 +28,7 @@ export default {
       disable: '停用',
       assignPermissions: '分配菜单',
       delete: '删除',
+      cancel: '取消',
     },
     badges: {
       protected: '系统内置角色',
@@ -35,6 +36,7 @@ export default {
     messages: {
       deleted: '角色已删除',
       statusUpdated: '角色状态已更新',
+      deleteConfirmTitle: '删除角色',
       confirmDelete: '确定删除角色「{{roleCode}}」？',
     },
   },

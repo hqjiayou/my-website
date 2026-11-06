@@ -28,6 +28,7 @@ export default {
       disable: '無効化',
       assignPermissions: 'メニュー割当',
       delete: '削除',
+      cancel: 'キャンセル',
     },
     badges: {
       protected: 'システム組み込みロール',
@@ -35,6 +36,7 @@ export default {
     messages: {
       deleted: 'ロールを削除しました',
       statusUpdated: 'ロール状態を更新しました',
+      deleteConfirmTitle: 'ロールを削除',
       confirmDelete: 'ロール「{{roleCode}}」を削除しますか？',
     },
   },

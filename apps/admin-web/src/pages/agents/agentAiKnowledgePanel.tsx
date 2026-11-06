@@ -6,7 +6,13 @@ import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
 import { DataTable, FormDialog, type DataTableColumn } from '@/components/admin'
-import { adminFieldClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
+import {
+  adminDangerButtonMdClass,
+  adminFieldClass,
+  adminFormActionsClass,
+  adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+} from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { AI_KB_STATUS, AI_KB_STATUS_VALUES, type AiKnowledgeListItem, type AiKnowledgeStatus } from '@/types/ai'
 import { PermissionGate } from '@/router/permission'
@@ -137,6 +143,8 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
   const [selectedBaseId, setSelectedBaseId] = useState<number | null>(null)
   const [newBaseName, setNewBaseName] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [deletingDoc, setDeletingDoc] = useState<AiKnowledgeListItem | null>(null)
+  const [deletingBase, setDeletingBase] = useState<{ id: number; name: string } | null>(null)
 
   const basesQuery = useQuery({
     queryKey: ['sites', agentId, 'ai', 'knowledge-bases'],
@@ -161,6 +169,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
   const deleteBaseMutation = useMutation({
     mutationFn: (baseId: number) => aiApi.deleteKnowledgeBase(agentId, baseId),
     onSuccess: () => {
+      setDeletingBase(null)
       toast.success(t('aiWorkspace.knowledge.baseDeleted'))
       setSelectedBaseId(null)
       void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge-bases'] })
@@ -222,6 +231,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => aiApi.deleteKnowledgeDocument(agentId, id),
     onSuccess: () => {
+      setDeletingDoc(null)
       toast.success(t('aiWorkspace.knowledge.deleted'))
       void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'knowledge'] })
     },
@@ -528,11 +538,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 <button
                   type="button"
                   className="text-sm text-danger-emphasis underline"
-                  onClick={() => {
-                    if (window.confirm(t('aiWorkspace.knowledge.confirmDelete'))) {
-                      deleteMutation.mutate(item.id)
-                    }
-                  }}
+                  onClick={() => setDeletingDoc(item)}
                 >
                   {t('aiWorkspace.knowledge.delete')}
                 </button>
@@ -542,7 +548,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
         ),
       },
     ],
-    [deleteMutation, openEditor, reindexMutation, agentId, t],
+    [openEditor, reindexMutation, agentId, t],
   )
 
   const records = data?.records ?? []
@@ -664,11 +670,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 type="button"
                 className="rounded-lg border border-danger/35 px-3 py-1.5 text-sm text-danger-emphasis disabled:opacity-50"
                 disabled={deleteBaseMutation.isPending}
-                onClick={() => {
-                  if (window.confirm(t('aiWorkspace.knowledge.baseDeleteConfirm'))) {
-                    deleteBaseMutation.mutate(selectedBase.id)
-                  }
-                }}
+                onClick={() => setDeletingBase({ id: selectedBase.id, name: selectedBase.name })}
               >
                 {t('aiWorkspace.knowledge.baseDelete')}
               </button>
@@ -934,6 +936,68 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
               </button>
             </div>
           </form>
+        </FormDialog>
+      ) : null}
+
+      {deletingDoc ? (
+        <FormDialog
+          title={t('aiWorkspace.knowledge.deleteConfirmTitle')}
+          closeLabel={t('aiWorkspace.knowledge.cancel')}
+          onClose={() => setDeletingDoc(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('aiWorkspace.knowledge.confirmDelete', { title: deletingDoc.title })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setDeletingDoc(null)}
+            >
+              {t('aiWorkspace.knowledge.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate(deletingDoc.id)}
+            >
+              {t('aiWorkspace.knowledge.delete')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
+
+      {deletingBase ? (
+        <FormDialog
+          title={t('aiWorkspace.knowledge.baseDeleteConfirmTitle')}
+          closeLabel={t('aiWorkspace.knowledge.cancel')}
+          onClose={() => setDeletingBase(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('aiWorkspace.knowledge.baseDeleteConfirm', { name: deletingBase.name })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setDeletingBase(null)}
+            >
+              {t('aiWorkspace.knowledge.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={deleteBaseMutation.isPending}
+              onClick={() => deleteBaseMutation.mutate(deletingBase.id)}
+            >
+              {t('aiWorkspace.knowledge.baseDelete')}
+            </button>
+          </div>
         </FormDialog>
       ) : null}
     </div>

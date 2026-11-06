@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Info, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, Info, Plus, RefreshCw, Server, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -7,12 +7,14 @@ import { toast } from 'sonner'
 import { aiApi } from '@/api/apps/aiApi'
 import { AdminPageHeader, FormDialog, StatusTag } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
   adminFieldClass,
   adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
+  adminSecondaryButtonSmClass,
 } from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
@@ -331,7 +333,7 @@ function KvEditor({
           onChange([...rows, { key: '', value: '', clear: false, isNew: true, valueHint: null }])
         }
       >
-        <Plus className="h-3.5 w-3.5" aria-hidden />
+        <Plus className="h-4 w-4" aria-hidden />
         {t('settings.mcp.kvAdd')}
       </button>
     </div>
@@ -353,6 +355,9 @@ function McpServersCard() {
   const [syncedVersion, setSyncedVersion] = useState<number | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
+  const [removing, setRemoving] = useState<EntryDraft | null>(null)
+  const [clearAllOpen, setClearAllOpen] = useState(false)
+  const [pendingImport, setPendingImport] = useState<EntryDraft[] | null>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['ai', 'mcp-config'],
@@ -409,7 +414,10 @@ function McpServersCard() {
       toast.error(validationError)
       return
     }
-    if (drafts.length === 0 && !window.confirm(t('settings.mcp.confirmClearAll'))) return
+    if (drafts.length === 0) {
+      setClearAllOpen(true)
+      return
+    }
     saveMutation.mutate(drafts.map(buildEntryInput))
   }
 
@@ -421,12 +429,14 @@ function McpServersCard() {
       toast.error(t('settings.mcp.importInvalid'))
       return
     }
-    if (
-      drafts.length > 0 &&
-      !window.confirm(t('settings.mcp.importReplaceConfirm', { count: imported.length }))
-    ) {
+    if (drafts.length > 0) {
+      setPendingImport(imported)
       return
     }
+    applyImport(imported)
+  }
+
+  function applyImport(imported: EntryDraft[]) {
     setDrafts(imported)
     setImportOpen(false)
     setImportText('')
@@ -439,11 +449,26 @@ function McpServersCard() {
   return (
     <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
       {isPending ? (
-        <p className="text-sm text-admin-muted">{t('loading')}</p>
+        <div className="space-y-3" aria-hidden>
+          <div className="h-[76px] animate-pulse rounded-lg bg-admin-surface-muted" />
+          <div className="h-56 animate-pulse rounded-lg bg-admin-surface-muted" />
+          <div className="h-56 animate-pulse rounded-lg bg-admin-surface-muted" />
+        </div>
       ) : isError ? (
-        <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
-          <p>{error instanceof Error ? error.message : t('error')}</p>
-          <button type="button" className="mt-2 underline" onClick={() => void refetch()}>
+        <div className="flex items-start gap-3 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
+          <AlertCircle
+            className="mt-0.5 h-[18px] w-[18px] shrink-0 text-danger-emphasis"
+            aria-hidden
+          />
+          <p className="min-w-0 flex-1 text-sm text-danger-emphasis">
+            {error instanceof Error ? error.message : t('error')}
+          </p>
+          <button
+            type="button"
+            className={adminSecondaryButtonSmClass}
+            onClick={() => void refetch()}
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden />
             {t('retry')}
           </button>
         </div>
@@ -492,7 +517,7 @@ function McpServersCard() {
                     disabled={retryMutation.isPending}
                     onClick={() => retryMutation.mutate()}
                   >
-                    <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                    <RefreshCw className="h-4 w-4" aria-hidden />
                     {retryMutation.isPending
                       ? t('settings.runtimeConfig.retrying')
                       : t('settings.runtimeConfig.retryPush')}
@@ -510,7 +535,23 @@ function McpServersCard() {
           ) : null}
 
           {drafts.length === 0 ? (
-            <p className="text-sm text-admin-muted">{t('settings.mcp.empty')}</p>
+            <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+              <span className="admin-empty-mark">
+                <Server className="h-6 w-6" aria-hidden />
+              </span>
+              <p className="text-sm font-medium text-admin">{t('settings.mcp.empty')}</p>
+              <p className="text-xs text-admin-muted">{t('settings.mcp.emptyHint')}</p>
+              {canUpdate ? (
+                <button
+                  type="button"
+                  className={cn(adminPrimaryButtonClass, 'mt-2')}
+                  onClick={() => setDrafts((current) => [...current, emptyEntryDraft()])}
+                >
+                  <Plus className="h-4 w-4" aria-hidden />
+                  {t('settings.mcp.add')}
+                </button>
+              ) : null}
+            </div>
           ) : (
             <div className="space-y-3">
               {drafts.map((draft, index) => (
@@ -534,7 +575,7 @@ function McpServersCard() {
                           aria-label={t('settings.mcp.moveUp')}
                           onClick={() => moveDraft(index, -1)}
                         >
-                          <ArrowUp className="h-3.5 w-3.5" aria-hidden />
+                          <ArrowUp className="h-4 w-4" aria-hidden />
                         </button>
                         <button
                           type="button"
@@ -543,19 +584,14 @@ function McpServersCard() {
                           aria-label={t('settings.mcp.moveDown')}
                           onClick={() => moveDraft(index, 1)}
                         >
-                          <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+                          <ArrowDown className="h-4 w-4" aria-hidden />
                         </button>
                         <button
                           type="button"
                           className={cn(adminDangerGhostButtonSmClass, 'shrink-0')}
-                          onClick={() => {
-                            if (!window.confirm(t('settings.mcp.confirmRemove'))) return
-                            setDrafts((current) =>
-                              current.filter((item) => item.localId !== draft.localId),
-                            )
-                          }}
+                          onClick={() => setRemoving(draft)}
                         >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          <Trash2 className="h-4 w-4" aria-hidden />
                           {t('settings.mcp.remove')}
                         </button>
                       </>
@@ -563,10 +599,12 @@ function McpServersCard() {
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block text-sm text-admin">
-                      {t('settings.mcp.name')}
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-admin-muted">
+                        {t('settings.mcp.name')}
+                      </span>
                       <input
-                        className={`${adminFieldClass} mt-1 font-mono`}
+                        className={`${adminFieldClass} font-mono`}
                         value={draft.name}
                         disabled={!canUpdate || !draft.isNew}
                         placeholder="my-server"
@@ -576,10 +614,12 @@ function McpServersCard() {
                         {draft.isNew ? t('settings.mcp.nameHint') : t('settings.mcp.nameLocked')}
                       </span>
                     </label>
-                    <label className="block text-sm text-admin">
-                      {t('settings.mcp.transport')}
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-admin-muted">
+                        {t('settings.mcp.transport')}
+                      </span>
                       <select
-                        className={`${adminFieldClass} mt-1`}
+                        className={adminFieldClass}
                         value={draft.transport}
                         disabled={!canUpdate}
                         onChange={(event) =>
@@ -588,7 +628,7 @@ function McpServersCard() {
                           })
                         }
                       >
-                        <option value="http">http（Streamable HTTP）</option>
+                        <option value="http">{t('settings.mcp.transportHttp')}</option>
                         <option value="sse">sse</option>
                         <option value="stdio">stdio</option>
                       </select>
@@ -597,10 +637,12 @@ function McpServersCard() {
 
                   {draft.transport === 'stdio' ? (
                     <>
-                      <label className="block text-sm text-admin">
-                        {t('settings.mcp.command')}
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-medium text-admin-muted">
+                          {t('settings.mcp.command')}
+                        </span>
                         <input
-                          className={`${adminFieldClass} mt-1 font-mono`}
+                          className={`${adminFieldClass} font-mono`}
                           value={draft.command}
                           disabled={!canUpdate}
                           placeholder="npx"
@@ -609,8 +651,10 @@ function McpServersCard() {
                           }
                         />
                       </label>
-                      <div className="space-y-2">
-                        <span className="block text-sm text-admin">{t('settings.mcp.args')}</span>
+                      <div className="space-y-1.5">
+                        <span className="block text-xs font-medium text-admin-muted">
+                          {t('settings.mcp.args')}
+                        </span>
                         {draft.args.map((arg, argIndex) => (
                           <div key={argIndex} className="flex items-center gap-2">
                             <input
@@ -643,14 +687,16 @@ function McpServersCard() {
                           disabled={!canUpdate}
                           onClick={() => updateDraft(draft.localId, { args: [...draft.args, ''] })}
                         >
-                          <Plus className="h-3.5 w-3.5" aria-hidden />
+                          <Plus className="h-4 w-4" aria-hidden />
                           {t('settings.mcp.argsAdd')}
                         </button>
                       </div>
-                      <label className="block text-sm text-admin">
-                        {t('settings.mcp.cwd')}
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-medium text-admin-muted">
+                          {t('settings.mcp.cwd')}
+                        </span>
                         <input
-                          className={`${adminFieldClass} mt-1 font-mono`}
+                          className={`${adminFieldClass} font-mono`}
                           value={draft.cwd}
                           disabled={!canUpdate}
                           onChange={(event) => updateDraft(draft.localId, { cwd: event.target.value })}
@@ -658,10 +704,12 @@ function McpServersCard() {
                       </label>
                     </>
                   ) : (
-                    <label className="block text-sm text-admin">
-                      {t('settings.mcp.url')}
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-admin-muted">
+                        {t('settings.mcp.url')}
+                      </span>
                       <input
-                        className={`${adminFieldClass} mt-1 font-mono`}
+                        className={`${adminFieldClass} font-mono`}
                         type="password"
                         autoComplete="new-password"
                         value={draft.url}
@@ -682,10 +730,12 @@ function McpServersCard() {
                   )}
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block text-sm text-admin">
-                      {t('settings.mcp.toolPrefix')}
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-admin-muted">
+                        {t('settings.mcp.toolPrefix')}
+                      </span>
                       <input
-                        className={`${adminFieldClass} mt-1 font-mono`}
+                        className={`${adminFieldClass} font-mono`}
                         value={draft.toolPrefix}
                         disabled={!canUpdate}
                         onChange={(event) =>
@@ -696,10 +746,12 @@ function McpServersCard() {
                         {t('settings.mcp.toolPrefixHint')}
                       </span>
                     </label>
-                    <label className="block text-sm text-admin">
-                      {t('settings.mcp.timeout')}
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-admin-muted">
+                        {t('settings.mcp.timeout')}
+                      </span>
                       <input
-                        className={`${adminFieldClass} mt-1`}
+                        className={adminFieldClass}
                         type="number"
                         min={1}
                         max={600}
@@ -730,8 +782,10 @@ function McpServersCard() {
                   </label>
 
                   {draft.transport === 'stdio' ? (
-                    <div className="space-y-1">
-                      <span className="block text-sm text-admin">{t('settings.mcp.env')}</span>
+                    <div className="space-y-1.5">
+                      <span className="block text-xs font-medium text-admin-muted">
+                        {t('settings.mcp.env')}
+                      </span>
                       <KvEditor
                         rows={draft.env}
                         disabled={!canUpdate}
@@ -741,8 +795,10 @@ function McpServersCard() {
                       />
                     </div>
                   ) : (
-                    <div className="space-y-1">
-                      <span className="block text-sm text-admin">{t('settings.mcp.headers')}</span>
+                    <div className="space-y-1.5">
+                      <span className="block text-xs font-medium text-admin-muted">
+                        {t('settings.mcp.headers')}
+                      </span>
                       <KvEditor
                         rows={draft.headers}
                         disabled={!canUpdate}
@@ -818,6 +874,109 @@ function McpServersCard() {
               onClick={handleImport}
             >
               {t('settings.mcp.importApply')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
+
+      {removing ? (
+        <FormDialog
+          title={t('settings.mcp.removeConfirmTitle')}
+          closeLabel={t('settings.mcp.cancel')}
+          onClose={() => setRemoving(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('settings.mcp.removeConfirmBody', {
+              name: removing.name.trim() || t('settings.mcp.unnamed'),
+            })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setRemoving(null)}
+            >
+              {t('settings.mcp.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              onClick={() => {
+                setDrafts((current) =>
+                  current.filter((item) => item.localId !== removing.localId),
+                )
+                setRemoving(null)
+              }}
+            >
+              {t('settings.mcp.remove')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
+
+      {clearAllOpen ? (
+        <FormDialog
+          title={t('settings.mcp.clearAllConfirmTitle')}
+          closeLabel={t('settings.mcp.cancel')}
+          onClose={() => setClearAllOpen(false)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">{t('settings.mcp.confirmClearAll')}</p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setClearAllOpen(false)}
+            >
+              {t('settings.mcp.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={saveMutation.isPending}
+              onClick={() => {
+                setClearAllOpen(false)
+                saveMutation.mutate(drafts.map(buildEntryInput))
+              }}
+            >
+              {t('settings.mcp.clearAllConfirmAction')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
+
+      {pendingImport ? (
+        <FormDialog
+          title={t('settings.mcp.importReplaceConfirmTitle')}
+          closeLabel={t('settings.mcp.cancel')}
+          onClose={() => setPendingImport(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('settings.mcp.importReplaceConfirm', { count: pendingImport.length })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setPendingImport(null)}
+            >
+              {t('settings.mcp.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              onClick={() => {
+                const imported = pendingImport
+                setPendingImport(null)
+                applyImport(imported)
+              }}
+            >
+              {t('settings.mcp.importReplaceConfirmAction')}
             </button>
           </div>
         </FormDialog>

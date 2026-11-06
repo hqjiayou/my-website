@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, ExternalLink, Plus } from 'lucide-react'
+import { AlertTriangle, Check, Copy, ExternalLink, Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -7,9 +7,11 @@ import { toast } from 'sonner'
 import { aiApi } from '@/api/apps/aiApi'
 import { CopyableText, FormDialog, StatusTag } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
   adminFieldClass,
   adminFormActionsClass,
+  adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
@@ -132,6 +134,45 @@ function shownModelIds(provider: string, modelIds: string[] | null | undefined) 
   return modelIds.filter((id) => !id.toLowerCase().startsWith('claude'))
 }
 
+/** 客户端 key 的脱敏显示：只露尾 4 位，全文不进 DOM（DS §7 密钥字段定案）。 */
+function maskApiKey(apiKey: string) {
+  return apiKey.length > 4 ? `••••••••${apiKey.slice(-4)}` : '••••'
+}
+
+/** 尾号标识：供删除确认文案称呼对象；key 过短时返回 null，文案改用泛称。 */
+function apiKeyTail(apiKey: string) {
+  return apiKey.length > 4 ? apiKey.slice(-4) : null
+}
+
+/** 脱敏 key 旁的复制钮：行为与 CopyableText 一致（clipboard＋toast），但 aria-label 不带 key 本身。 */
+function ApiKeyCopyButton({ value }: { value: string }) {
+  const { t } = useTranslation('common')
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      toast.success(t('actions.copied'))
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      toast.error(t('error.unknown'))
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      className={cn(adminGhostButtonClass, 'shrink-0')}
+      title={t('actions.copy')}
+      aria-label={t('actions.copy')}
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-admin-success" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  )
+}
+
 /**
  * CLI 代理面板本体（账号、登录、客户端 key、模型清单与 pacing）：原
  * 「API 管理」页的 CLI 部分整体搬运（Issue #214 UoW-2 起被「模型 API
@@ -146,6 +187,7 @@ export function ProxyServicesCliPanel() {
   const [choosing, setChoosing] = useState(false)
   const [draftKey, setDraftKey] = useState('')
   const [createdKey, setCreatedKey] = useState<string | null>(null)
+  const [deletingKey, setDeletingKey] = useState<string | null>(null)
   const [pendingLogin, setPendingLogin] = useState<PendingLogin | null>(null)
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const namesAtLogin = useRef<string[] | null>(null)
@@ -277,6 +319,8 @@ export function ProxyServicesCliPanel() {
     else if (!keysQuery.isLoading && clientKeys.length === 0) usageReason = t('proxyServices.usageNeedKey')
     else usageReason = t('proxyServices.usageNeedModels')
   }
+
+  const deletingKeyTail = deletingKey ? apiKeyTail(deletingKey) : null
 
   function startLogin(provider: ProxyLoginProvider) {
     namesAtLogin.current = accounts.map((account) => account.name)
@@ -471,17 +515,15 @@ export function ProxyServicesCliPanel() {
                   <ul className="max-h-32 overflow-auto">
                     {visibleKeys.map((apiKey) => (
                       <li key={apiKey} className="flex items-center gap-3 py-1.5">
-                        <span className="flex min-w-0 flex-1 items-center rounded-lg border border-admin bg-admin-surface-muted py-1 pl-3 pr-1">
-                          <CopyableText value={apiKey} className="min-w-0 flex-1 font-mono text-sm" />
+                        <span className="flex min-w-0 flex-1 items-center gap-1 rounded-lg border border-admin bg-admin-surface-muted py-1 pl-3 pr-1">
+                          <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{maskApiKey(apiKey)}</span>
+                          <ApiKeyCopyButton value={apiKey} />
                         </span>
                         {canUpdate ? (
                           <button
                             type="button"
                             className={cn(adminDangerGhostButtonClass, 'shrink-0')}
-                            onClick={() => {
-                              if (!window.confirm(t('proxyServices.confirmDelete'))) return
-                              deleteMutation.mutate(apiKey)
-                            }}
+                            onClick={() => setDeletingKey(apiKey)}
                           >
                             {t('proxyServices.delete')}
                           </button>
@@ -591,6 +633,37 @@ export function ProxyServicesCliPanel() {
               </button>
             </div>
           </form>
+        </FormDialog>
+      ) : null}
+
+      {deletingKey ? (
+        <FormDialog
+          title={t('proxyServices.deleteKeyTitle')}
+          closeLabel={t('proxyServices.dialog.cancel')}
+          onClose={() => setDeletingKey(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {deletingKeyTail
+              ? t('proxyServices.deleteKeyBody', { tail: deletingKeyTail })
+              : t('proxyServices.deleteKeyBodyGeneric')}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button type="button" className={adminSecondaryButtonClass} onClick={() => setDeletingKey(null)}>
+              {t('proxyServices.dialog.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={deleteMutation.isPending}
+              onClick={() =>
+                deleteMutation.mutate(deletingKey, { onSuccess: () => setDeletingKey(null) })
+              }
+            >
+              {t('proxyServices.delete')}
+            </button>
+          </div>
         </FormDialog>
       ) : null}
     </>

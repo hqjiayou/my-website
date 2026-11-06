@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, X } from 'lucide-react'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
 import { FormDialog } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
   adminFieldClass,
   adminFormActionsClass,
@@ -52,6 +53,22 @@ export function ChainPresetsCard() {
   })
   const entries = entriesQuery.data ?? []
   const entryById = new Map(entries.map((entry) => [entry.id, entry]))
+
+  // 列表呈现按模式分行（DESIGN_SYSTEM §10 组链可视化）：成员按其入口 mode 分组，
+  // 组内保持名单原序，模式行只渲染有成员者，行序按成员首次出现的模式。
+  function chainGroups(preset: AiChainPreset): Array<{ mode: 'CLI' | 'KEY'; entryIds: number[] }> {
+    const groups: Array<{ mode: 'CLI' | 'KEY'; entryIds: number[] }> = []
+    for (const entryId of preset.entryIds) {
+      const mode = (entryById.get(entryId)?.mode ?? 'KEY') === 'CLI' ? 'CLI' : 'KEY'
+      const group = groups.find((item) => item.mode === mode)
+      if (group) {
+        group.entryIds.push(entryId)
+      } else {
+        groups.push({ mode, entryIds: [entryId] })
+      }
+    }
+    return groups
+  }
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['ai', 'chain-presets'] })
@@ -128,7 +145,13 @@ export function ChainPresetsCard() {
         </PermissionGate>
       </div>
 
-      {presetsQuery.isError ? (
+      {presetsQuery.isPending ? (
+        <div className="space-y-2" aria-hidden>
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="h-14 animate-pulse rounded-[10px] bg-admin-surface-muted" />
+          ))}
+        </div>
+      ) : presetsQuery.isError ? (
         <p className="text-sm text-danger-emphasis">{t('settings.chainPresets.loadFailed')}</p>
       ) : (presetsQuery.data ?? []).length === 0 ? (
         <p className="text-sm text-admin-muted">{t('settings.chainPresets.empty')}</p>
@@ -140,15 +163,6 @@ export function ChainPresetsCard() {
               className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-admin bg-admin-surface-muted px-3 py-2"
             >
               <span className="text-sm font-semibold text-admin">{preset.name}</span>
-              <span className="flex flex-wrap items-center gap-1 text-xs text-admin-muted">
-                {preset.entryIds.length === 0
-                  ? t('settings.chainPresets.noMembers')
-                  : preset.entryIds.map((entryId, index) => (
-                      <span key={entryId} className="rounded bg-admin-surface px-1.5 py-0.5">
-                        {index + 1}. {entryById.get(entryId) ? entryLabel(entryById.get(entryId)!) : `#${entryId}`}
-                      </span>
-                    ))}
-              </span>
               <span className="ml-auto flex gap-1">
                 <button
                   type="button"
@@ -174,6 +188,62 @@ export function ChainPresetsCard() {
                   {t('settings.chainPresets.delete')}
                 </button>
               </span>
+              <div className="basis-full">
+                {preset.entryIds.length === 0 ? (
+                  <p className="text-sm text-admin-muted">{t('settings.chainPresets.noMembers')}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {chainGroups(preset).map((group) => (
+                      <div key={group.mode} className="flex flex-wrap items-center gap-2">
+                        <span className="w-16 shrink-0 self-center text-xs font-semibold uppercase text-admin-muted">
+                          {group.mode}
+                        </span>
+                        {group.entryIds.map((entryId, index) => {
+                          const entry = entryById.get(entryId)
+                          const primary = index === 0
+                          const disabled = entry != null && !entry.enabled
+                          return (
+                            <Fragment key={entryId}>
+                              {index > 0 ? (
+                                <span
+                                  className="flex flex-col items-center gap-1 self-center px-1"
+                                  aria-hidden
+                                >
+                                  <span className="w-8 border-t border-admin" />
+                                  <span className="whitespace-nowrap text-xs text-admin-muted">
+                                    {t('settings.chainPresets.chainTrigger')}
+                                  </span>
+                                </span>
+                              ) : null}
+                              <div
+                                className={cn(
+                                  'rounded-[10px] border border-admin bg-admin-surface px-3 py-2',
+                                  primary && 'border-primary/50 bg-primary/5',
+                                  disabled && 'border-dashed opacity-55',
+                                )}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <span className="truncate text-[13px] font-semibold text-admin">
+                                    {entry ? entry.displayName || entry.modelSpec : `#${entryId}`}
+                                  </span>
+                                  {primary ? (
+                                    <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                                      {t('settings.chainPrimary')}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="truncate text-xs text-admin-muted">
+                                  {entry ? entry.modelSpec : `#${entryId}`}
+                                </div>
+                              </div>
+                            </Fragment>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -313,7 +383,7 @@ export function ChainPresetsCard() {
             </button>
             <button
               type="button"
-              className={adminPrimaryButtonClass}
+              className={adminDangerButtonMdClass}
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleting.id)}
             >

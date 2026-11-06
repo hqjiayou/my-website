@@ -6,8 +6,13 @@ import { toast } from 'sonner'
 
 import { agentApi } from '@/api'
 import { aiApi } from '@/api/apps/aiApi'
-import { AdminPageHeader } from '@/components/admin'
-import { adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
+import { AdminPageHeader, FormDialog, StatusTag } from '@/components/admin'
+import {
+  adminDangerButtonMdClass,
+  adminFormActionsClass,
+  adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+} from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { AgentAiKnowledgePanel } from '@/pages/agents/agentAiKnowledgePanel'
 import { PermissionGate } from '@/router/permission'
@@ -22,10 +27,12 @@ export function AiKnowledgeBasesPage() {
   const { t } = useTranslation('aiAdmin')
   const [result, setResult] = useState<AiKnowledgeReembedResult | null>(null)
   const [conflicts, setConflicts] = useState<AiKnowledgeReembedConflict[] | null>(null)
+  const [confirmingReembed, setConfirmingReembed] = useState(false)
 
   const reembedMutation = useMutation({
     mutationFn: () => aiApi.reembedKnowledge(),
     onSuccess: (next) => {
+      setConfirmingReembed(false)
       setResult(next)
       setConflicts(null)
       if (next.status === 'PARTIAL') {
@@ -40,11 +47,6 @@ export function AiKnowledgeBasesPage() {
     },
   })
 
-  function startReembed() {
-    if (!window.confirm(t('knowledgeBases.reembed.confirm'))) return
-    reembedMutation.mutate()
-  }
-
   return (
     <section className="admin-content-data">
       <AdminPageHeader
@@ -56,7 +58,7 @@ export function AiKnowledgeBasesPage() {
               type="button"
               className={adminPrimaryButtonClass}
               disabled={reembedMutation.isPending}
-              onClick={startReembed}
+              onClick={() => setConfirmingReembed(true)}
             >
               {reembedMutation.isPending
                 ? t('knowledgeBases.reembed.working')
@@ -78,7 +80,7 @@ export function AiKnowledgeBasesPage() {
         </div>
       ) : null}
       {result ? (
-        <div className="mb-4 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground">
+        <div className="mb-4 rounded-lg border border-admin bg-admin-surface px-4 py-3 text-sm text-admin">
           <p>{t('knowledgeBases.reembed.usage')}</p>
           <p className="mt-2">
             {t('knowledgeBases.reembed.sites')} {result.sites}
@@ -107,9 +109,37 @@ export function AiKnowledgeBasesPage() {
       ) : null}
       <KnowledgeOverviewSection />
       <KnowledgeBasesAdminSection />
-      <article className="rounded-xl border border-border bg-card p-5">
+      <article className="rounded-xl border border-admin bg-admin-surface p-5">
         <AiAgentScope>{(agentId) => <AgentAiKnowledgePanel agentId={agentId} />}</AiAgentScope>
       </article>
+      {confirmingReembed ? (
+        <FormDialog
+          title={t('knowledgeBases.reembed.confirmTitle')}
+          closeLabel={t('knowledgeBases.cancel')}
+          onClose={() => setConfirmingReembed(false)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">{t('knowledgeBases.reembed.confirm')}</p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setConfirmingReembed(false)}
+            >
+              {t('knowledgeBases.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={reembedMutation.isPending}
+              onClick={() => reembedMutation.mutate()}
+            >
+              {t('knowledgeBases.reembed.action')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
     </section>
   )
 }
@@ -118,6 +148,12 @@ function KnowledgeBasesAdminSection() {
   const { t } = useTranslation('aiAdmin')
   const queryClient = useQueryClient()
   const [linkTargets, setLinkTargets] = useState<Record<number, string>>({})
+  const [unlinkTarget, setUnlinkTarget] = useState<{
+    baseId: number
+    baseName: string
+    targetAgentId: number
+    targetName: string
+  } | null>(null)
   const [embeddingBaseId, setEmbeddingBaseId] = useState<number | null>(null)
   const [expandedBaseId, setExpandedBaseId] = useState<number | null>(null)
   const basesQuery = useQuery({
@@ -149,6 +185,7 @@ function KnowledgeBasesAdminSection() {
     mutationFn: (input: { baseId: number; targetAgentId: number }) =>
       aiApi.unlinkKnowledgeBase(input.baseId, input.targetAgentId),
     onSuccess: () => {
+      setUnlinkTarget(null)
       toast.success(t('knowledgeBases.bases.unlinked'))
       invalidate()
     },
@@ -179,9 +216,7 @@ function KnowledgeBasesAdminSection() {
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-semibold text-admin">{base.name}</span>
                   {base.isDefault ? (
-                    <span className="rounded-full bg-admin-surface-muted px-1.5 py-0.5 text-xs text-admin-muted">
-                      {t('knowledgeBases.bases.defaultBadge')}
-                    </span>
+                    <StatusTag status="DEFAULT" tone="neutral" label={t('knowledgeBases.bases.defaultBadge')} />
                   ) : null}
                   <span className="text-xs text-admin-muted">
                     {t('knowledgeBases.bases.owner')} {base.ownerAgentName ?? `#${base.agentId}`}
@@ -208,18 +243,14 @@ function KnowledgeBasesAdminSection() {
                             className="rounded-full p-0.5 text-danger-emphasis transition hover:bg-danger-muted disabled:opacity-50"
                             title={t('knowledgeBases.bases.unlink')}
                             disabled={unlinkMutation.isPending}
-                            onClick={() => {
-                              if (
-                                !window.confirm(
-                                  t('knowledgeBases.bases.unlinkConfirm', {
-                                    name: agentName(linkedAgentId),
-                                  }),
-                                )
-                              ) {
-                                return
-                              }
-                              unlinkMutation.mutate({ baseId: base.id, targetAgentId: linkedAgentId })
-                            }}
+                            onClick={() =>
+                              setUnlinkTarget({
+                                baseId: base.id,
+                                baseName: base.name,
+                                targetAgentId: linkedAgentId,
+                                targetName: agentName(linkedAgentId),
+                              })
+                            }
                           >
                             <X className="h-3 w-3" />
                           </button>
@@ -298,6 +329,44 @@ function KnowledgeBasesAdminSection() {
           <EmbeddingRegistrationCard key={selectedBase.id} baseId={selectedBase.id} />
         </div>
       </div>
+      {unlinkTarget ? (
+        <FormDialog
+          title={t('knowledgeBases.bases.unlinkConfirmTitle')}
+          closeLabel={t('knowledgeBases.cancel')}
+          onClose={() => setUnlinkTarget(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('knowledgeBases.bases.unlinkConfirm', {
+              name: unlinkTarget.targetName,
+              base: unlinkTarget.baseName,
+            })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setUnlinkTarget(null)}
+            >
+              {t('knowledgeBases.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={unlinkMutation.isPending}
+              onClick={() =>
+                unlinkMutation.mutate({
+                  baseId: unlinkTarget.baseId,
+                  targetAgentId: unlinkTarget.targetAgentId,
+                })
+              }
+            >
+              {t('knowledgeBases.bases.unlink')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
     </article>
   )
 }
@@ -330,21 +399,26 @@ function BaseDocumentsList({ baseId, ownerAgentId }: { baseId: number; ownerAgen
           <FileText className="h-3.5 w-3.5 shrink-0 text-admin-muted" />
           <span className="min-w-0 flex-1 truncate text-xs text-admin">{item.title}</span>
           <span
-            className={cn(
-              'shrink-0 rounded-full px-2 py-0.5 text-xs',
-              item.indexStatus === 'INDEXED'
-                ? 'bg-success-muted text-success-emphasis'
-                : item.indexStatus === 'FAILED'
-                  ? 'bg-danger-muted text-danger-emphasis'
-                  : 'bg-admin-surface-muted text-admin-muted',
-            )}
+            className="shrink-0"
             title={item.indexStatus === 'FAILED' ? (item.indexError ?? undefined) : undefined}
           >
-            {item.indexStatus === 'INDEXED'
-              ? t('knowledgeBases.overview.indexed')
-              : item.indexStatus === 'FAILED'
-                ? t('knowledgeBases.overview.failed')
-                : t('knowledgeBases.overview.pending')}
+            <StatusTag
+              status={item.indexStatus}
+              tone={
+                item.indexStatus === 'INDEXED'
+                  ? 'active'
+                  : item.indexStatus === 'FAILED'
+                    ? 'danger'
+                    : 'warning'
+              }
+              label={
+                item.indexStatus === 'INDEXED'
+                  ? t('knowledgeBases.overview.indexed')
+                  : item.indexStatus === 'FAILED'
+                    ? t('knowledgeBases.overview.failed')
+                    : t('knowledgeBases.overview.pending')
+              }
+            />
           </span>
         </li>
       ))}
@@ -361,6 +435,7 @@ function formatBytes(bytes: number): string {
 function KnowledgeOverviewSection() {
   const { t } = useTranslation('aiAdmin')
   const queryClient = useQueryClient()
+  const [confirmingRetry, setConfirmingRetry] = useState(false)
   const overviewQuery = useQuery({
     queryKey: ['ai-knowledge-overview'],
     queryFn: () => aiApi.getKnowledgeOverview(),
@@ -368,6 +443,7 @@ function KnowledgeOverviewSection() {
   const retryMutation = useMutation({
     mutationFn: () => aiApi.reindexFailedKnowledge(),
     onSuccess: (res) => {
+      setConfirmingRetry(false)
       toast.success(
         `${t('knowledgeBases.overview.retryDone')} ${res.succeeded}/${res.attempted}`,
       )
@@ -474,11 +550,7 @@ function KnowledgeOverviewSection() {
                 type="button"
                 className={adminSecondaryButtonClass}
                 disabled={retryMutation.isPending}
-                onClick={() => {
-                  if (window.confirm(t('knowledgeBases.overview.retryConfirm'))) {
-                    retryMutation.mutate()
-                  }
-                }}
+                onClick={() => setConfirmingRetry(true)}
               >
                 {retryMutation.isPending
                   ? t('knowledgeBases.overview.retrying')
@@ -510,6 +582,34 @@ function KnowledgeOverviewSection() {
             ))}
           </div>
         </article>
+      ) : null}
+      {confirmingRetry ? (
+        <FormDialog
+          title={t('knowledgeBases.overview.retryConfirmTitle')}
+          closeLabel={t('knowledgeBases.cancel')}
+          onClose={() => setConfirmingRetry(false)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">{t('knowledgeBases.overview.retryConfirm')}</p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setConfirmingRetry(false)}
+            >
+              {t('knowledgeBases.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={retryMutation.isPending}
+              onClick={() => retryMutation.mutate()}
+            >
+              {t('knowledgeBases.overview.retryAll')}
+            </button>
+          </div>
+        </FormDialog>
       ) : null}
     </>
   )

@@ -27,6 +27,9 @@ export default {
     logout: 'ログアウト',
     logoutConfirm: 'ログアウトしますか？',
   },
+  dialog: {
+    cancel: 'キャンセル',
+  },
   preferences: {
     title: '表示と環境設定',
     description: 'テーマ、文字サイズ、密度などのローカル UI 設定を変更します。',

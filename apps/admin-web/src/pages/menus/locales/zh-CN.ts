@@ -41,6 +41,7 @@ export default {
     created: '菜单已创建。请到角色管理里勾选它，对应角色才会在侧栏看到。',
     updated: '菜单已更新',
     deleted: '菜单已删除',
+    deleteConfirmTitle: '删除菜单',
     confirmDelete: '确定删除菜单「{{name}}」？',
   },
 } as const

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, KeyRound, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowRight, CircleAlert, KeyRound, RefreshCw } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -8,12 +8,14 @@ import { toast } from 'sonner'
 import { aiApi } from '@/api/apps/aiApi'
 import { AdminPageHeader, CopyableText, FormDialog, StatusTag } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
   adminFieldClass,
   adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
+  adminSecondaryButtonSmClass,
 } from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
@@ -52,6 +54,9 @@ function GatewayAccessKeysCard() {
   const [name, setName] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   const [issuedKey, setIssuedKey] = useState<GatewayAccessKeyIssueResponse | null>(null)
+  const [revoking, setRevoking] = useState<GatewayAccessKey | null>(null)
+  const [issueOpen, setIssueOpen] = useState(false)
+  const [nameError, setNameError] = useState(false)
 
   const { data, isPending } = useQuery({
     queryKey: ['ai', 'gateway-access-keys'],
@@ -68,6 +73,8 @@ function GatewayAccessKeysCard() {
       setIssuedKey(response)
       setName('')
       setExpiresAt('')
+      setNameError(false)
+      setIssueOpen(false)
       toast.success(t('settings.gatewayKeys.issued'))
       void queryClient.invalidateQueries({ queryKey: ['ai', 'gateway-access-keys'] })
     },
@@ -77,6 +84,7 @@ function GatewayAccessKeysCard() {
   const revokeMutation = useMutation({
     mutationFn: (id: number) => aiApi.revokeGatewayAccessKey(id),
     onSuccess: () => {
+      setRevoking(null)
       toast.success(t('settings.gatewayKeys.revoked'))
       void queryClient.invalidateQueries({ queryKey: ['ai', 'gateway-access-keys'] })
     },
@@ -90,10 +98,35 @@ function GatewayAccessKeysCard() {
     EXPIRED: t('settings.gatewayKeys.statusExpired'),
   }
 
+  function openIssueDialog() {
+    setName('')
+    setExpiresAt('')
+    setNameError(false)
+    setIssueOpen(true)
+  }
+
+  function submitIssue(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!name.trim()) {
+      setNameError(true)
+      return
+    }
+    issueMutation.mutate()
+  }
+
   return (
     <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
-      <h3 className="text-sm font-semibold text-admin">{t('settings.gatewayKeys.title')}</h3>
-      <p className="text-sm text-admin-muted">{t('settings.gatewayKeys.description')}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-admin">{t('settings.gatewayKeys.title')}</h3>
+          <p className="mt-1 text-sm text-admin-muted">{t('settings.gatewayKeys.description')}</p>
+        </div>
+        <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
+          <button type="button" className={adminPrimaryButtonClass} onClick={openIssueDialog}>
+            {t('settings.gatewayKeys.issue')}
+          </button>
+        </PermissionGate>
+      </div>
 
       {issuedKey ? (
         <div className="rounded-lg border border-warning/35 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis">
@@ -103,7 +136,7 @@ function GatewayAccessKeysCard() {
           </div>
           <button
             type="button"
-            className="mt-2 text-xs text-warning-emphasis underline"
+            className={cn(adminSecondaryButtonSmClass, 'mt-3')}
             onClick={() => setIssuedKey(null)}
           >
             {t('settings.gatewayKeys.close')}
@@ -112,9 +145,19 @@ function GatewayAccessKeysCard() {
       ) : null}
 
       {isPending ? (
-        <p className="text-sm text-admin-muted">{t('loading')}</p>
+        <div className="space-y-2" aria-hidden>
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="admin-skeleton h-14 w-full" />
+          ))}
+        </div>
       ) : keys.length === 0 ? (
-        <p className="text-sm text-admin-muted">{t('settings.gatewayKeys.empty')}</p>
+        <div className="flex flex-col items-center px-4 py-10 text-center">
+          <span className="flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-admin-surface-muted text-admin-muted">
+            <KeyRound className="h-6 w-6" aria-hidden />
+          </span>
+          <p className="mt-3 text-sm font-medium text-admin">{t('settings.gatewayKeys.empty')}</p>
+          <p className="mt-1 text-xs text-admin-muted">{t('settings.gatewayKeys.emptyHint')}</p>
+        </div>
       ) : (
         <ul className="space-y-2">
           {keys.map((key) => {
@@ -149,10 +192,7 @@ function GatewayAccessKeysCard() {
                     type="button"
                     className={cn(adminDangerGhostButtonSmClass, 'shrink-0')}
                     disabled={revokeMutation.isPending}
-                    onClick={() => {
-                      if (!window.confirm(t('settings.gatewayKeys.confirmRevoke'))) return
-                      revokeMutation.mutate(key.id)
-                    }}
+                    onClick={() => setRevoking(key)}
                   >
                     {t('settings.gatewayKeys.revoke')}
                   </button>
@@ -163,44 +203,96 @@ function GatewayAccessKeysCard() {
         </ul>
       )}
 
-      <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (!name.trim()) return
-            issueMutation.mutate()
-          }}
+      {issueOpen ? (
+        <FormDialog
+          title={t('settings.gatewayKeys.issueDialogTitle')}
+          closeLabel={t('settings.gatewayKeys.cancel')}
+          onClose={() => setIssueOpen(false)}
+          size="s"
         >
-          <label className="block text-sm text-admin">
-            {t('settings.gatewayKeys.name')}
-            <input
-              className={`${adminFieldClass} mt-1`}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <label className="block text-sm text-admin">
-            {t('settings.gatewayKeys.expiresAt')}
-            <input
-              type="datetime-local"
-              className={`${adminFieldClass} mt-1`}
-              value={expiresAt}
-              onChange={(event) => setExpiresAt(event.target.value)}
-            />
-            <span className="mt-1 block text-xs text-admin-muted">
-              {t('settings.gatewayKeys.expiresAtHint')}
-            </span>
-          </label>
-          <button
-            type="submit"
-            disabled={issueMutation.isPending || !name.trim()}
-            className={adminPrimaryButtonClass}
-          >
-            {issueMutation.isPending ? t('settings.gatewayKeys.issuing') : t('settings.gatewayKeys.issue')}
-          </button>
-        </form>
-      </PermissionGate>
+          <form onSubmit={submitIssue} noValidate>
+            <div className="space-y-4">
+              <label className="block">
+                <span className="text-xs font-medium text-admin-muted">
+                  {t('settings.gatewayKeys.name')}
+                  <span className="text-admin-danger"> *</span>
+                </span>
+                <input
+                  className={`${adminFieldClass} mt-1.5`}
+                  value={name}
+                  aria-invalid={nameError}
+                  onChange={(event) => {
+                    setName(event.target.value)
+                    if (event.target.value.trim()) setNameError(false)
+                  }}
+                />
+                {nameError ? (
+                  <span className="mt-1 block text-xs text-danger-emphasis">
+                    {t('settings.gatewayKeys.nameRequired')}
+                  </span>
+                ) : null}
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-admin-muted">
+                  {t('settings.gatewayKeys.expiresAt')}
+                </span>
+                <input
+                  type="datetime-local"
+                  className={`${adminFieldClass} mt-1.5`}
+                  value={expiresAt}
+                  onChange={(event) => setExpiresAt(event.target.value)}
+                />
+                <span className="mt-1 block text-xs text-admin-muted">
+                  {t('settings.gatewayKeys.expiresAtHint')}
+                </span>
+              </label>
+            </div>
+            <div className={adminFormActionsClass}>
+              <button
+                type="button"
+                className={adminSecondaryButtonClass}
+                onClick={() => setIssueOpen(false)}
+              >
+                {t('settings.gatewayKeys.cancel')}
+              </button>
+              <button type="submit" disabled={issueMutation.isPending} className={adminPrimaryButtonClass}>
+                {issueMutation.isPending ? t('settings.gatewayKeys.issuing') : t('settings.gatewayKeys.issue')}
+              </button>
+            </div>
+          </form>
+        </FormDialog>
+      ) : null}
+
+      {revoking ? (
+        <FormDialog
+          title={t('settings.gatewayKeys.revokeConfirmTitle')}
+          closeLabel={t('settings.gatewayKeys.cancel')}
+          onClose={() => setRevoking(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('settings.gatewayKeys.revokeConfirmBody', { name: revoking.name })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setRevoking(null)}
+            >
+              {t('settings.gatewayKeys.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={revokeMutation.isPending}
+              onClick={() => revokeMutation.mutate(revoking.id)}
+            >
+              {t('settings.gatewayKeys.revoke')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
     </article>
   )
 }
@@ -308,15 +400,30 @@ function RuntimeConfigCard() {
 
   return (
     <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
-      <h3 className="text-sm font-semibold text-admin">{t('settings.runtimeConfig.title')}</h3>
+      <h3 className="text-base font-semibold text-admin">{t('settings.runtimeConfig.title')}</h3>
       <p className="text-sm text-admin-muted">{t('settings.runtimeConfig.description')}</p>
 
       {isPending ? (
-        <p className="text-sm text-admin-muted">{t('loading')}</p>
+        <div className="space-y-4" aria-hidden>
+          <div className="admin-skeleton h-16 w-full" />
+          {[1, 2, 3, 4].map((n) => (
+            <div key={n}>
+              <div className="admin-skeleton h-3 w-32" />
+              <div className="admin-skeleton mt-1.5 h-10 w-full" />
+            </div>
+          ))}
+        </div>
       ) : isError ? (
-        <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
-          <p>{error instanceof Error ? error.message : t('error')}</p>
-          <button type="button" className="mt-2 underline" onClick={() => void refetch()}>
+        <div className="flex items-start gap-3 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
+          <CircleAlert className="h-[18px] w-[18px] shrink-0 text-danger-emphasis" aria-hidden />
+          <p className="min-w-0 flex-1 text-sm text-danger-emphasis">
+            {error instanceof Error ? error.message : t('error')}
+          </p>
+          <button
+            type="button"
+            className={cn(adminSecondaryButtonSmClass, 'shrink-0')}
+            onClick={() => void refetch()}
+          >
             {t('retry')}
           </button>
         </div>
@@ -373,10 +480,10 @@ function RuntimeConfigCard() {
               handleSubmit()
             }}
           >
-            <label className="block text-sm text-admin">
-              {t('settings.runtimeConfig.dsn')}
+            <label className="block">
+              <span className="text-xs font-medium text-admin-muted">{t('settings.runtimeConfig.dsn')}</span>
               <input
-                className={`${adminFieldClass} mt-1`}
+                className={`${adminFieldClass} mt-1.5`}
                 type="password"
                 autoComplete="new-password"
                 value={dsn}
@@ -395,10 +502,12 @@ function RuntimeConfigCard() {
                   : t('settings.runtimeConfig.dsnHintEmpty')}
               </span>
             </label>
-            <label className="block text-sm text-admin">
-              {t('settings.runtimeConfig.embeddingModel')}
+            <label className="block">
+              <span className="text-xs font-medium text-admin-muted">
+                {t('settings.runtimeConfig.embeddingModel')}
+              </span>
               <input
-                className={`${adminFieldClass} mt-1`}
+                className={`${adminFieldClass} mt-1.5`}
                 value={embeddingModel}
                 disabled={!canUpdate}
                 onChange={(event) => setEmbeddingModel(event.target.value)}
@@ -407,10 +516,12 @@ function RuntimeConfigCard() {
                 {t('settings.runtimeConfig.embeddingModelHint')}
               </span>
             </label>
-            <label className="block text-sm text-admin">
-              {t('settings.runtimeConfig.dimensions')}
+            <label className="block">
+              <span className="text-xs font-medium text-admin-muted">
+                {t('settings.runtimeConfig.dimensions')}
+              </span>
               <input
-                className={`${adminFieldClass} mt-1`}
+                className={`${adminFieldClass} mt-1.5`}
                 type="number"
                 min={1}
                 max={10000}
@@ -423,10 +534,12 @@ function RuntimeConfigCard() {
                 {t('settings.runtimeConfig.dimensionsHint')}
               </span>
             </label>
-            <label className="block text-sm text-admin">
-              {t('settings.runtimeConfig.geminiKey')}
+            <label className="block">
+              <span className="text-xs font-medium text-admin-muted">
+                {t('settings.runtimeConfig.geminiKey')}
+              </span>
               <input
-                className={`${adminFieldClass} mt-1`}
+                className={`${adminFieldClass} mt-1.5`}
                 type="password"
                 autoComplete="new-password"
                 value={geminiKey}

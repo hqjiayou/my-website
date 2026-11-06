@@ -1,18 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronRight, Inbox, RefreshCw, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { StatusTag } from '@/components/admin'
+import { FilterTabs, FormDialog, StatusTag } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
+  adminDangerGhostButtonMdClass,
   adminDangerGhostButtonSmClass,
   adminFieldClass,
-  adminGhostButtonClass,
+  adminFormActionsClass,
   adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+  adminSecondaryButtonSmClass,
 } from '@/components/admin/controls'
-import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import type {
   AiExperienceExtractionResult,
@@ -61,40 +64,57 @@ export function ExperienceLessonsCard() {
       <h3 className="text-sm font-semibold text-admin">{t('settings.experience.title')}</h3>
       <p className="text-sm text-admin-muted">{t('settings.experience.description')}</p>
 
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('settings.experience.title')}>
-        {STATUSES.map((item) => (
-          <button
-            key={item}
-            type="button"
-            role="tab"
-            aria-selected={status === item}
-            className={cn(
-              adminGhostButtonClass,
-              status === item && 'border-primary/45 bg-primary/7 font-semibold text-primary',
-            )}
-            onClick={() => {
-              setStatus(item)
-              setExpandedId(null)
-            }}
-          >
-            {t(`settings.experience.tab.${item}`)}
-          </button>
-        ))}
-      </div>
+      <FilterTabs
+        tabs={STATUSES.map((item) => ({ key: item, label: t(`settings.experience.tab.${item}`) }))}
+        activeKey={status}
+        onChange={(key) => {
+          setStatus(key as AiExperienceLessonStatus)
+          setExpandedId(null)
+        }}
+      />
 
       {listQuery.isPending ? (
-        <p className="text-sm text-admin-muted">{t('loading')}</p>
+        <ul className="space-y-2" aria-hidden>
+          {[1, 2, 3].map((n) => (
+            <li key={n} className="rounded-lg border border-admin px-3 py-2.5">
+              <div className="animate-pulse space-y-2">
+                <div className="h-4 w-2/5 rounded-md bg-admin-surface-muted" />
+                <div className="h-3.5 w-4/5 rounded-md bg-admin-surface-muted" />
+                <div className="h-3 w-3/5 rounded-md bg-admin-surface-muted" />
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : listQuery.isError ? (
-        <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
-          <p>{listQuery.error instanceof Error ? listQuery.error.message : t('error')}</p>
-          <button type="button" className="mt-2 underline" onClick={() => void listQuery.refetch()}>
+        <div className="flex items-center gap-3 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
+          <AlertCircle className="h-[18px] w-[18px] shrink-0 text-admin-danger" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-admin">{t('settings.experience.loadFailed')}</p>
+            <p className="truncate text-xs text-admin-muted">
+              {listQuery.error instanceof Error ? listQuery.error.message : t('error')}
+            </p>
+          </div>
+          <button type="button" className={adminSecondaryButtonSmClass} onClick={() => void listQuery.refetch()}>
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
             {t('retry')}
           </button>
         </div>
       ) : items.length === 0 ? (
-        <p className="text-sm text-admin-muted">
-          {status === 'PENDING' ? t('settings.experience.emptyPending') : t('settings.experience.emptyOther')}
-        </p>
+        <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+          <span className="admin-empty-mark">
+            <Inbox className="h-6 w-6" />
+          </span>
+          <p className="text-sm font-medium text-admin">
+            {status === 'PENDING'
+              ? t('settings.experience.emptyPendingTitle')
+              : t('settings.experience.emptyOtherTitle')}
+          </p>
+          <p className="text-xs text-admin-muted">
+            {status === 'PENDING'
+              ? t('settings.experience.emptyPendingHint')
+              : t('settings.experience.emptyOtherHint')}
+          </p>
+        </div>
       ) : (
         <ul className="space-y-2">
           {items.map((item) => (
@@ -196,12 +216,28 @@ function LessonDetail({ id, canUpdate, onChanged }: { id: number; canUpdate: boo
     queryFn: () => aiApi.getExperienceLesson(id),
   })
 
-  if (detailQuery.isPending) return <p className="mt-3 text-sm text-admin-muted">{t('loading')}</p>
+  if (detailQuery.isPending)
+    return (
+      <div className="mt-3 space-y-2" aria-hidden>
+        <div className="h-4 animate-pulse rounded bg-admin-surface-muted" />
+        <div className="h-4 w-2/3 animate-pulse rounded bg-admin-surface-muted" />
+      </div>
+    )
   if (detailQuery.isError) {
     return (
-      <p className="mt-3 text-sm text-danger-emphasis">
-        {detailQuery.error instanceof Error ? detailQuery.error.message : t('error')}
-      </p>
+      <div className="mt-3 flex items-center gap-3 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
+        <AlertCircle className="h-[18px] w-[18px] shrink-0 text-danger-emphasis" aria-hidden />
+        <p className="min-w-0 flex-1 text-sm text-danger-emphasis">
+          {detailQuery.error instanceof Error ? detailQuery.error.message : t('error')}
+        </p>
+        <button
+          type="button"
+          className={adminSecondaryButtonSmClass}
+          onClick={() => void detailQuery.refetch()}
+        >
+          {t('retry')}
+        </button>
+      </div>
     )
   }
   const detail = detailQuery.data
@@ -233,6 +269,7 @@ function LessonDetailBody({
   const [symptom, setSymptom] = useState(detail.symptom ?? '')
   const [lesson, setLesson] = useState(detail.lesson)
   const [evidence, setEvidence] = useState(detail.evidence ?? '')
+  const [confirming, setConfirming] = useState<'reject' | 'disable' | null>(null)
 
   const actionMutation = useMutation({
     mutationFn: (action: 'approve' | 'reject' | 'disable') => {
@@ -249,6 +286,7 @@ function LessonDetailBody({
         : aiApi.disableExperienceLesson(detail.id)
     },
     onSuccess: (updated, action) => {
+      setConfirming(null)
       toast.success(
         action === 'approve'
           ? t('settings.experience.approvedToast', { no: updated.lessonNo ?? '' })
@@ -276,10 +314,10 @@ function LessonDetailBody({
     <div className="mt-3 space-y-3 border-t border-admin pt-3">
       {detail.status === 'PENDING' && canUpdate ? (
         <>
-          <label className="block text-sm text-admin">
-            {t('settings.experience.titleField')}
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-admin-muted">{t('settings.experience.titleField')}</span>
             <input
-              className={`${adminFieldClass} mt-1`}
+              className={adminFieldClass}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
@@ -329,12 +367,9 @@ function LessonDetailBody({
           </button>
           <button
             type="button"
-            className={adminDangerGhostButtonSmClass}
+            className={adminDangerGhostButtonMdClass}
             disabled={actionMutation.isPending}
-            onClick={() => {
-              if (!window.confirm(t('settings.experience.confirmReject'))) return
-              actionMutation.mutate('reject')
-            }}
+            onClick={() => setConfirming('reject')}
           >
             {t('settings.experience.reject')}
           </button>
@@ -346,13 +381,52 @@ function LessonDetailBody({
           type="button"
           className={adminDangerGhostButtonSmClass}
           disabled={actionMutation.isPending}
-          onClick={() => {
-            if (!window.confirm(t('settings.experience.confirmDisable'))) return
-            actionMutation.mutate('disable')
-          }}
+          onClick={() => setConfirming('disable')}
         >
           {t('settings.experience.disable')}
         </button>
+      ) : null}
+
+      {confirming ? (
+        <FormDialog
+          title={t(
+            confirming === 'reject'
+              ? 'settings.experience.rejectConfirmTitle'
+              : 'settings.experience.disableConfirmTitle',
+          )}
+          closeLabel={t('settings.experience.cancel')}
+          onClose={() => setConfirming(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t(
+              confirming === 'reject'
+                ? 'settings.experience.rejectConfirmBody'
+                : 'settings.experience.disableConfirmBody',
+              { name: detail.title },
+            )}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setConfirming(null)}
+            >
+              {t('settings.experience.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={actionMutation.isPending}
+              onClick={() => actionMutation.mutate(confirming)}
+            >
+              {confirming === 'reject'
+                ? t('settings.experience.reject')
+                : t('settings.experience.disable')}
+            </button>
+          </div>
+        </FormDialog>
       ) : null}
     </div>
   )
@@ -368,10 +442,10 @@ function TextAreaField({
   onChange: (value: string) => void
 }) {
   return (
-    <label className="block text-sm text-admin">
-      {label}
+    <label className="block space-y-1.5">
+      <span className="text-xs font-medium text-admin-muted">{label}</span>
       <textarea
-        className={`${adminFieldClass} mt-1 min-h-20`}
+        className={`${adminFieldClass} min-h-20`}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -422,24 +496,24 @@ function ExtractPanel({ onDone }: { onDone: () => void }) {
           extractMutation.mutate()
         }}
       >
-        <label className="block text-sm text-admin">
-          {t('settings.experience.windowDays')}
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-admin-muted">{t('settings.experience.windowDays')}</span>
           <input
             type="number"
             min={1}
             max={90}
-            className={`${adminFieldClass} mt-1 w-28`}
+            className={`${adminFieldClass} w-28`}
             value={windowDays}
             onChange={(event) => setWindowDays(event.target.value)}
           />
         </label>
-        <label className="block text-sm text-admin">
-          {t('settings.experience.maxTurns')}
+        <label className="block space-y-1.5">
+          <span className="text-xs font-medium text-admin-muted">{t('settings.experience.maxTurns')}</span>
           <input
             type="number"
             min={1}
             max={100}
-            className={`${adminFieldClass} mt-1 w-28`}
+            className={`${adminFieldClass} w-28`}
             value={maxTurns}
             onChange={(event) => setMaxTurns(event.target.value)}
           />
@@ -505,10 +579,10 @@ function ManualCreateForm({ onCreated }: { onCreated: () => void }) {
       }}
     >
       <h4 className="text-sm font-medium text-admin">{t('settings.experience.createTitle')}</h4>
-      <label className="block text-sm text-admin">
-        {t('settings.experience.titleField')}
+      <label className="block space-y-1.5">
+        <span className="text-xs font-medium text-admin-muted">{t('settings.experience.titleField')}</span>
         <input
-          className={`${adminFieldClass} mt-1`}
+          className={adminFieldClass}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
         />

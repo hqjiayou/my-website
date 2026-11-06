@@ -20,7 +20,12 @@ import {
   type MediaListItem,
   type UpdateContentInput,
 } from '@/api'
-import { DataTable, type DataTableColumn } from '@/components/admin'
+import { DataTable, FormDialog, type DataTableColumn } from '@/components/admin'
+import {
+  adminDangerButtonMdClass,
+  adminFormActionsClass,
+  adminSecondaryButtonClass,
+} from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -96,6 +101,7 @@ export function AgentContentsPage() {
   const [draftType, setDraftType] = useState('')
   const [draftStatus, setDraftStatus] = useState('')
   const [editor, setEditor] = useState<EditorState | null>(null)
+  const [deleting, setDeleting] = useState<ContentListItem | null>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['sites', site.id, 'contents', filters],
@@ -178,6 +184,7 @@ export function AgentContentsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => contentApi.deleteContent(site.id, id),
     onSuccess: () => {
+      setDeleting(null)
       toast.success(t('contentManagement.messages.deleted'))
       invalidateContents()
     },
@@ -352,18 +359,8 @@ export function AgentContentsPage() {
             {canDelete ? (
               <button
                 type="button"
-                disabled={deleteMutation.isPending}
-                onClick={() => {
-                  if (
-                    !window.confirm(
-                      t('contentManagement.messages.confirmDelete', { title: item.title }),
-                    )
-                  ) {
-                    return
-                  }
-                  deleteMutation.mutate(item.id)
-                }}
-                className="rounded-md border border-danger/35 px-2.5 py-1.5 text-xs font-medium text-danger-emphasis transition hover:bg-danger-muted disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setDeleting(item)}
+                className="rounded-md border border-danger/35 px-2.5 py-1.5 text-xs font-medium text-danger-emphasis transition hover:bg-danger-muted"
               >
                 {t('contentManagement.actions.delete')}
               </button>
@@ -372,7 +369,7 @@ export function AgentContentsPage() {
         ),
       },
     ],
-    [canDelete, canStatus, canUpdate, deleteMutation, statusMutation, t],
+    [canDelete, canStatus, canUpdate, statusMutation, t],
   )
 
   const saving = createMutation.isPending || updateMutation.isPending
@@ -592,6 +589,37 @@ export function AgentContentsPage() {
           onPageChange: (page) => setFilters((prev) => ({ ...prev, pageNum: page })),
         }}
       />
+
+      {deleting ? (
+        <FormDialog
+          title={t('contentManagement.messages.deleteConfirmTitle')}
+          closeLabel={t('contentManagement.actions.cancel')}
+          onClose={() => setDeleting(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('contentManagement.messages.confirmDelete', { title: deleting.title })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setDeleting(null)}
+            >
+              {t('contentManagement.actions.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate(deleting.id)}
+            >
+              {t('contentManagement.actions.delete')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
     </section>
   )
 }
