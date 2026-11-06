@@ -4,11 +4,11 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.mywebsite.infra.entity.AbstractAuditableEntity;
 
 /**
- * 对话链预设（表 {@code agent_ai_chain_preset}，Issue #210 UoW-7）：命名的有序
- * 模型入口集合，用途 v1 只有 {@code CHAT}（对话）。agent 以
- * {@code chain_preset_id} 引用、多 agent 可共享同一条预设；组链按
- * {@code entryIds} 的顺序取入口、过滤停用后交 {@code ModelChainResolver}。
- * 与 admin {@code AdminAiChainPresetEntity} 同表双映射。
+ * 对话链模板（表 {@code agent_ai_chain_preset}，Issue #210 UoW-7 引入）：命名的
+ * 有序模型入口集合，用途 v1 只有 {@code CHAT}（对话）。#210 时代 agent 以
+ * {@code chain_preset_id} 引用它组链；#214 UoW-3 链内置化后降级为<b>模板库</b>
+ * ——组链只读 agent 自有链字段，本表只被 admin 模板 CRUD 与「载入/另存」读写，
+ * 套用是拷贝、与 agent 脱钩。与 admin {@code AdminAiChainPresetEntity} 同表双映射。
  */
 @TableName("agent_ai_chain_preset")
 public class AgentAiChainPresetEntity extends AbstractAuditableEntity {

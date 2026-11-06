@@ -427,7 +427,8 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         String token = tokenFor(500L);
         long id = createAgent(token, "kind_ep");
 
-        // 创建缺省 kind=SITE，详情带出 agentKind 与 chainPresetId 两列（#213）。
+        // 创建缺省 kind=SITE，详情带出 agentKind（#213；详情的 chainPresetId 已随
+        // #214 UoW-3 链内置化退役）。
         mockMvc.perform(get("/api/admin/agents/" + id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.agentKind").value("SITE"));
@@ -499,10 +500,11 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andReturn();
         long id = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        jdbcTemplate.update("INSERT INTO agent_ai_chain_preset (id, name) VALUES (920011, '链甲')");
         jdbcTemplate.update("INSERT INTO agent_ai_config_preset (id, name) VALUES (920012, '预设乙')");
         jdbcTemplate.update(
-                "UPDATE agent SET chain_preset_id = 920011, config_preset_id = 920012 WHERE id = ?", id);
+                "UPDATE agent SET chain_key_entry_ids = '[11, 12]', chain_cli_entry_ids = '[13]',"
+                        + " config_preset_id = 920012 WHERE id = ?",
+                id);
         jdbcTemplate.update(
                 "INSERT INTO agent_ai_knowledge_base (id, created_by_agent_id, name) VALUES (920021, ?, '空间一')",
                 id);
@@ -514,7 +516,8 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
         jdbcTemplate.update(
                 "INSERT INTO agent_ai_knowledge_base_subscription (base_id, agent_id) VALUES (920022, ?)", id);
 
-        // 关联摘要：kind 缺省 SITE、订阅数＝订阅表行数（2，含创建者行口径）、两类预设名解析出。
+        // 关联摘要：kind 缺省 SITE、订阅数＝订阅表行数（2，含创建者行口径）、自有链
+        // 两模式成员数（#214 UoW-3）与配置预设名解析出。
         mockMvc.perform(get("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .param("agentType", "GYOSEISHOSHI"))
@@ -522,7 +525,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath(
                                 ("$.data.records[?(@.agentCode == '%s' && @.agentKind == 'SITE'"
                                         + " && @.subscriptionCount == 2"
-                                        + " && @.chainPresetId == 920011 && @.chainPresetName == '链甲'"
+                                        + " && @.chainKeyCount == 2 && @.chainCliCount == 1"
                                         + " && @.configPresetId == 920012 && @.configPresetName == '预设乙')]")
                                         .formatted(agentCode))
                         .exists());

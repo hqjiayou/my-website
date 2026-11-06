@@ -30,7 +30,6 @@ export default {
     contents: 'ページコンテンツ',
     files: 'ファイル管理',
     aiSettings: 'モデルAPI管理',
-    aiChainPresets: 'チェーンプリセット',
     aiConfigPresets: '設定プリセット',
     aiPlatformSettings: 'AI 設定',
     proxyServices: 'API キー',

@@ -23,11 +23,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 对话生效链（Issue #210 UoW-7）：链由 agent 引用的链预设决定——按预设序取
- * 启用成员，预设序内第一个默认作主用，其后按预设序备援；坏主用整链不启用。
- * 夹具以 {@link #givenPresetMembers} 声明预设成员（顺序即预设序，与 V63 按旧链
- * 生成的预设同形态：原专属入口在前、平台入口在后；entry 的第二参数来源标注
- * 自 UoW-7 起不再参与组链、仅留痕）。与平台化前旧链的逐条等价由
+ * 对话生效链（Issue #210 UoW-7 起、#214 UoW-3 内置化）：链由 agent 自有链
+ * 决定——按模式名单序取启用成员，名单序内第一个默认作主用，其后按名单序
+ * 备援；坏主用整链不启用。夹具以 {@link #givenChainMembers} 声明各模式成员
+ * （入口未标 mode 按 KEY 归属；entry 的第二参数来源标注自 UoW-7 起不再参与
+ * 组链、仅留痕）。与平台化前旧链的逐条等价由
  * {@link AdminAiChainPresetEquivalenceTest} 钉死。
  */
 @ExtendWith(MockitoExtension.class)
@@ -58,10 +58,25 @@ class AdminAiModelEntryServiceImplTest {
         });
     }
 
-    /** 让 agent 引用一条成员为 {@code members} 的预设（参数顺序即预设序）。 */
-    private void givenPresetMembers(long agentId, List<AdminAiModelEntryEntity> members) {
-        when(chainPresetService.referencedEntryIds(agentId))
-                .thenReturn(members.stream().map(AdminAiModelEntryEntity::getId).toList());
+    /**
+     * 声明 agent 的自有链成员（参数顺序即名单序）：桩按入口 mode 拆分——
+     * {@code ownChainEntryIds} 被以具体模式调用时只回该模式成员，整链（null）
+     * 回 KEY 名单＋CLI 名单，与服务实现的整链定义一致。
+     */
+    private void givenChainMembers(long agentId, List<AdminAiModelEntryEntity> members) {
+        lenient()
+                .when(chainPresetService.ownChainEntryIds(org.mockito.ArgumentMatchers.eq(agentId), any()))
+                .thenAnswer(invocation -> {
+                    String mode = invocation.getArgument(1);
+                    return members.stream()
+                            .filter(member -> mode == null
+                                    || mode.equalsIgnoreCase(
+                                            member.getMode() == null || member.getMode().isBlank()
+                                                    ? "KEY"
+                                                    : member.getMode().trim()))
+                            .map(AdminAiModelEntryEntity::getId)
+                            .toList();
+                });
         lenient().when(modelEntryMapper.selectBatchIds(any())).thenReturn(members);
     }
 
@@ -108,7 +123,7 @@ class AdminAiModelEntryServiceImplTest {
         AdminAiModelEntryEntity cli = entry(2L, 10L, "openai:gpt", true);
         cli.setMode("CLI");
         cli.setEmbeddingSpec("google:gemini-embedding-001");
-        givenPresetMembers(10L, List.of(cli));
+        givenChainMembers(10L, List.of(cli));
 
         List<AgentModelSelection> chain = service.selectionChain(10L);
         assertThat(chain).hasSize(1);
@@ -116,9 +131,9 @@ class AdminAiModelEntryServiceImplTest {
     }
 
     @Test
-    void chainFollowsPresetOrderWithPrimaryFirst() {
-        // 预设序即组链序：第一个默认作主用，其后按预设序备援
-        givenPresetMembers(
+    void chainFollowsOwnChainOrderWithPrimaryFirst() {
+        // 名单序即组链序：第一个默认作主用，其后按名单序备援
+        givenChainMembers(
                 10L,
                 List.of(
                         entry(3L, 10L, "google:agent-default", true),
@@ -136,7 +151,7 @@ class AdminAiModelEntryServiceImplTest {
 
     @Test
     void currentSelectionReturnsChainHead() {
-        givenPresetMembers(
+        givenChainMembers(
                 10L,
                 List.of(
                         entry(3L, 10L, "google:agent-default", true),
@@ -146,8 +161,8 @@ class AdminAiModelEntryServiceImplTest {
     }
 
     @Test
-    void chainFallsToLaterDefaultWhenPresetStartsWithNonDefault() {
-        givenPresetMembers(
+    void chainFallsToLaterDefaultWhenOwnChainStartsWithNonDefault() {
+        givenChainMembers(
                 10L,
                 List.of(
                         entry(4L, 10L, "openai:agent-alt", false),
@@ -162,7 +177,7 @@ class AdminAiModelEntryServiceImplTest {
 
     @Test
     void chainIsEmptyWithoutAnyDefault() {
-        givenPresetMembers(
+        givenChainMembers(
                 10L,
                 List.of(
                         entry(4L, 10L, "openai:agent-alt", false),
@@ -173,8 +188,11 @@ class AdminAiModelEntryServiceImplTest {
     }
 
     @Test
-    void chainIsEmptyWhenAgentHasNoPreset() {
-        when(chainPresetService.referencedEntryIds(10L)).thenReturn(List.of());
+    void chainIsEmptyWhenAgentHasNoOwnChain() {
+        lenient()
+                .when(chainPresetService.ownChainEntryIds(
+                        org.mockito.ArgumentMatchers.eq(10L), any()))
+                .thenReturn(List.of());
 
         assertThat(service.selectionChain(10L)).isEmpty();
         assertThat(service.currentSelection(10L)).isNull();
@@ -183,7 +201,7 @@ class AdminAiModelEntryServiceImplTest {
     @Test
     void chainIsEmptyWhenPrimaryKeyUndecryptable() {
         when(cipher.decrypt("enc:key-3")).thenReturn("");
-        givenPresetMembers(
+        givenChainMembers(
                 10L,
                 List.of(
                         entry(3L, 10L, "google:agent-default", true),
@@ -200,7 +218,7 @@ class AdminAiModelEntryServiceImplTest {
         cli.setMode("CLI");
         AdminAiModelEntryEntity key = entry(1L, null, "google:gemini-3-flash-preview", true);
         key.setMode("KEY");
-        givenPresetMembers(10L, List.of(cli, key));
+        givenChainMembers(10L, List.of(cli, key));
 
         assertThat(specs(service.selectionChain(10L, "CLI"))).containsExactly("openai:muse-wonder-1.0");
         assertThat(specs(service.selectionChain(10L, "key"))).containsExactly("google:gemini-3-flash-preview");
@@ -214,7 +232,7 @@ class AdminAiModelEntryServiceImplTest {
     @Test
     void chainSkipsUndecryptableFallbacks() {
         when(cipher.decrypt("enc:key-4")).thenReturn("");
-        givenPresetMembers(
+        givenChainMembers(
                 10L,
                 List.of(
                         entry(3L, 10L, "google:agent-default", true),
@@ -229,9 +247,12 @@ class AdminAiModelEntryServiceImplTest {
     void chainSkipsDisabledAndMissingMembers() {
         AdminAiModelEntryEntity disabled = entry(4L, 10L, "openai:agent-alt", false);
         disabled.setEnabled(false);
-        // 预设含已删除成员 99：批量查询不返回它（@TableLogic），组链按缺失跳过；
+        // 自有链含已删除成员 99：批量查询不返回它（@TableLogic），组链按缺失跳过；
         // 停用成员 4 在结果里但被启用过滤挡下
-        when(chainPresetService.referencedEntryIds(10L)).thenReturn(List.of(3L, 4L, 99L, 1L));
+        lenient()
+                .when(chainPresetService.ownChainEntryIds(
+                        org.mockito.ArgumentMatchers.eq(10L), any()))
+                .thenReturn(List.of(3L, 4L, 99L, 1L));
         when(modelEntryMapper.selectBatchIds(any()))
                 .thenReturn(
                         List.of(

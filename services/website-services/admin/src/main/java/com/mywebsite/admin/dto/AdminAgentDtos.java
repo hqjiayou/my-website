@@ -17,8 +17,9 @@ public final class AdminAgentDtos {
 
     /**
      * 列表项在基础字段之外带关联摘要（#213）：类型维度 {@code agentKind}、订阅知识空间数
-     * （订阅表行数，含创建者行，#209 口径），以及链预设／配置预设的 id＋名（预设名解析不到
-     * ——已被删或 id 落空——时 name 为 null、id 照实回）。
+     * （订阅表行数，含创建者行，#209 口径），以及配置预设的 id＋名（预设名解析不到
+     * ——已被删或 id 落空——时 name 为 null、id 照实回）。对话链的关联摘要自
+     * #214 UoW-3 起改为自有链两模式成员数（链已内置化，无引用名可回）。
      */
     public record AdminAgentListItemDto(
             Long id,
@@ -32,8 +33,8 @@ public final class AdminAgentDtos {
             OffsetDateTime updatedAt,
             String agentKind,
             long subscriptionCount,
-            Long chainPresetId,
-            String chainPresetName,
+            int chainKeyCount,
+            int chainCliCount,
             Long configPresetId,
             String configPresetName) {}
 
@@ -47,7 +48,6 @@ public final class AdminAgentDtos {
             String defaultDomain,
             String description,
             Long configPresetId,
-            Long chainPresetId,
             Integer version,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {}

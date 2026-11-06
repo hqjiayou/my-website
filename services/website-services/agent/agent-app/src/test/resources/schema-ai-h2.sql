@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS agent (
     description         TEXT,
     template_id         BIGINT,
     chain_preset_id     BIGINT,
+    chain_key_entry_ids TEXT,
+    chain_cli_entry_ids TEXT,
     config_preset_id    BIGINT,
     created_at          TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     created_by          BIGINT,

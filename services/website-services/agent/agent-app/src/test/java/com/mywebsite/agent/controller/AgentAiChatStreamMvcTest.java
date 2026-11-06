@@ -60,19 +60,17 @@ class AgentAiChatStreamMvcTest extends AbstractAgentSpringBootTest {
         jdbcTemplate.update(
                 "INSERT INTO agent_model_entry (display_name, model_spec, api_key, agent_id, enabled, is_default, mode)"
                         + " VALUES ('Test Key', 'google:test-model', 'test-api-key', 10, TRUE, TRUE, 'KEY')");
-        // 链预设口径（Issue #210 UoW-7）：链由 agent 引用的预设决定，把刚种的入口装进
-        // 预设 9001 并让 agent 10 引用，否则组链为空、请求到不了被 mock 的 agentClient。
-        // 注意：agent 行须真实存在——组链先查 agent 再取预设；旧两层口径只按入口 agent_id
-        // 找入口、不读 agent 行，所以此前不需种 agent 行；预设口径下缺行即链空（503）。
+        // 自有链口径（Issue #214 UoW-3）：链存 agent 自有字段，把刚种的入口写进
+        // agent 10 的 KEY 自有链，否则组链为空、请求到不了被 mock 的 agentClient。
+        // 注意：agent 行须真实存在——组链先查 agent 再读其自有链字段；旧两层口径只
+        // 按入口 agent_id 找入口、不读 agent 行，所以此前不需种 agent 行；
+        // 自有链口径下缺行即链空（503）。
         Long seededEntryId = jdbcTemplate.queryForObject("SELECT id FROM agent_model_entry", Long.class);
         jdbcTemplate.update("DELETE FROM agent WHERE id = 10");
         jdbcTemplate.update(
                 "INSERT INTO agent (id, agent_name, agent_type, status) VALUES (10, 'Test Agent', 'PERSONAL', 'ACTIVE')");
-        jdbcTemplate.update("DELETE FROM agent_ai_chain_preset");
         jdbcTemplate.update(
-                "INSERT INTO agent_ai_chain_preset (id, name, purpose, entry_ids) VALUES (9001, 'test-chain', 'CHAT', ?)",
-                "[" + seededEntryId + "]");
-        jdbcTemplate.update("UPDATE agent SET chain_preset_id = 9001 WHERE id = 10");
+                "UPDATE agent SET chain_key_entry_ids = ? WHERE id = 10", "[" + seededEntryId + "]");
     }
 
     @Test

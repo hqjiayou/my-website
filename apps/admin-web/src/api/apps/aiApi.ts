@@ -27,7 +27,8 @@ import type {
   AiExperienceLessonCreateInput,
   AiExperienceLessonListItem,
   AiExperienceLessonStatus,
-  AiAgentChainPreset,
+  AiAgentChain,
+  AiChainMode,
   AiChainPreset,
   AiChainPresetWriteInput,
   AiConfigPreset,
@@ -164,7 +165,7 @@ export const aiApi = {
       .then(unwrapVoid)
   },
 
-  /** 对话链预设（Issue #210 UoW-7）：平台区 CRUD；被任一 agent 引用的预设删除会被服务端拦截。 */
+  /** 对话链模板库（Issue #210 UoW-7 引入，#214 UoW-3 降级为模板）：平台区 CRUD；模板不被引用，删除无拦截。 */
   listChainPresets(): Promise<AiChainPreset[]> {
     return httpClient.get<HttpMessageBody<AiChainPreset[]>>('/admin/ai/chain-presets').then(unwrapData)
   },
@@ -214,18 +215,36 @@ export const aiApi = {
       .then(unwrapVoid)
   },
 
-  /** agent 的链预设引用：保存即换链；chainPresetId 传 null 解除引用。 */
-  getAgentChainPreset(agentId: number): Promise<AiAgentChainPreset> {
+  /** agent 自有对话链（Issue #214 UoW-3）：按模式各一份有序 entry id 名单。 */
+  getAgentChain(agentId: number): Promise<AiAgentChain> {
+    return httpClient.get<HttpMessageBody<AiAgentChain>>(`${aiBase(agentId)}/chain`).then(unwrapData)
+  },
+
+  /** 整表保存某模式的自有链：保存即换链；空数组＝清空该模式链。 */
+  updateAgentChain(agentId: number, mode: AiChainMode, entryIds: number[]): Promise<AiAgentChain> {
     return httpClient
-      .get<HttpMessageBody<AiAgentChainPreset>>(`${aiBase(agentId)}/chain-preset`)
+      .put<HttpMessageBody<AiAgentChain>, { entryIds: number[] }>(`${aiBase(agentId)}/chain/${mode}`, {
+        entryIds,
+      })
       .then(unwrapData)
   },
 
-  updateAgentChainPreset(agentId: number, chainPresetId: number | null): Promise<AiAgentChainPreset> {
+  /** 从模板载入某模式的自有链：模板中属于该模式的成员按模板序拷入（覆盖该模式链）。 */
+  loadAgentChainTemplate(agentId: number, mode: AiChainMode, templateId: number): Promise<AiAgentChain> {
     return httpClient
-      .put<HttpMessageBody<AiAgentChainPreset>, { chainPresetId: number | null }>(
-        `${aiBase(agentId)}/chain-preset`,
-        { chainPresetId },
+      .post<HttpMessageBody<AiAgentChain>, { mode: AiChainMode; templateId: number }>(
+        `${aiBase(agentId)}/chain/load-template`,
+        { mode, templateId },
+      )
+      .then(unwrapData)
+  },
+
+  /** 把某模式自有链另存为模板（返回新建模板）。 */
+  saveAgentChainAsTemplate(agentId: number, mode: AiChainMode, name: string): Promise<AiChainPreset> {
+    return httpClient
+      .post<HttpMessageBody<AiChainPreset>, { mode: AiChainMode; name: string }>(
+        `${aiBase(agentId)}/chain/save-as-template`,
+        { mode, name },
       )
       .then(unwrapData)
   },

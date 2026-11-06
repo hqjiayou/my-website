@@ -8,7 +8,6 @@ import {
   FolderKanban,
   LayoutDashboard,
   Layers3,
-  ListOrdered,
   MessageSquare,
   Palette,
   Settings2,
@@ -78,13 +77,12 @@ export const NAV_SECTIONS: NavSection[] = [
     entries: [
       {
         // 平台区（Issue #213 UoW-C）：跨站共享资源归组——知识空间、模型入口、
-        // 链预设、配置预设、媒体库（路由仍在运营区文件页，只在此归组呈现）。
+        // 配置预设、媒体库（路由仍在运营区文件页，只在此归组呈现）。
         id: 'group-platform',
         labelKey: 'groups.platform',
         children: [
           { labelKey: 'items.aiKnowledgeBases', path: ROUTES.ai.knowledgeBases, icon: BookOpen },
           { labelKey: 'items.aiSettings', path: ROUTES.ai.modelEntries, icon: Bot },
-          { labelKey: 'items.aiChainPresets', path: ROUTES.ai.chainPresets, icon: ListOrdered },
           { labelKey: 'items.aiConfigPresets', path: ROUTES.ai.configPresets, icon: SlidersHorizontal },
           { labelKey: 'items.files', path: ROUTES.operation.files, icon: FolderKanban },
         ],

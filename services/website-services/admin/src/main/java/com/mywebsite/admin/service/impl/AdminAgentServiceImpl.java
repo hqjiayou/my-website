@@ -14,12 +14,13 @@ import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListItemDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListQuery;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentStatusUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentUpdateRequest;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.admin.entity.AdminAgentEntity;
-import com.mywebsite.admin.entity.AdminAiChainPresetEntity;
 import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
-import com.mywebsite.admin.mapper.AdminAiChainPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
@@ -66,8 +67,8 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     private final AgentUserMemoryMapper agentUserMemoryMapper;
     private final AgentAiConversationShareMapper conversationShareMapper;
     private final AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper;
-    private final AdminAiChainPresetMapper chainPresetMapper;
     private final AdminAiConfigPresetMapper configPresetMapper;
+    private final ObjectMapper objectMapper;
 
     public AdminAgentServiceImpl(
             AdminAgentMapper adminAgentMapper,
@@ -80,8 +81,8 @@ public class AdminAgentServiceImpl implements AdminAgentService {
             AgentUserMemoryMapper agentUserMemoryMapper,
             AgentAiConversationShareMapper conversationShareMapper,
             AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper,
-            AdminAiChainPresetMapper chainPresetMapper,
-            AdminAiConfigPresetMapper configPresetMapper) {
+            AdminAiConfigPresetMapper configPresetMapper,
+            ObjectMapper objectMapper) {
         this.adminAgentMapper = adminAgentMapper;
         this.adminAppearanceService = adminAppearanceService;
         this.adminMediaService = adminMediaService;
@@ -92,8 +93,8 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         this.agentUserMemoryMapper = agentUserMemoryMapper;
         this.conversationShareMapper = conversationShareMapper;
         this.subscriptionMapper = subscriptionMapper;
-        this.chainPresetMapper = chainPresetMapper;
         this.configPresetMapper = configPresetMapper;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -122,23 +123,34 @@ public class AdminAgentServiceImpl implements AdminAgentService {
         Page<AdminAgentEntity> page =
                 adminAgentMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         List<AdminAgentEntity> records = page.getRecords();
-        // 关联摘要（#213）：订阅数与两类预设名按本页 id 集批量预载后内存组装，避免逐行查询。
+        // 关联摘要（#213；链部分 #214 UoW-3 改）：订阅数与配置预设名按本页 id 集批量
+        // 预载后内存组装，避免逐行查询；对话链已内置化，列表只回两模式成员数（自有
+        // 链字段直接在 agent 行上，逐行解析计数即可）。
         Map<Long, Long> subscriptionCounts = subscriptionCounts(records);
-        Map<Long, String> chainPresetNames = presetNames(
-                records.stream().map(AdminAgentEntity::getChainPresetId).collect(Collectors.toSet()),
-                chainPresetMapper,
-                AdminAiChainPresetEntity::getName);
         Map<Long, String> configPresetNames = presetNames(
                 records.stream().map(AdminAgentEntity::getConfigPresetId).collect(Collectors.toSet()),
                 configPresetMapper,
                 AdminAiConfigPresetEntity::getName);
         return new PageResult<>(
                 records.stream()
-                        .map(entity -> toListItem(entity, subscriptionCounts, chainPresetNames, configPresetNames))
+                        .map(entity -> toListItem(entity, subscriptionCounts, configPresetNames))
                         .toList(),
                 page.getTotal(),
                 (int) page.getCurrent(),
                 (int) page.getSize());
+    }
+
+    /** 自有链成员数：字段是 JSON 有序 id 数组文本，脏值按 0 计（列表摘要不阻断）。 */
+    private int chainMemberCount(String rawEntryIds) {
+        if (!StringUtils.hasText(rawEntryIds)) {
+            return 0;
+        }
+        try {
+            List<Long> ids = objectMapper.readValue(rawEntryIds, new TypeReference<List<Long>>() {});
+            return ids == null ? 0 : ids.size();
+        } catch (JsonProcessingException ex) {
+            return 0;
+        }
     }
 
     /** 订阅数＝订阅表行数（含空间创建者行，#209 口径）；按 agent id 集聚合 COUNT/GROUP BY 一次查回。 */
@@ -402,7 +414,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
     private AdminAgentListItemDto toListItem(
             AdminAgentEntity entity,
             Map<Long, Long> subscriptionCounts,
-            Map<Long, String> chainPresetNames,
             Map<Long, String> configPresetNames) {
         return new AdminAgentListItemDto(
                 entity.getId(),
@@ -416,8 +427,8 @@ public class AdminAgentServiceImpl implements AdminAgentService {
                 entity.getUpdatedAt(),
                 entity.getAgentKind(),
                 subscriptionCounts.getOrDefault(entity.getId(), 0L),
-                entity.getChainPresetId(),
-                entity.getChainPresetId() == null ? null : chainPresetNames.get(entity.getChainPresetId()),
+                chainMemberCount(entity.getChainKeyEntryIds()),
+                chainMemberCount(entity.getChainCliEntryIds()),
                 entity.getConfigPresetId(),
                 entity.getConfigPresetId() == null ? null : configPresetNames.get(entity.getConfigPresetId()));
     }
@@ -433,7 +444,6 @@ public class AdminAgentServiceImpl implements AdminAgentService {
                 entity.getDefaultDomain(),
                 entity.getDescription(),
                 entity.getConfigPresetId(),
-                entity.getChainPresetId(),
                 entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());

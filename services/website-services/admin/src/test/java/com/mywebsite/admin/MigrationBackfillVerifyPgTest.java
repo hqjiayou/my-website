@@ -22,7 +22,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * ① V57：每个未删空间都有一行创建者订阅；
  * ② V61：嵌入登记按空间扇出，类集（entry_id 集合）与原 agent-scope 行一致；
  * ③ V64：agent_ai_knowledge_document.agent_id 列已删；
- * ④ V63：链预设按「专属在前、平台在后（段内默认在前、id 升序）」生成并回填引用。
+ * ④ V63：链预设按「专属在前、平台在后（段内默认在前、id 升序）」生成并回填引用；
+ * ⑤ V69：自有链按模式拆分拷贝——KEY 链＝预设中 KEY 成员保序、CLI 链＝CLI 成员保序。
  *
  * <p>执行：{@code mvn test -Ppersistence-verify-pg -pl admin -am -Dtest=MigrationBackfillVerifyPgTest}
  */
@@ -33,6 +34,7 @@ class MigrationBackfillVerifyPgTest {
     private static final long OWN_DEFAULT_ENTRY_ID = 900201L;
     private static final long PLATFORM_ENTRY_ID = 900202L;
     private static final long OWN_ALT_ENTRY_ID = 900203L;
+    private static final long OWN_CLI_ENTRY_ID = 900204L;
     private static final long BASE_ID = 900301L;
     private static final long DOCUMENT_ID = 900401L;
 
@@ -101,7 +103,7 @@ class MigrationBackfillVerifyPgTest {
                 Integer.class);
         assertThat(documentAgentIdColumns).isZero();
 
-        // ④ V63 生成＋回填：引用非空，成员序＝专属（默认在前）→平台。
+        // ④ V63 生成＋回填：引用非空，成员序＝专属（默认在前、id 升序）→平台。
         Long chainPresetId = jdbc.queryForObject(
                 "SELECT chain_preset_id FROM agent WHERE id = ?", Long.class, AGENT_ID);
         assertThat(chainPresetId).isNotNull();
@@ -110,7 +112,21 @@ class MigrationBackfillVerifyPgTest {
         List<Long> presetEntryIds =
                 new ObjectMapper().readValue(entryIdsJson, new TypeReference<List<Long>>() {});
         assertThat(presetEntryIds)
+                .containsExactly(
+                        OWN_DEFAULT_ENTRY_ID, OWN_CLI_ENTRY_ID, OWN_ALT_ENTRY_ID, PLATFORM_ENTRY_ID);
+
+        // ⑤ V69 拆分拷贝：KEY 链只含预设里的 KEY 成员（保预设序），CLI 链只含 CLI 成员。
+        String chainKeyJson = jdbc.queryForObject(
+                "SELECT chain_key_entry_ids FROM agent WHERE id = ?", String.class, AGENT_ID);
+        List<Long> chainKeyIds =
+                new ObjectMapper().readValue(chainKeyJson, new TypeReference<List<Long>>() {});
+        assertThat(chainKeyIds)
                 .containsExactly(OWN_DEFAULT_ENTRY_ID, OWN_ALT_ENTRY_ID, PLATFORM_ENTRY_ID);
+        String chainCliJson = jdbc.queryForObject(
+                "SELECT chain_cli_entry_ids FROM agent WHERE id = ?", String.class, AGENT_ID);
+        List<Long> chainCliIds =
+                new ObjectMapper().readValue(chainCliJson, new TypeReference<List<Long>>() {});
+        assertThat(chainCliIds).containsExactly(OWN_CLI_ENTRY_ID);
     }
 
     /** 按 V56 时点表形造存量：列名/表名以 V56 为准（base 仍用 agent_id、link 表与 document.agent_id 都在）。 */
@@ -129,6 +145,11 @@ class MigrationBackfillVerifyPgTest {
                         + " (id, display_name, model_spec, api_key, agent_id, enabled, is_default, mode, embedding_spec)"
                         + " VALUES (?, 'Own Alt', 'openai:own-alt', 'k-alt', ?, TRUE, FALSE, 'KEY', 'openai:embed-alt')",
                 OWN_ALT_ENTRY_ID, AGENT_ID);
+        jdbc.update(
+                "INSERT INTO agent_model_entry"
+                        + " (id, display_name, model_spec, api_key, agent_id, enabled, is_default, mode, embedding_spec)"
+                        + " VALUES (?, 'Own CLI', 'openai:own-cli', 'k-cli', ?, TRUE, TRUE, 'CLI', NULL)",
+                OWN_CLI_ENTRY_ID, AGENT_ID);
         jdbc.update(
                 "INSERT INTO agent_model_entry"
                         + " (id, display_name, model_spec, api_key, agent_id, enabled, is_default, mode, embedding_spec)"

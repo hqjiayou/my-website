@@ -10,8 +10,9 @@ import org.springframework.util.StringUtils;
 
 /**
  * 网关 {@code /v1} 转发（{@code GatewayV1ServiceImpl}）用的入口查询与凭证组装。
- * 站点 chat 的生效链自 Issue #210 UoW-7 起改走链预设（agent 引用的预设成员交
- * agent-core {@code ModelChainResolver.resolvePresetChain}），不再经本类；本类
+ * 站点 chat 的生效链自 Issue #210 UoW-7 起改走显式成员名单（agent-core
+ * {@code ModelChainResolver.resolveMemberChain}，成员 #214 UoW-3 起取自 agent
+ * 自有链字段），不再经本类；本类
  * 只剩网关的 alias 链在用（其规则独立、不在本单范围）。
  *
  * <p>纯静态：不持有状态，调用方自带 {@code AgentAiModelEntryMapper}/{@code ModelEntryCipher}。
