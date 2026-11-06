@@ -32,11 +32,9 @@ import com.mywebsite.agent.properties.AgentProperties;
 import com.mywebsite.agent.dto.AgentAiAttachmentDto;
 import com.mywebsite.agent.dto.AgentAiChatRequestDto;
 import com.mywebsite.agent.dto.AgentAiModelModesDto;
-import com.mywebsite.agent.entity.AgentAiChainPresetEntity;
 import com.mywebsite.agent.entity.AgentAiKnowledgeDocumentEntity;
 import com.mywebsite.agent.entity.AgentAiModelEntryEntity;
 import com.mywebsite.agent.entity.AgentEntity;
-import com.mywebsite.agent.mapper.AgentAiChainPresetMapper;
 import com.mywebsite.agent.mapper.AgentAiKnowledgeDocumentMapper;
 import com.mywebsite.agent.mapper.AgentAiModelEntryMapper;
 import com.mywebsite.agent.mapper.AgentMapper;
@@ -208,7 +206,6 @@ public class AgentAiServiceImpl implements AgentAiService {
     private final AgentExperienceLessonService experienceLessonService;
     private final AgentMcpSelectionService mcpSelectionService;
     private final AgentMapper agentMapper;
-    private final AgentAiChainPresetMapper chainPresetMapper;
     private final KnowledgeSpaceResolver knowledgeSpaceResolver;
 
     public AgentAiServiceImpl(
@@ -228,7 +225,6 @@ public class AgentAiServiceImpl implements AgentAiService {
             AgentExperienceLessonService experienceLessonService,
             AgentMcpSelectionService mcpSelectionService,
             AgentMapper agentMapper,
-            AgentAiChainPresetMapper chainPresetMapper,
             KnowledgeSpaceResolver knowledgeSpaceResolver) {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
@@ -246,7 +242,6 @@ public class AgentAiServiceImpl implements AgentAiService {
         this.experienceLessonService = experienceLessonService;
         this.mcpSelectionService = mcpSelectionService;
         this.agentMapper = agentMapper;
-        this.chainPresetMapper = chainPresetMapper;
         this.knowledgeSpaceResolver = knowledgeSpaceResolver;
     }
 
@@ -831,14 +826,15 @@ public class AgentAiServiceImpl implements AgentAiService {
     /**
      * 生效链：规则在 agent-core 的 {@code ModelChainResolver}（Issue #132，与 admin
      * {@code AdminAiModelEntryServiceImpl.selectionChain} 共用同一份实现，不再两处手写）。
-     * 链预设落地后（Issue #210 UoW-7）链由对话所属 agent 引用的对话链预设决定：
-     * 按预设的有序 entry ids 取启用入口交 {@code resolvePresetChain} 组链；首元是
-     * 主用（预设序内第一个默认），主用坏掉整链为空（ADR-0004）；mode 非空时先按
-     * 模式过滤（备援封闭在模式内）；为空时即整链。agent 未引用预设时链为空。
-     * UoW-6 的来源分层过渡组链整体退役，{@code source_agent_id} 不再参与组链。
+     * 链内置化后（Issue #214 UoW-3）链取自 agent 自有字段：按模式各一份有序
+     * entry ids（V69），按名单序取启用入口交 {@code resolveMemberChain} 组链；首元是
+     * 主用（名单序内第一个默认），主用坏掉整链为空（ADR-0004）；agent 未配该模式
+     * 链时链为空。#210 的链预设引用（chain_preset_id）自本步起不再参与解析，
+     * 预设降级为模板（套用即拷贝）。UoW-6 的来源分层过渡组链整体退役，
+     * {@code source_agent_id} 不再参与组链。
      */
     private List<ChainLink> loadModelChainLinks(long agentId, String mode) {
-        List<Long> entryIds = referencedEntryIds(agentId);
+        List<Long> entryIds = ownChainEntryIds(agentId, mode);
         if (entryIds.isEmpty()) {
             return List.of();
         }
@@ -853,27 +849,28 @@ public class AgentAiServiceImpl implements AgentAiService {
                 members.add(entry);
             }
         }
-        return ModelChainResolver.resolvePresetChain(snapshots(members), mode).stream()
+        return ModelChainResolver.resolveMemberChain(snapshots(members), mode).stream()
                 .map(link -> new ChainLink(link.id(), link.displayName(), link.selection()))
                 .toList();
     }
 
     /**
-     * agent 引用预设的有序成员入口 id：agent 不存在、未引用预设或预设已删除时为空
-     * （＝无链，诚实无模型）。脏 JSON 按无成员处理并记 warn，不阻断对话主流程。
+     * agent 自有链在给定模式下的有序成员入口 id：agent 不存在或该模式未配链时
+     * 为空（＝无链，诚实无模型）。脏 JSON 按无成员处理并记 warn，不阻断对话主流程。
+     * {@code mode} 由调用方保证为 KEY / CLI（聊天路径先经 normalizeChatMode 收口）。
      */
-    private List<Long> referencedEntryIds(long agentId) {
+    private List<Long> ownChainEntryIds(long agentId, String mode) {
         AgentEntity agent = agentMapper.selectById(agentId);
-        if (agent == null || agent.getChainPresetId() == null) {
+        if (agent == null) {
             return List.of();
         }
-        AgentAiChainPresetEntity preset = chainPresetMapper.selectById(agent.getChainPresetId());
-        if (preset == null || !StringUtils.hasText(preset.getEntryIds())) {
+        String raw = "CLI".equals(mode) ? agent.getChainCliEntryIds() : agent.getChainKeyEntryIds();
+        if (!StringUtils.hasText(raw)) {
             return List.of();
         }
         try {
             List<Long> parsed =
-                    objectMapper.readValue(preset.getEntryIds(), new TypeReference<List<Long>>() {});
+                    objectMapper.readValue(raw, new TypeReference<List<Long>>() {});
             if (parsed == null || parsed.isEmpty()) {
                 return List.of();
             }
@@ -885,7 +882,7 @@ public class AgentAiServiceImpl implements AgentAiService {
             }
             return new ArrayList<>(unique);
         } catch (JsonProcessingException ex) {
-            log.warn("chain preset {} has malformed entry_ids, treated as empty", preset.getId(), ex);
+            log.warn("agent {} has malformed own chain entry_ids (mode {}), treated as empty", agentId, mode, ex);
             return List.of();
         }
     }

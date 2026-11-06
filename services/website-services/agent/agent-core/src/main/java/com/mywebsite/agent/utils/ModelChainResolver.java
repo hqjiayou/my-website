@@ -20,8 +20,8 @@ import org.springframework.util.StringUtils;
  *
  * <p>纯静态、无状态：解密由调用方完成并把明文 key 放进快照（解不出放 null）。
  * 输入列表的顺序即组链顺序：两层形态下调用方按「默认在前、id 升序」查好再传入；
- * 链预设形态（{@link #resolvePresetChain}，Issue #210 UoW-7 起的生产路径）下
- * 顺序就是预设的成员顺序。
+ * 成员链形态（{@link #resolveMemberChain}，现行生产路径）下顺序就是成员
+ * 名单的顺序（#210 UoW-7 时成员来自链预设，#214 UoW-3 起改存 agent 自有链）。
  *
  * <p>网关 {@code /v1} 的 alias 主用链不在这里：它以 alias 点名入口为主用、
  * 规则不同，继续走 {@code GatewayV1ServiceImpl} 自己的组装。
@@ -59,7 +59,7 @@ public final class ModelChainResolver {
      * 优先层其余、平台层其余（保持输入顺序），凭证组装不出的备援跳过。
      *
      * <p>两层的划分曾按入口来源（UoW-6 的过渡组链）；自 UoW-7 起生产组链改走
-     * {@link #resolvePresetChain}（链预设快照），来源分层整体退役、本方法只作
+     * {@link #resolveMemberChain}（显式成员名单），来源分层整体退役、本方法只作
      * 规则引擎与等价基线保留。网关 /v1 不走这里（见类注释）。
      */
     public static List<ResolvedLink> resolveChain(
@@ -85,14 +85,14 @@ public final class ModelChainResolver {
     }
 
     /**
-     * 链预设组链（Issue #210 UoW-7）：{@code members} 是 agent 引用的对话链预设
-     * 成员快照，按预设顺序排列（调用方已按预设 entry ids 取入口并过滤停用/已删）。
-     * 规则与两层形态同一份：按 {@code mode} 过滤后，预设序内第一个默认入口作主用，
-     * 主用不存在或凭证组装不出时整链为空；其后按预设序依次备援，凭证组装不出的跳过。
-     * 等价于把成员整体作优先层、平台层为空调用 {@link #resolveChain}——存量预设按
-     * 「专属层在前、平台层在后」生成时，解析结果与平台化前旧链逐条一致。
+     * 成员链组链（Issue #210 UoW-7 引入，#214 UoW-3 正名）：{@code members} 是
+     * 一份显式有序成员快照（调用方已按名单顺序取入口并过滤停用/已删；名单来源
+     * #210 时为 agent 引用的对话链预设，#214 UoW-3 起为 agent 自有链字段）。
+     * 规则与两层形态同一份：按 {@code mode} 过滤后，成员序内第一个默认入口作主用，
+     * 主用不存在或凭证组装不出时整链为空；其后按成员序依次备援，凭证组装不出的跳过。
+     * 等价于把成员整体作优先层、平台层为空调用 {@link #resolveChain}。
      */
-    public static List<ResolvedLink> resolvePresetChain(List<EntrySnapshot> members, String mode) {
+    public static List<ResolvedLink> resolveMemberChain(List<EntrySnapshot> members, String mode) {
         return resolveChain(members, List.of(), mode);
     }
 
