@@ -51,6 +51,7 @@ export const ROUTES = {
     modelEntries: '/ai/model-entries',
     promptTemplates: '/ai/prompt-templates',
     mcpServers: '/ai/mcp-servers',
+    skills: '/ai/skills',
   },
   config: {
     params: '/config/params',

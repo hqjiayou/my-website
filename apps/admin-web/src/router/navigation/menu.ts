@@ -12,6 +12,7 @@ import {
   Palette,
   Server,
   Settings2,
+  SlidersHorizontal,
   Zap,
 } from 'lucide-react'
 
@@ -77,7 +78,8 @@ export const NAV_SECTIONS: NavSection[] = [
     entries: [
       {
         // 平台区（Issue #213 UoW-C）：跨站共享资源归组——知识空间、模型入口、
-        // Prompt 模板、MCP 注册表（#214 UoW-5）、媒体库（路由仍在运营区文件页，只在此归组呈现）。
+        // Prompt 模板、MCP 注册表（#214 UoW-5）、Skills 货架（#214 UoW-6）、
+        // 媒体库（路由仍在运营区文件页，只在此归组呈现）。
         id: 'group-platform',
         labelKey: 'groups.platform',
         children: [
@@ -85,6 +87,7 @@ export const NAV_SECTIONS: NavSection[] = [
           { labelKey: 'items.aiSettings', path: ROUTES.ai.modelEntries, icon: Bot },
           { labelKey: 'items.aiPromptTemplates', path: ROUTES.ai.promptTemplates, icon: FileText },
           { labelKey: 'items.aiMcpServers', path: ROUTES.ai.mcpServers, icon: Server },
+          { labelKey: 'items.aiSkills', path: ROUTES.ai.skills, icon: SlidersHorizontal },
           { labelKey: 'items.files', path: ROUTES.operation.files, icon: FolderKanban },
         ],
       },

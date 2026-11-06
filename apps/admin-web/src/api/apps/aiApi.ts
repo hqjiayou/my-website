@@ -35,6 +35,7 @@ import type {
   AiChainPresetWriteInput,
   AiPromptTemplate,
   AiPromptTemplateCreateInput,
+  AiSkillCatalog,
   AiPromptTemplateUpdateInput,
   AiMcpConfig,
   AiMcpSelection,
@@ -188,6 +189,11 @@ export const aiApi = {
     return httpClient
       .delete<HttpMessageBody<null | void>>(`/admin/ai/chain-presets/${id}`)
       .then(unwrapVoid)
+  },
+
+  /** Skills 货架（Issue #214 UoW-6）：平台级只读目录＋自选开关状态，不挂具体 agent。 */
+  getSkillCatalog(): Promise<AiSkillCatalog> {
+    return httpClient.get<HttpMessageBody<AiSkillCatalog>>('/admin/ai/skills').then(unwrapData)
   },
 
   /** Prompt 模板（Issue #214 UoW-4）：工具组平台资产 CRUD；删除为软删，已套用 agent 的本地副本不受影响。 */

@@ -32,6 +32,7 @@ export default {
     aiSettings: 'モデルAPI管理',
     aiPromptTemplates: 'Prompt テンプレート',
     aiMcpServers: 'MCP サーバー',
+    aiSkills: 'Skills シェルフ',
     aiPlatformSettings: 'AI 設定',
     proxyServices: 'API キー',
     aiUsage: 'AI 利用量',
