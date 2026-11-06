@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { rbacApi } from '@/api/rbacApi'
 import { AdminPageHeader, DataTable, FormDialog, StatusTag } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
   adminFieldClass,
   adminFormActionsClass,
@@ -43,6 +44,7 @@ export function MenuTreePage() {
   const canUpdate = useHasPermission(PERMISSION_CODES.menuUpdate)
   const canDelete = useHasPermission(PERMISSION_CODES.menuDelete)
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [deleting, setDeleting] = useState<{ id: number; name: string } | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
@@ -93,6 +95,7 @@ export function MenuTreePage() {
     mutationFn: (id: number) => rbacApi.deleteMenu(id),
     onSuccess: () => {
       toast.success(t('messages.deleted'))
+      setDeleting(null)
       setDraft(null)
       refresh()
     },
@@ -132,8 +135,7 @@ export function MenuTreePage() {
 
   function handleDelete(node: MenuNodeDto) {
     if (node.id == null) return
-    if (!window.confirm(t('messages.confirmDelete', { name: node.menuName }))) return
-    deleteMutation.mutate(node.id)
+    setDeleting({ id: node.id, name: node.menuName })
   }
 
   function handleSave() {
@@ -284,6 +286,37 @@ export function MenuTreePage() {
               className={adminPrimaryButtonClass}
             >
               {saveMutation.isPending ? t('actions.saving') : t('actions.save')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
+
+      {deleting ? (
+        <FormDialog
+          title={t('messages.deleteConfirmTitle')}
+          closeLabel={t('actions.cancel')}
+          onClose={() => setDeleting(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('messages.confirmDelete', { name: deleting.name })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setDeleting(null)}
+            >
+              {t('actions.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate(deleting.id)}
+            >
+              {t('actions.remove')}
             </button>
           </div>
         </FormDialog>

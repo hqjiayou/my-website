@@ -6,8 +6,11 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
+import { FormDialog } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminFieldClass,
+  adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
@@ -56,6 +59,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
   const [skillInput, setSkillInput] = useState('')
   const [templateSelection, setTemplateSelection] = useState('')
   const [templateName, setTemplateName] = useState('')
+  const [confirmingLoad, setConfirmingLoad] = useState(false)
 
   const configQueryKey = ['sites', agentId, 'ai', 'prompt'] as const
   const configQuery = useQuery({
@@ -106,6 +110,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
   const loadMutation = useMutation({
     mutationFn: () => aiApi.loadAgentPromptTemplate(agentId, Number(templateSelection)),
     onSuccess: (config) => {
+      setConfirmingLoad(false)
       applySavedConfig(config)
       toast.success(t('prompts.templateLoaded'))
     },
@@ -315,7 +320,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
             type="button"
             className={adminSecondaryButtonClass}
             disabled={templateSelection === '' || loadMutation.isPending}
-            onClick={() => loadMutation.mutate()}
+            onClick={() => setConfirmingLoad(true)}
           >
             {t('prompts.loadTemplate')}
           </button>
@@ -346,6 +351,39 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
           {t('prompts.manageTemplates')}
         </Link>
       </div>
+
+      {confirmingLoad ? (
+        <FormDialog
+          title={t('prompts.loadConfirmTitle')}
+          closeLabel={t('prompts.loadConfirmCancel')}
+          onClose={() => setConfirmingLoad(false)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('prompts.loadConfirmBody', {
+              name: templates.find((template) => template.id === Number(templateSelection))?.name ?? '',
+            })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setConfirmingLoad(false)}
+            >
+              {t('prompts.loadConfirmCancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={loadMutation.isPending}
+              onClick={() => loadMutation.mutate()}
+            >
+              {t('prompts.loadConfirmAction')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
     </div>
   )
 }

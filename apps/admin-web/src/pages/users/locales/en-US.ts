@@ -29,6 +29,7 @@ export default {
       disable: 'Disable',
       assignRoles: 'Assign roles',
       delete: 'Delete',
+      cancel: 'Cancel',
     },
     badges: {
       self: 'You',
@@ -37,6 +38,7 @@ export default {
     messages: {
       statusUpdated: 'User status updated',
       deleted: 'User deleted',
+      deleteConfirmTitle: 'Delete user',
       confirmDelete: 'Delete user "{{username}}"?',
       restrictedSelf: 'You cannot disable, delete, or change roles for your own account.',
       restrictedProtected: 'Users with super_admin are protected and cannot be disabled, deleted, or reassigned.',

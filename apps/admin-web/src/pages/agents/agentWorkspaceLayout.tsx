@@ -17,8 +17,14 @@ import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { agentApi, SITE_STATUS, type Site } from '@/api'
-import { StatusTag } from '@/components/admin'
-import { adminDangerGhostButtonMdClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
+import { FormDialog, StatusTag } from '@/components/admin'
+import {
+  adminDangerButtonMdClass,
+  adminDangerGhostButtonMdClass,
+  adminFormActionsClass,
+  adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+} from '@/components/admin/controls'
 import { RouteFallback } from '@/components/page'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
@@ -55,6 +61,7 @@ interface WorkspaceNavGroup {
 export function AgentWorkspaceLayout() {
   const { t } = useTranslation('sites')
   const [createOpen, setCreateOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { agentId } = useParams()
@@ -216,10 +223,7 @@ export function AgentWorkspaceLayout() {
               type="button"
               className={adminDangerGhostButtonMdClass}
               disabled={deleteMutation.isPending}
-              onClick={() => {
-                if (!window.confirm(t('list.messages.confirmDelete', { name: site.agentName }))) return
-                deleteMutation.mutate()
-              }}
+              onClick={() => setDeleteOpen(true)}
             >
               {t('list.actions.delete')}
             </button>
@@ -262,6 +266,36 @@ export function AgentWorkspaceLayout() {
         </div>
       </div>
       {createOpen ? <AgentCreateDialog onClose={() => setCreateOpen(false)} /> : null}
+      {deleteOpen ? (
+        <FormDialog
+          title={t('list.messages.deleteConfirmTitle')}
+          closeLabel={t('list.actions.cancel')}
+          onClose={() => setDeleteOpen(false)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('list.messages.confirmDelete', { name: site.agentName })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setDeleteOpen(false)}
+            >
+              {t('list.actions.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate()}
+            >
+              {t('list.actions.delete')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
     </section>
   )
 }

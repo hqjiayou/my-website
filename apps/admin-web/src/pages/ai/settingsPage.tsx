@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { aiApi } from '@/api/apps/aiApi'
 import { AdminPageHeader, CopyableText, FormDialog, StatusTag } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
   adminFieldClass,
   adminFormActionsClass,
@@ -52,6 +53,7 @@ function GatewayAccessKeysCard() {
   const [name, setName] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   const [issuedKey, setIssuedKey] = useState<GatewayAccessKeyIssueResponse | null>(null)
+  const [revoking, setRevoking] = useState<GatewayAccessKey | null>(null)
 
   const { data, isPending } = useQuery({
     queryKey: ['ai', 'gateway-access-keys'],
@@ -77,6 +79,7 @@ function GatewayAccessKeysCard() {
   const revokeMutation = useMutation({
     mutationFn: (id: number) => aiApi.revokeGatewayAccessKey(id),
     onSuccess: () => {
+      setRevoking(null)
       toast.success(t('settings.gatewayKeys.revoked'))
       void queryClient.invalidateQueries({ queryKey: ['ai', 'gateway-access-keys'] })
     },
@@ -149,10 +152,7 @@ function GatewayAccessKeysCard() {
                     type="button"
                     className={cn(adminDangerGhostButtonSmClass, 'shrink-0')}
                     disabled={revokeMutation.isPending}
-                    onClick={() => {
-                      if (!window.confirm(t('settings.gatewayKeys.confirmRevoke'))) return
-                      revokeMutation.mutate(key.id)
-                    }}
+                    onClick={() => setRevoking(key)}
                   >
                     {t('settings.gatewayKeys.revoke')}
                   </button>
@@ -201,6 +201,37 @@ function GatewayAccessKeysCard() {
           </button>
         </form>
       </PermissionGate>
+
+      {revoking ? (
+        <FormDialog
+          title={t('settings.gatewayKeys.revokeConfirmTitle')}
+          closeLabel={t('settings.gatewayKeys.cancel')}
+          onClose={() => setRevoking(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('settings.gatewayKeys.revokeConfirmBody', { name: revoking.name })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setRevoking(null)}
+            >
+              {t('settings.gatewayKeys.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={revokeMutation.isPending}
+              onClick={() => revokeMutation.mutate(revoking.id)}
+            >
+              {t('settings.gatewayKeys.revoke')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
     </article>
   )
 }

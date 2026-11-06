@@ -27,6 +27,9 @@ export default {
     logout: '退出登录',
     logoutConfirm: '确定要退出登录吗？',
   },
+  dialog: {
+    cancel: '取消',
+  },
   preferences: {
     title: '外观与偏好',
     description: '调整主题、字号、密度等本地显示设置。',

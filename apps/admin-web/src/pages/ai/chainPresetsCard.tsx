@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { aiApi } from '@/api/apps/aiApi'
 import { FormDialog } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
   adminFieldClass,
   adminFormActionsClass,
@@ -313,7 +314,7 @@ export function ChainPresetsCard() {
             </button>
             <button
               type="button"
-              className={adminPrimaryButtonClass}
+              className={adminDangerButtonMdClass}
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleting.id)}
             >

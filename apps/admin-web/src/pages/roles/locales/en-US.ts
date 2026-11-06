@@ -28,6 +28,7 @@ export default {
       disable: 'Disable',
       assignPermissions: 'Assign menus',
       delete: 'Delete',
+      cancel: 'Cancel',
     },
     badges: {
       protected: 'Built-in role',
@@ -35,6 +36,7 @@ export default {
     messages: {
       deleted: 'Role deleted',
       statusUpdated: 'Role status updated',
+      deleteConfirmTitle: 'Delete role',
       confirmDelete: 'Delete role "{{roleCode}}"?',
     },
   },

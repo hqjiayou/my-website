@@ -3,7 +3,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-import { adminDangerGhostButtonMdClass } from '@/components/admin/controls'
+import {
+  adminDangerButtonMdClass,
+  adminDangerGhostButtonMdClass,
+  adminFormActionsClass,
+  adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+} from '@/components/admin/controls'
+import { FormDialog } from '@/components/admin/formDialog'
 import type { FontSize, PageDensity, PrimaryColor, ThemeMode } from '@/config/preferences'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/i18n/constants'
 import { cn } from '@/lib/cn'
@@ -31,6 +38,7 @@ export function Header() {
 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [appearanceOpen, setAppearanceOpen] = useState(false)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
 
   // 静态 nav（工作区子页等）优先；其余能从后端菜单派生的标题不再双维护
@@ -51,8 +59,8 @@ export function Header() {
     return () => document.removeEventListener('mousedown', handlePointerDown)
   }, [])
 
-  async function handleLogout() {
-    if (!window.confirm(tLayout('userMenu.logoutConfirm'))) return
+  async function confirmLogout() {
+    setLogoutConfirmOpen(false)
     await logout()
     navigate(ROUTES.login, { replace: true })
   }
@@ -134,7 +142,10 @@ export function Header() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handleLogout()}
+                  onClick={() => {
+                    setUserMenuOpen(false)
+                    setLogoutConfirmOpen(true)
+                  }}
                   className="admin-focus-ring flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-admin-danger transition hover:bg-admin-danger-muted"
                 >
                   <LogOut className="h-4 w-4" />
@@ -145,6 +156,33 @@ export function Header() {
           </div>
         </div>
       </header>
+
+      {logoutConfirmOpen ? (
+        <FormDialog
+          title={tLayout('userMenu.logout')}
+          closeLabel={tLayout('dialog.cancel')}
+          onClose={() => setLogoutConfirmOpen(false)}
+          size="s"
+        >
+          <p className="text-sm text-admin">{tLayout('userMenu.logoutConfirm')}</p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setLogoutConfirmOpen(false)}
+            >
+              {tLayout('dialog.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminPrimaryButtonClass}
+              onClick={() => void confirmLogout()}
+            >
+              {tLayout('userMenu.logout')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
 
       <AppearanceDrawer open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
     </>
@@ -163,6 +201,7 @@ function AppearanceDrawer({ open, onClose }: { open: boolean; onClose: () => voi
     setLocale,
     resetPreferences,
   } = useAdminPreferencesStore()
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
 
   if (!open) return null
 
@@ -172,8 +211,12 @@ function AppearanceDrawer({ open, onClose }: { open: boolean; onClose: () => voi
   const primaryColors: PrimaryColor[] = ['blue', 'purple', 'green', 'orange']
 
   function handleClearLocal() {
-    if (!window.confirm(t('preferences.clearConfirm'))) return
+    setClearConfirmOpen(true)
+  }
+
+  function confirmClearLocal() {
     resetPreferences()
+    setClearConfirmOpen(false)
   }
 
   return (
@@ -279,6 +322,34 @@ function AppearanceDrawer({ open, onClose }: { open: boolean; onClose: () => voi
           <p className="mt-2 text-xs text-admin-muted">{t('preferences.clearHint')}</p>
         </div>
       </aside>
+
+      {clearConfirmOpen ? (
+        <FormDialog
+          title={t('preferences.clearLocal')}
+          closeLabel={t('dialog.cancel')}
+          onClose={() => setClearConfirmOpen(false)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">{t('preferences.clearConfirm')}</p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setClearConfirmOpen(false)}
+            >
+              {t('dialog.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              onClick={confirmClearLocal}
+            >
+              {t('preferences.clearLocal')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
     </>
   )
 }

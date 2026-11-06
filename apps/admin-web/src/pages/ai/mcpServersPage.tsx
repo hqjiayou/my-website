@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { aiApi } from '@/api/apps/aiApi'
 import { AdminPageHeader, FormDialog, StatusTag } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
   adminFieldClass,
   adminFormActionsClass,
@@ -353,6 +354,9 @@ function McpServersCard() {
   const [syncedVersion, setSyncedVersion] = useState<number | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
+  const [removing, setRemoving] = useState<EntryDraft | null>(null)
+  const [clearAllOpen, setClearAllOpen] = useState(false)
+  const [pendingImport, setPendingImport] = useState<EntryDraft[] | null>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['ai', 'mcp-config'],
@@ -409,7 +413,10 @@ function McpServersCard() {
       toast.error(validationError)
       return
     }
-    if (drafts.length === 0 && !window.confirm(t('settings.mcp.confirmClearAll'))) return
+    if (drafts.length === 0) {
+      setClearAllOpen(true)
+      return
+    }
     saveMutation.mutate(drafts.map(buildEntryInput))
   }
 
@@ -421,12 +428,14 @@ function McpServersCard() {
       toast.error(t('settings.mcp.importInvalid'))
       return
     }
-    if (
-      drafts.length > 0 &&
-      !window.confirm(t('settings.mcp.importReplaceConfirm', { count: imported.length }))
-    ) {
+    if (drafts.length > 0) {
+      setPendingImport(imported)
       return
     }
+    applyImport(imported)
+  }
+
+  function applyImport(imported: EntryDraft[]) {
     setDrafts(imported)
     setImportOpen(false)
     setImportText('')
@@ -548,12 +557,7 @@ function McpServersCard() {
                         <button
                           type="button"
                           className={cn(adminDangerGhostButtonSmClass, 'shrink-0')}
-                          onClick={() => {
-                            if (!window.confirm(t('settings.mcp.confirmRemove'))) return
-                            setDrafts((current) =>
-                              current.filter((item) => item.localId !== draft.localId),
-                            )
-                          }}
+                          onClick={() => setRemoving(draft)}
                         >
                           <Trash2 className="h-3.5 w-3.5" aria-hidden />
                           {t('settings.mcp.remove')}
@@ -818,6 +822,109 @@ function McpServersCard() {
               onClick={handleImport}
             >
               {t('settings.mcp.importApply')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
+
+      {removing ? (
+        <FormDialog
+          title={t('settings.mcp.removeConfirmTitle')}
+          closeLabel={t('settings.mcp.cancel')}
+          onClose={() => setRemoving(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('settings.mcp.removeConfirmBody', {
+              name: removing.name.trim() || t('settings.mcp.unnamed'),
+            })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setRemoving(null)}
+            >
+              {t('settings.mcp.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              onClick={() => {
+                setDrafts((current) =>
+                  current.filter((item) => item.localId !== removing.localId),
+                )
+                setRemoving(null)
+              }}
+            >
+              {t('settings.mcp.remove')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
+
+      {clearAllOpen ? (
+        <FormDialog
+          title={t('settings.mcp.clearAllConfirmTitle')}
+          closeLabel={t('settings.mcp.cancel')}
+          onClose={() => setClearAllOpen(false)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">{t('settings.mcp.confirmClearAll')}</p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setClearAllOpen(false)}
+            >
+              {t('settings.mcp.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={saveMutation.isPending}
+              onClick={() => {
+                setClearAllOpen(false)
+                saveMutation.mutate(drafts.map(buildEntryInput))
+              }}
+            >
+              {t('settings.mcp.clearAllConfirmAction')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
+
+      {pendingImport ? (
+        <FormDialog
+          title={t('settings.mcp.importReplaceConfirmTitle')}
+          closeLabel={t('settings.mcp.cancel')}
+          onClose={() => setPendingImport(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('settings.mcp.importReplaceConfirm', { count: pendingImport.length })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setPendingImport(null)}
+            >
+              {t('settings.mcp.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              onClick={() => {
+                const imported = pendingImport
+                setPendingImport(null)
+                applyImport(imported)
+              }}
+            >
+              {t('settings.mcp.importReplaceConfirmAction')}
             </button>
           </div>
         </FormDialog>

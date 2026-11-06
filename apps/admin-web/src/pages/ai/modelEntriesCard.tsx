@@ -5,13 +5,15 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { StatusTag } from '@/components/admin'
+import { FormDialog, StatusTag } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
   adminFieldClass,
   adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
 } from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
@@ -107,6 +109,7 @@ export function ModelEntriesCard() {
   const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [selectedSource, setSelectedSource] = useState<string | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   // 页面挂载同步一次 CLI 派生条目（Issue #214 UoW-2）：派生行随代理侧
   // 账号/模型构成自动物化；同步失败不打断页面，派生行保持现状。
@@ -191,6 +194,7 @@ export function ModelEntriesCard() {
     mutationFn: (id: number) => aiApi.deleteModelEntry(id),
     onSuccess: () => {
       toast.success(t('settings.deleted'))
+      setConfirmingDelete(false)
       setDraft(null)
       void queryClient.invalidateQueries({ queryKey: ['ai', 'model-entries'] })
     },
@@ -607,8 +611,7 @@ export function ModelEntriesCard() {
                   disabled={deleteMutation.isPending}
                   onClick={() => {
                     if (draft.id == null) return
-                    if (!window.confirm(t('settings.confirmDelete'))) return
-                    deleteMutation.mutate(draft.id)
+                    setConfirmingDelete(true)
                   }}
                 >
                   {t('settings.remove')}
@@ -624,6 +627,40 @@ export function ModelEntriesCard() {
             </div>
           </PermissionGate>
         </form>
+      ) : null}
+
+      {confirmingDelete && draft && draft.id != null ? (
+        <FormDialog
+          title={t('settings.deleteConfirmTitle')}
+          closeLabel={t('settings.cancel')}
+          onClose={() => setConfirmingDelete(false)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('settings.deleteConfirmBody', { name: draft.displayName.trim() || draft.modelSpec })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setConfirmingDelete(false)}
+            >
+              {t('settings.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (draft.id == null) return
+                deleteMutation.mutate(draft.id)
+              }}
+            >
+              {t('settings.remove')}
+            </button>
+          </div>
+        </FormDialog>
       ) : null}
     </>
   )

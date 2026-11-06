@@ -16,7 +16,12 @@ import {
   type MediaListView,
   type MediaScope,
 } from '@/api'
-import { DataTable, type DataTableColumn } from '@/components/admin'
+import { DataTable, FormDialog, type DataTableColumn } from '@/components/admin'
+import {
+  adminDangerButtonMdClass,
+  adminFormActionsClass,
+  adminSecondaryButtonClass,
+} from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -46,6 +51,7 @@ export function AgentFilesPage() {
   const canDownload = useHasPermission(PERMISSION_CODES.mediaDownload)
   const canDelete = useHasPermission(PERMISSION_CODES.mediaDelete)
 
+  const [deleting, setDeleting] = useState<MediaListItem | null>(null)
   const [view, setView] = useState<MediaListView>('library')
   const [filters, setFilters] = useState<MediaListQuery>({ pageNum: 1, pageSize: 20, view: 'library' })
 
@@ -87,6 +93,7 @@ export function AgentFilesPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => mediaApi.deleteMedia(site.id, id),
     onSuccess: () => {
+      setDeleting(null)
       toast.success(t('filesManagement.messages.deleted'))
       void queryClient.invalidateQueries({ queryKey: ['sites', site.id, 'media'] })
     },
@@ -242,20 +249,8 @@ export function AgentFilesPage() {
               {canDelete && own ? (
                 <button
                   type="button"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => {
-                    if (
-                      !window.confirm(
-                        t('filesManagement.messages.confirmDelete', {
-                          name: item.originalFilename,
-                        }),
-                      )
-                    ) {
-                      return
-                    }
-                    deleteMutation.mutate(item.id)
-                  }}
-                  className="rounded-md border border-danger/35 px-2.5 py-1.5 text-xs font-medium text-danger-emphasis transition hover:bg-danger-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => setDeleting(item)}
+                  className="rounded-md border border-danger/35 px-2.5 py-1.5 text-xs font-medium text-danger-emphasis transition hover:bg-danger-muted"
                 >
                   {t('filesManagement.actions.delete')}
                 </button>
@@ -268,7 +263,6 @@ export function AgentFilesPage() {
     [
       canDelete,
       canDownload,
-      deleteMutation,
       previewMutation,
       referenceMutation,
       scopeMutation,
@@ -348,6 +342,37 @@ export function AgentFilesPage() {
           onPageChange: (page) => setFilters((prev) => ({ ...prev, pageNum: page })),
         }}
       />
+
+      {deleting ? (
+        <FormDialog
+          title={t('filesManagement.messages.deleteConfirmTitle')}
+          closeLabel={t('filesManagement.actions.cancel')}
+          onClose={() => setDeleting(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('filesManagement.messages.confirmDelete', { name: deleting.originalFilename })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setDeleting(null)}
+            >
+              {t('filesManagement.actions.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate(deleting.id)}
+            >
+              {t('filesManagement.actions.delete')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
     </section>
   )
 }

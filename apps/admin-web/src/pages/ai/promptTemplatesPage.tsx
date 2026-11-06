@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { aiApi } from '@/api/apps/aiApi'
 import { AdminPageHeader, FormDialog } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
   adminFieldClass,
   adminFormActionsClass,
@@ -261,7 +262,7 @@ export function AiPromptTemplatesPage() {
             </button>
             <button
               type="button"
-              className={adminPrimaryButtonClass}
+              className={adminDangerButtonMdClass}
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleting.id)}
             >

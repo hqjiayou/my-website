@@ -29,6 +29,7 @@ export default {
       disable: '無効化',
       assignRoles: 'ロール割当',
       delete: '削除',
+      cancel: 'キャンセル',
     },
     badges: {
       self: '自分',
@@ -37,6 +38,7 @@ export default {
     messages: {
       statusUpdated: 'ユーザーステータスを更新しました',
       deleted: 'ユーザーを削除しました',
+      deleteConfirmTitle: 'ユーザーを削除',
       confirmDelete: 'ユーザー「{{username}}」を削除しますか？',
       restrictedSelf: '自分のアカウントを無効化・削除・ロール変更できません。',
       restrictedProtected: 'super_admin を持つユーザーは保護されており、無効化・削除・ロール変更できません。',

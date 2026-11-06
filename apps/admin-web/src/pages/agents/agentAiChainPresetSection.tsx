@@ -5,9 +5,11 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FilterTabs } from '@/components/admin'
+import { FilterTabs, FormDialog } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminFieldClass,
+  adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
@@ -44,6 +46,7 @@ export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
   const [addSelection, setAddSelection] = useState('')
   const [templateSelection, setTemplateSelection] = useState('')
   const [templateName, setTemplateName] = useState('')
+  const [confirmingLoad, setConfirmingLoad] = useState(false)
 
   const chainQueryKey = ['sites', agentId, 'ai', 'chain'] as const
   const chainQuery = useQuery({
@@ -101,6 +104,7 @@ export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
   const loadMutation = useMutation({
     mutationFn: () => aiApi.loadAgentChainTemplate(agentId, mode, Number(templateSelection)),
     onSuccess: (chain) => {
+      setConfirmingLoad(false)
       applySavedChain(chain)
       toast.success(t('aiWorkspace.chainPreset.templateLoaded'))
     },
@@ -258,7 +262,7 @@ export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
                 type="button"
                 className={adminSecondaryButtonClass}
                 disabled={templateSelection === '' || loadMutation.isPending}
-                onClick={() => loadMutation.mutate()}
+                onClick={() => setConfirmingLoad(true)}
               >
                 {t('aiWorkspace.chainPreset.loadTemplate')}
               </button>
@@ -284,6 +288,39 @@ export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
           </div>
         </div>
       )}
+
+      {confirmingLoad ? (
+        <FormDialog
+          title={t('aiWorkspace.chainPreset.loadConfirmTitle')}
+          closeLabel={t('aiWorkspace.chainPreset.loadConfirmCancel')}
+          onClose={() => setConfirmingLoad(false)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('aiWorkspace.chainPreset.loadConfirmBody', {
+              name: presets.find((preset) => preset.id === Number(templateSelection))?.name ?? '',
+            })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setConfirmingLoad(false)}
+            >
+              {t('aiWorkspace.chainPreset.loadConfirmCancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={loadMutation.isPending}
+              onClick={() => loadMutation.mutate()}
+            >
+              {t('aiWorkspace.chainPreset.loadConfirmAction')}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
     </section>
   )
 }

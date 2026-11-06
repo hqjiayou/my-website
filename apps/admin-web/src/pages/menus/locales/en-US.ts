@@ -41,6 +41,7 @@ export default {
     created: 'Menu created. Assign it on a role before that role can see it in the sidebar.',
     updated: 'Menu updated',
     deleted: 'Menu deleted',
+    deleteConfirmTitle: 'Delete menu',
     confirmDelete: 'Delete menu “{{name}}”?',
   },
 } as const

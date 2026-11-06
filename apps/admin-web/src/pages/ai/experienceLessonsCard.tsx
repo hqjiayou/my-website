@@ -5,12 +5,15 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { StatusTag } from '@/components/admin'
+import { FormDialog, StatusTag } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
   adminFieldClass,
+  adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
 } from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
@@ -233,6 +236,7 @@ function LessonDetailBody({
   const [symptom, setSymptom] = useState(detail.symptom ?? '')
   const [lesson, setLesson] = useState(detail.lesson)
   const [evidence, setEvidence] = useState(detail.evidence ?? '')
+  const [confirming, setConfirming] = useState<'reject' | 'disable' | null>(null)
 
   const actionMutation = useMutation({
     mutationFn: (action: 'approve' | 'reject' | 'disable') => {
@@ -249,6 +253,7 @@ function LessonDetailBody({
         : aiApi.disableExperienceLesson(detail.id)
     },
     onSuccess: (updated, action) => {
+      setConfirming(null)
       toast.success(
         action === 'approve'
           ? t('settings.experience.approvedToast', { no: updated.lessonNo ?? '' })
@@ -331,10 +336,7 @@ function LessonDetailBody({
             type="button"
             className={adminDangerGhostButtonSmClass}
             disabled={actionMutation.isPending}
-            onClick={() => {
-              if (!window.confirm(t('settings.experience.confirmReject'))) return
-              actionMutation.mutate('reject')
-            }}
+            onClick={() => setConfirming('reject')}
           >
             {t('settings.experience.reject')}
           </button>
@@ -346,13 +348,52 @@ function LessonDetailBody({
           type="button"
           className={adminDangerGhostButtonSmClass}
           disabled={actionMutation.isPending}
-          onClick={() => {
-            if (!window.confirm(t('settings.experience.confirmDisable'))) return
-            actionMutation.mutate('disable')
-          }}
+          onClick={() => setConfirming('disable')}
         >
           {t('settings.experience.disable')}
         </button>
+      ) : null}
+
+      {confirming ? (
+        <FormDialog
+          title={t(
+            confirming === 'reject'
+              ? 'settings.experience.rejectConfirmTitle'
+              : 'settings.experience.disableConfirmTitle',
+          )}
+          closeLabel={t('settings.experience.cancel')}
+          onClose={() => setConfirming(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t(
+              confirming === 'reject'
+                ? 'settings.experience.rejectConfirmBody'
+                : 'settings.experience.disableConfirmBody',
+              { name: detail.title },
+            )}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setConfirming(null)}
+            >
+              {t('settings.experience.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={actionMutation.isPending}
+              onClick={() => actionMutation.mutate(confirming)}
+            >
+              {confirming === 'reject'
+                ? t('settings.experience.reject')
+                : t('settings.experience.disable')}
+            </button>
+          </div>
+        </FormDialog>
       ) : null}
     </div>
   )

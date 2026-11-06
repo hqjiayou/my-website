@@ -8,6 +8,7 @@ import { agentApi } from '@/api/apps/agentApi'
 import { aiApi } from '@/api/apps/aiApi'
 import { FormDialog } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
   adminFieldClass,
   adminFormActionsClass,
@@ -22,7 +23,7 @@ import { PERMISSION_CODES } from '@/types/rbac'
  * 供应商 API key 直连条目管理（原「API 管理」页 proxyServicesPage 的 KEY
  * 页签整块，Issue #215 起搬入「模型 API 管理」页作独立分节，逻辑与文案
  * 未改）：左栏 KEY 模式条目名单、右栏详情（spec／key hint／Base URL／
- * 使用归属），新建走弹窗、删除走行内确认。
+ * 使用归属），新建走弹窗、删除走危险确认弹窗。
  */
 export function ApiKeyColumn() {
   const { t } = useTranslation('aiAdmin')
@@ -34,6 +35,7 @@ export function ApiKeyColumn() {
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState<{ id: number; displayName: string } | null>(null)
 
   const entriesQuery = useQuery({
     queryKey: ['ai', 'model-entries'],
@@ -87,6 +89,7 @@ export function ApiKeyColumn() {
     mutationFn: (id: number) => aiApi.deleteModelEntry(id),
     onSuccess: () => {
       toast.success(t('proxyServices.keyDeleted'))
+      setDeleting(null)
       setSelectedId(null)
       void queryClient.invalidateQueries({ queryKey: ['ai', 'model-entries'] })
     },
@@ -158,10 +161,7 @@ export function ApiKeyColumn() {
                   <button
                     type="button"
                     className={adminDangerGhostButtonClass}
-                    onClick={() => {
-                      if (!window.confirm(t('proxyServices.keyConfirmDelete'))) return
-                      deleteMutation.mutate(selected.id)
-                    }}
+                    onClick={() => setDeleting({ id: selected.id, displayName: selected.displayName })}
                   >
                     {t('proxyServices.delete')}
                   </button>
@@ -240,6 +240,32 @@ export function ApiKeyColumn() {
               </button>
             </div>
           </form>
+        </FormDialog>
+      ) : null}
+      {deleting ? (
+        <FormDialog
+          title={t('proxyServices.keyDeleteConfirmTitle')}
+          closeLabel={t('proxyServices.dialog.cancel')}
+          onClose={() => setDeleting(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('proxyServices.keyDeleteConfirmBody', { name: deleting.displayName })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button type="button" className={adminSecondaryButtonClass} onClick={() => setDeleting(null)}>
+              {t('proxyServices.dialog.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate(deleting.id)}
+            >
+              {t('proxyServices.delete')}
+            </button>
+          </div>
         </FormDialog>
       ) : null}
     </section>

@@ -7,8 +7,10 @@ import { toast } from 'sonner'
 import { rbacApi } from '@/api/rbacApi'
 import { AdminPageHeader, DataTable, FormDialog, StatusTag } from '@/components/admin'
 import {
+  adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
   adminFilterFieldClass,
+  adminFormActionsClass,
   adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
@@ -32,6 +34,7 @@ export function RoleListPage() {
   const [dialog, setDialog] = useState<
     { kind: 'create' } | { kind: 'edit'; id: number } | { kind: 'permissions'; id: number } | null
   >(null)
+  const [deleting, setDeleting] = useState<{ id: number; roleCode: string } | null>(null)
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['roles', filters],
@@ -43,6 +46,7 @@ export function RoleListPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => rbacApi.deleteRole(id),
     onSuccess: () => {
+      setDeleting(null)
       toast.success(t('list.messages.deleted'))
       void queryClient.invalidateQueries({ queryKey: ['roles'] })
     },
@@ -79,8 +83,7 @@ export function RoleListPage() {
 
   function handleDelete(id: number, roleCode: string) {
     if (isSuperAdminRole(roleCode)) return
-    if (!window.confirm(t('list.messages.confirmDelete', { roleCode }))) return
-    deleteMutation.mutate(id)
+    setDeleting({ id, roleCode })
   }
 
   function toggleStatus(role: {
@@ -199,6 +202,36 @@ export function RoleListPage() {
           wide
         >
           <RolePermissionPage roleId={String(dialog.id)} onClose={() => setDialog(null)} />
+        </FormDialog>
+      ) : null}
+      {deleting ? (
+        <FormDialog
+          title={t('list.messages.deleteConfirmTitle')}
+          closeLabel={t('list.actions.cancel')}
+          onClose={() => setDeleting(null)}
+          size="s"
+          danger
+        >
+          <p className="text-sm text-admin">
+            {t('list.messages.confirmDelete', { roleCode: deleting.roleCode })}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setDeleting(null)}
+            >
+              {t('list.actions.cancel')}
+            </button>
+            <button
+              type="button"
+              className={adminDangerButtonMdClass}
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate(deleting.id)}
+            >
+              {t('list.actions.delete')}
+            </button>
+          </div>
         </FormDialog>
       ) : null}
     </section>

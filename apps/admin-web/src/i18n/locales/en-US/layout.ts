@@ -27,6 +27,9 @@ export default {
     logout: 'Sign out',
     logoutConfirm: 'Are you sure you want to sign out?',
   },
+  dialog: {
+    cancel: 'Cancel',
+  },
   preferences: {
     title: 'Appearance & preferences',
     description: 'Customize theme, font size, density, and other local UI settings.',
