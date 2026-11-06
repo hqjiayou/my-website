@@ -61,9 +61,9 @@ export interface AgentListItem {
   agentKind: AgentKind
   /** 订阅知识空间数（订阅表行数，含创建者行，#209 口径）。 */
   subscriptionCount: number
-  /** 引用的对话链预设；name 解析不到（预设已删）时为 null、id 照实。 */
-  chainPresetId: number | null
-  chainPresetName: string | null
+  /** 自有对话链两模式的成员数（#214 UoW-3 链内置化；0＝该模式未配链）。 */
+  chainKeyCount: number
+  chainCliCount: number
   /** 引用的 AI 配置预设；name 解析不到（预设已删）时为 null、id 照实。 */
   configPresetId: number | null
   configPresetName: string | null
@@ -79,7 +79,6 @@ export interface AgentDetail {
   defaultDomain: string | null
   description: string | null
   configPresetId: number | null
-  chainPresetId: number | null
   version: number
   createdAt: string
   updatedAt: string

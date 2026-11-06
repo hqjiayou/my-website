@@ -53,10 +53,6 @@ export function AgentsPage() {
         agentType: agentTypeFilter || undefined,
       }),
   })
-  const chainPresetsQuery = useQuery({
-    queryKey: ['ai', 'chain-presets'],
-    queryFn: () => aiApi.listChainPresets(),
-  })
   const configPresetsQuery = useQuery({
     queryKey: ['ai', 'config-presets'],
     queryFn: () => aiApi.listConfigPresets(),
@@ -80,19 +76,6 @@ export function AgentsPage() {
     },
   })
 
-  const chainPresetMutation = useMutation({
-    mutationFn: (input: { agentId: number; chainPresetId: number | null }) =>
-      aiApi.updateAgentChainPreset(input.agentId, input.chainPresetId),
-    onSuccess: () => {
-      toast.success(t('list.messages.chainPresetUpdated'))
-      invalidateSites()
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : t('list.messages.chainPresetUpdated'))
-      invalidateSites()
-    },
-  })
-
   const configPresetMutation = useMutation({
     mutationFn: (input: { id: number; configPresetId: number | null }) =>
       agentApi.updateAgentConfigPreset(input.id, { configPresetId: input.configPresetId }),
@@ -106,7 +89,6 @@ export function AgentsPage() {
     },
   })
 
-  const chainPresets = chainPresetsQuery.data ?? []
   const configPresets = configPresetsQuery.data ?? []
   const records = sitesQuery.data?.records ?? []
   const total = sitesQuery.data?.total ?? 0
@@ -194,27 +176,12 @@ export function AgentsPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="w-16 shrink-0 text-xs text-admin-muted">{t('list.associations.chainPreset')}</span>
-            <select
-              className={inlineSelectClass}
-              aria-label={t('list.associations.chainPreset')}
-              value={row.chainPresetId != null ? String(row.chainPresetId) : ''}
-              disabled={
-                !canUpdate || (chainPresetMutation.isPending && chainPresetMutation.variables?.agentId === row.id)
-              }
-              onChange={(event) =>
-                chainPresetMutation.mutate({
-                  agentId: row.id,
-                  chainPresetId: event.target.value === '' ? null : Number(event.target.value),
-                })
-              }
-            >
-              <option value="">{t('list.associations.none')}</option>
-              {presetOptions(row.chainPresetId, row.chainPresetName, chainPresets).map((option) => (
-                <option key={option.id} value={String(option.id)}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
+            {/* 对话链已内置化（#214 UoW-3）：列表只读摘要两模式成员数，编辑在工作台链编辑器。 */}
+            <span className="inline-flex items-center gap-1 rounded bg-admin-surface-muted px-1.5 py-0.5 text-xs text-admin">
+              {row.chainKeyCount === 0 && row.chainCliCount === 0
+                ? t('list.associations.chainNone')
+                : `Key ${row.chainKeyCount} · CLI ${row.chainCliCount}`}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-16 shrink-0 text-xs text-admin-muted">{t('list.associations.configPreset')}</span>

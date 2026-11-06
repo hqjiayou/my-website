@@ -540,7 +540,7 @@ export function AiSettingsPage() {
         <MovedOutLinkCard
           title={t('settings.chainPresets.title')}
           hint={t('settings.movedChainPresetsHint')}
-          to={ROUTES.ai.chainPresets}
+          to={ROUTES.ai.modelEntries}
         />
       </div>
     </section>

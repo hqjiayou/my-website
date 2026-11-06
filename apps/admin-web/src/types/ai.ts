@@ -244,8 +244,9 @@ export interface AiMcpSelection {
 }
 
 /**
- * 对话链预设（Issue #210 UoW-7）：平台级命名链快照，entryIds 有序＝链的成员与顺序。
- * agent 引用一条预设即决定其对话链；用途 v1 只有 CHAT。
+ * 对话链模板（Issue #210 UoW-7 引入，#214 UoW-3 降级为模板库）：平台级命名链
+ * 快照，entryIds 有序＝成员与顺序。模板不被 agent 引用：载入到 agent 时按模式
+ * 拷贝其成员进 agent 自有链，之后改模板不影响 agent。用途 v1 只有 CHAT。
  */
 export interface AiChainPreset {
   id: number
@@ -263,11 +264,18 @@ export interface AiChainPresetWriteInput {
   version?: number
 }
 
-/** agent 当前引用的链预设；chainPresetId 为 null＝未引用（对话链为空）。 */
-export interface AiAgentChainPreset {
+/**
+ * agent 自有对话链（Issue #214 UoW-3）：按模式各一份有序 entry id 名单；
+ * 空数组＝该模式未配链（对话诚实 BLOCKED）。
+ */
+export interface AiAgentChain {
   agentId: number
-  chainPresetId: number | null
+  keyEntryIds: number[]
+  cliEntryIds: number[]
 }
+
+/** 对话链模式：Key＝API Key 入口链 / CLI＝CLI 代理入口链。 */
+export type AiChainMode = 'KEY' | 'CLI'
 
 /**
  * AI 配置预设（Issue #211 UoW-8 后端、#213 UoW-C 管理页）：命名预设＝一组

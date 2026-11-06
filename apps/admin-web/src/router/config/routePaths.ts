@@ -49,7 +49,6 @@ export const ROUTES = {
     knowledgeBases: '/ai/knowledge-bases',
     conversations: '/ai/conversations',
     modelEntries: '/ai/model-entries',
-    chainPresets: '/ai/chain-presets',
     configPresets: '/ai/config-presets',
   },
   config: {

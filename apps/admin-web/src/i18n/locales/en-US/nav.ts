@@ -30,7 +30,6 @@ export default {
     contents: 'Page Contents',
     files: 'File Assets',
     aiSettings: 'Model API management',
-    aiChainPresets: 'Chain presets',
     aiConfigPresets: 'Config presets',
     aiPlatformSettings: 'AI settings',
     proxyServices: 'API keys',

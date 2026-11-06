@@ -31,9 +31,9 @@ function entryLabel(entry: AiModelEntry): string {
 }
 
 /**
- * 对话链预设卡（Issue #210 UoW-7）：平台区管理命名链预设——成员是有序的模型入口 id
- * 名单，顺序即链序。agent 在工作台引用某条预设即决定其对话链；被引用的预设删除
- * 由服务端拦截，错误文案原样 toast 呈现。
+ * 对话链模板卡（Issue #210 UoW-7 引入，#214 UoW-3 降级为模板库）：模型页维护
+ * 命名链模板——成员是有序的模型入口 id 名单，顺序即链序。模板不被 agent
+ * 引用：agent 在工作台把模板载入自有链时是拷贝，之后改/删模板不影响 agent。
  */
 export function ChainPresetsCard() {
   const { t } = useTranslation('aiAdmin')
@@ -81,7 +81,7 @@ export function ChainPresetsCard() {
       invalidate()
       toast.success(t('settings.chainPresets.deleted'))
     },
-    // 被引用拦截等业务错误：服务端文案（含引用数）原样呈现
+    // 业务错误（如成员不存在）：服务端文案原样呈现
     onError: (error) => toast.error(error instanceof Error ? error.message : t('error')),
   })
 

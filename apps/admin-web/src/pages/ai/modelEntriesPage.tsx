@@ -9,8 +9,8 @@ import { ModelEntriesCard } from './modelEntriesCard'
 /**
  * 模型 API 管理页（Issue #213 UoW-C 独立页；Issue #214 UoW-2 重构）：
  * 第一节是来源×模型（ModelEntriesCard，含 CLI 派生同步与代理账号管理），
- * 第二节是对话链预设（ChainPresetsCard 复用，独立页 chainPresetsPage 在
- * UoW-3 撤除前保留）。文案：modelManagement.* 与 settings.*。
+ * 第二节是对话链模板（ChainPresetsCard；其独立页已于 UoW-3 撤除）。
+ * 文案：modelManagement.* 与 settings.*。
  */
 export function AiModelEntriesPage() {
   const { t } = useTranslation('aiAdmin')
