@@ -18,7 +18,6 @@ export const ROUTES = {
   },
   apps: {
     sites: '/agent',
-    api: '/agent/api',
     agentCreate: '/agent/create',
     agentDetailPattern: '/agent/:agentId',
     agentDetail: (agentId: number | string) => `/agent/${agentId}`,
@@ -66,6 +65,8 @@ export const ROUTES = {
   legacy: {
     sites: '/sites',
     appsSites: '/apps/sites',
+    /** #215 退役：「API 管理」页撤除，网关 Key 管理已搬入模型 API 管理页。 */
+    api: '/agent/api',
     proxyServices: '/ai/proxy-services',
     /** #214 UoW-3 撤页：对话链模板区现居模型 API 管理页。 */
     chainPresets: '/ai/chain-presets',

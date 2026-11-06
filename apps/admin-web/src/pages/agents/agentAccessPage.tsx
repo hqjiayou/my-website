@@ -274,7 +274,7 @@ function CliAccessForm({
       ) : (
         <p className="mt-4 text-sm text-admin-muted">
           {t('access.needProxy')}{' '}
-          <Link to={ROUTES.apps.api} className="font-medium text-admin underline-offset-2 hover:underline">
+          <Link to={ROUTES.ai.modelEntries} className="font-medium text-admin underline-offset-2 hover:underline">
             {t('access.openApi')}
           </Link>
         </p>
@@ -391,7 +391,7 @@ function KeyAccessForm({
       ) : (
         <p className="mt-4 text-sm text-admin-muted">
           {t('access.noProviderKeys')}{' '}
-          <Link to={ROUTES.apps.api} className="font-medium text-admin underline-offset-2 hover:underline">
+          <Link to={ROUTES.ai.modelEntries} className="font-medium text-admin underline-offset-2 hover:underline">
             {t('access.openApi')}
           </Link>
         </p>

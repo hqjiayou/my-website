@@ -34,7 +34,6 @@ export default {
     aiMcpServers: 'MCP サーバー',
     aiSkills: 'Skills シェルフ',
     aiPlatformSettings: 'AI 設定',
-    proxyServices: 'API キー',
     aiUsage: 'AI 利用量',
     aiPrompts: 'Prompt 設定',
     aiKnowledgeBases: 'ナレッジベース',

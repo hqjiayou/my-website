@@ -13,7 +13,6 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   [ROUTES.system.roles]: PERMISSION_CODES.roleList,
   [ROUTES.system.menus]: PERMISSION_CODES.menuList,
   [ROUTES.apps.sites]: PERMISSION_CODES.agentList,
-  [ROUTES.apps.api]: PERMISSION_CODES.aiModelRead,
   [ROUTES.apps.agentCreate]: PERMISSION_CODES.agentCreate,
   [ROUTES.apps.style]: PERMISSION_CODES.agentList,
   [ROUTES.operation.contents]: PERMISSION_CODES.contentList,
