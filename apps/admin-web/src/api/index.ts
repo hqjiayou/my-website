@@ -79,7 +79,6 @@ export type {
   AgentRuntimeStatus,
   AgentStatus,
   AgentType,
-  UpdateAgentConfigPresetInput,
   UpdateAgentInput,
   UpdateAgentKindInput,
   UpdateAgentStatusInput,

@@ -11,7 +11,6 @@ import type {
   AgentListItem,
   AgentListQuery,
   AgentRuntimeStatus,
-  UpdateAgentConfigPresetInput,
   UpdateAgentInput,
   UpdateAgentKindInput,
   UpdateAgentStatusInput,
@@ -78,16 +77,6 @@ const agentHttpService = {
       .then(unwrapData)
   },
 
-  /** 配置预设引用专属改写（#213）：configPresetId 为 null 即清除引用。 */
-  updateAgentConfigPreset(id: number, input: UpdateAgentConfigPresetInput): Promise<AgentDetail> {
-    return httpClient
-      .put<HttpMessageBody<AgentDetail>, UpdateAgentConfigPresetInput>(
-        `/admin/agents/${id}/config-preset`,
-        input,
-      )
-      .then(unwrapData)
-  },
-
   getAgentRuntimeStatus(id: number): Promise<AgentRuntimeStatus> {
     return deriveAgentRuntimeStatus(id)
   },
@@ -102,7 +91,6 @@ export const agentApi = {
   deleteSite: agentHttpService.deleteSite,
   updateAgentStatus: agentHttpService.updateAgentStatus,
   updateAgentKind: agentHttpService.updateAgentKind,
-  updateAgentConfigPreset: agentHttpService.updateAgentConfigPreset,
   getAgentRuntimeStatus: agentHttpService.getAgentRuntimeStatus,
 }
 
@@ -116,7 +104,6 @@ export type {
   AgentRuntimeStatus,
   AgentStatus,
   AgentType,
-  UpdateAgentConfigPresetInput,
   UpdateAgentInput,
   UpdateAgentKindInput,
   UpdateAgentStatusInput,

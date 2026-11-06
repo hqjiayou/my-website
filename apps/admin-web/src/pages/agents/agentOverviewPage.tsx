@@ -117,9 +117,9 @@ export function AgentOverviewPage() {
     queryFn: () => aiApi.listPreviewSkills(site.id),
     enabled: canPrompt && runtimeQuery.data?.reachable === true,
   })
-  const presetsQuery = useQuery({
-    queryKey: ['ai', 'config-presets'],
-    queryFn: () => aiApi.listConfigPresets(),
+  const promptConfigQuery = useQuery({
+    queryKey: ['sites', site.id, 'ai', 'prompt'],
+    queryFn: () => aiApi.getAgentPromptConfig(site.id),
     enabled: canPrompt,
   })
   const knowledgeQuery = useQuery({
@@ -167,25 +167,30 @@ export function AgentOverviewPage() {
     <p className="text-sm font-semibold leading-5 text-admin">{modelValue}</p>
   )
 
-  // #213 UoW-D：Prompt 卡改读配置预设引用（旧 prompt-profile 端点已退役）。
-  const promptConfigured = site.configPresetId != null
-  const currentPreset =
-    site.configPresetId == null
-      ? undefined
-      : (presetsQuery.data ?? []).find((preset) => preset.id === site.configPresetId)
-  const promptValue = !canPrompt || presetsQuery.isPending
+  // #214 UoW-4：Prompt 卡改读 agent 本地副本（配置预设引用已退役）；标题行展示
+  // 来源模板留痕名，摘要为本地副本的 systemPrompt 本体。
+  const promptConfig = promptConfigQuery.data
+  const promptConfigured =
+    promptConfig != null &&
+    (promptConfig.promptTemplateId != null ||
+      Boolean(promptConfig.systemPrompt?.trim()) ||
+      promptConfig.temperature != null)
+  const promptValue = !canPrompt || promptConfigQuery.isPending
     ? unavailable
     : promptConfigured
       ? t('agentOverview.prompt.configured')
       : t('agentOverview.prompt.notConfigured')
   const promptBadge =
-    canPrompt && !presetsQuery.isPending ? (
+    canPrompt && !promptConfigQuery.isPending ? (
       <StatusTag status={promptConfigured ? SITE_STATUS.ACTIVE : SITE_STATUS.DISABLED} label={promptValue} />
     ) : undefined
-  const promptSummary = currentPreset?.systemPrompt?.trim() || null
+  const promptSummary = promptConfig?.systemPrompt?.trim() || null
+  const promptTitle =
+    promptConfig?.promptTemplateName ??
+    (promptConfig?.promptTemplateId != null ? `#${promptConfig.promptTemplateId}` : promptValue)
   const promptValueNode = promptConfigured ? (
     <div className="space-y-1.5">
-      <p className="text-sm font-semibold leading-5 text-admin">{currentPreset?.name ?? promptValue}</p>
+      <p className="text-sm font-semibold leading-5 text-admin">{promptTitle}</p>
       {promptSummary ? (
         <blockquote className="line-clamp-2 border-l-[3px] border-[rgb(var(--primary)/.35)] pl-2.5 text-xs leading-relaxed text-admin-muted">
           {promptSummary}

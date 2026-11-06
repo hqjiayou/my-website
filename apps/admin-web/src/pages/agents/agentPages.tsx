@@ -5,7 +5,7 @@ import { useOutletContext } from 'react-router-dom'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
-import { AgentAiConfigPresetPanel } from './agentAiConfigPresetPanel'
+import { AgentAiPromptPanel } from './agentAiPromptPanel'
 import { AgentAiConversationsPanel } from './agentAiConversationsPanel'
 import { AgentAiKnowledgePanel } from './agentAiKnowledgePanel'
 import { AgentAiPreviewChat } from './agentAiPreviewChat'
@@ -55,7 +55,7 @@ function agentPanelPage(
 export const AgentPromptPage = agentPanelPage(
   'agentPrompt',
   PERMISSION_CODES.aiPromptRead,
-  AgentAiConfigPresetPanel,
+  AgentAiPromptPanel,
 )
 export const AgentKnowledgePage = agentPanelPage(
   'agentKnowledge',

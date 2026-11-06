@@ -64,9 +64,13 @@ export interface AgentListItem {
   /** 自有对话链两模式的成员数（#214 UoW-3 链内置化；0＝该模式未配链）。 */
   chainKeyCount: number
   chainCliCount: number
-  /** 引用的 AI 配置预设；name 解析不到（预设已删）时为 null、id 照实。 */
-  configPresetId: number | null
-  configPresetName: string | null
+  /** Prompt 来源模板留痕（#214 UoW-4）；name 解析不到（模板已删）时为 null、id 照实。 */
+  promptTemplateId: number | null
+  promptTemplateName: string | null
+  /** 是否已有 Prompt 本地副本（留痕/prompt/温度任一非空，与后端解析口径一致）。 */
+  promptConfigured: boolean
+  /** 自有默认 skill 集成员数（#214 UoW-4）。 */
+  defaultSkillCount: number
 }
 
 export interface AgentDetail {
@@ -78,7 +82,8 @@ export interface AgentDetail {
   status: string
   defaultDomain: string | null
   description: string | null
-  configPresetId: number | null
+  /** Prompt 来源模板留痕 id（#214 UoW-4）；本地副本本体走 ai/prompt 配置端点。 */
+  promptTemplateId: number | null
   version: number
   createdAt: string
   updatedAt: string
@@ -118,11 +123,6 @@ export interface UpdateAgentStatusInput {
 export interface UpdateAgentKindInput {
   kind: AgentKind
   version: number
-}
-
-/** 配置预设引用专属改写（#213）：configPresetId 为 null 即清除引用。 */
-export interface UpdateAgentConfigPresetInput {
-  configPresetId: number | null
 }
 
 /**
