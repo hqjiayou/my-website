@@ -144,7 +144,7 @@ class AgentAiPromptResolutionTest extends AbstractAgentSpringBootTest {
                     java.sql.PreparedStatement ps = connection.prepareStatement(
                             "INSERT INTO agent_prompt_template (name, system_prompt, temperature)"
                                     + " VALUES (?, ?, ?)",
-                            java.sql.Statement.RETURN_GENERATED_KEYS);
+                            new String[] {"id"});
                     ps.setString(1, name);
                     ps.setString(2, systemPrompt);
                     if (temperature == null) {
