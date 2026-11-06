@@ -31,6 +31,7 @@ export default {
     files: '文件管理',
     aiSettings: '模型 API 管理',
     aiPromptTemplates: 'Prompt 模板',
+    aiMcpServers: 'MCP 服务器',
     aiPlatformSettings: 'AI 设置',
     proxyServices: 'API 管理',
     aiUsage: 'AI 用量',

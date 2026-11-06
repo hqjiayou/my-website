@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FormDialog, StatusTag } from '@/components/admin'
+import { AdminPageHeader, FormDialog, StatusTag } from '@/components/admin'
 import {
   adminDangerGhostButtonSmClass,
   adminFieldClass,
@@ -339,12 +339,13 @@ function KvEditor({
 }
 
 /**
- * MCP 服务器全局注册表（Issue #192 UoW-4）：AI 设置页的一节，与运行配置共用
- * 同一行与推送管线。整表保存（顺序即注册顺序）；url 与 headers/env 的值按密钥
- * 语义处理：GET 只回 hint、编辑留空＝保留、显式动作才删键。推送状态同运行配置口径。
+ * MCP 服务器全局注册表（Issue #192 UoW-4；Issue #214 UoW-5 自 AI 设置页搬为
+ * 工具组独立页）：与运行配置共用同一行与推送管线。整表保存（顺序即注册
+ * 顺序）；url 与 headers/env 的值按密钥语义处理：GET 只回 hint、编辑留空＝
+ * 保留、显式动作才删键。推送状态同运行配置口径。
  * 写接口后端校验 admin:ai-model:update（aiRuntimeConfigUpdate）。
  */
-export function McpServersCard() {
+function McpServersCard() {
   const { t } = useTranslation('aiAdmin')
   const queryClient = useQueryClient()
   const canUpdate = useHasPermission(PERMISSION_CODES.aiRuntimeConfigUpdate)
@@ -437,9 +438,6 @@ export function McpServersCard() {
 
   return (
     <article className="space-y-3 rounded-xl border border-admin bg-admin-surface p-5">
-      <h3 className="text-sm font-semibold text-admin">{t('settings.mcp.title')}</h3>
-      <p className="text-sm text-admin-muted">{t('settings.mcp.description')}</p>
-
       {isPending ? (
         <p className="text-sm text-admin-muted">{t('loading')}</p>
       ) : isError ? (
@@ -825,5 +823,23 @@ export function McpServersCard() {
         </FormDialog>
       ) : null}
     </article>
+  )
+}
+
+/**
+ * MCP 独立页（Issue #214 UoW-5）：工具组页面，内容即上面的注册表卡片；
+ * 页头承接原卡片内的标题与说明（settings.mcp.title / description），
+ * AI 设置页原位置只留跳转卡。后端沿用 #192 的 /admin/ai/mcp-config 通道。
+ */
+export function AiMcpServersPage() {
+  const { t } = useTranslation('aiAdmin')
+
+  return (
+    <section className="admin-content-form">
+      <AdminPageHeader title={t('settings.mcp.title')} description={t('settings.mcp.description')} />
+      <div className="space-y-4">
+        <McpServersCard />
+      </div>
+    </section>
   )
 }

@@ -23,9 +23,10 @@ export default {
   },
   settings: {
     pageTitle: 'AI 设置',
-    pageDescription: '平台运行类设置：网关访问 Key、运行配置、MCP 注册表、经验沉淀与全站嵌入类登记。模型入口与链预设已迁至平台区独立页面。',
+    pageDescription: '平台运行类设置：网关访问 Key、运行配置、经验沉淀与全站嵌入类登记。模型入口、链预设与 MCP 注册表已迁至平台区独立页面。',
     movedEntriesHint: '模型入口已迁至平台区独立页面维护（按模式维护模型 spec 与 API key）。',
     movedChainPresetsHint: '对话链模板已并入模型 API 管理页的对话链区维护（模板供智能体载入自有链时拷贝）。',
+    movedMcpHint: 'MCP 服务器注册表已迁至工具组独立页面维护（全平台共享，与运行配置共用同一份版本与推送）。',
     movedGo: '前往',
     title: '模型入口',
     description: '按模式维护模型 spec 和 API key。对话预览只用所选模式的默认入口；用户端对话在同模式内还可以接着试其他入口。',
