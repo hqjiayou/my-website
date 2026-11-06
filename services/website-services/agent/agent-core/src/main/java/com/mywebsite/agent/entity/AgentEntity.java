@@ -16,8 +16,20 @@ public class AgentEntity extends AbstractAuditableEntity {
     private String description;
     /** V8：选用模板；可空。外观真相源在 site_appearance。 */
     private Long templateId;
-    /** V60：引用的 AI 配置预设（#211）；可空，无预设时对话解析回退为无配置。 */
+    /** V60：引用的 AI 配置预设（#211）；#214 UoW-4 起停用（Prompt 改读本地副本，见下），列保留待 UoW-7 评估删除。 */
     private Long configPresetId;
+
+    /** V70：Prompt 本地副本（#214 UoW-4）；与 promptTemperature、promptTemplateId 三者皆空＝未配置，解析回退为无 profile。 */
+    private String promptSystemPrompt;
+
+    /** V70：本地副本温度（0–2）；NULL 用 Provider 默认。 */
+    private java.math.BigDecimal promptTemperature;
+
+    /** V70：来源模板留痕；仅记录出处，模板变更不联动本地副本。 */
+    private Long promptTemplateId;
+
+    /** V70：自有默认 skill 集（有序 JSON 数组文本）；NULL/空＝无自有集，正式对话回退平台 env 默认。 */
+    private String defaultSkillIds;
 
     /** V63：引用的对话链预设；#214 UoW-3 起停用（链改存自有字段，见下），列保留待 UoW-7 评估删除。 */
     private Long chainPresetId;
@@ -122,5 +134,37 @@ public class AgentEntity extends AbstractAuditableEntity {
 
     public void setConfigPresetId(Long configPresetId) {
         this.configPresetId = configPresetId;
+    }
+
+    public String getPromptSystemPrompt() {
+        return promptSystemPrompt;
+    }
+
+    public void setPromptSystemPrompt(String promptSystemPrompt) {
+        this.promptSystemPrompt = promptSystemPrompt;
+    }
+
+    public java.math.BigDecimal getPromptTemperature() {
+        return promptTemperature;
+    }
+
+    public void setPromptTemperature(java.math.BigDecimal promptTemperature) {
+        this.promptTemperature = promptTemperature;
+    }
+
+    public Long getPromptTemplateId() {
+        return promptTemplateId;
+    }
+
+    public void setPromptTemplateId(Long promptTemplateId) {
+        this.promptTemplateId = promptTemplateId;
+    }
+
+    public String getDefaultSkillIds() {
+        return defaultSkillIds;
+    }
+
+    public void setDefaultSkillIds(String defaultSkillIds) {
+        this.defaultSkillIds = defaultSkillIds;
     }
 }

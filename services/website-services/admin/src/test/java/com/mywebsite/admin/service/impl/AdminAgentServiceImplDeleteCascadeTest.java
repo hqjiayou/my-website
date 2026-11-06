@@ -7,8 +7,8 @@ import static org.mockito.Mockito.when;
 
 import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
-import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper;
+import com.mywebsite.admin.mapper.AdminAiPromptTemplateMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
 import com.mywebsite.admin.service.AdminAppearanceService;
@@ -32,8 +32,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
  * 软删——五路领域服务（外观／内容／媒体／知识／会话），以及 agent-core 三张表
  * （成员／用户记忆／会话分享）逐行软删。两路先后退役：模型入口随入口平台化退役
  * （#210 UoW-6：入口是平台资源、删站不级联，构造器已无该依赖）；Prompt 配置自
- * #211 起退出级联（旧 profile 表停写、配置预设是共享资源不随 agent 删除），本
- * agent 只清 config_preset_id 引用。
+ * #211 起退出级联，#214 UoW-4 后本地副本是 agent 自有数据、随 agent 行本身
+ * 软删，Prompt 模板是平台资源同样不随 agent 删除（构造器只留模板名解析依赖）。
  * 端到端逐表断言见 AdminAgentManagementMvcTest 的删站级联用例。
  */
 @ExtendWith(MockitoExtension.class)
@@ -49,7 +49,7 @@ class AdminAgentServiceImplDeleteCascadeTest {
     @Mock private AgentUserMemoryMapper agentUserMemoryMapper;
     @Mock private AgentAiConversationShareMapper conversationShareMapper;
     @Mock private AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper;
-    @Mock private AdminAiConfigPresetMapper configPresetMapper;
+    @Mock private AdminAiPromptTemplateMapper promptTemplateMapper;
 
     private AdminAgentServiceImpl service;
 
@@ -66,15 +66,16 @@ class AdminAgentServiceImplDeleteCascadeTest {
                 agentUserMemoryMapper,
                 conversationShareMapper,
                 subscriptionMapper,
-                configPresetMapper,
+                promptTemplateMapper,
                 new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     @Test
-    void deleteSiteCascadesAcrossAllPathsAndOnlyClearsPresetReference() {
+    void deleteSiteCascadesAcrossAllPaths() {
         AdminAgentEntity agent = new AdminAgentEntity();
         agent.setId(7L);
-        agent.setConfigPresetId(99L);
+        agent.setPromptTemplateId(99L);
+        agent.setPromptSystemPrompt("本地提示");
         when(adminAgentMapper.selectById(7L)).thenReturn(agent);
         when(adminAgentMapper.deleteById(7L)).thenReturn(1);
 
@@ -110,8 +111,9 @@ class AdminAgentServiceImplDeleteCascadeTest {
         verify(conversationShareMapper).deleteById(73L);
 
         assertThat(agent.getDeletedAt()).isNotNull();
-        // #211：预设本体不删（共享资源），本 agent 的引用被清空。
-        assertThat(agent.getConfigPresetId()).isNull();
+        // #214 UoW-4：本地副本随 agent 行软删（字段原样留在行上待软删过滤），
+        // 模板本体不在级联内（deleteSite 不触碰模板 Mapper 的任何写路径）。
+        assertThat(agent.getPromptSystemPrompt()).isEqualTo("本地提示");
         verify(adminAgentMapper).updateById(agent);
         verify(adminAgentMapper).deleteById(7L);
     }

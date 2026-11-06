@@ -10,7 +10,6 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mywebsite.admin.constant.AdminAgentMessageKeys;
-import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentConfigPresetUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentCreateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentDetailDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentKindUpdateRequest;
@@ -18,10 +17,10 @@ import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListItemDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListQuery;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentUpdateRequest;
 import com.mywebsite.admin.entity.AdminAgentEntity;
-import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
+import com.mywebsite.admin.entity.AdminAiPromptTemplateEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
-import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper;
+import com.mywebsite.admin.mapper.AdminAiPromptTemplateMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiKnowledgeService;
 import com.mywebsite.admin.service.AdminAppearanceService;
@@ -43,10 +42,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 列表关联摘要与类型／预设专属改写（Issue #213 UoW-A）：listSites 组装订阅数（订阅表
- * 行数，含创建者行）与两类预设名（批量预载、解析不到 name=null 但 id 照实）；
- * updateKind 走封闭枚举＋乐观锁（口径同 status）；updateConfigPreset 仿链预设改引用
- * （null 清除、不存在抛 NOT_FOUND）。
+ * 列表关联摘要与类型专属改写（Issue #213 UoW-A；Prompt 摘要 #214 UoW-4 改）：
+ * listSites 组装订阅数（订阅表行数，含创建者行）、自有链两模式成员数与 Prompt
+ * 本地副本摘要（来源模板名批量预载、解析不到 name=null 但 id 照实；已配置标记
+ * 与自有技能数由 agent 行字段计得）；updateKind 走封闭枚举＋乐观锁（口径同
+ * status）。基础信息更新不再触碰 Prompt 副本（专属端点在 AdminAiPromptTemplateService）。
  */
 @ExtendWith(MockitoExtension.class)
 class AdminAgentServiceImplAssociationsTest {
@@ -61,7 +61,7 @@ class AdminAgentServiceImplAssociationsTest {
     @Mock private AgentUserMemoryMapper agentUserMemoryMapper;
     @Mock private AgentAiConversationShareMapper conversationShareMapper;
     @Mock private AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper;
-    @Mock private AdminAiConfigPresetMapper configPresetMapper;
+    @Mock private AdminAiPromptTemplateMapper promptTemplateMapper;
 
     private AdminAgentServiceImpl service;
 
@@ -78,12 +78,12 @@ class AdminAgentServiceImplAssociationsTest {
                 agentUserMemoryMapper,
                 conversationShareMapper,
                 subscriptionMapper,
-                configPresetMapper,
+                promptTemplateMapper,
                 new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     private static AdminAgentEntity agent(
-            long id, String kind, String chainKeyEntryIds, String chainCliEntryIds, Long configPresetId) {
+            long id, String kind, String chainKeyEntryIds, String chainCliEntryIds, Long promptTemplateId) {
         AdminAgentEntity entity = new AdminAgentEntity();
         entity.setId(id);
         entity.setAgentCode("agent_" + id);
@@ -93,14 +93,16 @@ class AdminAgentServiceImplAssociationsTest {
         entity.setStatus("ACTIVE");
         entity.setChainKeyEntryIds(chainKeyEntryIds);
         entity.setChainCliEntryIds(chainCliEntryIds);
-        entity.setConfigPresetId(configPresetId);
+        entity.setPromptTemplateId(promptTemplateId);
         entity.setVersion(0);
         return entity;
     }
 
     @Test
-    void listSitesAssemblesSubscriptionCountsChainCountsAndConfigPresetName() {
+    void listSitesAssemblesSubscriptionCountsChainCountsAndPromptSummary() {
         AdminAgentEntity withAll = agent(1L, "AI_ONLY", "[11, 12]", "[13]", 21L);
+        withAll.setPromptSystemPrompt("本地提示");
+        withAll.setDefaultSkillIds("[\"s1\",\"s2\"]");
         AdminAgentEntity bare = agent(2L, "SITE", null, null, null);
         Page<AdminAgentEntity> page = new Page<>(1, 20);
         page.setRecords(List.of(withAll, bare));
@@ -111,10 +113,10 @@ class AdminAgentServiceImplAssociationsTest {
                 .thenReturn(List.of(
                         Map.of("agent_id", 1L, "subscription_count", 3L),
                         Map.of("agent_id", 2L, "subscription_count", 1L)));
-        AdminAiConfigPresetEntity configPreset = new AdminAiConfigPresetEntity();
-        configPreset.setId(21L);
-        configPreset.setName("严谨型");
-        when(configPresetMapper.selectBatchIds(anyCollection())).thenReturn(List.of(configPreset));
+        AdminAiPromptTemplateEntity template = new AdminAiPromptTemplateEntity();
+        template.setId(21L);
+        template.setName("严谨口径");
+        when(promptTemplateMapper.selectBatchIds(anyCollection())).thenReturn(List.of(template));
 
         PageResult<AdminAgentListItemDto> result = service.listSites(new AdminAgentListQuery(1, 20, null, null));
 
@@ -125,34 +127,41 @@ class AdminAgentServiceImplAssociationsTest {
         // 自有链摘要（#214 UoW-3）：两模式成员数直接由 agent 行的链字段计得
         assertThat(first.chainKeyCount()).isEqualTo(2);
         assertThat(first.chainCliCount()).isEqualTo(1);
-        assertThat(first.configPresetId()).isEqualTo(21L);
-        assertThat(first.configPresetName()).isEqualTo("严谨型");
+        // Prompt 摘要（#214 UoW-4）：留痕 id＋模板名、已配置标记、自有技能数同由行字段计得
+        assertThat(first.promptTemplateId()).isEqualTo(21L);
+        assertThat(first.promptTemplateName()).isEqualTo("严谨口径");
+        assertThat(first.promptConfigured()).isTrue();
+        assertThat(first.defaultSkillCount()).isEqualTo(2);
         AdminAgentListItemDto second = result.getRecords().get(1);
         assertThat(second.agentKind()).isEqualTo("SITE");
         assertThat(second.subscriptionCount()).isEqualTo(1L);
         assertThat(second.chainKeyCount()).isZero();
         assertThat(second.chainCliCount()).isZero();
-        assertThat(second.configPresetId()).isNull();
-        assertThat(second.configPresetName()).isNull();
+        assertThat(second.promptTemplateId()).isNull();
+        assertThat(second.promptTemplateName()).isNull();
+        assertThat(second.promptConfigured()).isFalse();
+        assertThat(second.defaultSkillCount()).isZero();
     }
 
     @Test
-    void listSitesKeepsConfigPresetIdButNullNameWhenPresetNoLongerResolves() {
-        // 配置预设已被删：批量预载查不到行，name 落 null，但 agent 上的引用 id 照实回。
+    void listSitesKeepsTemplateTraceButNullNameWhenTemplateNoLongerResolves() {
+        // 来源模板已被删：批量预载查不到行，name 落 null，但留痕 id 照实回；
+        // 只有留痕也算已配置（与解析的非 null profile 口径一致）。
         AdminAgentEntity stale = agent(3L, "SITE", null, null, 98L);
         Page<AdminAgentEntity> page = new Page<>(1, 20);
         page.setRecords(List.of(stale));
         page.setTotal(1);
         when(adminAgentMapper.selectPage(any(), any())).thenReturn(page);
         when(subscriptionMapper.selectMaps(any())).thenReturn(List.of());
-        when(configPresetMapper.selectBatchIds(anyCollection())).thenReturn(List.of());
+        when(promptTemplateMapper.selectBatchIds(anyCollection())).thenReturn(List.of());
 
         PageResult<AdminAgentListItemDto> result = service.listSites(new AdminAgentListQuery(1, 20, null, null));
 
         AdminAgentListItemDto item = result.getRecords().get(0);
         assertThat(item.subscriptionCount()).isZero();
-        assertThat(item.configPresetId()).isEqualTo(98L);
-        assertThat(item.configPresetName()).isNull();
+        assertThat(item.promptTemplateId()).isEqualTo(98L);
+        assertThat(item.promptTemplateName()).isNull();
+        assertThat(item.promptConfigured()).isTrue();
     }
 
     @Test
@@ -194,18 +203,21 @@ class AdminAgentServiceImplAssociationsTest {
     }
 
     @Test
-    void updateSiteRejectsMissingConfigPreset() {
-        // 全量更新带不存在的配置预设引用：与专属端点同口径抛 404，不落库撞外键变 500。
-        AdminAgentEntity entity = agent(6L, "SITE", null, null, null);
+    void updateSiteLeavesPromptCopyUntouched() {
+        // 基础信息全量更新不带 Prompt 字段（#214 UoW-4）：本地副本、留痕与自有
+        // 技能集原样保留，详情只回留痕 id。
+        AdminAgentEntity entity = agent(6L, "SITE", null, null, 21L);
+        entity.setPromptSystemPrompt("本地提示");
+        entity.setDefaultSkillIds("[\"s1\"]");
         when(adminAgentMapper.selectById(6L)).thenReturn(entity);
-        when(configPresetMapper.selectById(404L)).thenReturn(null);
+        when(adminAgentMapper.updateById(entity)).thenReturn(1);
 
-        assertThatThrownBy(() -> service.updateSite(
-                        6L, new AdminAgentUpdateRequest("Renamed", null, null, null, 404L, 0, null)))
-                .isInstanceOfSatisfying(
-                        BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
-        verify(adminAgentMapper, never()).updateById(any(AdminAgentEntity.class));
+        AdminAgentDetailDto detail =
+                service.updateSite(6L, new AdminAgentUpdateRequest("Renamed", null, null, null, 0, null));
+
+        assertThat(detail.promptTemplateId()).isEqualTo(21L);
+        assertThat(entity.getPromptSystemPrompt()).isEqualTo("本地提示");
+        assertThat(entity.getDefaultSkillIds()).isEqualTo("[\"s1\"]");
     }
 
     @Test
@@ -236,47 +248,6 @@ class AdminAgentServiceImplAssociationsTest {
                             assertThat(ex.getMessageKey())
                                     .isEqualTo(AdminAgentMessageKeys.AGENT_VERSION_CONFLICT);
                         });
-    }
-
-    @Test
-    void updateConfigPresetSetsReferenceAfterExistenceCheck() {
-        AdminAgentEntity entity = agent(6L, "SITE", null, null, null);
-        when(adminAgentMapper.selectById(6L)).thenReturn(entity);
-        AdminAiConfigPresetEntity preset = new AdminAiConfigPresetEntity();
-        preset.setId(21L);
-        when(configPresetMapper.selectById(21L)).thenReturn(preset);
-        when(adminAgentMapper.updateById(entity)).thenReturn(1);
-
-        AdminAgentDetailDto detail =
-                service.updateConfigPreset(6L, new AdminAgentConfigPresetUpdateRequest(21L));
-
-        assertThat(detail.configPresetId()).isEqualTo(21L);
-    }
-
-    @Test
-    void updateConfigPresetClearsReferenceOnNull() {
-        AdminAgentEntity entity = agent(6L, "SITE", null, null, 21L);
-        when(adminAgentMapper.selectById(6L)).thenReturn(entity);
-        when(adminAgentMapper.updateById(entity)).thenReturn(1);
-
-        AdminAgentDetailDto detail =
-                service.updateConfigPreset(6L, new AdminAgentConfigPresetUpdateRequest(null));
-
-        assertThat(detail.configPresetId()).isNull();
-        verify(configPresetMapper, never()).selectById(any());
-    }
-
-    @Test
-    void updateConfigPresetRejectsMissingPreset() {
-        AdminAgentEntity entity = agent(6L, "SITE", null, null, null);
-        when(adminAgentMapper.selectById(6L)).thenReturn(entity);
-        when(configPresetMapper.selectById(404L)).thenReturn(null);
-
-        assertThatThrownBy(() -> service.updateConfigPreset(6L, new AdminAgentConfigPresetUpdateRequest(404L)))
-                .isInstanceOfSatisfying(
-                        BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
-        verify(adminAgentMapper, never()).updateById(any(AdminAgentEntity.class));
     }
 
     @Test

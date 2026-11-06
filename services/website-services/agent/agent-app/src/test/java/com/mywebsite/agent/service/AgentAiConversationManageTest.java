@@ -24,7 +24,6 @@ import com.mywebsite.agent.mapper.AgentAiConversationShareMapper;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import com.mywebsite.agent.mapper.AgentAiConfigPresetMapper;
 import com.mywebsite.agent.mapper.AgentAiConversationMapper;
 import com.mywebsite.agent.mapper.AgentAiMessageMapper;
 import com.mywebsite.agent.mapper.AgentMapper;
@@ -50,9 +49,6 @@ class AgentAiConversationManageTest {
     private AgentMapper agentMapper;
 
     @Mock
-    private AgentAiConfigPresetMapper configPresetMapper;
-
-    @Mock
     private AgentAiConversationShareMapper shareMapper;
 
     private AgentAiConversationServiceImpl service;
@@ -60,12 +56,7 @@ class AgentAiConversationManageTest {
     @BeforeEach
     void setUp() {
         service = new AgentAiConversationServiceImpl(
-                conversationMapper,
-                messageMapper,
-                agentMapper,
-                configPresetMapper,
-                shareMapper,
-                new ObjectMapper());
+                conversationMapper, messageMapper, agentMapper, shareMapper, new ObjectMapper());
     }
 
     @Test

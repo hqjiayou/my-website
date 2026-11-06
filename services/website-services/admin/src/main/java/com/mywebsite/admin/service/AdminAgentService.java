@@ -1,6 +1,5 @@
 package com.mywebsite.admin.service;
 
-import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentConfigPresetUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentCreateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentDetailDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentKindUpdateRequest;
@@ -25,6 +24,4 @@ public interface AdminAgentService {
     AdminAgentDetailDto updateStatus(long id, AdminAgentStatusUpdateRequest request);
 
     AdminAgentDetailDto updateKind(long id, AdminAgentKindUpdateRequest request);
-
-    AdminAgentDetailDto updateConfigPreset(long id, AdminAgentConfigPresetUpdateRequest request);
 }

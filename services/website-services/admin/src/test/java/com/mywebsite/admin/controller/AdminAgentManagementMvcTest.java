@@ -14,7 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.admin.dto.AdminAppearanceDtos.AdminAppearanceConfigV1Dto;
-import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentConfigPresetUpdateRequest;
+import com.mywebsite.admin.dto.AdminAiPromptTemplateDtos.AdminAgentPromptConfigUpdateRequest;
+import com.mywebsite.admin.dto.AdminAiPromptTemplateDtos.AdminAgentPromptLoadTemplateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentCreateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentKindUpdateRequest;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentStatusUpdateRequest;
@@ -96,7 +97,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andExpect(jsonPath("$.data.description").value("desc"));
 
         String updateBody = MAPPER.writeValueAsString(
-                new AdminAgentUpdateRequest("Demo Agent Renamed", "SALON", null, "updated", null, 0));
+                new AdminAgentUpdateRequest("Demo Agent Renamed", "SALON", null, "updated", 0));
         mockMvc.perform(put("/api/admin/agents/" + id)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
@@ -164,7 +165,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminAgentUpdateRequest("First", "CLINIC", null, null, null, 0))))
+                                new AdminAgentUpdateRequest("First", "CLINIC", null, null, 0))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.version").value(1));
 
@@ -172,7 +173,7 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
                         .content(MAPPER.writeValueAsString(
-                                new AdminAgentUpdateRequest("Stale", "CLINIC", null, null, null, 0))))
+                                new AdminAgentUpdateRequest("Stale", "CLINIC", null, null, 0))))
                 .andExpect(status().isConflict());
     }
 
@@ -457,34 +458,50 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
     }
 
     @Test
-    void configPresetEndpointSetsClearsAndRejectsMissingPreset() throws Exception {
+    void promptConfigEndpointsSaveCopyLoadTemplateAndRejectMissingTemplate() throws Exception {
         String token = tokenFor(500L);
         long id = createAgent(token, "cfg_ep");
-        jdbcTemplate.update("INSERT INTO agent_ai_config_preset (id, name) VALUES (920001, '预设甲')");
+        jdbcTemplate.update(
+                "INSERT INTO agent_prompt_template (id, name, system_prompt, temperature)"
+                        + " VALUES (920001, '模板甲', '模板提示', 0.70)");
 
-        mockMvc.perform(put("/api/admin/agents/" + id + "/config-preset")
+        // 整表保存本地副本＋自有技能集。
+        mockMvc.perform(put("/api/admin/agents/" + id + "/ai/prompt")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(new AdminAgentConfigPresetUpdateRequest(920001L))))
+                        .content(MAPPER.writeValueAsString(new AdminAgentPromptConfigUpdateRequest(
+                                "本地提示", new java.math.BigDecimal("0.50"), java.util.List.of("s1", "s2")))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.configPresetId").value(920001));
+                .andExpect(jsonPath("$.data.systemPrompt").value("本地提示"))
+                .andExpect(jsonPath("$.data.defaultSkillIds[0]").value("s1"))
+                .andExpect(jsonPath("$.data.defaultSkillIds[1]").value("s2"));
 
-        // 预设不存在 → 404（与链预设改引用的 requirePreset 同口径）。
-        mockMvc.perform(put("/api/admin/agents/" + id + "/config-preset")
+        // 套用模板：prompt 部分被模板内容覆盖并写留痕，自有技能集不动。
+        mockMvc.perform(post("/api/admin/agents/" + id + "/ai/prompt/load-template")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(new AdminAgentConfigPresetUpdateRequest(920404L))))
+                        .content(MAPPER.writeValueAsString(new AdminAgentPromptLoadTemplateRequest(920001L))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.systemPrompt").value("模板提示"))
+                .andExpect(jsonPath("$.data.promptTemplateId").value(920001))
+                .andExpect(jsonPath("$.data.promptTemplateName").value("模板甲"))
+                .andExpect(jsonPath("$.data.defaultSkillIds[0]").value("s1"));
+        Object traced = jdbcTemplate.queryForObject(
+                "SELECT prompt_template_id FROM agent WHERE id = ?", Object.class, id);
+        assertThat(((Number) traced).longValue()).isEqualTo(920001L);
+
+        // 模板不存在 → 404（与链模板 requirePreset 同口径）。
+        mockMvc.perform(post("/api/admin/agents/" + id + "/ai/prompt/load-template")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(APPLICATION_JSON)
+                        .content(MAPPER.writeValueAsString(new AdminAgentPromptLoadTemplateRequest(920404L))))
                 .andExpect(status().isNotFound());
 
-        // null 即清除引用：直查落库值断言，不依赖 JSON null 序列化口径。
-        mockMvc.perform(put("/api/admin/agents/" + id + "/config-preset")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .contentType(APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(new AdminAgentConfigPresetUpdateRequest(null))))
-                .andExpect(status().isOk());
-        Object cleared = jdbcTemplate.queryForObject(
-                "SELECT config_preset_id FROM agent WHERE id = ?", Object.class, id);
-        assertThat(cleared).isNull();
+        // 读回与落库一致。
+        mockMvc.perform(get("/api/admin/agents/" + id + "/ai/prompt")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.systemPrompt").value("模板提示"));
     }
 
     @Test
@@ -500,10 +517,11 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andReturn();
         long id = MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        jdbcTemplate.update("INSERT INTO agent_ai_config_preset (id, name) VALUES (920012, '预设乙')");
+        jdbcTemplate.update("INSERT INTO agent_prompt_template (id, name) VALUES (920012, '模板乙')");
         jdbcTemplate.update(
                 "UPDATE agent SET chain_key_entry_ids = '[11, 12]', chain_cli_entry_ids = '[13]',"
-                        + " config_preset_id = 920012 WHERE id = ?",
+                        + " prompt_system_prompt = '本地提示', prompt_template_id = 920012,"
+                        + " default_skill_ids = '[\"s1\"]' WHERE id = ?",
                 id);
         jdbcTemplate.update(
                 "INSERT INTO agent_ai_knowledge_base (id, created_by_agent_id, name) VALUES (920021, ?, '空间一')",
@@ -517,7 +535,8 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                 "INSERT INTO agent_ai_knowledge_base_subscription (base_id, agent_id) VALUES (920022, ?)", id);
 
         // 关联摘要：kind 缺省 SITE、订阅数＝订阅表行数（2，含创建者行口径）、自有链
-        // 两模式成员数（#214 UoW-3）与配置预设名解析出。
+        // 两模式成员数（#214 UoW-3）与 Prompt 本地副本摘要（#214 UoW-4：留痕模板名、
+        // 已配置标记、自有技能数）解析出。
         mockMvc.perform(get("/api/admin/agents")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .param("agentType", "GYOSEISHOSHI"))
@@ -526,7 +545,8 @@ class AdminAgentManagementMvcTest extends AbstractAdminSpringBootTest {
                                 ("$.data.records[?(@.agentCode == '%s' && @.agentKind == 'SITE'"
                                         + " && @.subscriptionCount == 2"
                                         + " && @.chainKeyCount == 2 && @.chainCliCount == 1"
-                                        + " && @.configPresetId == 920012 && @.configPresetName == '预设乙')]")
+                                        + " && @.promptTemplateId == 920012 && @.promptTemplateName == '模板乙'"
+                                        + " && @.promptConfigured == true && @.defaultSkillCount == 1)]")
                                         .formatted(agentCode))
                         .exists());
     }

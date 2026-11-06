@@ -12,11 +12,9 @@ import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionDto;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiMcpSelectionUpdateRequest;
 import com.mywebsite.admin.dto.AdminAiPreviewDtos.AdminAiRuntimeDto;
 import com.mywebsite.admin.entity.AdminAgentEntity;
-import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeBaseEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeBaseSubscriptionEntity;
 import com.mywebsite.admin.entity.AdminAiKnowledgeDocumentEntity;
-import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeDocumentMapper;
@@ -25,6 +23,8 @@ import com.mywebsite.admin.service.AdminAiConversationService;
 import com.mywebsite.admin.service.AdminAiModelEntryService;
 import com.mywebsite.admin.service.AdminAiModelEntryService.ChainCandidate;
 import com.mywebsite.admin.service.AdminAiPreviewService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.agent.client.AgentClient;
@@ -74,7 +74,6 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     private final AgentClient agentClient;
     private final AgentProperties agentProperties;
     private final AdminAgentMapper adminAgentMapper;
-    private final AdminAiConfigPresetMapper configPresetMapper;
     private final AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper;
     private final AdminAiKnowledgeBaseMapper knowledgeBaseMapper;
     private final AdminAiKnowledgeBaseSubscriptionMapper knowledgeSubscriptionMapper;
@@ -91,7 +90,6 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
             AgentClient agentClient,
             AgentProperties agentProperties,
             AdminAgentMapper adminAgentMapper,
-            AdminAiConfigPresetMapper configPresetMapper,
             AdminAiKnowledgeDocumentMapper knowledgeDocumentMapper,
             AdminAiKnowledgeBaseMapper knowledgeBaseMapper,
             AdminAiKnowledgeBaseSubscriptionMapper knowledgeSubscriptionMapper,
@@ -106,7 +104,6 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
         this.agentClient = agentClient;
         this.agentProperties = agentProperties;
         this.adminAgentMapper = adminAgentMapper;
-        this.configPresetMapper = configPresetMapper;
         this.knowledgeDocumentMapper = knowledgeDocumentMapper;
         this.knowledgeBaseMapper = knowledgeBaseMapper;
         this.knowledgeSubscriptionMapper = knowledgeSubscriptionMapper;
@@ -160,7 +157,7 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
                 null,
                 loadPromptProfile(agentId),
                 toHistory(request.history()),
-                normalizeSkills(request.skills()),
+                resolveSkills(agentId, request.skills()),
                 toTodos(request.todos()),
                 primary,
                 callbackBaseUrl(),
@@ -468,27 +465,48 @@ public class AdminAiPreviewServiceImpl implements AdminAiPreviewService {
     }
 
     /**
-     * 配置预设解析（Issue #211 UoW-8）：与正式对话同口径——agent →
-     * {@code config_preset_id} → 预设行；无引用返回 null（未配置常态，不记日志），
-     * 引用悬空或预设已软删返回 null 并记 warn。旧表
-     * {@code agent_ai_prompt_profile} 自本单起停读。试聊 skills 仍走请求级
-     * {@code normalizeSkills}，不读预设默认集（UoW-9 只改正式对话）。
+     * Prompt 解析（Issue #214 UoW-4）：与正式对话同口径——直接读 agent 行上的
+     * 本地副本（{@code prompt_system_prompt}／{@code prompt_temperature}，来源
+     * 留痕 {@code prompt_template_id}）。三者皆空返回 null（未配置常态，不记
+     * 日志），与旧「无预设返回 null」逐字一致；任一非空即组装 profile（含旧
+     * 名称型预设拷出的「只有留痕、prompt 与温度皆空」形态，旧解析同样返回
+     * 非 null profile）。配置预设与旧 profile 表自本单起停读。
      */
     private AgentPromptProfile loadPromptProfile(long agentId) {
         AdminAgentEntity agent = adminAgentMapper.selectById(agentId);
-        if (agent == null || agent.getConfigPresetId() == null) {
+        if (agent == null
+                || (agent.getPromptTemplateId() == null
+                        && !StringUtils.hasText(agent.getPromptSystemPrompt())
+                        && agent.getPromptTemperature() == null)) {
             return null;
         }
-        AdminAiConfigPresetEntity preset = configPresetMapper.selectById(agent.getConfigPresetId());
-        if (preset == null) {
-            log.warn(
-                    "agent {} references config preset {} which is missing or deleted; preview falls back to no profile",
-                    agentId,
-                    agent.getConfigPresetId());
+        Double temperature =
+                agent.getPromptTemperature() == null ? null : agent.getPromptTemperature().doubleValue();
+        return new AgentPromptProfile(agent.getPromptSystemPrompt(), temperature);
+    }
+
+    /**
+     * 试聊 skills（Issue #214 UoW-4）：请求显式给出（含空数组）时以请求为准
+     * （试聊台的逐轮选集）；请求缺省（null）时改读 agent 自有默认集，与正式
+     * 对话同口径——自有集为空/脏 JSON 时返回 null，Python env 兜底不变。
+     */
+    private List<String> resolveSkills(long agentId, List<String> requestedSkills) {
+        if (requestedSkills != null) {
+            return normalizeSkills(requestedSkills);
+        }
+        AdminAgentEntity agent = adminAgentMapper.selectById(agentId);
+        if (agent == null || !StringUtils.hasText(agent.getDefaultSkillIds())) {
             return null;
         }
-        Double temperature = preset.getTemperature() == null ? null : preset.getTemperature().doubleValue();
-        return new AgentPromptProfile(preset.getSystemPrompt(), temperature);
+        try {
+            List<String> parsed =
+                    objectMapper.readValue(agent.getDefaultSkillIds(), new TypeReference<List<String>>() {});
+            List<String> skills = normalizeSkills(parsed);
+            return skills.isEmpty() ? null : skills;
+        } catch (JsonProcessingException ex) {
+            log.warn("agent {} has malformed default_skill_ids, preview treated as no default skills", agentId, ex);
+            return null;
+        }
     }
 
     /**

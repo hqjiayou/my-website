@@ -24,9 +24,25 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
     private String description;
     /** V8：选用模板；可空。 */
     private Long templateId;
-    /** V60：引用的 AI 配置预设（#211）；可空。null 即清除引用，须 ALWAYS 否则 updateById 跳过空值。 */
+    /** V60：引用的 AI 配置预设（#211）；#214 UoW-4 起停用（Prompt 改存本地副本，见下），列保留待 UoW-7 评估删除。 */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Long configPresetId;
+
+    /** V70：Prompt 本地副本（#214 UoW-4）；NULL＝未配置。清空副本须写 null，须 ALWAYS。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String promptSystemPrompt;
+
+    /** V70：本地副本温度（0–2）；NULL 用 Provider 默认。须 ALWAYS 同上。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private java.math.BigDecimal promptTemperature;
+
+    /** V70：来源模板留痕（套用/另存时写入）；仅记录出处，模板变更不联动本地副本。须 ALWAYS 同上。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Long promptTemplateId;
+
+    /** V70：自有默认 skill 集（有序 JSON 数组文本）；NULL/空＝无自有集，解析回退 env 兜底。须 ALWAYS 同上。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String defaultSkillIds;
 
     /** V63：引用的对话链预设；#214 UoW-3 起停用（链改存自有字段，见下），列保留待 UoW-7 评估删除。 */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
@@ -134,5 +150,37 @@ public class AdminAgentEntity extends AbstractAuditableEntity {
 
     public void setConfigPresetId(Long configPresetId) {
         this.configPresetId = configPresetId;
+    }
+
+    public String getPromptSystemPrompt() {
+        return promptSystemPrompt;
+    }
+
+    public void setPromptSystemPrompt(String promptSystemPrompt) {
+        this.promptSystemPrompt = promptSystemPrompt;
+    }
+
+    public java.math.BigDecimal getPromptTemperature() {
+        return promptTemperature;
+    }
+
+    public void setPromptTemperature(java.math.BigDecimal promptTemperature) {
+        this.promptTemperature = promptTemperature;
+    }
+
+    public Long getPromptTemplateId() {
+        return promptTemplateId;
+    }
+
+    public void setPromptTemplateId(Long promptTemplateId) {
+        this.promptTemplateId = promptTemplateId;
+    }
+
+    public String getDefaultSkillIds() {
+        return defaultSkillIds;
+    }
+
+    public void setDefaultSkillIds(String defaultSkillIds) {
+        this.defaultSkillIds = defaultSkillIds;
     }
 }
