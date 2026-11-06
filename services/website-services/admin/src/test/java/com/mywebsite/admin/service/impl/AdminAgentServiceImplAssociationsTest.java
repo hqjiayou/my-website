@@ -18,10 +18,8 @@ import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListItemDto;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentListQuery;
 import com.mywebsite.admin.dto.AdminAgentDtos.AdminAgentUpdateRequest;
 import com.mywebsite.admin.entity.AdminAgentEntity;
-import com.mywebsite.admin.entity.AdminAiChainPresetEntity;
 import com.mywebsite.admin.entity.AdminAiConfigPresetEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
-import com.mywebsite.admin.mapper.AdminAiChainPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
@@ -63,7 +61,6 @@ class AdminAgentServiceImplAssociationsTest {
     @Mock private AgentUserMemoryMapper agentUserMemoryMapper;
     @Mock private AgentAiConversationShareMapper conversationShareMapper;
     @Mock private AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper;
-    @Mock private AdminAiChainPresetMapper chainPresetMapper;
     @Mock private AdminAiConfigPresetMapper configPresetMapper;
 
     private AdminAgentServiceImpl service;
@@ -81,11 +78,12 @@ class AdminAgentServiceImplAssociationsTest {
                 agentUserMemoryMapper,
                 conversationShareMapper,
                 subscriptionMapper,
-                chainPresetMapper,
-                configPresetMapper);
+                configPresetMapper,
+                new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
-    private static AdminAgentEntity agent(long id, String kind, Long chainPresetId, Long configPresetId) {
+    private static AdminAgentEntity agent(
+            long id, String kind, String chainKeyEntryIds, String chainCliEntryIds, Long configPresetId) {
         AdminAgentEntity entity = new AdminAgentEntity();
         entity.setId(id);
         entity.setAgentCode("agent_" + id);
@@ -93,16 +91,17 @@ class AdminAgentServiceImplAssociationsTest {
         entity.setAgentType("PERSONAL");
         entity.setAgentKind(kind);
         entity.setStatus("ACTIVE");
-        entity.setChainPresetId(chainPresetId);
+        entity.setChainKeyEntryIds(chainKeyEntryIds);
+        entity.setChainCliEntryIds(chainCliEntryIds);
         entity.setConfigPresetId(configPresetId);
         entity.setVersion(0);
         return entity;
     }
 
     @Test
-    void listSitesAssemblesSubscriptionCountsAndPresetNames() {
-        AdminAgentEntity withAll = agent(1L, "AI_ONLY", 11L, 21L);
-        AdminAgentEntity bare = agent(2L, "SITE", null, null);
+    void listSitesAssemblesSubscriptionCountsChainCountsAndConfigPresetName() {
+        AdminAgentEntity withAll = agent(1L, "AI_ONLY", "[11, 12]", "[13]", 21L);
+        AdminAgentEntity bare = agent(2L, "SITE", null, null, null);
         Page<AdminAgentEntity> page = new Page<>(1, 20);
         page.setRecords(List.of(withAll, bare));
         page.setTotal(2);
@@ -112,10 +111,6 @@ class AdminAgentServiceImplAssociationsTest {
                 .thenReturn(List.of(
                         Map.of("agent_id", 1L, "subscription_count", 3L),
                         Map.of("agent_id", 2L, "subscription_count", 1L)));
-        AdminAiChainPresetEntity chainPreset = new AdminAiChainPresetEntity();
-        chainPreset.setId(11L);
-        chainPreset.setName("平台默认链");
-        when(chainPresetMapper.selectBatchIds(anyCollection())).thenReturn(List.of(chainPreset));
         AdminAiConfigPresetEntity configPreset = new AdminAiConfigPresetEntity();
         configPreset.setId(21L);
         configPreset.setName("严谨型");
@@ -127,44 +122,42 @@ class AdminAgentServiceImplAssociationsTest {
         AdminAgentListItemDto first = result.getRecords().get(0);
         assertThat(first.agentKind()).isEqualTo("AI_ONLY");
         assertThat(first.subscriptionCount()).isEqualTo(3L);
-        assertThat(first.chainPresetId()).isEqualTo(11L);
-        assertThat(first.chainPresetName()).isEqualTo("平台默认链");
+        // 自有链摘要（#214 UoW-3）：两模式成员数直接由 agent 行的链字段计得
+        assertThat(first.chainKeyCount()).isEqualTo(2);
+        assertThat(first.chainCliCount()).isEqualTo(1);
         assertThat(first.configPresetId()).isEqualTo(21L);
         assertThat(first.configPresetName()).isEqualTo("严谨型");
         AdminAgentListItemDto second = result.getRecords().get(1);
         assertThat(second.agentKind()).isEqualTo("SITE");
         assertThat(second.subscriptionCount()).isEqualTo(1L);
-        assertThat(second.chainPresetId()).isNull();
-        assertThat(second.chainPresetName()).isNull();
+        assertThat(second.chainKeyCount()).isZero();
+        assertThat(second.chainCliCount()).isZero();
         assertThat(second.configPresetId()).isNull();
         assertThat(second.configPresetName()).isNull();
     }
 
     @Test
-    void listSitesKeepsIdButNullNameWhenPresetNoLongerResolves() {
-        // 预设已被删：批量预载查不到行，name 落 null，但 agent 上的引用 id 照实回。
-        AdminAgentEntity stale = agent(3L, "SITE", 99L, 98L);
+    void listSitesKeepsConfigPresetIdButNullNameWhenPresetNoLongerResolves() {
+        // 配置预设已被删：批量预载查不到行，name 落 null，但 agent 上的引用 id 照实回。
+        AdminAgentEntity stale = agent(3L, "SITE", null, null, 98L);
         Page<AdminAgentEntity> page = new Page<>(1, 20);
         page.setRecords(List.of(stale));
         page.setTotal(1);
         when(adminAgentMapper.selectPage(any(), any())).thenReturn(page);
         when(subscriptionMapper.selectMaps(any())).thenReturn(List.of());
-        when(chainPresetMapper.selectBatchIds(anyCollection())).thenReturn(List.of());
         when(configPresetMapper.selectBatchIds(anyCollection())).thenReturn(List.of());
 
         PageResult<AdminAgentListItemDto> result = service.listSites(new AdminAgentListQuery(1, 20, null, null));
 
         AdminAgentListItemDto item = result.getRecords().get(0);
         assertThat(item.subscriptionCount()).isZero();
-        assertThat(item.chainPresetId()).isEqualTo(99L);
-        assertThat(item.chainPresetName()).isNull();
         assertThat(item.configPresetId()).isEqualTo(98L);
         assertThat(item.configPresetName()).isNull();
     }
 
     @Test
     void updateKindSwitchesKindAndReturnsDetail() {
-        AdminAgentEntity entity = agent(5L, "SITE", null, null);
+        AdminAgentEntity entity = agent(5L, "SITE", null, null, null);
         when(adminAgentMapper.selectById(5L)).thenReturn(entity);
         when(adminAgentMapper.updateById(entity)).thenReturn(1);
 
@@ -176,7 +169,7 @@ class AdminAgentServiceImplAssociationsTest {
 
     @Test
     void updateKindRejectsValueOutsideClosedEnum() {
-        when(adminAgentMapper.selectById(5L)).thenReturn(agent(5L, "SITE", null, null));
+        when(adminAgentMapper.selectById(5L)).thenReturn(agent(5L, "SITE", null, null, null));
 
         assertThatThrownBy(() -> service.updateKind(5L, new AdminAgentKindUpdateRequest("HYBRID", 0)))
                 .isInstanceOfSatisfying(
@@ -203,7 +196,7 @@ class AdminAgentServiceImplAssociationsTest {
     @Test
     void updateSiteRejectsMissingConfigPreset() {
         // 全量更新带不存在的配置预设引用：与专属端点同口径抛 404，不落库撞外键变 500。
-        AdminAgentEntity entity = agent(6L, "SITE", null, null);
+        AdminAgentEntity entity = agent(6L, "SITE", null, null, null);
         when(adminAgentMapper.selectById(6L)).thenReturn(entity);
         when(configPresetMapper.selectById(404L)).thenReturn(null);
 
@@ -231,7 +224,7 @@ class AdminAgentServiceImplAssociationsTest {
 
     @Test
     void updateKindSurfacesOptimisticLockConflict() {
-        AdminAgentEntity entity = agent(5L, "SITE", null, null);
+        AdminAgentEntity entity = agent(5L, "SITE", null, null, null);
         when(adminAgentMapper.selectById(5L)).thenReturn(entity);
         when(adminAgentMapper.updateById(entity)).thenReturn(0);
 
@@ -247,7 +240,7 @@ class AdminAgentServiceImplAssociationsTest {
 
     @Test
     void updateConfigPresetSetsReferenceAfterExistenceCheck() {
-        AdminAgentEntity entity = agent(6L, "SITE", null, null);
+        AdminAgentEntity entity = agent(6L, "SITE", null, null, null);
         when(adminAgentMapper.selectById(6L)).thenReturn(entity);
         AdminAiConfigPresetEntity preset = new AdminAiConfigPresetEntity();
         preset.setId(21L);
@@ -262,7 +255,7 @@ class AdminAgentServiceImplAssociationsTest {
 
     @Test
     void updateConfigPresetClearsReferenceOnNull() {
-        AdminAgentEntity entity = agent(6L, "SITE", null, 21L);
+        AdminAgentEntity entity = agent(6L, "SITE", null, null, 21L);
         when(adminAgentMapper.selectById(6L)).thenReturn(entity);
         when(adminAgentMapper.updateById(entity)).thenReturn(1);
 
@@ -275,7 +268,7 @@ class AdminAgentServiceImplAssociationsTest {
 
     @Test
     void updateConfigPresetRejectsMissingPreset() {
-        AdminAgentEntity entity = agent(6L, "SITE", null, null);
+        AdminAgentEntity entity = agent(6L, "SITE", null, null, null);
         when(adminAgentMapper.selectById(6L)).thenReturn(entity);
         when(configPresetMapper.selectById(404L)).thenReturn(null);
 

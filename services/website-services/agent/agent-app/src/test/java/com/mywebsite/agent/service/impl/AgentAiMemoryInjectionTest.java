@@ -85,9 +85,6 @@ class AgentAiMemoryInjectionTest {
     @Mock
     private com.mywebsite.agent.mapper.AgentMapper agentMapper;
 
-    @Mock
-    private com.mywebsite.agent.mapper.AgentAiChainPresetMapper chainPresetMapper;
-
     private AgentAiServiceImpl service;
 
     @BeforeEach
@@ -109,7 +106,6 @@ class AgentAiMemoryInjectionTest {
                 org.mockito.Mockito.mock(AgentExperienceLessonService.class),
                 org.mockito.Mockito.mock(AgentMcpSelectionService.class),
                 agentMapper,
-                chainPresetMapper,
                 org.mockito.Mockito.mock(KnowledgeSpaceResolver.class));
     }
 
@@ -152,16 +148,11 @@ class AgentAiMemoryInjectionTest {
         entry.setEnabled(true);
         entry.setDefaultEntry(true);
         entry.setMode("KEY");
-        // 链预设口径（Issue #210 UoW-7）：agent 10 引用只含该入口的预设
+        // 自有链口径（Issue #214 UoW-3）：agent 10 的 KEY 自有链只含该入口
         com.mywebsite.agent.entity.AgentEntity agent = new com.mywebsite.agent.entity.AgentEntity();
         agent.setId(10L);
-        agent.setChainPresetId(900L);
+        agent.setChainKeyEntryIds("[3]");
         when(agentMapper.selectById(10L)).thenReturn(agent);
-        com.mywebsite.agent.entity.AgentAiChainPresetEntity preset =
-                new com.mywebsite.agent.entity.AgentAiChainPresetEntity();
-        preset.setId(900L);
-        preset.setEntryIds("[3]");
-        when(chainPresetMapper.selectById(900L)).thenReturn(preset);
         when(modelEntryMapper.selectBatchIds(any())).thenReturn(List.of(entry));
         when(modelEntryCipher.decrypt("enc:key-3")).thenReturn("key-3");
 

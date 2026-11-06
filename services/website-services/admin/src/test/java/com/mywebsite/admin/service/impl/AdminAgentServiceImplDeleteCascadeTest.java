@@ -7,7 +7,6 @@ import static org.mockito.Mockito.when;
 
 import com.mywebsite.admin.entity.AdminAgentEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
-import com.mywebsite.admin.mapper.AdminAiChainPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiConfigPresetMapper;
 import com.mywebsite.admin.mapper.AdminAiKnowledgeBaseSubscriptionMapper;
 import com.mywebsite.admin.service.AdminAiConversationService;
@@ -50,7 +49,6 @@ class AdminAgentServiceImplDeleteCascadeTest {
     @Mock private AgentUserMemoryMapper agentUserMemoryMapper;
     @Mock private AgentAiConversationShareMapper conversationShareMapper;
     @Mock private AdminAiKnowledgeBaseSubscriptionMapper subscriptionMapper;
-    @Mock private AdminAiChainPresetMapper chainPresetMapper;
     @Mock private AdminAiConfigPresetMapper configPresetMapper;
 
     private AdminAgentServiceImpl service;
@@ -68,8 +66,8 @@ class AdminAgentServiceImplDeleteCascadeTest {
                 agentUserMemoryMapper,
                 conversationShareMapper,
                 subscriptionMapper,
-                chainPresetMapper,
-                configPresetMapper);
+                configPresetMapper,
+                new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     @Test

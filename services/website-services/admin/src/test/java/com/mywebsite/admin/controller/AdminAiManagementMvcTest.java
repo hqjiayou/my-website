@@ -684,7 +684,7 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
         long keyId =
                 MAPPER.readTree(keyCreated.getResponse().getContentAsString()).path("data").path("id").asLong();
 
-        // 链预设口径（Issue #210 UoW-7）：两条入口装进该 agent 的链预设后才成链
+        // 自有链口径（Issue #214 UoW-3）：两条入口按各自模式写进该 agent 的自有链后才成链
         givenAgentChain(token, agentId, cliId, keyId);
 
         // mode 缺省：CLI 链非空 → 落到 CLI，与 previewStream 的默认判定（previewMode）同一路径。
@@ -1102,83 +1102,50 @@ class AdminAiManagementMvcTest extends AbstractAdminSpringBootTest {
                 .andReturn();
         long entryId =
                 MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
-        // 链预设口径（Issue #210 UoW-7）：入口本身不再决定链，把它累积进该 agent 的
-        // 链预设并让 agent 引用，预览组链才看得到（同方法内多次调用按创建序累积）。
+        // 自有链口径（Issue #214 UoW-3）：入口本身不再决定链，把它累积进该 agent 的
+        // KEY 自有链（本辅助建的入口 mode 恒 KEY），预览组链才看得到（同方法内
+        // 多次调用按创建序累积、整表重写）。
         java.util.List<Long> memberIds =
                 chainEntryIdsByAgent.computeIfAbsent(agentId, key -> new java.util.ArrayList<>());
         memberIds.add(entryId);
-        Long presetId = chainPresetIdsByAgent.get(agentId);
-        if (presetId == null) {
-            chainPresetIdsByAgent.put(agentId, createChainPreset(token, memberIds));
-            assignChainPreset(token, agentId, chainPresetIdsByAgent.get(agentId));
-        } else {
-            updateChainPresetMembers(token, presetId, memberIds);
-        }
+        saveAgentOwnChain(token, agentId, "KEY", memberIds);
         return entryId;
     }
 
-    /** 本方法内各 agent 的链预设夹具状态（JUnit 每方法新实例，天然隔离）。 */
-    private final java.util.Map<Long, Long> chainPresetIdsByAgent = new java.util.HashMap<>();
-
+    /** 本方法内各 agent 的 KEY 自有链夹具状态（JUnit 每方法新实例，天然隔离）。 */
     private final java.util.Map<Long, java.util.List<Long>> chainEntryIdsByAgent = new java.util.HashMap<>();
 
-    /** 建一条链预设（成员为给定的有序 entry ids），返回预设 id。 */
-    private long createChainPreset(String token, java.util.List<Long> entryIds) throws Exception {
-        ObjectNode preset = MAPPER.createObjectNode();
-        preset.put("name", "test-chain-" + System.nanoTime());
-        var ids = preset.putArray("entryIds");
+    /** 整表保存 agent 某模式的自有链（成员顺序即链序）。 */
+    private void saveAgentOwnChain(
+            String token, long agentId, String mode, java.util.List<Long> entryIds) throws Exception {
+        ObjectNode body = MAPPER.createObjectNode();
+        var ids = body.putArray("entryIds");
         for (Long entryId : entryIds) {
             ids.add(entryId);
         }
-        MvcResult created = mockMvc.perform(post("/api/admin/ai/chain-presets")
+        mockMvc.perform(put("/api/admin/agents/" + agentId + "/ai/chain/" + mode)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(preset)))
-                .andExpect(status().isOk())
-                .andReturn();
-        return MAPPER.readTree(created.getResponse().getContentAsString()).path("data").path("id").asLong();
-    }
-
-    /** 覆盖既有预设的成员（先读当前版本再整表更新）。 */
-    private void updateChainPresetMembers(String token, long presetId, java.util.List<Long> entryIds)
-            throws Exception {
-        MvcResult current = mockMvc.perform(get("/api/admin/ai/chain-presets/" + presetId)
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
-                .andExpect(status().isOk())
-                .andReturn();
-        var currentData = MAPPER.readTree(current.getResponse().getContentAsString()).path("data");
-        ObjectNode preset = MAPPER.createObjectNode();
-        preset.put("name", currentData.path("name").asText());
-        preset.put("version", currentData.path("version").asInt());
-        var ids = preset.putArray("entryIds");
-        for (Long entryId : entryIds) {
-            ids.add(entryId);
-        }
-        mockMvc.perform(put("/api/admin/ai/chain-presets/" + presetId)
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(preset)))
+                        .content(MAPPER.writeValueAsString(body)))
                 .andExpect(status().isOk());
     }
 
-    /** 让 agent 引用给定预设（保存即换链）。 */
-    private void assignChainPreset(String token, long agentId, long presetId) throws Exception {
-        ObjectNode ref = MAPPER.createObjectNode();
-        ref.put("chainPresetId", presetId);
-        mockMvc.perform(put("/api/admin/agents/" + agentId + "/ai/chain-preset")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(MAPPER.writeValueAsString(ref)))
-                .andExpect(status().isOk());
-    }
-
-    /** 一次性夹具：建只含给定入口的预设并让 agent 引用（内联建入口的用例用）。 */
+    /**
+     * 一次性夹具：把给定入口按各自的模式写进 agent 对应模式的自有链
+     * （内联建入口的用例用；混模式调用按入口 mode 分组、组内保序）。
+     */
     private void givenAgentChain(String token, long agentId, long... entryIds) throws Exception {
-        java.util.List<Long> ids = new java.util.ArrayList<>();
+        java.util.Map<String, java.util.List<Long>> byMode = new java.util.LinkedHashMap<>();
         for (long entryId : entryIds) {
-            ids.add(entryId);
+            AdminAiModelEntryEntity entry = modelEntryMapper.selectById(entryId);
+            String mode = entry == null || entry.getMode() == null || entry.getMode().isBlank()
+                    ? "KEY"
+                    : entry.getMode().trim().toUpperCase(java.util.Locale.ROOT);
+            byMode.computeIfAbsent(mode, key -> new java.util.ArrayList<>()).add(entryId);
         }
-        assignChainPreset(token, agentId, createChainPreset(token, ids));
+        for (var group : byMode.entrySet()) {
+            saveAgentOwnChain(token, agentId, group.getKey(), group.getValue());
+        }
     }
 
     private long createSite(String token) throws Exception {

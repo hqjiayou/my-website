@@ -9,8 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.admin.constant.AdminAiChainPresetMessageKeys;
-import com.mywebsite.admin.dto.AdminAiChainPresetDtos.AdminAgentChainPresetDto;
-import com.mywebsite.admin.dto.AdminAiChainPresetDtos.AdminAgentChainPresetUpdateRequest;
+import com.mywebsite.admin.dto.AdminAiChainPresetDtos.AdminAgentChainDto;
 import com.mywebsite.admin.dto.AdminAiChainPresetDtos.AdminAiChainPresetCreateRequest;
 import com.mywebsite.admin.dto.AdminAiChainPresetDtos.AdminAiChainPresetDto;
 import com.mywebsite.admin.dto.AdminAiChainPresetDtos.AdminAiChainPresetUpdateRequest;
@@ -30,8 +29,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 对话链预设服务（Issue #210 UoW-7）：成员归一化与存在性校验、被引用删除拦截、
- * agent 引用读写与组链读路径。
+ * 对话链服务（Issue #210 UoW-7 引入，#214 UoW-3 链内置化）：模板库 CRUD
+ * （成员归一化与存在性校验、保存剔除悬空成员、删除无引用拦截）与 agent
+ * 自有链读写（按模式整表保存、模式一致性校验、模板载入是拷贝、另存为模板、
+ * 组链读路径）。
  */
 @ExtendWith(MockitoExtension.class)
 class AdminAiChainPresetServiceImplTest {
@@ -54,8 +55,13 @@ class AdminAiChainPresetServiceImplTest {
     }
 
     private static AdminAiModelEntryEntity entry(long id) {
+        return entry(id, null);
+    }
+
+    private static AdminAiModelEntryEntity entry(long id, String mode) {
         AdminAiModelEntryEntity entry = new AdminAiModelEntryEntity();
         entry.setId(id);
+        entry.setMode(mode);
         return entry;
     }
 
@@ -69,13 +75,18 @@ class AdminAiChainPresetServiceImplTest {
         return preset;
     }
 
-    private static AdminAgentEntity agent(long id, Long chainPresetId) {
+    private static AdminAgentEntity agent(long id, String keyEntryIds, String cliEntryIds) {
         AdminAgentEntity agent = new AdminAgentEntity();
         agent.setId(id);
-        agent.setChainPresetId(chainPresetId);
+        agent.setChainKeyEntryIds(keyEntryIds);
+        agent.setChainCliEntryIds(cliEntryIds);
         agent.setVersion(0);
         return agent;
     }
+
+    // ------------------------------------------------------------------
+    // 模板库
+    // ------------------------------------------------------------------
 
     @Test
     void createPresetNormalizesMembersAndFixesPurposeToChat() {
@@ -169,87 +180,183 @@ class AdminAiChainPresetServiceImplTest {
     }
 
     @Test
-    void deletePresetBlockedWhileReferenced() {
+    void deletePresetSucceedsWithoutReferenceGuard() {
+        // 链内置化后模板不被引用（套用是拷贝）：删除不再查引用数、不再拦截。
         when(chainPresetMapper.selectById(7L)).thenReturn(preset(7L, "[1]"));
-        when(agentMapper.selectCount(any())).thenReturn(2L);
-
-        assertThatThrownBy(() -> service.deletePreset(7L))
-                .isInstanceOfSatisfying(
-                        BusinessException.class,
-                        ex -> {
-                            assertThat(ex.getCode()).isEqualTo(ErrorCode.CONFLICT.getCode());
-                            assertThat(ex.getMessageKey())
-                                    .isEqualTo(AdminAiChainPresetMessageKeys.PRESET_REFERENCED);
-                            assertThat(ex.getMessageArgs()).containsExactly(2L);
-                        });
-        verify(chainPresetMapper, never()).deleteById(any());
-    }
-
-    @Test
-    void deletePresetSucceedsWhenUnreferenced() {
-        when(chainPresetMapper.selectById(7L)).thenReturn(preset(7L, "[1]"));
-        when(agentMapper.selectCount(any())).thenReturn(0L);
 
         service.deletePreset(7L);
 
         verify(chainPresetMapper).updateById(any(AdminAiChainPresetEntity.class));
         verify(chainPresetMapper).deleteById(7L);
+        verify(agentMapper, never()).selectCount(any());
+    }
+
+    // ------------------------------------------------------------------
+    // agent 自有链
+    // ------------------------------------------------------------------
+
+    @Test
+    void getAgentChainReportsBothModes() {
+        when(agentMapper.selectById(10L)).thenReturn(agent(10L, "[3, 1]", "[5]"));
+
+        AdminAgentChainDto dto = service.getAgentChain(10L);
+
+        assertThat(dto.agentId()).isEqualTo(10L);
+        assertThat(dto.keyEntryIds()).containsExactly(3L, 1L);
+        assertThat(dto.cliEntryIds()).containsExactly(5L);
     }
 
     @Test
-    void agentChainPresetRoundTripAndClear() {
-        AdminAgentEntity agent = agent(10L, null);
+    void updateAgentChainWritesNormalizedMembersIntoModeColumn() {
+        AdminAgentEntity agent = agent(10L, null, "[7]");
         when(agentMapper.selectById(10L)).thenReturn(agent);
         when(agentMapper.updateById(any(AdminAgentEntity.class))).thenReturn(1);
-        when(chainPresetMapper.selectById(7L)).thenReturn(preset(7L, "[1]"));
+        when(modelEntryMapper.selectBatchIds(any()))
+                .thenReturn(List.of(entry(3L, "KEY"), entry(1L, "KEY")));
 
-        assertThat(service.getAgentChainPreset(10L).chainPresetId()).isNull();
+        AdminAgentChainDto dto =
+                service.updateAgentChain(10L, "key", java.util.Arrays.asList(3L, 1L, 3L, null));
 
-        AdminAgentChainPresetDto updated =
-                service.updateAgentChainPreset(10L, new AdminAgentChainPresetUpdateRequest(7L));
-        assertThat(updated.chainPresetId()).isEqualTo(7L);
-        assertThat(agent.getChainPresetId()).isEqualTo(7L);
-
-        AdminAgentChainPresetDto cleared =
-                service.updateAgentChainPreset(10L, new AdminAgentChainPresetUpdateRequest(null));
-        assertThat(cleared.chainPresetId()).isNull();
+        // 保序去重落到 KEY 列；CLI 列原样不动
+        assertThat(agent.getChainKeyEntryIds()).isEqualTo("[3,1]");
+        assertThat(agent.getChainCliEntryIds()).isEqualTo("[7]");
+        assertThat(dto.keyEntryIds()).containsExactly(3L, 1L);
+        assertThat(dto.cliEntryIds()).containsExactly(7L);
     }
 
     @Test
-    void updateAgentChainPresetRejectsMissingPresetAndAgent() {
-        when(agentMapper.selectById(10L)).thenReturn(agent(10L, null));
-        when(chainPresetMapper.selectById(99L)).thenReturn(null);
+    void updateAgentChainWithEmptyListClearsColumnToNull() {
+        AdminAgentEntity agent = agent(10L, "[3]", null);
+        when(agentMapper.selectById(10L)).thenReturn(agent);
+        when(agentMapper.updateById(any(AdminAgentEntity.class))).thenReturn(1);
 
-        assertThatThrownBy(() ->
-                        service.updateAgentChainPreset(10L, new AdminAgentChainPresetUpdateRequest(99L)))
+        AdminAgentChainDto dto = service.updateAgentChain(10L, "KEY", List.of());
+
+        assertThat(agent.getChainKeyEntryIds()).isNull();
+        assertThat(dto.keyEntryIds()).isEmpty();
+    }
+
+    @Test
+    void updateAgentChainRejectsMissingEntry() {
+        when(agentMapper.selectById(10L)).thenReturn(agent(10L, null, null));
+        when(modelEntryMapper.selectBatchIds(any())).thenReturn(List.of(entry(3L, "KEY")));
+
+        assertThatThrownBy(() -> service.updateAgentChain(10L, "KEY", List.of(3L, 99L)))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> {
+                            assertThat(ex.getCode()).isEqualTo(ErrorCode.BAD_REQUEST.getCode());
+                            assertThat(ex.getMessageKey())
+                                    .isEqualTo(AdminAiChainPresetMessageKeys.ENTRY_NOT_FOUND);
+                            assertThat(ex.getMessageArgs()).containsExactly(99L);
+                        });
+        verify(agentMapper, never()).updateById(any(AdminAgentEntity.class));
+    }
+
+    @Test
+    void updateAgentChainRejectsEntryOfOtherMode() {
+        when(agentMapper.selectById(10L)).thenReturn(agent(10L, null, null));
+        when(modelEntryMapper.selectBatchIds(any())).thenReturn(List.of(entry(5L, "CLI")));
+
+        assertThatThrownBy(() -> service.updateAgentChain(10L, "KEY", List.of(5L)))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> {
+                            assertThat(ex.getCode()).isEqualTo(ErrorCode.BAD_REQUEST.getCode());
+                            assertThat(ex.getMessageKey())
+                                    .isEqualTo(AdminAiChainPresetMessageKeys.ENTRY_MODE_MISMATCH);
+                            assertThat(ex.getMessageArgs()).containsExactly(5L);
+                        });
+        verify(agentMapper, never()).updateById(any(AdminAgentEntity.class));
+    }
+
+    @Test
+    void updateAgentChainRejectsUnknownModeAndMissingAgent() {
+        when(agentMapper.selectById(10L)).thenReturn(agent(10L, null, null));
+        assertThatThrownBy(() -> service.updateAgentChain(10L, "BOGUS", List.of()))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.BAD_REQUEST.getCode()));
+
+        when(agentMapper.selectById(404L)).thenReturn(null);
+        assertThatThrownBy(() -> service.getAgentChain(404L))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
-
-        when(agentMapper.selectById(404L)).thenReturn(null);
-        assertThatThrownBy(() -> service.getAgentChainPreset(404L))
-                .isInstanceOfSatisfying(
-                        BusinessException.class,
-                        ex -> assertThat(ex.getCode()).isEqualTo(ErrorCode.NOT_FOUND.getCode()));
     }
 
     @Test
-    void referencedEntryIdsFollowsAgentReference() {
-        when(agentMapper.selectById(10L)).thenReturn(agent(10L, 7L));
-        when(chainPresetMapper.selectById(7L)).thenReturn(preset(7L, "[8, 10, 9]"));
+    void ownChainEntryIdsReadsPerModeAndMergesForWholeChain() {
+        when(agentMapper.selectById(10L)).thenReturn(agent(10L, "[8, 9]", "[10]"));
+        when(agentMapper.selectById(404L)).thenReturn(null);
 
-        assertThat(service.referencedEntryIds(10L)).containsExactly(8L, 10L, 9L);
+        assertThat(service.ownChainEntryIds(10L, "KEY")).containsExactly(8L, 9L);
+        assertThat(service.ownChainEntryIds(10L, "CLI")).containsExactly(10L);
+        // 整链定义：KEY 在前、CLI 在后（见服务接口注释）
+        assertThat(service.ownChainEntryIds(10L, null)).containsExactly(8L, 9L, 10L);
+        assertThat(service.ownChainEntryIds(404L, "KEY")).isEmpty();
     }
 
     @Test
-    void referencedEntryIdsEmptyWithoutReferenceOrPreset() {
-        when(agentMapper.selectById(10L)).thenReturn(agent(10L, null));
-        when(agentMapper.selectById(20L)).thenReturn(agent(20L, 7L));
-        when(chainPresetMapper.selectById(7L)).thenReturn(null);
-        when(agentMapper.selectById(404L)).thenReturn(null);
+    void loadAgentChainFromTemplateCopiesOnlyTargetModeMembers() {
+        AdminAgentEntity agent = agent(10L, null, "[42]");
+        when(agentMapper.selectById(10L)).thenReturn(agent);
+        when(agentMapper.updateById(any(AdminAgentEntity.class))).thenReturn(1);
+        when(chainPresetMapper.selectById(7L)).thenReturn(preset(7L, "[8, 10, 9, 11]"));
+        when(modelEntryMapper.selectBatchIds(any()))
+                .thenReturn(List.of(
+                        entry(8L, "KEY"), entry(10L, "CLI"), entry(9L, "KEY"), entry(11L, "CLI")));
 
-        assertThat(service.referencedEntryIds(10L)).isEmpty();
-        assertThat(service.referencedEntryIds(20L)).isEmpty();
-        assertThat(service.referencedEntryIds(404L)).isEmpty();
+        AdminAgentChainDto dto = service.loadAgentChainFromTemplate(10L, "KEY", 7L);
+
+        // 只拷模板中属于 KEY 的成员且保模板序；CLI 自有链不动
+        assertThat(agent.getChainKeyEntryIds()).isEqualTo("[8,9]");
+        assertThat(agent.getChainCliEntryIds()).isEqualTo("[42]");
+        assertThat(dto.keyEntryIds()).containsExactly(8L, 9L);
+        assertThat(dto.cliEntryIds()).containsExactly(42L);
+    }
+
+    @Test
+    void templateLoadIsACopyEditingTemplateAfterwardsDoesNotChangeAgentChain() {
+        AdminAgentEntity agent = agent(10L, null, null);
+        AdminAiChainPresetEntity template = preset(7L, "[8, 10, 9, 11]");
+        when(agentMapper.selectById(10L)).thenReturn(agent);
+        when(agentMapper.updateById(any(AdminAgentEntity.class))).thenReturn(1);
+        when(chainPresetMapper.selectById(7L)).thenReturn(template);
+        when(chainPresetMapper.updateById(any(AdminAiChainPresetEntity.class))).thenReturn(1);
+        when(modelEntryMapper.selectBatchIds(any()))
+                .thenReturn(List.of(
+                        entry(8L, "KEY"), entry(10L, "CLI"), entry(9L, "KEY"), entry(11L, "CLI")));
+
+        service.loadAgentChainFromTemplate(10L, "KEY", 7L);
+        assertThat(service.ownChainEntryIds(10L, "KEY")).containsExactly(8L, 9L);
+
+        // 之后把模板改成只剩 11：agent 已拷贝的链纹丝不动（拷贝而非引用）
+        service.updatePreset(7L, new AdminAiChainPresetUpdateRequest("renamed", List.of(11L), 0));
+        assertThat(template.getEntryIds()).isEqualTo("[11]");
+        assertThat(service.ownChainEntryIds(10L, "KEY")).containsExactly(8L, 9L);
+    }
+
+    @Test
+    void saveAgentChainAsTemplateCreatesPresetWithThatModesMembers() {
+        when(agentMapper.selectById(10L)).thenReturn(agent(10L, "[8, 9]", "[10]"));
+        List<AdminAiChainPresetEntity> savedHolder = new java.util.ArrayList<>();
+        when(chainPresetMapper.insert(any(AdminAiChainPresetEntity.class)))
+                .thenAnswer(invocation -> {
+                    AdminAiChainPresetEntity entity = invocation.getArgument(0);
+                    entity.setId(56L);
+                    savedHolder.add(entity);
+                    return 1;
+                });
+        when(chainPresetMapper.selectById(56L)).thenReturn(preset(56L, "[10]"));
+
+        AdminAiChainPresetDto dto = service.saveAgentChainAsTemplate(10L, "CLI", " cli 模板 ");
+
+        AdminAiChainPresetEntity saved = savedHolder.get(0);
+        assertThat(saved.getName()).isEqualTo("cli 模板");
+        assertThat(saved.getPurpose()).isEqualTo("CHAT");
+        // 只取 CLI 模式链的内容，KEY 链不混入
+        assertThat(saved.getEntryIds()).isEqualTo("[10]");
+        assertThat(dto.entryIds()).containsExactly(10L);
     }
 }

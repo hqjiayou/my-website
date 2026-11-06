@@ -106,11 +106,11 @@ class ModelChainResolverTest {
         assertThat(chain.get(0).displayName()).isEqualTo("google:a");
     }
 
-    // ===== 链预设形态（Issue #210 UoW-7）：成员整体即链，顺序为预设序 =====
+    // ===== 成员链形态（Issue #210 UoW-7 起，#214 UoW-3 成员来源改 agent 自有链）：成员整体即链，顺序为成员序 =====
 
     @Test
     void presetChainUsesFirstDefaultInPresetOrderAsPrimary() {
-        List<ResolvedLink> chain = ModelChainResolver.resolvePresetChain(
+        List<ResolvedLink> chain = ModelChainResolver.resolveMemberChain(
                 List.of(
                         keyEntry(4, "openai:alt", false),
                         keyEntry(1, "google:default", true),
@@ -123,7 +123,7 @@ class ModelChainResolverTest {
 
     @Test
     void presetChainFiltersModeAndClosesBackupsInsideIt() {
-        List<ResolvedLink> chain = ModelChainResolver.resolvePresetChain(
+        List<ResolvedLink> chain = ModelChainResolver.resolveMemberChain(
                 List.of(
                         keyEntry(3, "google:key-default", true),
                         entry(5, "openai:cli-default", "k5", true, "CLI", null),
@@ -136,15 +136,15 @@ class ModelChainResolverTest {
 
     @Test
     void presetChainIsEmptyWithoutDefaultOrWithBrokenPrimary() {
-        assertThat(ModelChainResolver.resolvePresetChain(
+        assertThat(ModelChainResolver.resolveMemberChain(
                         List.of(keyEntry(2, "google:b", false)), null))
                 .isEmpty();
-        assertThat(ModelChainResolver.resolvePresetChain(
+        assertThat(ModelChainResolver.resolveMemberChain(
                         List.of(
                                 entry(1, "google:a", null, true, "KEY", null),
                                 keyEntry(2, "google:b", false)),
                         null))
                 .isEmpty();
-        assertThat(ModelChainResolver.resolvePresetChain(List.of(), null)).isEmpty();
+        assertThat(ModelChainResolver.resolveMemberChain(List.of(), null)).isEmpty();
     }
 }

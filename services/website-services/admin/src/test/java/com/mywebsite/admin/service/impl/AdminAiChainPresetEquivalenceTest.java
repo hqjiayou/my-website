@@ -8,7 +8,6 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mywebsite.admin.entity.AdminAgentEntity;
-import com.mywebsite.admin.entity.AdminAiChainPresetEntity;
 import com.mywebsite.admin.entity.AdminAiModelEntryEntity;
 import com.mywebsite.admin.mapper.AdminAgentMapper;
 import com.mywebsite.admin.mapper.AdminAiChainPresetMapper;
@@ -30,16 +29,22 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 链预设组链等价（Issue #210 UoW-7 验收，关 UoW-6 遗留）：同一批入口数据，先按
- * 平台化前语义（agent 作用域层 → 全站层，基线由 {@link ModelChainResolver} 对旧
- * 分组直接计算并手写钉死）算出各 agent 的旧链，再按 V63 的生成口径落成预设
- * （甲的预设＝甲专属块在前＋平台块在后；乙无专属入口、与丙共用同一条纯平台链
- * 预设——去重共用的可观察形态），走改造后的预设组链，断言有序 entry id 逐条
- * 等价；并断言换预设即换链、点名范围限预设内。
+ * 组链等价链（三代同数据）：同一批入口数据，先按平台化前语义（agent 作用域层 →
+ * 全站层，基线由 {@link ModelChainResolver} 对旧分组直接计算并手写钉死）算出各
+ * agent 的旧链；#210 UoW-7 时旧链落成预设（V63），#214 UoW-3 的 V69 再把预设
+ * 内容按成员模式拆分逐字拷入 agent 自有链。本类夹具的自有链字段即 V69 对原
+ * 预设文本的拷贝结果（甲原预设 {@code [8, 10, 9, 11, 1, 3, 2]} → KEY
+ * {@code [8, 9, 1, 2]}／CLI {@code [10, 11, 3]}；乙/丙原共用预设
+ * {@code [1, 3, 2]} → KEY {@code [1, 2]}／CLI {@code [3]}），断言<b>逐模式</b>
+ * 解析与旧链逐条等价——这正是「迁移前后同一 agent 同一模式解析等价」的钉子。
+ *
+ * <p>整链（mode=null）视图是唯一变了的口径：预设时代两模式同存一份名单、
+ * 交错序即预设序；拆分存储后整链定义为 KEY 链在前、CLI 链在后（见
+ * {@code AdminAiChainPresetService.ownChainEntryIds}）。生产路径自 #208 起
+ * 均显式传模式，整链仅剩兼容面，本类按新定义钉死、不再与旧交错序比对。
  *
  * <p>夹具与 UoW-6 等价测试同一形态（全站 3 条＋甲专属 4 条，两级在 KEY/CLI
- * 各有默认、专属默认 id 更大），使三代口径（旧作用域链／UoW-6 来源分层链／
- * UoW-7 预设链）在同一数据上可比。
+ * 各有默认、专属默认 id 更大）。
  */
 @ExtendWith(MockitoExtension.class)
 class AdminAiChainPresetEquivalenceTest {
@@ -113,23 +118,16 @@ class AdminAiChainPresetEquivalenceTest {
         return entry;
     }
 
-    private static AdminAiChainPresetEntity preset(long id, String entryIdsJson) {
-        AdminAiChainPresetEntity preset = new AdminAiChainPresetEntity();
-        preset.setId(id);
-        preset.setName("preset-" + id);
-        preset.setPurpose("CHAT");
-        preset.setEntryIds(entryIdsJson);
-        return preset;
-    }
-
-    private static AdminAgentEntity agent(long id, Long chainPresetId) {
+    /** agent 实体只带自有链两字段（即 V69 拷贝结果），其余与组链无关。 */
+    private static AdminAgentEntity agent(long id, String keyEntryIds, String cliEntryIds) {
         AdminAgentEntity agent = new AdminAgentEntity();
         agent.setId(id);
-        agent.setChainPresetId(chainPresetId);
+        agent.setChainKeyEntryIds(keyEntryIds);
+        agent.setChainCliEntryIds(cliEntryIds);
         return agent;
     }
 
-    /** 可变的甲实体：换预设用例直接改它的引用。 */
+    /** 可变的甲实体：改链用例直接改它的自有链字段。 */
     private AdminAgentEntity agentJia;
 
     @BeforeEach
@@ -142,15 +140,14 @@ class AdminAiChainPresetEquivalenceTest {
             String raw = invocation.getArgument(0);
             return raw != null && raw.startsWith("enc:") ? raw.substring(4) : raw;
         });
-        // V63 生成形态：甲的预设＝专属块 [8,10,9,11]＋平台块 [1,3,2]（各块默认在前、id 升序，
-        // entry_ids 文本与 jsonb 序列化一致带空格）；乙/丙无专属入口，共用纯平台链预设 902。
-        agentJia = agent(10L, 901L);
+        // V69 拷贝形态：甲原预设 [8, 10, 9, 11, 1, 3, 2]（专属块在前＋平台块在后）
+        // 按成员模式拆分 → KEY [8, 9, 1, 2]、CLI [10, 11, 3]；乙/丙原共用纯平台链
+        // 预设 [1, 3, 2]，各自拷得 KEY [1, 2]、CLI [3]（拷贝后互不相干）。
+        agentJia = agent(10L, "[8, 9, 1, 2]", "[10, 11, 3]");
         // 各用例只问其中一两个 agent，整套 stub 放宽避免 strict stub 误报
         lenient().when(agentMapper.selectById(10L)).thenReturn(agentJia);
-        lenient().when(agentMapper.selectById(20L)).thenReturn(agent(20L, 902L));
-        lenient().when(agentMapper.selectById(30L)).thenReturn(agent(30L, 902L));
-        lenient().when(chainPresetMapper.selectById(901L)).thenReturn(preset(901L, "[8, 10, 9, 11, 1, 3, 2]"));
-        lenient().when(chainPresetMapper.selectById(902L)).thenReturn(preset(902L, "[1, 3, 2]"));
+        lenient().when(agentMapper.selectById(20L)).thenReturn(agent(20L, "[1, 2]", "[3]"));
+        lenient().when(agentMapper.selectById(30L)).thenReturn(agent(30L, "[1, 2]", "[3]"));
         List<AdminAiModelEntryEntity> all =
                 MIXED_ROWS.stream().map(AdminAiChainPresetEquivalenceTest::converted).toList();
         lenient().when(modelEntryMapper.selectBatchIds(any())).thenAnswer(invocation -> {
@@ -159,53 +156,53 @@ class AdminAiChainPresetEquivalenceTest {
         });
     }
 
-    private List<Long> presetChainIds(long agentId, String mode) {
+    private List<Long> ownChainIds(long agentId, String mode) {
         return service.chainCandidates(agentId, mode).stream().map(ChainCandidate::id).toList();
     }
 
     @Test
-    void agentWithOwnEntriesKeepsLegacyChainWhole() {
-        List<Long> baseline = legacyChainIds(MIXED_ROWS, 10L, null);
-        assertThat(baseline).containsExactly(8L, 10L, 9L, 11L, 1L, 3L, 2L);
-
-        assertThat(presetChainIds(10L, null)).containsExactlyElementsOf(baseline);
-    }
-
-    @Test
-    void agentWithOwnEntriesKeepsLegacyChainPerMode() {
+    void copiedOwnChainResolvesPerModeExactlyLikeTheLegacyChain() {
+        // 迁移等价：V69 拷入的自有链在每个模式下的解析与平台化前旧链逐条一致
         assertThat(legacyChainIds(MIXED_ROWS, 10L, "KEY")).containsExactly(8L, 9L, 1L, 2L);
         assertThat(legacyChainIds(MIXED_ROWS, 10L, "CLI")).containsExactly(10L, 11L, 3L);
 
-        assertThat(presetChainIds(10L, "KEY")).containsExactly(8L, 9L, 1L, 2L);
-        assertThat(presetChainIds(10L, "CLI")).containsExactly(10L, 11L, 3L);
+        assertThat(ownChainIds(10L, "KEY")).containsExactly(8L, 9L, 1L, 2L);
+        assertThat(ownChainIds(10L, "CLI")).containsExactly(10L, 11L, 3L);
+    }
+
+    @Test
+    void wholeChainViewIsKeyChainThenCliChain() {
+        // 整链新定义（类注释）：不再是旧交错序 [8, 10, 9, 11, 1, 3, 2]，
+        // 而是 KEY 链整体在前、CLI 链整体在后。
+        assertThat(ownChainIds(10L, null)).containsExactly(8L, 9L, 1L, 2L, 10L, 11L, 3L);
     }
 
     @Test
     void agentWithoutOwnEntriesGetsPurePlatformChain() {
-        assertThat(legacyChainIds(MIXED_ROWS, 20L, null)).containsExactly(1L, 3L, 2L);
         assertThat(legacyChainIds(MIXED_ROWS, 20L, "KEY")).containsExactly(1L, 2L);
         assertThat(legacyChainIds(MIXED_ROWS, 20L, "CLI")).containsExactly(3L);
 
-        assertThat(presetChainIds(20L, null)).containsExactly(1L, 3L, 2L);
-        assertThat(presetChainIds(20L, "KEY")).containsExactly(1L, 2L);
-        assertThat(presetChainIds(20L, "CLI")).containsExactly(3L);
+        assertThat(ownChainIds(20L, "KEY")).containsExactly(1L, 2L);
+        assertThat(ownChainIds(20L, "CLI")).containsExactly(3L);
+        assertThat(ownChainIds(20L, null)).containsExactly(1L, 2L, 3L);
     }
 
     @Test
-    void agentsSharingThePlatformPresetResolveIdentically() {
-        // 乙与丙同引一条纯平台链预设（V63 去重共用）：问到的链逐条一致
-        assertThat(presetChainIds(30L, null)).containsExactlyElementsOf(presetChainIds(20L, null));
-        assertThat(presetChainIds(30L, "KEY")).containsExactly(1L, 2L);
+    void agentsWithIdenticalCopiedChainsResolveIdentically() {
+        // 乙与丙在 V63 时代共用一条预设，V69 后各持一份内容相同的拷贝：解析一致
+        assertThat(ownChainIds(30L, null)).containsExactlyElementsOf(ownChainIds(20L, null));
+        assertThat(ownChainIds(30L, "KEY")).containsExactly(1L, 2L);
     }
 
     @Test
-    void swappingPresetReferenceSwapsChainAndPinScope() {
+    void rewritingOwnChainSwapsChainAndPinScope() {
         assertThat(service.selectionOnChain(10L, "KEY", 9L).spec()).isEqualTo("openai:agent-key-alt");
 
-        // 甲改指纯平台链预设：链随之变为平台链，且点名只认预设内成员
-        agentJia.setChainPresetId(902L);
+        // 甲的自有链改写成纯平台链内容：链随之变为平台链，且点名只认链内成员
+        agentJia.setChainKeyEntryIds("[1, 2]");
+        agentJia.setChainCliEntryIds("[3]");
 
-        assertThat(presetChainIds(10L, null)).containsExactly(1L, 3L, 2L);
+        assertThat(ownChainIds(10L, null)).containsExactly(1L, 2L, 3L);
         assertThatThrownBy(() -> service.selectionOnChain(10L, "KEY", 9L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getCode())
