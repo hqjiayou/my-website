@@ -70,10 +70,8 @@ export default {
     entryProvenance: '旧専用',
     entryProvenanceNote:
       '由来：この入口は以前サイト #{{id}} の専用入口でした。現在はプラットフォーム登録です。',
-    mode: 'モード',
     modeKey: 'Key 直接',
     modeCli: 'CLI プロキシ',
-    modeHint: 'API key はプロバイダへ直接つなぎます。CLI は API キーが公開したアドレス、クライアント key、ログイン済みアカウントのモデルを使います。モードごとに既定入口が一つあります。',
     cliModel: 'プロキシのモデル',
     cliModelHint: 'ログイン済みアカウントが公開したモデルだけです。保存時は openai:モデル名 になります。',
     cliAddressFixed: 'アドレスは {{baseUrl}} で固定です。API キーが決め、ここでは変更できません。クライアント key はプロキシに入るためのもので、モデルと一対一ではありません。',

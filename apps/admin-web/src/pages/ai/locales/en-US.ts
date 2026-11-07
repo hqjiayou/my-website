@@ -70,10 +70,8 @@ export default {
     entryProvenance: 'Formerly dedicated',
     entryProvenanceNote:
       'Provenance: this entry used to be dedicated to site #{{id}}; it is now registered platform-wide.',
-    mode: 'Mode',
     modeKey: 'Key (direct)',
     modeCli: 'CLI (proxy)',
-    modeHint: 'API key calls the provider directly. CLI uses the address, client key, and models published by API keys. Each mode has its own default entry.',
     cliModel: 'Proxy model',
     cliModelHint: 'Only models published by a signed-in account. Saved as openai:model-name.',
     cliAddressFixed: 'The address is fixed at {{baseUrl}} by API keys and cannot be edited here. The client key only enters the proxy. It is not paired with one model.',

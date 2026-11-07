@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, KeyRound, Loader2, Plus, Zap } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -18,7 +18,13 @@ import {
 } from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
-import type { AiModelEntry, AiModelEntryWriteInput, ProxyLoginProvider, ProxyServicesAccount } from '@/types/ai'
+import type {
+  AiModelEntry,
+  AiModelEntryWriteInput,
+  ProxyLoginProvider,
+  ProxyServicesAccount,
+  ProxyServicesPublishedAccount,
+} from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 import { modelIdFromSpec } from '@/utils/modelSpec'
 
@@ -95,6 +101,9 @@ const KNOWN_KEY_VENDORS = ['google', 'openai', 'anthropic', 'azure']
 const CLI_VENDOR_ORDER = ['codex', 'claude', 'antigravity', 'meta']
 const KEYS_PANE = '__keys'
 const UNASSIGNED = '__unassigned'
+const EMPTY_ENTRIES: AiModelEntry[] = []
+const EMPTY_ACCOUNTS: ProxyServicesAccount[] = []
+const EMPTY_PUBLISHED: ProxyServicesPublishedAccount[] = []
 
 function keyVendorName(prefix: string) {
   return KEY_VENDOR_NAMES[prefix] ?? (prefix ? prefix.charAt(0).toUpperCase() + prefix.slice(1) : prefix)
@@ -244,6 +253,38 @@ export function ModelEntriesCard() {
     },
   })
 
+  const entries = data ?? EMPTY_ENTRIES
+  const keyEntries = useMemo(
+    () => entries.filter((entry) => (entry.mode ?? 'KEY') !== 'CLI'),
+    [entries],
+  )
+  const cliEntries = useMemo(
+    () => entries.filter((entry) => (entry.mode ?? 'KEY') === 'CLI'),
+    [entries],
+  )
+  const accounts = statusQuery.data?.accounts ?? EMPTY_ACCOUNTS
+  const usageAccounts = usageQuery.data?.accounts ?? EMPTY_PUBLISHED
+  const usagePending = usageQuery.isPending
+  const accountEntryMap = useMemo(() => {
+    const publishedByName = new Map(usageAccounts.map((account) => [account.name, account]))
+    const map = new Map<string, AiModelEntry[]>()
+    for (const account of accounts) {
+      if (usagePending) {
+        map.set(account.name, [])
+        continue
+      }
+      const ids = shownModelIds(account.provider, publishedByName.get(account.name)?.modelIds ?? []) ?? []
+      map.set(
+        account.name,
+        cliEntries.filter((entry) => ids.includes(modelIdFromSpec(entry.modelSpec))),
+      )
+    }
+    return map
+  }, [accounts, usageAccounts, usagePending, cliEntries])
+  function accountEntries(account: ProxyServicesAccount): AiModelEntry[] {
+    return accountEntryMap.get(account.name) ?? []
+  }
+
   if (isPending) {
     return (
       <div className="space-y-4" aria-hidden>
@@ -268,10 +309,6 @@ export function ModelEntriesCard() {
     )
   }
 
-  const entries = data ?? []
-  const keyEntries = entries.filter((entry) => (entry.mode ?? 'KEY') !== 'CLI')
-  const cliEntries = entries.filter((entry) => (entry.mode ?? 'KEY') === 'CLI')
-
   // KEY 厂商：按 spec 前缀聚合；四个常见厂商恒列出（空厂商给空态与首加入口）。
   const directGroups = new Map<string, AiModelEntry[]>()
   for (const entry of keyEntries) {
@@ -291,14 +328,6 @@ export function ModelEntriesCard() {
   const activeKeyEntries = directGroups.get(activeKeyVendor) ?? []
 
   // CLI 厂商：按代理账号的 provider 聚合；条目按账号放出的模型 id 归属账号。
-  const accounts = statusQuery.data?.accounts ?? []
-  const publishedByName = new Map((usageQuery.data?.accounts ?? []).map((account) => [account.name, account]))
-  function accountEntries(account: ProxyServicesAccount): AiModelEntry[] {
-    if (usageQuery.isPending) return []
-    const published = publishedByName.get(account.name)
-    const ids = shownModelIds(account.provider, published?.modelIds ?? []) ?? []
-    return cliEntries.filter((entry) => ids.includes(modelIdFromSpec(entry.modelSpec)))
-  }
   const cliProviders = [
     ...CLI_VENDOR_ORDER.filter((provider) => accounts.some((account) => account.provider === provider)),
     ...[...new Set(accounts.map((account) => account.provider))].filter(
@@ -309,7 +338,8 @@ export function ModelEntriesCard() {
   for (const account of accounts) {
     for (const entry of accountEntries(account)) matchedEntryIds.add(entry.id)
   }
-  const unassignedCliEntries = usageQuery.isPending ? [] : cliEntries.filter((entry) => !matchedEntryIds.has(entry.id))
+  const unassignedCliEntries =
+    usageQuery.isPending || usageQuery.isError ? [] : cliEntries.filter((entry) => !matchedEntryIds.has(entry.id))
   const cliRailKeys = [
     ...cliProviders,
     ...(unassignedCliEntries.length > 0 ? [UNASSIGNED] : []),
@@ -393,14 +423,10 @@ export function ModelEntriesCard() {
     saveMutation.mutate({ id: draft.id, body })
   }
 
-  function entryRow(entry: AiModelEntry) {
+  function entryRow(entry: AiModelEntry, account?: ProxyServicesAccount) {
     const entryMode = entry.mode ?? 'KEY'
     const usedPercent =
-      entryMode === 'CLI'
-        ? (accounts.find((account) => accountEntries(account).includes(entry))?.modelUsedPercent[
-            modelIdFromSpec(entry.modelSpec)
-          ] ?? null)
-        : null
+      entryMode === 'CLI' && account ? (account.modelUsedPercent[modelIdFromSpec(entry.modelSpec)] ?? null) : null
     return (
       <li key={entry.id} className="flex items-stretch gap-2">
         <button
@@ -628,7 +654,7 @@ export function ModelEntriesCard() {
                     <p className="mt-1 text-xs text-admin-muted">{t('modelManagement.emptyVendorHint')}</p>
                   </div>
                 ) : (
-                  <ul className="space-y-2">{activeKeyEntries.map(entryRow)}</ul>
+                  <ul className="space-y-2">{activeKeyEntries.map((entry) => entryRow(entry))}</ul>
                 )}
               </div>
             ) : activeCliVendor === KEYS_PANE ? (
@@ -650,10 +676,25 @@ export function ModelEntriesCard() {
                     </div>
                   </div>
                 ) : null}
+                {usageQuery.isError && activeCliVendor !== UNASSIGNED ? (
+                  <div className="mb-3 flex items-start gap-3 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
+                    <AlertCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-danger-emphasis" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-danger-emphasis">{t('error')}</p>
+                      <button
+                        type="button"
+                        className={cn(adminSecondaryButtonSmClass, 'mt-2')}
+                        onClick={() => void usageQuery.refetch()}
+                      >
+                        {t('retry')}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {activeCliVendor === UNASSIGNED ? (
                   <>
                     <p className="mb-2 text-sm text-admin-muted">{t('modelManagement.unassignedHint')}</p>
-                    <ul className="space-y-2">{unassignedCliEntries.map(entryRow)}</ul>
+                    <ul className="space-y-2">{unassignedCliEntries.map((entry) => entryRow(entry))}</ul>
                   </>
                 ) : (
                   accounts
@@ -717,7 +758,7 @@ export function ModelEntriesCard() {
                           ) : rows.length === 0 ? (
                             <p className="px-2 py-3 text-sm text-admin-muted">{t('modelManagement.noCliModels')}</p>
                           ) : (
-                            <ul className="space-y-2">{rows.map(entryRow)}</ul>
+                            <ul className="space-y-2">{rows.map((entry) => entryRow(entry, account))}</ul>
                           )}
                         </div>
                       )
