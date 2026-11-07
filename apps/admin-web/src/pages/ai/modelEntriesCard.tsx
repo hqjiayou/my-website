@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, KeyRound, Loader2, Plus, Zap } from 'lucide-react'
+import { AlertCircle, Inbox, KeyRound, Loader2, Plus, Zap } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -99,8 +99,6 @@ const KEY_VENDOR_NAMES: Record<string, string> = {
 }
 const KNOWN_KEY_VENDORS = ['google', 'openai', 'anthropic', 'azure']
 const CLI_VENDOR_ORDER = ['codex', 'claude', 'antigravity', 'meta']
-const KEYS_PANE = '__keys'
-const UNASSIGNED = '__unassigned'
 const EMPTY_ENTRIES: AiModelEntry[] = []
 const EMPTY_ACCOUNTS: ProxyServicesAccount[] = []
 const EMPTY_PUBLISHED: ProxyServicesPublishedAccount[] = []
@@ -129,12 +127,26 @@ function specPrefix(spec: string) {
 }
 
 /**
+ * CLI 条目的厂商推断（账号匹配不到时用）：按模型名约定归类，与登录供应商
+ * 的 provider id 对齐（claude→claude、gemini→antigravity、llama/meta→meta，
+ * 其余默认 codex——CLI 派生 spec 由系统统一盖 openai 前缀，GPT 系为主）。
+ */
+function inferredCliProvider(entry: AiModelEntry): string {
+  const id = modelIdFromSpec(entry.modelSpec).toLowerCase()
+  if (id.startsWith('claude')) return 'claude'
+  if (id.startsWith('gemini') || id.startsWith('antigravity')) return 'antigravity'
+  if (id.startsWith('llama') || id.startsWith('meta-')) return 'meta'
+  return 'codex'
+}
+
+/**
  * 模型入口管理（模型页改版，kou 2026-11-07 定形态）：上方水平页签只有
  * CLI / API Key 两种模式，右端一颗「添加」总钮先选添加方式（登录 CLI
  * 账号 / 填 API key 表单）再进弹窗；展示区用竖排厂商页签，点厂商才展
- * 该厂商的条目。CLI 条目按账号放出的模型归到账号所属厂商下，派生行
- * 只读；历史手工 CLI 条目仍可编辑（存量编辑分支），但新建只走 KEY。
- * 客户端 key 与网关状态收在 CLI 左栏末位页签（ProxyClientKeysPane）。
+ * 该厂商的条目。CLI 条目按账号放出的模型归到账号所属厂商下，匹配不到
+ * 账号时按模型名推断厂商，恒按厂商分组；派生行只读，历史手工 CLI 条目
+ * 仍可编辑（存量编辑分支），但新建只走 KEY。客户端 key 与网关状态是
+ * 条目卡下方独立一节（ProxyClientKeysPane），不混进厂商页签。
  */
 export function ModelEntriesCard() {
   const { t } = useTranslation('aiAdmin')
@@ -327,26 +339,50 @@ export function ModelEntriesCard() {
       : (keyVendors.find((prefix) => (directGroups.get(prefix) ?? []).length > 0) ?? keyVendors[0])
   const activeKeyEntries = directGroups.get(activeKeyVendor) ?? []
 
-  // CLI 厂商：按代理账号的 provider 聚合；条目按账号放出的模型 id 归属账号。
-  const cliProviders = [
-    ...CLI_VENDOR_ORDER.filter((provider) => accounts.some((account) => account.provider === provider)),
-    ...[...new Set(accounts.map((account) => account.provider))].filter(
-      (provider) => !CLI_VENDOR_ORDER.includes(provider),
-    ),
-  ]
+  // CLI 厂商归属：条目先按在线账号放出的模型匹配到账号所属厂商；匹配不到
+  // （代理未启动、账号已删等）时按模型名推断厂商——恒按厂商分组，不设
+  // 「未归属」。厂商列表 = 有账号或有条目的厂商，按登录供应商顺序排。
   const matchedEntryIds = new Set<number>()
+  const matchedProviders = new Map<number, Set<string>>()
   for (const account of accounts) {
-    for (const entry of accountEntries(account)) matchedEntryIds.add(entry.id)
+    for (const entry of accountEntries(account)) {
+      matchedEntryIds.add(entry.id)
+      const providers = matchedProviders.get(entry.id) ?? new Set<string>()
+      providers.add(account.provider)
+      matchedProviders.set(entry.id, providers)
+    }
   }
-  const unassignedCliEntries =
-    usageQuery.isPending || usageQuery.isError ? [] : cliEntries.filter((entry) => !matchedEntryIds.has(entry.id))
-  const cliRailKeys = [
-    ...cliProviders,
-    ...(unassignedCliEntries.length > 0 ? [UNASSIGNED] : []),
-    KEYS_PANE,
+  const unmatchedCliEntries = usageQuery.isPending
+    ? []
+    : cliEntries.filter((entry) => !matchedEntryIds.has(entry.id))
+  function cliEntryVendors(entry: AiModelEntry): string[] {
+    const matched = matchedProviders.get(entry.id)
+    if (matched && matched.size > 0) return [...matched]
+    if (usageQuery.isPending) return []
+    return [inferredCliProvider(entry)]
+  }
+  const cliVendors = [
+    ...CLI_VENDOR_ORDER.filter(
+      (provider) =>
+        accounts.some((account) => account.provider === provider) ||
+        cliEntries.some((entry) => cliEntryVendors(entry).includes(provider)),
+    ),
+    ...[
+      ...new Set([
+        ...accounts.map((account) => account.provider),
+        ...cliEntries.flatMap((entry) => cliEntryVendors(entry)),
+      ]),
+    ].filter((provider) => !CLI_VENDOR_ORDER.includes(provider)),
   ]
+  function vendorCliEntries(provider: string) {
+    return cliEntries.filter((entry) => cliEntryVendors(entry).includes(provider))
+  }
   const activeCliVendor =
-    cliVendor != null && cliRailKeys.includes(cliVendor) ? cliVendor : (cliProviders[0] ?? KEYS_PANE)
+    cliVendor != null && cliVendors.includes(cliVendor) ? cliVendor : (cliVendors[0] ?? '')
+  const detachedCliEntries =
+    activeCliVendor === ''
+      ? []
+      : unmatchedCliEntries.filter((entry) => inferredCliProvider(entry) === activeCliVendor)
 
   const aliasTrimmed = draft?.alias.trim() ?? ''
   const aliasInvalid = aliasTrimmed !== '' && !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(aliasTrimmed.toLowerCase())
@@ -554,9 +590,9 @@ export function ModelEntriesCard() {
                   <div className="admin-skeleton h-11 w-full" />
                 </div>
               ) : null}
-              {cliProviders.map((provider) => {
+              {cliVendors.map((provider) => {
                 const providerAccounts = accounts.filter((account) => account.provider === provider)
-                const count = new Set(providerAccounts.flatMap((account) => accountEntries(account).map((entry) => entry.id))).size
+                const count = vendorCliEntries(provider).length
                 return (
                   <button
                     key={provider}
@@ -575,48 +611,14 @@ export function ModelEntriesCard() {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-admin">{providerLabel(provider, t)}</span>
                       <span className="mt-0.5 block truncate text-xs text-admin-muted">
-                        {t('modelManagement.proxyAccounts', { count: providerAccounts.length })} ·{' '}
-                        {t('modelManagement.modelsCount', { count })}
+                        {providerAccounts.length > 0
+                          ? `${t('modelManagement.proxyAccounts', { count: providerAccounts.length })} · ${t('modelManagement.modelsCount', { count })}`
+                          : t('modelManagement.modelsCount', { count })}
                       </span>
                     </span>
                   </button>
                 )
               })}
-              {unassignedCliEntries.length > 0 ? (
-                <button
-                  type="button"
-                  aria-pressed={activeCliVendor === UNASSIGNED}
-                  onClick={() => setCliVendor(UNASSIGNED)}
-                  className={railItemClass(activeCliVendor === UNASSIGNED)}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md bg-admin-surface-muted text-sm font-bold text-admin-muted">
-                    ?
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-admin">
-                      {t('modelManagement.unassignedVendor')}
-                    </span>
-                    <span className="mt-0.5 block truncate text-xs text-admin-muted">
-                      {t('modelManagement.modelsCount', { count: unassignedCliEntries.length })}
-                    </span>
-                  </span>
-                </button>
-              ) : null}
-              <div className="mx-1 my-1.5 border-t border-admin" />
-              <button
-                type="button"
-                aria-pressed={activeCliVendor === KEYS_PANE}
-                onClick={() => setCliVendor(KEYS_PANE)}
-                className={railItemClass(activeCliVendor === KEYS_PANE)}
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md bg-primary/10 text-primary">
-                  <KeyRound className="h-4 w-4" aria-hidden />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-admin">{t('proxyServices.usageKeysTitle')}</span>
-                  <span className="mt-0.5 block truncate text-xs text-admin-muted">{t('modelManagement.keysPaneHint')}</span>
-                </span>
-              </button>
             </div>
           )}
 
@@ -628,25 +630,11 @@ export function ModelEntriesCard() {
                   <span className="text-xs text-admin-muted">
                     {t('modelManagement.directSource')} · {t('modelManagement.modelsCount', { count: activeKeyEntries.length })}
                   </span>
-                  <span className="flex-1" />
-                  <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
-                    <button
-                      type="button"
-                      className={adminPrimaryButtonClass}
-                      onClick={() => {
-                        setFormTouched(false)
-                        setDraft(emptyDraft(keyEntries.length === 0, `${activeKeyVendor}:`))
-                      }}
-                    >
-                      <Plus className="h-4 w-4" />
-                      {t('settings.add')}
-                    </button>
-                  </PermissionGate>
                 </div>
                 {activeKeyEntries.length === 0 ? (
                   <div className="px-2 py-10 text-center">
                     <span className="mx-auto flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-admin-surface-muted text-admin-muted">
-                      <Plus className="h-5 w-5" aria-hidden />
+                      <Inbox className="h-5 w-5" aria-hidden />
                     </span>
                     <p className="mt-3 text-sm font-medium text-admin">
                       {t('modelManagement.emptyVendorTitle', { vendor: keyVendorName(activeKeyVendor) })}
@@ -657,8 +645,6 @@ export function ModelEntriesCard() {
                   <ul className="space-y-2">{activeKeyEntries.map((entry) => entryRow(entry))}</ul>
                 )}
               </div>
-            ) : activeCliVendor === KEYS_PANE ? (
-              <ProxyClientKeysPane />
             ) : (
               <div className="p-4">
                 {statusQuery.isError ? (
@@ -676,7 +662,7 @@ export function ModelEntriesCard() {
                     </div>
                   </div>
                 ) : null}
-                {usageQuery.isError && activeCliVendor !== UNASSIGNED ? (
+                {usageQuery.isError ? (
                   <div className="mb-3 flex items-start gap-3 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
                     <AlertCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-danger-emphasis" aria-hidden />
                     <div className="min-w-0 flex-1">
@@ -691,14 +677,8 @@ export function ModelEntriesCard() {
                     </div>
                   </div>
                 ) : null}
-                {activeCliVendor === UNASSIGNED ? (
-                  <>
-                    <p className="mb-2 text-sm text-admin-muted">{t('modelManagement.unassignedHint')}</p>
-                    <ul className="space-y-2">{unassignedCliEntries.map((entry) => entryRow(entry))}</ul>
-                  </>
-                ) : (
-                  accounts
-                    .filter((account) => account.provider === activeCliVendor)
+                {accounts
+                  .filter((account) => account.provider === activeCliVendor)
                     .map((account) => {
                       const status = accountStatus(account, t)
                       const rows = accountEntries(account)
@@ -763,17 +743,40 @@ export function ModelEntriesCard() {
                         </div>
                       )
                     })
-                )}
-                {activeCliVendor !== UNASSIGNED &&
-                statusQuery.isPending === false &&
-                accounts.filter((account) => account.provider === activeCliVendor).length === 0 ? (
-                  <p className="px-2 py-6 text-sm text-admin-muted">{t('proxyServices.emptyAccounts')}</p>
+                }
+                {detachedCliEntries.length > 0 ? (
+                  <div>
+                    <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-admin">
+                      {t('modelManagement.unmatchedBlock')}
+                      <span className="text-xs font-normal text-admin-muted">
+                        {t('modelManagement.modelsCount', { count: detachedCliEntries.length })}
+                      </span>
+                    </p>
+                    <ul className="space-y-2">{detachedCliEntries.map((entry) => entryRow(entry))}</ul>
+                  </div>
+                ) : null}
+                {cliVendors.length === 0 && statusQuery.isPending === false ? (
+                  <div className="px-2 py-10 text-center">
+                    <span className="mx-auto flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-admin-surface-muted text-admin-muted">
+                      <Inbox className="h-5 w-5" aria-hidden />
+                    </span>
+                    <p className="mt-3 text-sm font-medium text-admin">{t('proxyServices.emptyAccounts')}</p>
+                    <p className="mt-1 text-xs text-admin-muted">{t('modelManagement.addCliDesc')}</p>
+                  </div>
                 ) : null}
               </div>
             )}
           </div>
         </div>
       </article>
+
+      <div className="space-y-2 pt-2">
+        <h2 className="text-base font-semibold text-admin">{t('proxyServices.usageKeysTitle')}</h2>
+        <p className="text-sm text-admin-muted">{t('modelManagement.keysPaneHint')}</p>
+      </div>
+      <section className="overflow-hidden rounded-xl border border-admin bg-admin-surface">
+        <ProxyClientKeysPane />
+      </section>
 
       {addOpen ? (
         <FormDialog
