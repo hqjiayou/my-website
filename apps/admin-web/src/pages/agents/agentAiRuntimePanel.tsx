@@ -253,6 +253,7 @@ function McpSelectionSection({
                         type="checkbox"
                         className="accent-primary"
                         checked={selected.includes(server.name)}
+                        disabled={!server.enabled && !selected.includes(server.name)}
                         onChange={(event) =>
                           setSelected((current) =>
                             event.target.checked
