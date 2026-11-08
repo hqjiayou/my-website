@@ -365,7 +365,7 @@ class AdminAiModelEntryServiceImplTest {
         // DB 对 clearOtherDefaults 的「同来源 × 同模式 × 默认位」查询只会回同组旧默认；
         // 异组两条不落入该 wrapper 的过滤条件，不出现在结果里。
         when(modelEntryMapper.selectList(any())).thenReturn(List.of(oldGroupDefault));
-        when(modelEntryMapper.updateById(any())).thenReturn(1);
+        when(modelEntryMapper.updateById(any(AdminAiModelEntryEntity.class))).thenReturn(1);
         lenient().when(cipher.encrypt(any())).thenReturn("enc:stored");
 
         AdminAiModelEntryDto dto = service.updateEntry(
