@@ -347,4 +347,36 @@ class AdminAiModelEntryServiceImplTest {
         assertThat(captor.getValue().getSourceAgentId()).isNull();
         assertThat(dto.sourceAgentId()).isNull();
     }
+
+    @Test
+    void updateEntryAsDefaultClearsOldDefaultInSameSourceAndModeGroupOnly() {
+        // 默认位互斥口径（Issue #216 UoW-3 钉死）：更新时把目标标为默认，服务层须在
+        // 同一事务内清掉同「来源 × 模式」组的旧默认；异模式、同模式异来源的默认不受影响。
+        AdminAiModelEntryEntity oldGroupDefault = entry(1L, null, "google:old-default", true);
+        oldGroupDefault.setMode("KEY");
+        AdminAiModelEntryEntity otherModeDefault = entry(2L, null, "openai:cli-default", true);
+        otherModeDefault.setMode("CLI");
+        AdminAiModelEntryEntity otherSourceDefault = entry(3L, 10L, "google:agent-default", true);
+        otherSourceDefault.setMode("KEY");
+        AdminAiModelEntryEntity target = entry(5L, null, "google:new-default", false);
+        target.setMode("KEY");
+
+        lenient().when(modelEntryMapper.selectById(5L)).thenReturn(target);
+        // DB 对 clearOtherDefaults 的「同来源 × 同模式 × 默认位」查询只会回同组旧默认；
+        // 异组两条不落入该 wrapper 的过滤条件，不出现在结果里。
+        when(modelEntryMapper.selectList(any())).thenReturn(List.of(oldGroupDefault));
+        when(modelEntryMapper.updateById(any())).thenReturn(1);
+        lenient().when(cipher.encrypt(any())).thenReturn("enc:stored");
+
+        AdminAiModelEntryDto dto = service.updateEntry(
+                5L,
+                new AdminAiModelEntryWriteRequest(
+                        "New default", "google:new-default", null, null, null, true, true, 0, "KEY", null));
+
+        assertThat(dto.defaultEntry()).isTrue();
+        assertThat(target.getDefaultEntry()).isTrue();
+        assertThat(oldGroupDefault.getDefaultEntry()).isFalse();
+        assertThat(otherModeDefault.getDefaultEntry()).isTrue();
+        assertThat(otherSourceDefault.getDefaultEntry()).isTrue();
+    }
 }
