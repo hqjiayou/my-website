@@ -29,6 +29,32 @@ test.describe('Agent Config PR-4.1 (mock API)', () => {
     await expect(page.getByRole('heading', { name: 'Knowledge spaces' })).toBeVisible()
   })
 
+  test('browser back is blocked by unsaved draft; stay keeps URL, discard leaves without loop', async ({ page }) => {
+    await loginWithMocks(page)
+    await page.goto('/agent/42/agent/config/models')
+    await page.getByRole('link', { name: 'Prompt' }).first().click()
+    await expect(page).toHaveURL(/\/config\/prompt/)
+    await expect(page.getByRole('heading', { name: 'Prompt' })).toBeVisible()
+
+    const promptBox = page.locator('textarea').first()
+    await promptBox.fill('Draft prompt — back button')
+    const leaveDialog = page.getByRole('dialog').filter({ hasText: 'Unsaved changes' })
+
+    await page.goBack()
+    await expect(leaveDialog).toBeVisible()
+    await leaveDialog.getByRole('button', { name: 'Keep editing' }).click()
+    await expect(leaveDialog).toBeHidden()
+    await expect(page).toHaveURL(/\/config\/prompt/)
+    await expect(promptBox).toHaveValue('Draft prompt — back button')
+
+    // 再次后退：仍拦截（无循环 / 历史错乱）；放弃后真正回到上一页，且不再弹窗。
+    await page.goBack()
+    await expect(leaveDialog).toBeVisible()
+    await leaveDialog.getByRole('button', { name: 'Discard and leave' }).click()
+    await expect(page).toHaveURL(/\/config\/models/)
+    await expect(leaveDialog).toBeHidden()
+  })
+
   test('resource picker keeps in-progress selection across list refresh', async ({ page }) => {
     await loginWithMocks(page)
     await page.goto('/agent/42/agent/config/prompt')

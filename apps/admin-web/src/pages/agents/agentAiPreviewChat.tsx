@@ -302,7 +302,13 @@ function createPreviewSelection(initialConversationId: number | null) {
   let locationEnabled = false
   let cachedLocation: PreviewLocation | undefined
   let locationEpoch = 0
+  // 面板存活标记：卸载（切换 Agent）后置 false，旧流迟到事件据此丢弃。
+  let alive = false
   return {
+    isAlive: () => alive,
+    setAlive: (next: boolean) => {
+      alive = next
+    },
     getLocationEnabled: () => locationEnabled,
     getCachedLocation: () => cachedLocation,
     setLocation: (next: PreviewLocation) => {
@@ -422,20 +428,9 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
     selection.setRequestedSpec(activeSpec)
   }, [activeSpec, selection])
 
-  // 渲染期调整（与下方服务端 mode 采纳同法）：agentId 变化（含首次挂载）时把本地
-  // 续写标记同步落进 state，不在 effect 里同步 setState。
-  const [restoredAgentId, setRestoredAgentId] = useState<number | null>(null)
-  if (restoredAgentId !== agentId) {
-    setRestoredAgentId(agentId)
-    const storedId = readStoredConversationId(agentId)
-    selection.setConversationId(storedId)
-    setConversationId(storedId)
-    if (storedId == null) {
-      selection.setPersistedHistory([])
-      setRestoredMessages([])
-    }
-  }
-
+  // 隔离契约：本组件按 agentId 整体重挂载（调用方 key={agentId}），selection / runtime / trace /
+  // Inspector 状态都随 agentId 生灭，agentId 在组件生命周期内不变。
+  // selection.isAlive 是兜底守卫：卸载（切换 Agent）后，旧流的迟到事件、定位授权回调一律丢弃。
   useEffect(() => {
     const storedId = readStoredConversationId(agentId)
     if (storedId == null) {
@@ -548,6 +543,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
         getPersistedHistory: selection.getPersistedHistory,
         getLocationEnabled: selection.getLocationEnabled,
         getCachedLocation: selection.getCachedLocation,
+        isCurrent: selection.isAlive,
         onAgentEvent: (event) => {
           if (event.type === 'error') {
             if (event.errorCode === 'MODEL_ENTRY_UNAVAILABLE') {
@@ -572,6 +568,16 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
     [agentId, selection, updateTodos],
   )
   const runtime = useLocalRuntime(adapter)
+
+  useEffect(() => {
+    selection.setAlive(true)
+    return () => {
+      selection.setAlive(false)
+      // 作废未决的定位授权，并中止进行中的流（abort 后读流立即结束，不再写回任何状态）。
+      selection.nextLocationEpoch()
+      runtime.thread.cancelRun()
+    }
+  }, [runtime, selection])
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>

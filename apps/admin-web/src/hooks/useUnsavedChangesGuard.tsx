@@ -1,6 +1,6 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useBlocker, useNavigate } from 'react-router-dom'
 
 import { FormDialog } from '@/components/admin'
 import { adminFormActionsClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
@@ -19,23 +19,22 @@ export function useUnsavedDirtyKey(key: string, dirty: boolean) {
   }, [key, dirty])
 }
 
-function sameLocation(next: string) {
-  const url = new URL(next, window.location.origin)
-  const current = window.location.pathname + window.location.search + window.location.hash
-  return url.pathname + url.search + url.hash === current
-}
-
 /**
- * 未保存离开保护（兼容 BrowserRouter，不依赖 data-router useBlocker）：
- * - beforeunload：刷新/关页
- * - 捕获同站 <a> 点击（Tabs / 配置子导航）
- * - tryNavigate：Agent 切换等编程式导航
+ * 未保存离开保护（需 data router：main.tsx 的 createBrowserRouter + RouterProvider）：
+ * - useBlocker：拦截所有经 router 的离开——Link / NavLink 点击、navigate()、浏览器后退/前进；
+ *   仅 pathname 变化才拦（同页 search / hash 变化不丢草稿）。后退/前进的历史回滚由 router 内部处理，无需手补。
+ * - beforeunload：刷新 / 关页 / 跳出站外。
+ * - tryNavigate：Agent 切换等编程式导航入口；实际拦截由 blocker 完成，这里只负责 navigate。
+ * 用户选「放弃并离开」走 blocker.proceed()，「继续编辑」走 blocker.reset()，不再次触发 blocker。
  */
 export function useUnsavedChangesGuard() {
   const { t } = useTranslation('common')
   const navigate = useNavigate()
   const when = useSyncExternalStore(subscribeUnsavedDirty, getUnsavedDirtySnapshot, () => false)
-  const [pendingTo, setPendingTo] = useState<string | null>(null)
+
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) => when && currentLocation.pathname !== nextLocation.pathname,
+  )
 
   useEffect(() => {
     if (!when) return
@@ -47,59 +46,30 @@ export function useUnsavedChangesGuard() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [when])
 
+  // 拦截期间草稿被清空（例如保存成功）：不再有未保存内容，直接放行，避免对话框悬挂。
   useEffect(() => {
-    if (!when) return
-    const onClick = (event: MouseEvent) => {
-      if (event.defaultPrevented || event.button !== 0) return
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-      const target = event.target
-      if (!(target instanceof Element)) return
-      const anchor = target.closest('a[href]')
-      if (!(anchor instanceof HTMLAnchorElement)) return
-      if (anchor.target === '_blank' || anchor.hasAttribute('download')) return
-      const url = new URL(anchor.href, window.location.href)
-      if (url.origin !== window.location.origin) return
-      const next = `${url.pathname}${url.search}${url.hash}`
-      if (sameLocation(next)) return
-      event.preventDefault()
-      event.stopPropagation()
-      setPendingTo(next)
-    }
-    document.addEventListener('click', onClick, true)
-    return () => document.removeEventListener('click', onClick, true)
-  }, [when])
+    if (blocker.state === 'blocked' && !when) blocker.proceed()
+  }, [blocker, when])
 
   function tryNavigate(to: string) {
-    if (!when || sameLocation(to)) {
-      navigate(to)
-      return
-    }
-    setPendingTo(to)
+    navigate(to)
   }
 
   const dialog =
-    pendingTo != null ? (
+    blocker.state === 'blocked' && when ? (
       <FormDialog
         title={t('unsavedChanges.title')}
         closeLabel={t('unsavedChanges.stay')}
-        onClose={() => setPendingTo(null)}
+        onClose={() => blocker.reset()}
         size="s"
         danger
       >
         <p className="text-sm text-admin">{t('unsavedChanges.body')}</p>
         <div className={adminFormActionsClass}>
-          <button type="button" className={adminSecondaryButtonClass} onClick={() => setPendingTo(null)}>
+          <button type="button" className={adminSecondaryButtonClass} onClick={() => blocker.reset()}>
             {t('unsavedChanges.stay')}
           </button>
-          <button
-            type="button"
-            className={adminPrimaryButtonClass}
-            onClick={() => {
-              const target = pendingTo
-              setPendingTo(null)
-              if (target) navigate(target)
-            }}
-          >
+          <button type="button" className={adminPrimaryButtonClass} onClick={() => blocker.proceed()}>
             {t('unsavedChanges.leave')}
           </button>
         </div>
