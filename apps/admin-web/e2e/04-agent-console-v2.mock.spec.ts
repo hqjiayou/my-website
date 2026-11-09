@@ -26,7 +26,7 @@ test.describe('Agent Console V2 (mock API)', () => {
     await expect(page.getByText('Demo Agent')).toBeVisible()
     await expect(page.getByText('demo-agent')).toBeVisible()
     await expect(page.getByLabel('Status')).toBeVisible()
-    await expect(page.getByText('1 items')).toBeVisible()
+    await expect(page.getByText('2 items')).toBeVisible()
 
     await page.getByText('Demo Agent').click()
     await page.waitForURL('**/agent/42/agent')
@@ -118,7 +118,7 @@ test.describe('Agent Console V2 (mock API)', () => {
     await expect(kindSelect).toBeVisible()
     await kindSelect.selectOption('SITE')
 
-    await page.getByRole('button', { name: 'Row actions' }).click()
+    await page.getByRole('row', { name: /Demo Agent/ }).getByRole('button', { name: 'Row actions' }).click()
     await page.getByRole('menuitem', { name: 'Manage subscriptions' }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
     await expect(page.getByText('Demo KB')).toBeVisible()

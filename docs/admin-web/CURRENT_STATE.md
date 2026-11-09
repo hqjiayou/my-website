@@ -9,7 +9,7 @@ source_of_truth: apps/admin-web/src
 
 ## 总览
 
-管理后台 React 应用。主纵向域走 **REAL API**。侧栏父级叫 agent；智能体、模型 API、AI 用量等同组。`/agent` 为智能体列表（列显示管理、状态/类型服务端筛选、行级 `···` 操作；无全局 `q/sort` 时不开放本地伪装搜索）。Agent 工作区取消常驻二级侧栏，改为横向 Tabs：`概览 / 配置 / 调试 / 运行记录 / 设置`；配置内子导航为 `模型链 / Prompt / 知识空间 / Tools`（薄容器复用既有业务面板）。Settings 聚合 Basic＋Access（平台默认只读）并以高级入口保留 Theme／Contents／Files。旧路径 `prompt/knowledge/preview/conversations/runtime/basic/access` 绝对重定向到 V2 等价页；`theme/contents/files` 仍直达。对话预览左栏顺序为本轮执行 → MCP（状态只读，选择在运行状态／Tools 页）→ Skills → Todo；成功轮次落库为 `ADMIN_PREVIEW`。概览左侧上方是当前模型、Prompt 和知识库，下面是 Harness，右侧是对话列表。
+管理后台 React 应用。主纵向域走 **REAL API**。侧栏父级叫 agent；智能体、模型 API、AI 用量等同组。`/agent` 为智能体列表（列显示管理、状态/类型服务端筛选、行级 `···` 操作；无全局 `q/sort` 时不开放本地伪装搜索）。Agent 工作区横向 Tabs：`概览 / 配置 / 调试 / 运行记录 / 设置`；配置子导航 `模型链 / Prompt / 知识空间 / Tools`。配置页经 `ResourcePickerDrawer` 选择模型／Skills／知识空间／MCP（确认≠保存；保存走各自 Agent API）。模型链分 CLI/KEY 有序名单，首位为主用，不把平台 `defaultEntry` 当 Agent 主用；停用入口不可新增、既有失效入口保留告警。Prompt 为 Agent 自有副本，模板套用是拷贝；默认 Skills 仅允许目录 ID。知识空间关联与文档管理分离，解绑不删平台空间。MCP 保留 INHERIT/OFF/CUSTOM。CLI 模型页在用量接口失败时标「状态未知」，不误标未发布。Settings 聚合 Basic＋Access（平台默认只读）并保留 Theme／Contents／Files。旧路径绝对重定向到 V2 等价页。
 
 ## 域 × 数据源
 

@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, ArrowDown, ArrowUp, Link2, X } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FormDialog } from '@/components/admin'
+import { FormDialog, ResourcePickerDrawer, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFieldClass,
@@ -16,15 +16,11 @@ import {
   adminSecondaryButtonSmClass,
 } from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
-import { PermissionGate } from '@/router/permission'
+import { PermissionGate, useHasPermission } from '@/router/permission'
 import type { AiAgentChain, AiChainMode, AiChainPreset, AiModelEntry } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 
 const ROW_ORDER: AiChainMode[] = ['CLI', 'KEY']
-
-function entryLabel(entry: AiModelEntry): string {
-  return entry.displayName ? `${entry.displayName} · ${entry.modelSpec}` : entry.modelSpec
-}
 
 function serverIds(chain: AiAgentChain | undefined, mode: AiChainMode): number[] {
   if (!chain) return []
@@ -62,9 +58,10 @@ function ChainModeRow({
 }: ChainModeRowProps) {
   const { t } = useTranslation('sites')
   const queryClient = useQueryClient()
+  const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
   // 草稿为 null 表示跟随服务端值；编辑后才落草稿，保存/载入成功后回到跟随。
   const [draft, setDraftState] = useState<number[] | null>(null)
-  const [addSelection, setAddSelection] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [templateSelection, setTemplateSelection] = useState('')
   const [templateName, setTemplateName] = useState('')
   const [confirmingLoad, setConfirmingLoad] = useState(false)
@@ -73,9 +70,7 @@ function ChainModeRow({
   const serverList = serverIds(chain, mode)
   const currentIds = draft ?? serverList
   const dirty = draft != null && draft.join(',') !== serverList.join(',')
-  const candidates = entries.filter(
-    (entry) => (entry.mode ?? 'KEY') === mode && !currentIds.includes(entry.id),
-  )
+  const modeEntries = entries.filter((entry) => (entry.mode ?? 'KEY') === mode)
 
   const moveMember = (index: number, delta: number) => {
     const target = index + delta
@@ -161,10 +156,17 @@ function ChainModeRow({
                         {t('aiWorkspace.chainPreset.primaryMark')}
                       </span>
                     ) : null}
+                    {!entry ? (
+                      <StatusTag status="warning" tone="warning" label={t('aiWorkspace.chainPreset.missingMark')} />
+                    ) : !entry.enabled ? (
+                      <StatusTag status="DISABLED" tone="danger" label={t('aiWorkspace.chainPreset.disabledMark')} />
+                    ) : null}
                   </div>
-                  {entry && entry.displayName ? (
-                    <div className="truncate text-xs text-admin-muted">{entry.modelSpec}</div>
-                  ) : null}
+                  {entry ? (
+                    <div className="truncate font-mono text-xs text-admin-muted">{entry.modelSpec}</div>
+                  ) : (
+                    <div className="text-xs text-warning-emphasis">{t('aiWorkspace.chainPreset.missingHint')}</div>
+                  )}
                   <div className="mt-1.5 flex gap-1">
                     <button
                       type="button"
@@ -214,34 +216,17 @@ function ChainModeRow({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          className={adminFieldClass}
-          style={{ maxWidth: 320 }}
-          value={addSelection}
-          disabled={chainPending || entriesPending}
-          onChange={(event) => setAddSelection(event.target.value)}
-          aria-label={t('aiWorkspace.chainPreset.addPlaceholder')}
-        >
-          <option value="">{t('aiWorkspace.chainPreset.addPlaceholder')}</option>
-          {candidates.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entryLabel(entry)}
-              {entry.defaultEntry ? ` · ${t('aiWorkspace.chainPreset.defaultMark')}` : ''}
-              {entry.enabled ? '' : ` · ${t('aiWorkspace.chainPreset.disabledMark')}`}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className={adminSecondaryButtonClass}
-          disabled={addSelection === ''}
-          onClick={() => {
-            setDraftState([...currentIds, Number(addSelection)])
-            setAddSelection('')
-          }}
-        >
-          {t('aiWorkspace.chainPreset.add')}
-        </button>
+        <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
+          <button
+            type="button"
+            className={adminSecondaryButtonClass}
+            disabled={chainPending || entriesPending || !canUpdate}
+            onClick={() => setPickerOpen(true)}
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            {t('aiWorkspace.chainPreset.addFromPicker')}
+          </button>
+        </PermissionGate>
         <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
           <button
             type="button"
@@ -249,10 +234,79 @@ function ChainModeRow({
             disabled={!dirty || saveMutation.isPending}
             onClick={() => saveMutation.mutate()}
           >
-            {t('aiWorkspace.chainPreset.save')}
+            {saveMutation.isPending ? t('aiWorkspace.chainPreset.saving') : t('aiWorkspace.chainPreset.save')}
           </button>
         </PermissionGate>
+        {dirty ? (
+          <button
+            type="button"
+            className={adminGhostButtonClass}
+            disabled={saveMutation.isPending}
+            onClick={() => setDraftState(null)}
+          >
+            {t('aiWorkspace.chainPreset.discard')}
+          </button>
+        ) : null}
       </div>
+
+      <ResourcePickerDrawer
+        open={pickerOpen}
+        title={t('aiWorkspace.chainPreset.pickerTitle', { mode })}
+        description={t('aiWorkspace.chainPreset.pickerHint')}
+        items={modeEntries}
+        getId={(entry) => String(entry.id)}
+        alreadySelectedIds={currentIds.map(String)}
+        alreadySelectedLabel={t('aiWorkspace.chainPreset.alreadyInChain')}
+        disabledReason={(entry) =>
+          entry.enabled ? null : t('aiWorkspace.chainPreset.disabledMark')
+        }
+        searchText={(entry) => `${entry.displayName} ${entry.modelSpec} ${entry.mode}`}
+        columns={[
+          {
+            id: 'name',
+            header: t('aiWorkspace.chainPreset.colName'),
+            cell: (entry) => (
+              <div>
+                <div className="font-medium text-admin">{entry.displayName || entry.modelSpec}</div>
+                {entry.defaultEntry ? (
+                  <span className="text-xs text-admin-muted">{t('aiWorkspace.chainPreset.platformDefaultHint')}</span>
+                ) : null}
+              </div>
+            ),
+          },
+          {
+            id: 'spec',
+            header: t('aiWorkspace.chainPreset.colSpec'),
+            cell: (entry) => <span className="font-mono text-xs">{entry.modelSpec}</span>,
+          },
+          {
+            id: 'mode',
+            header: t('aiWorkspace.chainPreset.colMode'),
+            cell: (entry) => entry.mode ?? mode,
+          },
+          {
+            id: 'status',
+            header: t('aiWorkspace.chainPreset.colStatus'),
+            cell: (entry) =>
+              entry.enabled ? t('status.ACTIVE') : t('aiWorkspace.chainPreset.disabledMark'),
+          },
+        ]}
+        isLoading={entriesPending}
+        confirmLabel={t('aiWorkspace.chainPreset.add')}
+        onConfirm={(ids) => {
+          const next = [...currentIds]
+          for (const id of ids) {
+            const numeric = Number(id)
+            if (!Number.isFinite(numeric) || next.includes(numeric)) continue
+            const entry = entryById.get(numeric)
+            if (!entry || !entry.enabled) continue
+            next.push(numeric)
+          }
+          setDraftState(next)
+          setPickerOpen(false)
+        }}
+        onClose={() => setPickerOpen(false)}
+      />
 
       <div className="flex flex-wrap items-center gap-2 border-t border-admin pt-3">
         <span className="text-xs font-medium text-admin-muted">
@@ -374,14 +428,8 @@ export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
   }
 
   return (
-    <section className="mt-3 rounded-xl border border-admin bg-admin-surface p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-info-muted text-info-emphasis">
-          <Link2 className="h-4.5 w-4.5" aria-hidden />
-        </span>
-        <h3 className="text-base font-semibold text-admin">{t('aiWorkspace.chainPreset.title')}</h3>
-      </div>
-      <p className="mb-3 text-xs text-admin-muted">{t('aiWorkspace.chainPreset.hint')}</p>
+    <div className="space-y-4">
+      <p className="text-xs text-admin-muted">{t('aiWorkspace.chainPreset.hint')}</p>
       {chainQuery.isError || entriesQuery.isError ? (
         <div className="flex items-center gap-2.5 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
           <AlertCircle className="h-4.5 w-4.5 shrink-0 text-danger-emphasis" aria-hidden />
@@ -400,7 +448,7 @@ export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
         <div className="space-y-5">
           {ROW_ORDER.map((rowMode) => (
             <ChainModeRow
-              key={rowMode}
+              key={`${agentId}-${rowMode}`}
               agentId={agentId}
               mode={rowMode}
               chain={chainQuery.data}
@@ -414,6 +462,6 @@ export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
           ))}
         </div>
       )}
-    </section>
+    </div>
   )
 }

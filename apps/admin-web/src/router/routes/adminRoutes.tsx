@@ -53,14 +53,6 @@ const AgentOverviewPage = lazyNamed(
   () => import('@/pages/agents/agentOverviewPage'),
   'AgentOverviewPage',
 )
-const AgentPromptPage = lazyNamed(
-  () => import('@/pages/agents/agentPages'),
-  'AgentPromptPage',
-)
-const AgentKnowledgePage = lazyNamed(
-  () => import('@/pages/agents/agentPages'),
-  'AgentKnowledgePage',
-)
 const AgentConversationsPage = lazyNamed(
   () => import('@/pages/agents/agentPages'),
   'AgentConversationsPage',
@@ -68,10 +60,6 @@ const AgentConversationsPage = lazyNamed(
 const AgentPreviewPage = lazyNamed(
   () => import('@/pages/agents/agentPages'),
   'AgentPreviewPage',
-)
-const AgentRuntimePage = lazyNamed(
-  () => import('@/pages/agents/agentPages'),
-  'AgentRuntimePage',
 )
 const AgentConfigLayout = lazyNamed(
   () => import('@/pages/agents/console/AgentConfigLayout'),
@@ -84,6 +72,18 @@ const RedirectToAgentConfigIndex = lazyNamed(
 const AgentConfigModelsPage = lazyNamed(
   () => import('@/pages/agents/console/AgentConfigModelsPage'),
   'AgentConfigModelsPage',
+)
+const AgentConfigPromptPage = lazyNamed(
+  () => import('@/pages/agents/console/AgentConfigPromptPage'),
+  'AgentConfigPromptPage',
+)
+const AgentConfigKnowledgePage = lazyNamed(
+  () => import('@/pages/agents/console/AgentConfigKnowledgePage'),
+  'AgentConfigKnowledgePage',
+)
+const AgentConfigToolsPage = lazyNamed(
+  () => import('@/pages/agents/console/AgentConfigToolsPage'),
+  'AgentConfigToolsPage',
 )
 const AgentSettingsPage = lazyNamed(
   () => import('@/pages/agents/console/AgentSettingsPage'),
@@ -184,9 +184,9 @@ export const adminRoutes = (
         <Route path="config" element={<AgentConfigLayout />}>
           <Route index element={<RedirectToAgentConfigIndex />} />
           <Route path="models" element={<AgentConfigModelsPage />} />
-          <Route path="prompt" element={<AgentPromptPage />} />
-          <Route path="knowledge" element={<AgentKnowledgePage />} />
-          <Route path="tools" element={<AgentRuntimePage />} />
+          <Route path="prompt" element={<AgentConfigPromptPage />} />
+          <Route path="knowledge" element={<AgentConfigKnowledgePage />} />
+          <Route path="tools" element={<AgentConfigToolsPage />} />
         </Route>
         <Route path="debug" element={<AgentPreviewPage />} />
         <Route path="runs" element={<AgentConversationsPage />} />

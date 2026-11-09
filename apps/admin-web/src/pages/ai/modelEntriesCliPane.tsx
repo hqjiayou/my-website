@@ -41,13 +41,17 @@ import {
   shownModelIds,
 } from './proxyServicesShared'
 
+export type CliPublishStatus = 'published' | 'not_published' | 'unknown' | 'loading'
+
 export type CliTableRow = {
   key: string
   entry: AiModelEntry
   account: ProxyServicesAccount | null
   provider: string
   usedPercent: number | null
+  /** @deprecated 使用 publishStatus；保留 published 兼容旧断言。 */
   published: boolean
+  publishStatus: CliPublishStatus
 }
 
 type CliPaneProps = {
@@ -77,15 +81,17 @@ function buildCliRows(
   accounts: ProxyServicesAccount[],
   publishedAccounts: ProxyServicesPublishedAccount[],
   usagePending: boolean,
+  usageError: boolean,
 ): CliTableRow[] {
   const publishedByName = new Map(publishedAccounts.map((account) => [account.name, account]))
   const matchedIds = new Set<number>()
   const rows: CliTableRow[] = []
 
   for (const account of accounts) {
-    const ids = usagePending
-      ? []
-      : (shownModelIds(account.provider, publishedByName.get(account.name)?.modelIds ?? []) ?? [])
+    const ids =
+      usagePending || usageError
+        ? []
+        : (shownModelIds(account.provider, publishedByName.get(account.name)?.modelIds ?? []) ?? [])
     for (const entry of entries) {
       const modelId = modelIdFromSpec(entry.modelSpec)
       if (!ids.includes(modelId)) continue
@@ -97,22 +103,55 @@ function buildCliRows(
         provider: account.provider,
         usedPercent: account.modelUsedPercent[modelId] ?? null,
         published: true,
+        publishStatus: 'published',
       })
     }
   }
 
-  if (!usagePending) {
+  // 用量接口失败时：不得把未匹配行标成「未发布/未关联」，只标状态未知。
+  if (usageError) {
     for (const entry of entries) {
       if (matchedIds.has(entry.id)) continue
       rows.push({
-        key: `detached:${entry.id}`,
+        key: `unknown:${entry.id}`,
         entry,
         account: null,
         provider: inferredCliProvider(entry),
         usedPercent: null,
         published: false,
+        publishStatus: 'unknown',
       })
     }
+    return rows
+  }
+
+  if (usagePending) {
+    for (const entry of entries) {
+      if (matchedIds.has(entry.id)) continue
+      rows.push({
+        key: `loading:${entry.id}`,
+        entry,
+        account: null,
+        provider: inferredCliProvider(entry),
+        usedPercent: null,
+        published: false,
+        publishStatus: 'loading',
+      })
+    }
+    return rows
+  }
+
+  for (const entry of entries) {
+    if (matchedIds.has(entry.id)) continue
+    rows.push({
+      key: `detached:${entry.id}`,
+      entry,
+      account: null,
+      provider: inferredCliProvider(entry),
+      usedPercent: null,
+      published: false,
+      publishStatus: 'not_published',
+    })
   }
 
   return rows
@@ -148,8 +187,8 @@ export function ModelEntriesCliPane({
   const [sortOrder, setSortOrder] = useState<TableSortOrder>('asc')
 
   const allRows = useMemo(
-    () => buildCliRows(entries, accounts, publishedAccounts, usagePending),
-    [accounts, entries, publishedAccounts, usagePending],
+    () => buildCliRows(entries, accounts, publishedAccounts, usagePending, usageError),
+    [accounts, entries, publishedAccounts, usageError, usagePending],
   )
 
   const filtered = useMemo(
@@ -208,7 +247,11 @@ export function ModelEntriesCliPane({
               <div className="truncate font-mono text-xs text-admin-muted">{row.account.name}</div>
             </div>
           ) : (
-            <span className="text-xs text-admin-muted">{t('modelManagement.unmatchedBlock')}</span>
+            <span className="text-xs text-admin-muted">
+              {row.publishStatus === 'unknown' || row.publishStatus === 'loading'
+                ? t('modelManagement.accountLinkUnknown')
+                : t('modelManagement.unmatchedBlock')}
+            </span>
           ),
         sortValue: (row) => (row.account ? accountTitle(row.account) : ''),
         sortable: true,
@@ -218,6 +261,16 @@ export function ModelEntriesCliPane({
         header: t('modelManagement.columns.authStatus'),
         cell: (row) => {
           if (!row.account) {
+            if (row.publishStatus === 'unknown') {
+              return (
+                <StatusTag status="neutral" tone="neutral" label={t('modelManagement.accountLinkUnknown')} />
+              )
+            }
+            if (row.publishStatus === 'loading') {
+              return (
+                <StatusTag status="info" tone="info" label={t('modelManagement.publishStatusLoading')} />
+              )
+            }
             return <StatusTag status="warning" tone="warning" label={t('modelManagement.accountDetached')} />
           }
           const status = accountStatus(row.account, t)
@@ -272,8 +325,14 @@ export function ModelEntriesCliPane({
                 {t('settings.defaultBadgeCli')}
               </span>
             ) : null}
-            {!row.published ? (
+            {row.publishStatus === 'not_published' ? (
               <StatusTag status="warning" tone="warning" label={t('modelManagement.notPublished')} />
+            ) : null}
+            {row.publishStatus === 'unknown' ? (
+              <StatusTag status="neutral" tone="neutral" label={t('modelManagement.publishStatusUnknown')} />
+            ) : null}
+            {row.publishStatus === 'loading' ? (
+              <StatusTag status="info" tone="info" label={t('modelManagement.publishStatusLoading')} />
             ) : null}
           </span>
         ),

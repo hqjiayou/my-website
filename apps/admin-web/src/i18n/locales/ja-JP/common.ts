@@ -31,6 +31,15 @@ export default {
     copy: 'コピー',
     copied: 'コピーしました',
   },
+  resourcePicker: {
+    searchPlaceholder: 'リソースを検索',
+    confirm: '選択を追加',
+    cancel: 'キャンセル',
+    alreadySelected: '追加済み',
+    discardTitle: '選択を破棄しますか？',
+    discardBody: 'ドロワー内の未適用の選択があります。閉じて破棄しますか？',
+    discardConfirm: '破棄',
+  },
   breadcrumb: 'パンくず',
   error: {
     network: 'ネットワークエラー。しばらくしてから再試行してください。',

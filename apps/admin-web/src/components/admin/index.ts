@@ -26,6 +26,12 @@ export {
   adminSecondaryButtonClass,
 } from './controls'
 export { FormDialog } from './formDialog'
+export {
+  ResourcePickerDrawer,
+  type ResourcePickerColumn,
+  type ResourcePickerDrawerProps,
+  type ResourcePickerMode,
+} from './ResourcePickerDrawer'
 export { SearchToolbar } from './searchToolbar'
 export { StatusTag } from './statusTag'
 export {

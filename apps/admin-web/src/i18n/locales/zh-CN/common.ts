@@ -31,6 +31,15 @@ export default {
     copy: '复制',
     copied: '已复制',
   },
+  resourcePicker: {
+    searchPlaceholder: '搜索资源',
+    confirm: '添加所选',
+    cancel: '取消',
+    alreadySelected: '已添加',
+    discardTitle: '放弃选择？',
+    discardBody: '抽屉内的选择尚未应用。确定关闭并丢弃吗？',
+    discardConfirm: '放弃',
+  },
   breadcrumb: '面包屑',
   error: {
     network: '网络错误，请稍后重试',
