@@ -1,6 +1,13 @@
 export { AdminPageHeader, type AdminBreadcrumbItem } from './adminPageHeader'
 export { CopyableText } from './copyableText'
-export { DataTable, type DataTableColumn, type DataTablePagination } from './dataTable'
+export {
+  DataTable,
+  type DataTableColumn,
+  type DataTablePagination,
+  type DataTableProps,
+  type DataTableSelectionProps,
+  type DataTableSortProps,
+} from './dataTable'
 export { FilterTabs, type FilterTabItem } from './filterTabs'
 export {
   adminDangerButtonClass,
@@ -21,3 +28,35 @@ export {
 export { FormDialog } from './formDialog'
 export { SearchToolbar } from './searchToolbar'
 export { StatusTag } from './statusTag'
+export {
+  AdminDataTable,
+  DataTableBulkActions,
+  DataTableColumnMenu,
+  DataTableEmptyState,
+  DataTableRowActions,
+  DataTableSortHeader,
+  DataTableToolbar,
+  defaultAdminTableQuery,
+  parseAdminTableQuery,
+  resolveVisibleColumns,
+  serializeAdminTableQuery,
+  setPageSelection,
+  sortClientPageRows,
+  toggleColumnHidden,
+  toggleKeySelection,
+  toggleSortOrder,
+  useColumnVisibility,
+  useDebouncedValue,
+  useRowSelection,
+  useTableQueryState,
+  withPageReset,
+  type AdminTableQuery,
+  type DataTableColumnDef,
+  type DataTableColumnMenuItem,
+  type TableBulkAction,
+  type TableEmptyKind,
+  type TableRowAction,
+  type TableSortOrder,
+  type TableSortScope,
+  type TableSortState,
+} from './table'

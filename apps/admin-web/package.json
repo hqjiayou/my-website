@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:boundary": "node scripts/check-agent-platform-default-boundary.mjs",
+    "test:table": "node --experimental-strip-types scripts/check-table-foundation.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
