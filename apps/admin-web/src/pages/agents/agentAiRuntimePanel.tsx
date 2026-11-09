@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, RefreshCw, Server, Sparkles, Wrench } from 'lucide-react'
-import { useState } from 'react'
+import { Activity, Plus, RefreshCw, Server, Sparkles, Wrench } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
+import { ResourcePickerDrawer, StatusTag } from '@/components/admin'
+import { adminGhostButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
+import { useUnsavedDirtyKey } from '@/hooks/useUnsavedChangesGuard'
 import { cn } from '@/lib/cn'
 import { PermissionGate } from '@/router/permission'
 import type { AiMcpSelectionMode, AiRuntimeLimits } from '@/types/ai'
@@ -121,9 +124,8 @@ function McpSelectionSection({
 }) {
   const { t } = useTranslation('sites')
   const queryClient = useQueryClient()
-  const [mode, setMode] = useState<AiMcpSelectionMode>('INHERIT')
-  const [selected, setSelected] = useState<string[]>([])
-  const [syncedKey, setSyncedKey] = useState<string | null>(null)
+  const [draft, setDraft] = useState<{ mode: AiMcpSelectionMode; serverNames: string[] } | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const selectionQuery = useQuery({
     queryKey: ['sites', agentId, 'ai', 'mcp-selection'],
@@ -136,18 +138,20 @@ function McpSelectionSection({
   })
 
   const saved = selectionQuery.data
-  if (saved) {
-    const key = `${saved.mode}|${saved.serverNames.join(',')}`
-    if (key !== syncedKey) {
-      setMode(saved.mode)
-      setSelected(saved.serverNames)
-      setSyncedKey(key)
-    }
-  }
+  const mode = draft?.mode ?? saved?.mode ?? 'INHERIT'
+  const selected = draft?.serverNames ?? saved?.serverNames ?? []
 
-  const registry = registryQuery.data
-    ? registryQuery.data.servers.map((server) => ({ name: server.name, enabled: server.enabled }))
-    : fallbackServers
+  const registry = useMemo(
+    () =>
+      registryQuery.data
+        ? registryQuery.data.servers.map((server) => ({
+            name: server.name,
+            enabled: server.enabled,
+            transport: server.transport,
+          }))
+        : fallbackServers.map((server) => ({ ...server, transport: null as string | null })),
+    [fallbackServers, registryQuery.data],
+  )
   const enabledNames = registry.filter((server) => server.enabled).map((server) => server.name)
   const staleNames = selected.filter((name) => !registry.some((server) => server.name === name))
   const effective =
@@ -157,6 +161,13 @@ function McpSelectionSection({
         ? []
         : selected.filter((name) => enabledNames.includes(name))
   const customEmpty = mode === 'CUSTOM' && selected.length === 0
+  const serverDirty =
+    saved != null &&
+    (mode !== saved.mode ||
+      (mode === 'CUSTOM' &&
+        (selected.length !== saved.serverNames.length ||
+          selected.some((name) => !saved.serverNames.includes(name)))))
+  useUnsavedDirtyKey(`agent-mcp-${agentId}`, serverDirty)
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -165,6 +176,7 @@ function McpSelectionSection({
         serverNames: mode === 'CUSTOM' ? selected : [],
       }),
     onSuccess: () => {
+      setDraft(null)
       toast.success(t('aiWorkspace.runtime.mcpSelection.saved'))
       void queryClient.invalidateQueries({ queryKey: ['sites', agentId, 'ai', 'mcp-selection'] })
       queryClient.removeQueries({ queryKey: ['sites', agentId, 'ai', 'mcp-ready'] })
@@ -228,7 +240,7 @@ function McpSelectionSection({
                   name={`mcp-selection-mode-${agentId}`}
                   className="accent-primary"
                   checked={mode === item.value}
-                  onChange={() => setMode(item.value)}
+                  onChange={() => setDraft({ mode: item.value, serverNames: selected })}
                 />
                 <span>
                   {item.label}
@@ -239,39 +251,59 @@ function McpSelectionSection({
           </div>
 
           {mode === 'CUSTOM' ? (
-            registry.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {t('aiWorkspace.runtime.mcpSelection.registryEmpty')}
-              </p>
-            ) : (
-              <ul className="space-y-1.5">
-                {registry.map((server) => (
-                  <li key={server.name}>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs">
-                      <input
-                        type="checkbox"
-                        className="accent-primary"
-                        checked={selected.includes(server.name)}
-                        disabled={!server.enabled && !selected.includes(server.name)}
-                        onChange={(event) =>
-                          setSelected((current) =>
-                            event.target.checked
-                              ? [...current, server.name]
-                              : current.filter((name) => name !== server.name),
-                          )
-                        }
-                      />
-                      <span className="min-w-0 flex-1 truncate font-mono text-foreground">{server.name}</span>
-                      {!server.enabled ? (
-                        <span className="text-muted-foreground">
-                          {t('aiWorkspace.runtime.mcpSelection.disabledTag')}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
+                  <button
+                    type="button"
+                    className={adminSecondaryButtonClass}
+                    onClick={() => setPickerOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" aria-hidden />
+                    {t('aiWorkspace.runtime.mcpSelection.pickServers')}
+                  </button>
+                </PermissionGate>
+                {selected.length === 0 ? (
+                  <p className="text-xs text-warning-emphasis">
+                    {t('aiWorkspace.runtime.mcpSelection.customEmpty')}
+                  </p>
+                ) : null}
+              </div>
+              {selected.length > 0 ? (
+                <ul className="flex flex-wrap gap-1.5">
+                  {selected.map((name) => {
+                    const row = registry.find((server) => server.name === name)
+                    const enabled = row?.enabled === true
+                    return (
+                      <li key={name}>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-admin px-2 py-1 font-mono text-xs">
+                          {name}
+                          {!row ? (
+                            <StatusTag
+                              status="warning"
+                              tone="warning"
+                              label={t('aiWorkspace.runtime.mcpSelection.missingTag')}
+                            />
+                          ) : !enabled ? (
+                            <StatusTag
+                              status="DISABLED"
+                              tone="danger"
+                              label={t('aiWorkspace.runtime.mcpSelection.disabledTag')}
+                            />
+                          ) : (
+                            <StatusTag
+                              status="ACTIVE"
+                              tone="active"
+                              label={t('aiWorkspace.runtime.mcpSelection.platformEnabledTag')}
+                            />
+                          )}
                         </span>
-                      ) : null}
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            )
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : null}
+            </div>
           ) : null}
 
           {staleNames.length > 0 ? (
@@ -296,19 +328,75 @@ function McpSelectionSection({
           ) : null}
 
           <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
-              disabled={saveMutation.isPending || customEmpty}
-              onClick={() => saveMutation.mutate()}
-            >
-              {saveMutation.isPending
-                ? t('aiWorkspace.runtime.mcpSelection.saving')
-                : t('aiWorkspace.runtime.mcpSelection.save')}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+                disabled={saveMutation.isPending || customEmpty || !serverDirty}
+                onClick={() => saveMutation.mutate()}
+              >
+                {saveMutation.isPending
+                  ? t('aiWorkspace.runtime.mcpSelection.saving')
+                  : t('aiWorkspace.runtime.mcpSelection.save')}
+              </button>
+              {serverDirty ? (
+                <button
+                  type="button"
+                  className={adminGhostButtonClass}
+                  disabled={saveMutation.isPending}
+                  onClick={() => setDraft(null)}
+                >
+                  {t('aiWorkspace.runtime.mcpSelection.discard')}
+                </button>
+              ) : null}
+            </div>
           </PermissionGate>
         </div>
       )}
+
+      <ResourcePickerDrawer
+        open={pickerOpen}
+        title={t('aiWorkspace.runtime.mcpSelection.pickerTitle')}
+        description={t('aiWorkspace.runtime.mcpSelection.pickerHint')}
+        items={registry}
+        getId={(server) => server.name}
+        initialSelectedIds={selected}
+        alreadySelectedSelectable
+        disabledReason={(server) =>
+          server.enabled ? null : t('aiWorkspace.runtime.mcpSelection.disabledTag')
+        }
+        searchText={(server) => `${server.name} ${server.transport ?? ''}`}
+        columns={[
+          {
+            id: 'name',
+            header: t('aiWorkspace.runtime.mcpSelection.colName'),
+            cell: (server) => <span className="font-mono text-xs">{server.name}</span>,
+          },
+          {
+            id: 'transport',
+            header: t('aiWorkspace.runtime.mcpSelection.colTransport'),
+            cell: (server) => server.transport ?? '—',
+          },
+          {
+            id: 'status',
+            header: t('aiWorkspace.runtime.mcpSelection.colStatus'),
+            cell: (server) =>
+              server.enabled
+                ? t('aiWorkspace.runtime.mcpSelection.platformEnabledTag')
+                : t('aiWorkspace.runtime.mcpSelection.disabledTag'),
+          },
+        ]}
+        isLoading={registryQuery.isPending}
+        isError={registryQuery.isError && fallbackServers.length === 0}
+        errorMessage={t('aiWorkspace.runtime.mcpSelection.registryEmpty')}
+        onRetry={() => void registryQuery.refetch()}
+        confirmLabel={t('aiWorkspace.runtime.mcpSelection.applyDraft')}
+        onConfirm={(ids) => {
+          setDraft({ mode: 'CUSTOM', serverNames: ids })
+          setPickerOpen(false)
+        }}
+        onClose={() => setPickerOpen(false)}
+      />
     </section>
   )
 }

@@ -78,7 +78,89 @@ const MODEL_ENTRY_CLI = {
   updatedAt: '2026-11-09T00:00:00Z',
 }
 
-const MODEL_ENTRIES = [MODEL_ENTRY_KEY, MODEL_ENTRY_CLI]
+const MODEL_ENTRY_DISABLED = {
+  ...MODEL_ENTRY_KEY,
+  id: 3,
+  displayName: 'Disabled Model',
+  modelSpec: 'openai:gpt-disabled',
+  enabled: false,
+  defaultEntry: false,
+  apiKeyHint: 'sk-…off',
+}
+
+const MODEL_ENTRIES = [MODEL_ENTRY_KEY, MODEL_ENTRY_CLI, MODEL_ENTRY_DISABLED]
+
+const AGENT_B = {
+  ...AGENT,
+  id: 43,
+  agentCode: 'other-agent',
+  agentName: 'Other Agent',
+  subscriptionCount: 0,
+  chainKeyCount: 0,
+}
+
+const SKILL_CATALOG = {
+  skills: [
+    {
+      id: 'orchestration',
+      description: 'Orchestrate multi-step work with Todo.',
+      version: '1.0.0',
+      license: null,
+      compatibility: null,
+      metadata: {},
+      allowedTools: [],
+    },
+    {
+      id: 'doc-qa-cited',
+      description: 'Answer with citations from knowledge docs.',
+      version: '1.0.0',
+      license: null,
+      compatibility: null,
+      metadata: {},
+      allowedTools: [],
+    },
+  ],
+  skillsSelfSelectEnabled: true,
+}
+
+const MCP_CONFIG = {
+  servers: [
+    {
+      name: 'filesystem',
+      transport: 'stdio',
+      urlConfigured: false,
+      urlHint: null,
+      enabled: true,
+      toolPrefix: null,
+      initTimeoutSeconds: null,
+      command: 'npx',
+      args: [],
+      cwd: null,
+      headers: [],
+      env: [],
+    },
+    {
+      name: 'legacy-off',
+      transport: 'stdio',
+      urlConfigured: false,
+      urlHint: null,
+      enabled: false,
+      toolPrefix: null,
+      initTimeoutSeconds: null,
+      command: 'npx',
+      args: [],
+      cwd: null,
+      headers: [],
+      env: [],
+    },
+  ],
+  configVersion: 1,
+  lastPushStatus: null,
+  lastPushMessage: null,
+  lastPushedAt: null,
+  version: 1,
+  updatedAt: null,
+}
 
 const PROXY_ACCOUNT = {
   name: 'codex-demo.json',
@@ -115,15 +197,43 @@ const PROXY_USAGE = {
   ],
 }
 
-const KNOWLEDGE_BASE = {
+const KNOWLEDGE_BASE_OWNED = {
   id: 7,
   agentId: 42,
-  name: 'Demo KB',
-  description: null,
-  documentCount: 2,
   ownerAgentName: 'Demo Agent',
-  linked: true,
-  version: 1,
+  name: 'Demo KB',
+  isDefault: true,
+  owned: true,
+  documentCount: 2,
+  linkedAgentIds: [] as number[],
+  createdAt: '2026-11-01T00:00:00Z',
+  updatedAt: '2026-11-09T00:00:00Z',
+}
+
+const KNOWLEDGE_BASE_OTHER = {
+  id: 8,
+  agentId: 43,
+  ownerAgentName: 'Other Agent',
+  name: 'Shared KB',
+  isDefault: false,
+  owned: false,
+  documentCount: 5,
+  linkedAgentIds: [] as number[],
+  createdAt: '2026-11-01T00:00:00Z',
+  updatedAt: '2026-11-09T00:00:00Z',
+}
+
+/** 关联 POST 故意失败，用于 PR-4.1 部分成功冒烟。 */
+const KNOWLEDGE_BASE_FAIL = {
+  id: 9,
+  agentId: 43,
+  ownerAgentName: 'Other Agent',
+  name: 'Fail KB',
+  isDefault: false,
+  owned: false,
+  documentCount: 1,
+  linkedAgentIds: [] as number[],
+  createdAt: '2026-11-01T00:00:00Z',
   updatedAt: '2026-11-09T00:00:00Z',
 }
 
@@ -165,6 +275,21 @@ async function json(route: Route, body: unknown, status = 200) {
  */
 export async function installAgentConsoleMocks(page: Page, options: MockAuthOptions = {}) {
   const me = buildMe(options.permissions ?? FULL_PERMISSIONS)
+  let chainState = { agentId: 42, keyEntryIds: [1], cliEntryIds: [] as number[] }
+  let promptState = {
+    agentId: 42,
+    systemPrompt: 'You are a helpful assistant.',
+    temperature: 0.2,
+    promptTemplateId: null as number | null,
+    promptTemplateName: null as string | null,
+    defaultSkillIds: [] as string[],
+  }
+  let mcpSelection = { mode: 'INHERIT' as string, serverNames: [] as string[] }
+  const knowledgeBases = [
+    { ...KNOWLEDGE_BASE_OWNED, linkedAgentIds: [] as number[] },
+    { ...KNOWLEDGE_BASE_OTHER, linkedAgentIds: [] as number[] },
+    { ...KNOWLEDGE_BASE_FAIL, linkedAgentIds: [] as number[] },
+  ]
 
   await page.route('**/api/**', async (route) => {
     const request = route.request()
@@ -184,8 +309,8 @@ export async function installAgentConsoleMocks(page: Page, options: MockAuthOpti
       await json(
         route,
         ok({
-          records: [AGENT],
-          total: 1,
+          records: [AGENT, AGENT_B],
+          total: 2,
           pageNum: Number(url.searchParams.get('pageNum') ?? 1),
           pageSize: Number(url.searchParams.get('pageSize') ?? 20),
         }),
@@ -197,7 +322,8 @@ export async function installAgentConsoleMocks(page: Page, options: MockAuthOpti
       return
     }
     if (/^\/admin\/agents\/\d+$/.test(path) && method === 'GET') {
-      await json(route, ok(AGENT))
+      const id = Number(path.split('/').pop())
+      await json(route, ok(id === 43 ? AGENT_B : AGENT))
       return
     }
     if (/^\/admin\/agents\/\d+$/.test(path) && (method === 'PUT' || method === 'PATCH')) {
@@ -209,11 +335,23 @@ export async function installAgentConsoleMocks(page: Page, options: MockAuthOpti
       return
     }
     if (/\/ai\/chain$/.test(path) && method === 'GET') {
-      await json(route, ok({ agentId: 42, keyEntryIds: [1], cliEntryIds: [] }))
+      const agentId = Number(path.split('/')[3])
+      await json(route, ok({ ...chainState, agentId }))
+      return
+    }
+    if (/\/ai\/chain\/(KEY|CLI)$/.test(path) && method === 'PUT') {
+      const mode = path.endsWith('/KEY') ? 'KEY' : 'CLI'
+      const body = request.postDataJSON() as { entryIds?: number[] }
+      const entryIds = body.entryIds ?? []
+      chainState =
+        mode === 'KEY'
+          ? { ...chainState, keyEntryIds: entryIds }
+          : { ...chainState, cliEntryIds: entryIds }
+      await json(route, ok({ ...chainState }))
       return
     }
     if (/\/ai\/chain\//.test(path)) {
-      await json(route, ok({ agentId: 42, keyEntryIds: [1], cliEntryIds: [] }))
+      await json(route, ok({ ...chainState }))
       return
     }
     if (/\/ai\/runtime$/.test(path)) {
@@ -302,56 +440,184 @@ export async function installAgentConsoleMocks(page: Page, options: MockAuthOpti
       return
     }
     if (path === '/admin/ai/knowledge-bases' && method === 'GET') {
-      await json(route, ok([KNOWLEDGE_BASE]))
+      await json(route, ok(knowledgeBases))
+      return
+    }
+    if (/\/knowledge-bases\/\d+\/links\/\d+$/.test(path) && method === 'POST') {
+      const parts = path.split('/')
+      const baseId = Number(parts[4])
+      const targetAgentId = Number(parts[6])
+      if (baseId === 9) {
+        await json(route, { code: 50001, message: 'mock link failed', data: null }, 500)
+        return
+      }
+      const base = knowledgeBases.find((item) => item.id === baseId)
+      if (base && !base.linkedAgentIds.includes(targetAgentId)) {
+        base.linkedAgentIds.push(targetAgentId)
+      }
+      await json(route, ok(null))
+      return
+    }
+    if (/\/knowledge-bases\/\d+\/links\/\d+$/.test(path) && method === 'DELETE') {
+      const parts = path.split('/')
+      const baseId = Number(parts[4])
+      const targetAgentId = Number(parts[6])
+      const base = knowledgeBases.find((item) => item.id === baseId)
+      if (base) {
+        base.linkedAgentIds = base.linkedAgentIds.filter((id) => id !== targetAgentId)
+      }
+      await json(route, ok(null))
       return
     }
     if (/\/knowledge-bases/.test(path)) {
-      await json(route, ok(method === 'GET' ? [] : null))
+      await json(route, ok(method === 'GET' ? knowledgeBases : null))
       return
     }
     if (path === '/admin/ai/prompt-templates' || /\/prompt-templates(\/|$)/.test(path)) {
-      await json(route, ok([]))
+      await json(
+        route,
+        ok([
+          {
+            id: 11,
+            name: 'Support template',
+            systemPrompt: 'Copied from template.',
+            temperature: 0.4,
+            version: 1,
+          },
+        ]),
+      )
+      return
+    }
+    if (/\/ai\/prompt$/.test(path) && method === 'PUT') {
+      const body = request.postDataJSON() as {
+        systemPrompt?: string | null
+        temperature?: number | null
+        defaultSkillIds?: string[]
+      }
+      promptState = {
+        ...promptState,
+        systemPrompt: body.systemPrompt ?? promptState.systemPrompt,
+        temperature: body.temperature ?? promptState.temperature,
+        defaultSkillIds: body.defaultSkillIds ?? promptState.defaultSkillIds,
+      }
+      await json(route, ok(promptState))
+      return
+    }
+    if (/\/ai\/prompt\/load-template$/.test(path) && method === 'POST') {
+      promptState = {
+        ...promptState,
+        systemPrompt: 'Copied from template.',
+        temperature: 0.4,
+        promptTemplateId: 11,
+        promptTemplateName: 'Support template',
+      }
+      await json(route, ok(promptState))
       return
     }
     if (/\/ai\/prompt(\/|$)/.test(path)) {
-      await json(
-        route,
-        ok({
-          agentId: 42,
-          systemPrompt: 'You are a helpful assistant.',
-          temperature: 0.2,
-          promptTemplateId: null,
-          promptTemplateName: null,
-          defaultSkillIds: [],
-        }),
-      )
+      await json(route, ok(promptState))
       return
     }
     if (/\/knowledge/.test(path) || /\/documents/.test(path)) {
       await json(route, ok({ records: [], total: 0, pageNum: 1, pageSize: 20 }))
       return
     }
-    if (/\/preview\/skills/.test(path) || /\/skills/.test(path)) {
-      await json(route, ok([]))
+    if (path === '/admin/ai/skills') {
+      await json(route, ok(SKILL_CATALOG))
       return
     }
-    if (/\/mcp-selection/.test(path)) {
-      await json(route, ok({ mode: 'INHERIT', serverNames: [] }))
-      return
-    }
-    if (path === '/admin/ai/mcp-config' || /\/mcp-config/.test(path)) {
+    if (/\/preview\/model/.test(path) && method === 'GET') {
+      const mode = url.searchParams.get('mode') === 'CLI' ? 'CLI' : 'KEY'
+      const entries = MODEL_ENTRIES.filter((entry) => (entry.mode ?? 'KEY') === mode && entry.enabled)
+      const primary = entries[0] ?? MODEL_ENTRY_KEY
       await json(
         route,
         ok({
-          servers: [],
-          configVersion: 1,
-          lastPushStatus: null,
-          lastPushMessage: null,
-          lastPushedAt: null,
-          version: 1,
-          updatedAt: null,
+          available: true,
+          mode,
+          modelSpec: primary.modelSpec,
+          entryId: primary.id,
+          entries: entries.map((entry) => ({
+            id: entry.id,
+            displayName: entry.displayName,
+            modelSpec: entry.modelSpec,
+            mode: entry.mode,
+            enabled: entry.enabled,
+          })),
         }),
       )
+      return
+    }
+    if (/\/preview\/skills/.test(path) || /\/skills/.test(path)) {
+      await json(route, ok(SKILL_CATALOG.skills.map(({ id, description, version }) => ({ id, description, version }))))
+      return
+    }
+    if (/\/conversations\/\d+\/messages$/.test(path) && method === 'GET') {
+      await json(
+        route,
+        ok([
+          {
+            id: 1,
+            role: 'USER',
+            content: 'Hello from preview',
+            createdAt: '2026-11-09T01:00:00Z',
+            agentMeta: null,
+          },
+          {
+            id: 2,
+            role: 'ASSISTANT',
+            content: 'Mock reply without run meta',
+            createdAt: '2026-11-09T01:00:01Z',
+            agentMeta: null,
+          },
+        ]),
+      )
+      return
+    }
+    if (/\/conversations/.test(path) && method === 'GET') {
+      await json(
+        route,
+        ok({
+          records: [
+            {
+              id: 101,
+              title: 'Preview debug session',
+              source: 'ADMIN_PREVIEW',
+              agentUserId: null,
+              lastMessageAt: '2026-11-09T01:00:01Z',
+              createdAt: '2026-11-09T01:00:00Z',
+            },
+            {
+              id: 102,
+              title: 'Portal user chat',
+              source: 'PORTAL',
+              agentUserId: 7,
+              lastMessageAt: '2026-11-08T12:00:00Z',
+              createdAt: '2026-11-08T11:00:00Z',
+            },
+          ],
+          total: 2,
+          pageNum: Number(url.searchParams.get('pageNum') ?? 1),
+          pageSize: Number(url.searchParams.get('pageSize') ?? 20),
+        }),
+      )
+      return
+    }
+    if (/\/mcp-selection$/.test(path) && method === 'PUT') {
+      const body = request.postDataJSON() as { mode?: string; serverNames?: string[] }
+      mcpSelection = {
+        mode: body.mode ?? mcpSelection.mode,
+        serverNames: body.serverNames ?? mcpSelection.serverNames,
+      }
+      await json(route, ok(mcpSelection))
+      return
+    }
+    if (/\/mcp-selection/.test(path)) {
+      await json(route, ok(mcpSelection))
+      return
+    }
+    if (path === '/admin/ai/mcp-config' || /\/mcp-config/.test(path)) {
+      await json(route, ok(MCP_CONFIG))
       return
     }
     if (/\/mcp-ready/.test(path) || /\/mcp/.test(path)) {

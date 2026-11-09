@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Settings2, X } from 'lucide-react'
-import { useState } from 'react'
+import { Loader2, Plus, Settings2, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FormDialog } from '@/components/admin'
+import { FormDialog, ResourcePickerDrawer } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFieldClass,
@@ -16,9 +16,10 @@ import {
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
+import { useUnsavedDirtyKey } from '@/hooks/useUnsavedChangesGuard'
 import { ROUTES } from '@/router/config/routePaths'
 import { PermissionGate } from '@/router/permission'
-import type { AiAgentPromptConfig } from '@/types/ai'
+import type { AiAgentPromptConfig, AiPreviewSkill } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 
 import { SkillCatalogItem } from './agentAiSkillCatalog'
@@ -59,7 +60,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
   const queryClient = useQueryClient()
   // 草稿为 null 表示跟随服务端值；编辑后才落草稿，保存/套用成功后回到跟随。
   const [draft, setDraft] = useState<Draft | null>(null)
-  const [skillInput, setSkillInput] = useState('')
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false)
   const [templateSelection, setTemplateSelection] = useState('')
   const [templateName, setTemplateName] = useState('')
   const [confirmingLoad, setConfirmingLoad] = useState(false)
@@ -73,7 +74,11 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
     queryKey: ['ai', 'prompt-templates'],
     queryFn: () => aiApi.listPromptTemplates(),
   })
-  const skillsQuery = useQuery({
+  const catalogQuery = useQuery({
+    queryKey: ['ai', 'skill-catalog'],
+    queryFn: () => aiApi.getSkillCatalog(),
+  })
+  const previewSkillsQuery = useQuery({
     queryKey: ['sites', agentId, 'ai', 'preview', 'skills'],
     queryFn: () => aiApi.listPreviewSkills(agentId),
   })
@@ -87,10 +92,25 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
     (draft.systemPrompt !== serverDraft.systemPrompt ||
       draft.temperature !== serverDraft.temperature ||
       draft.defaultSkillIds.join(',') !== serverDraft.defaultSkillIds.join(','))
+  useUnsavedDirtyKey(`agent-prompt-${agentId}`, dirty)
   // temperature 非法（非数或超出 0–2）走字段级错误：错误文字替换字段下帮助位，不再只弹 toast。
   const temperatureInvalid = current != null && parseTemperature(current.temperature) === undefined
   const templates = templatesQuery.data ?? []
-  const skillCatalog = skillsQuery.data ?? []
+  const skillCatalog: AiPreviewSkill[] = useMemo(() => {
+    const fromPlatform = catalogQuery.data?.skills ?? []
+    if (fromPlatform.length > 0) {
+      return fromPlatform.map((skill) => ({
+        id: skill.id,
+        description: skill.description,
+        version: skill.version,
+      }))
+    }
+    return previewSkillsQuery.data ?? []
+  }, [catalogQuery.data, previewSkillsQuery.data])
+  const catalogById = useMemo(
+    () => new Map(skillCatalog.map((skill) => [skill.id, skill])),
+    [skillCatalog],
+  )
 
   const applySavedConfig = (config: AiAgentPromptConfig) => {
     queryClient.setQueryData(configQueryKey, config)
@@ -134,24 +154,12 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
     onError: (saveAsError: Error) => toast.error(saveAsError.message),
   })
 
-  function toggleSkill(skillId: string) {
+  function removeSkill(skillId: string) {
     if (!current) return
-    const selected = current.defaultSkillIds.includes(skillId)
     setDraft({
       ...current,
-      defaultSkillIds: selected
-        ? current.defaultSkillIds.filter((id) => id !== skillId)
-        : [...current.defaultSkillIds, skillId],
+      defaultSkillIds: current.defaultSkillIds.filter((id) => id !== skillId),
     })
-  }
-
-  function addSkillByInput() {
-    const skillId = skillInput.trim()
-    if (!skillId || !current) return
-    setSkillInput('')
-    if (!current.defaultSkillIds.includes(skillId)) {
-      setDraft({ ...current, defaultSkillIds: [...current.defaultSkillIds, skillId] })
-    }
   }
 
   function submitDraft() {
@@ -189,6 +197,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
             ? t('prompts.sourceNone')
             : (server.promptTemplateName ?? `#${server.promptTemplateId}`)}
         </p>
+        <p className="mt-1 text-xs text-admin-muted">{t('prompts.sourceCopyHint')}</p>
       </div>
 
       <label className="block space-y-1.5">
@@ -230,87 +239,127 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
       </label>
 
       <div className="space-y-2">
-        <span className="text-xs font-medium text-admin-muted">{t('prompts.defaultSkills')}</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-medium text-admin-muted">{t('prompts.defaultSkills')}</span>
+          <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => setSkillPickerOpen(true)}
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              {t('prompts.pickSkills')}
+            </button>
+          </PermissionGate>
+        </div>
+        <p className="text-xs text-admin-muted">{t('prompts.defaultSkillsHint')}</p>
         {current.defaultSkillIds.length === 0 ? (
           <p className="text-sm text-admin-muted">{t('prompts.noSkills')}</p>
         ) : (
-          <ul className="flex flex-wrap gap-1.5">
-            {current.defaultSkillIds.map((skillId) => (
-              <li
-                key={skillId}
-                className="admin-status-tag inline-flex items-center gap-1.5 rounded-full bg-admin-surface-muted px-2 text-xs font-medium text-admin"
-              >
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-admin-muted-foreground" aria-hidden />
-                <span className="font-mono">{skillId}</span>
-                <button
-                  type="button"
-                  className="admin-focus-ring -mr-1 inline-flex rounded-full p-0.5 text-admin-muted transition hover:bg-admin-surface hover:text-admin-danger"
-                  aria-label={t('prompts.removeSkill')}
-                  onClick={() => toggleSkill(skillId)}
+          <ul className="space-y-2">
+            {current.defaultSkillIds.map((skillId) => {
+              const meta = catalogById.get(skillId)
+              return (
+                <li
+                  key={skillId}
+                  className="flex items-start justify-between gap-2 rounded-lg border border-admin px-3 py-2"
                 >
-                  <X className="h-3.5 w-3.5" aria-hidden />
-                </button>
-              </li>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    {meta ? (
+                      <SkillCatalogItem id={meta.id} version={meta.version} description={meta.description} />
+                    ) : (
+                      <div>
+                        <span className="font-mono text-sm text-admin">{skillId}</span>
+                        <p className="text-xs text-warning-emphasis">{t('prompts.skillMissing')}</p>
+                      </div>
+                    )}
+                  </div>
+                  <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
+                    <button
+                      type="button"
+                      className={adminGhostButtonClass}
+                      aria-label={t('prompts.removeSkill')}
+                      onClick={() => removeSkill(skillId)}
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </PermissionGate>
+                </li>
+              )
+            })}
           </ul>
         )}
-        {skillCatalog.length > 0 ? (
-          <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-admin p-2">
-            {skillCatalog.map((skill) => (
-              <div key={skill.id} className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  className="admin-check mt-0.5 shrink-0"
-                  checked={current.defaultSkillIds.includes(skill.id)}
-                  onChange={() => toggleSkill(skill.id)}
-                  aria-label={skill.id}
-                />
-                <div className="min-w-0 flex-1">
-                  <SkillCatalogItem id={skill.id} version={skill.version} description={skill.description} />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-admin-muted">{t('prompts.catalogUnavailable')}</p>
-        )}
-        <div className="flex gap-2">
-          <input
-            className={adminFieldClass}
-            value={skillInput}
-            placeholder={t('prompts.skillInputHint')}
-            onChange={(event) => setSkillInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                addSkillByInput()
-              }
-            }}
-          />
-          <button
-            type="button"
-            className={adminGhostButtonClass}
-            disabled={skillInput.trim() === ''}
-            onClick={addSkillByInput}
-          >
-            {t('prompts.addSkill')}
-          </button>
-        </div>
       </div>
 
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
           <button
             type="button"
             className={adminPrimaryButtonClass}
-            disabled={!dirty || saveMutation.isPending}
+            disabled={!dirty || saveMutation.isPending || temperatureInvalid}
             onClick={submitDraft}
           >
             {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             {t('prompts.save')}
           </button>
         </PermissionGate>
+        {dirty ? (
+          <button
+            type="button"
+            className={adminGhostButtonClass}
+            disabled={saveMutation.isPending}
+            onClick={() => setDraft(null)}
+          >
+            {t('prompts.discard')}
+          </button>
+        ) : null}
       </div>
+
+      <ResourcePickerDrawer
+        open={skillPickerOpen}
+        title={t('prompts.skillPickerTitle')}
+        description={t('prompts.skillPickerHint')}
+        items={skillCatalog}
+        getId={(skill) => skill.id}
+        initialSelectedIds={current.defaultSkillIds.filter((id) => catalogById.has(id))}
+        alreadySelectedIds={[]}
+        alreadySelectedSelectable
+        searchText={(skill) => `${skill.id} ${skill.description ?? ''} ${skill.version ?? ''}`}
+        columns={[
+          {
+            id: 'id',
+            header: t('prompts.skillColId'),
+            cell: (skill) => <span className="font-mono text-xs">{skill.id}</span>,
+          },
+          {
+            id: 'version',
+            header: t('prompts.skillColVersion'),
+            cell: (skill) => skill.version ?? '—',
+          },
+          {
+            id: 'description',
+            header: t('prompts.skillColDescription'),
+            cell: (skill) => (
+              <span className="line-clamp-2 text-xs text-admin-muted">{skill.description ?? '—'}</span>
+            ),
+          },
+        ]}
+        isLoading={catalogQuery.isPending && previewSkillsQuery.isPending}
+        isError={catalogQuery.isError && previewSkillsQuery.isError}
+        errorMessage={t('prompts.catalogUnavailable')}
+        onRetry={() => {
+          void catalogQuery.refetch()
+          void previewSkillsQuery.refetch()
+        }}
+        confirmLabel={t('prompts.applySkills')}
+        onConfirm={(ids) => {
+          const known = ids.filter((id) => catalogById.has(id))
+          const preservedUnknown = current.defaultSkillIds.filter((id) => !catalogById.has(id))
+          setDraft({ ...current, defaultSkillIds: [...known, ...preservedUnknown] })
+          setSkillPickerOpen(false)
+        }}
+        onClose={() => setSkillPickerOpen(false)}
+      />
 
       <div className="flex flex-wrap items-center gap-2 border-t border-admin pt-3">
         <span className="text-xs font-medium text-admin-muted">{t('prompts.templateLabel')}</span>

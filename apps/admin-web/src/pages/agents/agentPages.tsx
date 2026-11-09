@@ -40,7 +40,8 @@ function agentPanelPage(
                 : 'rounded-xl border border-border bg-card p-4 sm:p-5'
             }
           >
-            <Panel agentId={site.id} />
+            {/* key：切换 Agent 时整体重挂载，面板内的草稿 / 预览 runtime / 调试状态不跨 Agent 泄漏。 */}
+            <Panel key={site.id} agentId={site.id} />
           </article>
         ) : (
           <p className="rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground">

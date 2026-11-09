@@ -31,6 +31,21 @@ export default {
     copy: 'Copy',
     copied: 'Copied',
   },
+  resourcePicker: {
+    searchPlaceholder: 'Search resources',
+    confirm: 'Add selected',
+    cancel: 'Cancel',
+    alreadySelected: 'Already added',
+    discardTitle: 'Discard selection?',
+    discardBody: 'You have unsaved selection changes in this drawer. Close without applying?',
+    discardConfirm: 'Discard',
+  },
+  unsavedChanges: {
+    title: 'Unsaved changes',
+    body: 'Your edits are not saved yet. Leaving will discard them.',
+    stay: 'Keep editing',
+    leave: 'Discard and leave',
+  },
   breadcrumb: 'Breadcrumb',
   error: {
     network: 'Network error. Please try again.',

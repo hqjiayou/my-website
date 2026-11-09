@@ -7,7 +7,13 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './e2e',
-  testMatch: ['**/04-agent-console-v2.mock.spec.ts', '**/05-model-entries.mock.spec.ts'],
+  testMatch: [
+    '**/04-agent-console-v2.mock.spec.ts',
+    '**/05-model-entries.mock.spec.ts',
+    '**/06-agent-config-pr4.mock.spec.ts',
+    '**/07-agent-config-pr41.mock.spec.ts',
+    '**/08-agent-debug-pr5.mock.spec.ts',
+  ],
   timeout: 90_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,

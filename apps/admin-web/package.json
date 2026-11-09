@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test:boundary": "node scripts/check-agent-platform-default-boundary.mjs",
     "test:table": "node --experimental-strip-types scripts/check-table-foundation.ts",
+    "test:sse": "node --experimental-strip-types scripts/check-preview-sse.ts",
     "test:e2e": "playwright test",
     "test:e2e:mock": "playwright test -c playwright.mock.config.ts"
   },
