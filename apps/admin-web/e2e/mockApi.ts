@@ -39,7 +39,7 @@ const FULL_PERMISSIONS = [
   'admin:ai-model:update',
 ]
 
-const MODEL_ENTRY = {
+const MODEL_ENTRY_KEY = {
   id: 1,
   displayName: 'Mock Model',
   modelSpec: 'openai:gpt-test',
@@ -49,13 +49,70 @@ const MODEL_ENTRY = {
   derived: false,
   derivedSource: null,
   apiKeyConfigured: true,
-  apiKeyHint: '****',
-  baseUrl: null,
+  apiKeyHint: 'sk-…test',
+  baseUrl: 'https://api.openai.com/v1',
   alias: null,
   sourceAgentId: null,
   embeddingSpec: null,
   version: 1,
   updatedAt: '2026-11-09T00:00:00Z',
+}
+
+/** CLI 派生行：只读；mock 故意不带 apiKey 明文。 */
+const MODEL_ENTRY_CLI = {
+  id: 2,
+  displayName: 'gpt-test-cli',
+  modelSpec: 'openai:gpt-test-cli',
+  mode: 'CLI',
+  enabled: true,
+  defaultEntry: false,
+  derived: true,
+  derivedSource: 'PROXY',
+  apiKeyConfigured: true,
+  apiKeyHint: 'cli-…key',
+  baseUrl: 'http://127.0.0.1:8317/v1',
+  alias: null,
+  sourceAgentId: null,
+  embeddingSpec: null,
+  version: 1,
+  updatedAt: '2026-11-09T00:00:00Z',
+}
+
+const MODEL_ENTRIES = [MODEL_ENTRY_KEY, MODEL_ENTRY_CLI]
+
+const PROXY_ACCOUNT = {
+  name: 'codex-demo.json',
+  provider: 'codex',
+  disabled: false,
+  unavailable: false,
+  email: 'demo@example.com',
+  success: 3,
+  failed: 0,
+  usedPercent: 12,
+  modelUsedPercent: { 'gpt-test-cli': 8 },
+}
+
+const PROXY_STATUS = {
+  name: 'CLIProxyAPI',
+  baseUrl: 'http://127.0.0.1:8317',
+  reachable: true,
+  managementConfigured: true,
+  accounts: [PROXY_ACCOUNT],
+  accountPacing: null,
+}
+
+const PROXY_USAGE = {
+  apiBaseUrl: 'http://127.0.0.1:8317/v1',
+  callable: true,
+  accounts: [
+    {
+      name: PROXY_ACCOUNT.name,
+      provider: PROXY_ACCOUNT.provider,
+      disabled: false,
+      unavailable: false,
+      modelIds: ['gpt-test-cli'],
+    },
+  ],
 }
 
 const KNOWLEDGE_BASE = {
@@ -186,8 +243,58 @@ export async function installAgentConsoleMocks(page: Page, options: MockAuthOpti
       )
       return
     }
+    if (path === '/admin/ai/model-entries/sync-cli' && method === 'POST') {
+      await json(
+        route,
+        ok({
+          status: 'OK',
+          proxyReady: true,
+          created: 0,
+          reactivated: 0,
+          deactivated: 0,
+          unchanged: 1,
+          skippedNoClientKey: 0,
+        }),
+      )
+      return
+    }
+    if (path === '/admin/ai/model-entries' && method === 'GET') {
+      // 永不回显密钥明文；仅脱敏 hint。
+      await json(route, ok(MODEL_ENTRIES))
+      return
+    }
+    if (/^\/admin\/ai\/model-entries\/\d+$/.test(path) && (method === 'PUT' || method === 'PATCH')) {
+      const id = Number(path.split('/').pop())
+      const existing = MODEL_ENTRIES.find((entry) => entry.id === id) ?? MODEL_ENTRY_KEY
+      await json(route, ok({ ...existing, version: existing.version + 1 }))
+      return
+    }
     if (path === '/admin/ai/model-entries' || /\/model-entries(\/|$)/.test(path)) {
-      await json(route, ok([MODEL_ENTRY]))
+      await json(route, ok(MODEL_ENTRIES))
+      return
+    }
+    if (path === '/admin/ai/proxy-services' && method === 'GET') {
+      await json(route, ok(PROXY_STATUS))
+      return
+    }
+    if (path === '/admin/ai/proxy-services/usage' && method === 'GET') {
+      await json(route, ok(PROXY_USAGE))
+      return
+    }
+    if (path === '/admin/ai/proxy-services/api-keys' && method === 'GET') {
+      await json(route, ok({ apiKeys: ['mock-client-key'] }))
+      return
+    }
+    if (/\/proxy-services\/api-keys/.test(path)) {
+      await json(route, ok(method === 'POST' ? { apiKey: 'mock-client-key-created' } : null))
+      return
+    }
+    if (/\/proxy-services\/login/.test(path)) {
+      await json(route, ok({ provider: 'codex', url: 'https://example.com/oauth', state: 'mock' }))
+      return
+    }
+    if (/\/proxy-services/.test(path)) {
+      await json(route, ok(PROXY_STATUS))
       return
     }
     if (path === '/admin/ai/chain-presets' || /\/chain-presets(\/|$)/.test(path)) {

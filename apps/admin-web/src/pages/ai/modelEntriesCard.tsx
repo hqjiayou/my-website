@@ -1,20 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Inbox, KeyRound, Loader2, Plus, Zap } from 'lucide-react'
+import { Loader2, Plus, Zap } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FilterTabs, FormDialog, StatusTag } from '@/components/admin'
+import { FilterTabs, FormDialog } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
   adminFieldClass,
   adminFormActionsClass,
-  adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
-  adminSecondaryButtonSmClass,
 } from '@/components/admin/controls'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
@@ -28,142 +26,42 @@ import type {
 import { PERMISSION_CODES } from '@/types/rbac'
 import { modelIdFromSpec } from '@/utils/modelSpec'
 
-import { ProviderIcon } from './providerIcon'
-import { ProxyClientKeysPane, ProxyLoginFlow } from './proxyServicesPage'
+import { ModelEntriesCliPane } from './modelEntriesCliPane'
+import { ModelEntriesKeyPane } from './modelEntriesKeyPane'
 import {
-  accountStatus,
-  accountTitle,
-  isLoginProvider,
-  providerLabel,
-  providerTileClass,
-  shownModelIds,
-} from './proxyServicesShared'
+  cliModelSpec,
+  draftFromEntry,
+  emptyDraft,
+  type ModelEntryDraft,
+  type ModelEntryMode,
+} from './modelEntriesShared'
+import { ProxyClientKeysPane, ProxyLoginFlow } from './proxyServicesPage'
+import { shownModelIds } from './proxyServicesShared'
 
-type Draft = {
-  id: number | null
-  displayName: string
-  modelSpec: string
-  apiKey: string
-  baseUrl: string
-  sourceAgentId: number | null
-  embeddingSpec: string
-  enabled: boolean
-  defaultEntry: boolean
-  mode: string
-  alias: string
-  version: number | null
-  apiKeyHint: string | null
-}
-
-function emptyDraft(makeDefault: boolean, specPrefix = ''): Draft {
-  return {
-    id: null,
-    displayName: '',
-    modelSpec: specPrefix,
-    apiKey: '',
-    baseUrl: '',
-    sourceAgentId: null,
-    embeddingSpec: '',
-    enabled: true,
-    defaultEntry: makeDefault,
-    mode: 'KEY',
-    alias: '',
-    version: null,
-    apiKeyHint: null,
-  }
-}
-
-function draftFromEntry(entry: AiModelEntry): Draft {
-  return {
-    id: entry.id,
-    displayName: entry.displayName,
-    modelSpec: entry.modelSpec,
-    apiKey: '',
-    baseUrl: entry.baseUrl ?? '',
-    sourceAgentId: entry.sourceAgentId,
-    embeddingSpec: entry.embeddingSpec ?? '',
-    enabled: entry.enabled,
-    defaultEntry: entry.defaultEntry,
-    mode: entry.mode ?? 'KEY',
-    alias: entry.alias ?? '',
-    version: entry.version,
-    apiKeyHint: entry.apiKeyHint,
-  }
-}
-
-const KEY_VENDOR_NAMES: Record<string, string> = {
-  google: 'Google',
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  azure: 'Azure',
-}
-const KNOWN_KEY_VENDORS = ['google', 'openai', 'anthropic', 'azure']
-const CLI_VENDOR_ORDER = ['codex', 'claude', 'antigravity', 'meta']
 const EMPTY_ENTRIES: AiModelEntry[] = []
 const EMPTY_ACCOUNTS: ProxyServicesAccount[] = []
 const EMPTY_PUBLISHED: ProxyServicesPublishedAccount[] = []
 
-function keyVendorName(prefix: string) {
-  return KEY_VENDOR_NAMES[prefix] ?? (prefix ? prefix.charAt(0).toUpperCase() + prefix.slice(1) : prefix)
-}
-
-/** 家族图标砖：按 spec 协议前缀映射色板 token。CLI 厂商砖走 ProviderIcon，不经这里。 */
-function familyTile(prefix: string): { letter: string; className: string } {
-  if (prefix === 'google') return { letter: 'G', className: 'bg-[rgb(var(--info)/.12)] text-info' }
-  if (prefix === 'openai') return { letter: 'O', className: 'bg-[rgb(var(--chart-2)/.12)] text-chart-2' }
-  if (prefix === 'anthropic') return { letter: 'A', className: 'bg-[rgb(var(--chart-3)/.12)] text-chart-3' }
-  if (prefix === 'azure') return { letter: 'Az', className: 'bg-[rgb(var(--chart-1)/.12)] text-chart-1' }
-  return { letter: 'M', className: 'bg-admin-surface-muted text-admin-muted' }
-}
-
-function cliModelSpec(modelId: string) {
-  const trimmed = modelId.trim()
-  if (!trimmed) return trimmed
-  return trimmed.includes(':') ? trimmed : `openai:${trimmed}`
-}
-
-function specPrefix(spec: string) {
-  return spec.split(':')[0]?.trim().toLowerCase() || 'other'
+type ModelEntriesCardProps = {
+  mode: ModelEntryMode
+  onModeChange: (mode: ModelEntryMode) => void
 }
 
 /**
- * CLI 条目的厂商推断（账号匹配不到时用）：按模型名约定归类，与登录供应商
- * 的 provider id 对齐（claude→claude、gemini→antigravity、llama/meta→meta，
- * 其余默认 codex——CLI 派生 spec 由系统统一盖 openai 前缀，GPT 系为主）。
+ * 模型入口编排卡：共用 listModelEntries；CLI/KEY 由 URL mode 驱动；
+ * 表单与同步留在此卡，列表渲染下沉到各 pane。
  */
-function inferredCliProvider(entry: AiModelEntry): string {
-  const id = modelIdFromSpec(entry.modelSpec).toLowerCase()
-  if (id.startsWith('claude')) return 'claude'
-  if (id.startsWith('gemini') || id.startsWith('antigravity')) return 'antigravity'
-  if (id.startsWith('llama') || id.startsWith('meta-')) return 'meta'
-  return 'codex'
-}
-
-/**
- * 模型入口管理（模型页改版，kou 2026-11-07 定形态）：上方水平页签只有
- * CLI / API Key 两种模式，右端一颗「添加」总钮先选添加方式（登录 CLI
- * 账号 / 填 API key 表单）再进弹窗；展示区用竖排厂商页签，点厂商才展
- * 该厂商的条目。CLI 条目按账号放出的模型归到账号所属厂商下，匹配不到
- * 账号时按模型名推断厂商，恒按厂商分组；派生行只读，历史手工 CLI 条目
- * 仍可编辑（存量编辑分支），但新建只走 KEY。客户端 key 与网关状态是
- * 条目卡下方独立一节（ProxyClientKeysPane），不混进厂商页签。
- */
-export function ModelEntriesCard() {
+export function ModelEntriesCard({ mode, onModeChange }: ModelEntriesCardProps) {
   const { t } = useTranslation('aiAdmin')
   const queryClient = useQueryClient()
   const canUpdate = useHasPermission(PERMISSION_CODES.aiModelUpdate)
-  const [mode, setMode] = useState<'CLI' | 'KEY'>('CLI')
-  const [keyVendor, setKeyVendor] = useState<string | null>(null)
-  const [cliVendor, setCliVendor] = useState<string | null>(null)
-  const [draft, setDraft] = useState<Draft | null>(null)
+  const [draft, setDraft] = useState<ModelEntryDraft | null>(null)
   const [formTouched, setFormTouched] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const [addOpen, setAddOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<AiModelEntry | null>(null)
   const [loginOpen, setLoginOpen] = useState(false)
   const [loginProvider, setLoginProvider] = useState<ProxyLoginProvider | null>(null)
 
-  // 页面挂载同步一次 CLI 派生条目（Issue #214 UoW-2）：派生行随代理侧
-  // 账号/模型构成自动物化；同步失败不打断页面，派生行保持现状。
   const syncRan = useRef(false)
   useEffect(() => {
     if (syncRan.current) return
@@ -189,11 +87,11 @@ export function ModelEntriesCard() {
         }
       })
       .catch(() => {
-        // 同步端点失败时静默：入口列表仍可用，派生行下次打开页面再同步。
+        toast.error(t('modelManagement.syncFailed'))
       })
   }, [queryClient, t])
 
-  const { data, isPending, isError, error, refetch } = useQuery({
+  const entriesQuery = useQuery({
     queryKey: ['ai', 'model-entries'],
     queryFn: () => aiApi.listModelEntries(),
   })
@@ -214,15 +112,13 @@ export function ModelEntriesCard() {
   const saveMutation = useMutation({
     mutationFn: (input: { id: number | null; body: AiModelEntryWriteInput }) =>
       input.id == null ? aiApi.createModelEntry(input.body) : aiApi.updateModelEntry(input.id, input.body),
-    onSuccess: (entry, input) => {
+    onSuccess: (_entry, input) => {
       toast.success(t('settings.saved'))
       setDraft(null)
       setFormTouched(false)
       void queryClient.invalidateQueries({ queryKey: ['ai', 'model-entries'] })
-      if (input.id == null && (entry.mode ?? 'KEY') !== 'CLI') {
-        // 新建落点：切到 KEY 模式并选中新条目所在厂商（审计口径：追加成功按类型区分反馈）。
-        setMode('KEY')
-        setKeyVendor(specPrefix(entry.modelSpec))
+      if (input.id == null) {
+        onModeChange('KEY')
       }
     },
     onError: (saveError: Error) => {
@@ -257,6 +153,7 @@ export function ModelEntriesCard() {
     onSuccess: () => {
       toast.success(t('settings.deleted'))
       setConfirmingDelete(false)
+      setDeleteTarget(null)
       setDraft(null)
       void queryClient.invalidateQueries({ queryKey: ['ai', 'model-entries'] })
     },
@@ -265,7 +162,7 @@ export function ModelEntriesCard() {
     },
   })
 
-  const entries = data ?? EMPTY_ENTRIES
+  const entries = entriesQuery.data ?? EMPTY_ENTRIES
   const keyEntries = useMemo(
     () => entries.filter((entry) => (entry.mode ?? 'KEY') !== 'CLI'),
     [entries],
@@ -276,113 +173,6 @@ export function ModelEntriesCard() {
   )
   const accounts = statusQuery.data?.accounts ?? EMPTY_ACCOUNTS
   const usageAccounts = usageQuery.data?.accounts ?? EMPTY_PUBLISHED
-  const usagePending = usageQuery.isPending
-  const accountEntryMap = useMemo(() => {
-    const publishedByName = new Map(usageAccounts.map((account) => [account.name, account]))
-    const map = new Map<string, AiModelEntry[]>()
-    for (const account of accounts) {
-      if (usagePending) {
-        map.set(account.name, [])
-        continue
-      }
-      const ids = shownModelIds(account.provider, publishedByName.get(account.name)?.modelIds ?? []) ?? []
-      map.set(
-        account.name,
-        cliEntries.filter((entry) => ids.includes(modelIdFromSpec(entry.modelSpec))),
-      )
-    }
-    return map
-  }, [accounts, usageAccounts, usagePending, cliEntries])
-  function accountEntries(account: ProxyServicesAccount): AiModelEntry[] {
-    return accountEntryMap.get(account.name) ?? []
-  }
-
-  if (isPending) {
-    return (
-      <div className="space-y-4" aria-hidden>
-        <div className="admin-skeleton h-9 w-64" />
-        <div className="admin-skeleton h-72 w-full rounded-xl" />
-      </div>
-    )
-  }
-  if (isError) {
-    return (
-      <div className="flex items-start gap-3 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
-        <AlertCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-danger-emphasis" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-danger-emphasis">
-            {error instanceof Error ? error.message : t('error')}
-          </p>
-          <button type="button" className={cn(adminSecondaryButtonSmClass, 'mt-2')} onClick={() => void refetch()}>
-            {t('retry')}
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // KEY 厂商：按 spec 前缀聚合；四个常见厂商恒列出（空厂商给空态与首加入口）。
-  const directGroups = new Map<string, AiModelEntry[]>()
-  for (const entry of keyEntries) {
-    const prefix = specPrefix(entry.modelSpec)
-    const group = directGroups.get(prefix) ?? []
-    group.push(entry)
-    directGroups.set(prefix, group)
-  }
-  const keyVendors = [
-    ...KNOWN_KEY_VENDORS,
-    ...[...directGroups.keys()].filter((prefix) => !KNOWN_KEY_VENDORS.includes(prefix)).sort(),
-  ]
-  const activeKeyVendor =
-    keyVendor != null && keyVendors.includes(keyVendor)
-      ? keyVendor
-      : (keyVendors.find((prefix) => (directGroups.get(prefix) ?? []).length > 0) ?? keyVendors[0])
-  const activeKeyEntries = directGroups.get(activeKeyVendor) ?? []
-
-  // CLI 厂商归属：条目先按在线账号放出的模型匹配到账号所属厂商；匹配不到
-  // （代理未启动、账号已删等）时按模型名推断厂商——恒按厂商分组，不设
-  // 「未归属」。厂商列表 = 有账号或有条目的厂商，按登录供应商顺序排。
-  const matchedEntryIds = new Set<number>()
-  const matchedProviders = new Map<number, Set<string>>()
-  for (const account of accounts) {
-    for (const entry of accountEntries(account)) {
-      matchedEntryIds.add(entry.id)
-      const providers = matchedProviders.get(entry.id) ?? new Set<string>()
-      providers.add(account.provider)
-      matchedProviders.set(entry.id, providers)
-    }
-  }
-  const unmatchedCliEntries = usageQuery.isPending
-    ? []
-    : cliEntries.filter((entry) => !matchedEntryIds.has(entry.id))
-  function cliEntryVendors(entry: AiModelEntry): string[] {
-    const matched = matchedProviders.get(entry.id)
-    if (matched && matched.size > 0) return [...matched]
-    if (usageQuery.isPending) return []
-    return [inferredCliProvider(entry)]
-  }
-  const cliVendors = [
-    ...CLI_VENDOR_ORDER.filter(
-      (provider) =>
-        accounts.some((account) => account.provider === provider) ||
-        cliEntries.some((entry) => cliEntryVendors(entry).includes(provider)),
-    ),
-    ...[
-      ...new Set([
-        ...accounts.map((account) => account.provider),
-        ...cliEntries.flatMap((entry) => cliEntryVendors(entry)),
-      ]),
-    ].filter((provider) => !CLI_VENDOR_ORDER.includes(provider)),
-  ]
-  function vendorCliEntries(provider: string) {
-    return cliEntries.filter((entry) => cliEntryVendors(entry).includes(provider))
-  }
-  const activeCliVendor =
-    cliVendor != null && cliVendors.includes(cliVendor) ? cliVendor : (cliVendors[0] ?? '')
-  const detachedCliEntries =
-    activeCliVendor === ''
-      ? []
-      : unmatchedCliEntries.filter((entry) => inferredCliProvider(entry) === activeCliVendor)
 
   const aliasTrimmed = draft?.alias.trim() ?? ''
   const aliasInvalid = aliasTrimmed !== '' && !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(aliasTrimmed.toLowerCase())
@@ -397,7 +187,6 @@ export function ModelEntriesCard() {
           ? modelIdFromSpec(draft.modelSpec) || t('settings.name')
           : draft.displayName || t('settings.name')
 
-  // 存量手工 CLI 条目编辑分支的就绪判定：区分加载中 / 加载失败 / 真未配置（原 H6）。
   const cliEditAccounts = (usageQuery.data?.accounts ?? []).filter(
     (account) => !account.disabled && !account.unavailable,
   )
@@ -459,74 +248,11 @@ export function ModelEntriesCard() {
     saveMutation.mutate({ id: draft.id, body })
   }
 
-  function entryRow(entry: AiModelEntry, account?: ProxyServicesAccount) {
-    const entryMode = entry.mode ?? 'KEY'
-    const usedPercent =
-      entryMode === 'CLI' && account ? (account.modelUsedPercent[modelIdFromSpec(entry.modelSpec)] ?? null) : null
-    return (
-      <li key={entry.id} className="flex items-stretch gap-2">
-        <button
-          type="button"
-          className="flex flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-admin-surface-muted admin-focus-ring"
-          onClick={() => openEntryEdit(entry)}
-        >
-          <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="font-medium text-admin">
-                {entryMode === 'CLI' ? modelIdFromSpec(entry.modelSpec) : entry.displayName}
-              </span>
-              {entry.alias ? (
-                <span className="rounded-md bg-admin-surface-muted px-1.5 py-0.5 font-mono text-xs text-admin-muted">
-                  {entry.alias}
-                </span>
-              ) : null}
-            </span>
-            <span className="mt-0.5 block truncate font-mono text-xs text-admin-muted">
-              {entry.modelSpec}
-              {entryMode !== 'CLI' && entry.embeddingSpec ? ` · ${entry.embeddingSpec}` : ''}
-            </span>
-          </span>
-          <span className="flex flex-wrap items-center justify-end gap-1.5">
-            {entry.defaultEntry ? (
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                {entryMode === 'CLI' ? t('settings.defaultBadgeCli') : t('settings.defaultBadgeKey')}
-              </span>
-            ) : null}
-            {entry.derived ? (
-              <StatusTag status="neutral" tone="neutral" label={t('modelManagement.derivedBadge')} />
-            ) : null}
-            {!entry.enabled ? <StatusTag status="DISABLED" tone="danger" label={t('settings.disabledBadge')} /> : null}
-            {usedPercent != null ? (
-              <span className="font-mono text-xs tabular-nums text-admin-muted" title={t('proxyServices.statQuota')}>
-                {usedPercent}%
-              </span>
-            ) : null}
-            {entry.apiKeyConfigured ? (
-              <span className="rounded-md bg-admin-surface-muted px-1.5 py-0.5 font-mono text-xs text-admin-muted">
-                {entry.apiKeyHint}
-              </span>
-            ) : null}
-          </span>
-        </button>
-        {canUpdate && entry.enabled && !entry.defaultEntry && !entry.derived ? (
-          <button
-            type="button"
-            className={cn(adminGhostButtonClass, 'shrink-0 self-center')}
-            disabled={setDefaultMutation.isPending}
-            onClick={() => setDefaultMutation.mutate(entry)}
-          >
-            {t('settings.setDefault')}
-          </button>
-        ) : null}
-      </li>
-    )
+  function refreshAll() {
+    void entriesQuery.refetch()
+    void statusQuery.refetch()
+    void usageQuery.refetch()
   }
-
-  const railItemClass = (active: boolean) =>
-    cn(
-      'flex w-full items-center gap-3 rounded-[10px] border border-transparent px-2.5 py-2 text-left transition hover:bg-admin-surface-muted admin-focus-ring',
-      active && 'admin-active-inset border-admin bg-admin-surface shadow-sm',
-    )
 
   return (
     <>
@@ -537,238 +263,71 @@ export function ModelEntriesCard() {
             { key: 'KEY', label: t('modelManagement.tabKey'), count: keyEntries.length },
           ]}
           activeKey={mode}
-          onChange={(key) => setMode(key === 'KEY' ? 'KEY' : 'CLI')}
+          onChange={(key) => onModeChange(key === 'KEY' ? 'KEY' : 'CLI')}
         />
         <span className="flex-1" />
         <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
-          <button type="button" className={adminPrimaryButtonClass} onClick={() => setAddOpen(true)}>
-            <Plus className="h-4 w-4" />
-            {t('modelManagement.addButton')}
-          </button>
+          {mode === 'CLI' ? (
+            <button type="button" className={adminPrimaryButtonClass} onClick={() => startLogin(null)}>
+              <Zap className="h-4 w-4" />
+              {t('modelManagement.loginCli')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={adminPrimaryButtonClass}
+              onClick={() => {
+                setFormTouched(false)
+                setDraft(emptyDraft(keyEntries.length === 0))
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              {t('modelManagement.addKeyEntry')}
+            </button>
+          )}
         </PermissionGate>
       </div>
 
-      <article className="overflow-hidden rounded-xl border border-admin bg-admin-surface">
-        <div className="grid items-start lg:grid-cols-[15rem_minmax(0,1fr)]">
-          {mode === 'KEY' ? (
-            <div className="flex flex-col gap-0.5 p-2" aria-label={t('modelManagement.sourcesTitle')}>
-              <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
-                {t('modelManagement.directSource')}
-              </p>
-              {keyVendors.map((prefix) => {
-                const tile = familyTile(prefix)
-                const count = (directGroups.get(prefix) ?? []).length
-                return (
-                  <button
-                    key={prefix}
-                    type="button"
-                    aria-pressed={activeKeyVendor === prefix}
-                    onClick={() => setKeyVendor(prefix)}
-                    className={railItemClass(activeKeyVendor === prefix)}
-                  >
-                    <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md text-sm font-bold', tile.className)}>
-                      {tile.letter}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-admin">{keyVendorName(prefix)}</span>
-                      <span className="mt-0.5 block truncate text-xs text-admin-muted">
-                        {t('modelManagement.modelsCount', { count })}
-                      </span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-0.5 p-2" aria-label={t('modelManagement.sourcesTitle')}>
-              <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">
-                {t('modelManagement.proxySource')}
-              </p>
-              {statusQuery.isPending ? (
-                <div className="space-y-2 px-1 py-1" aria-hidden>
-                  <div className="admin-skeleton h-11 w-full" />
-                  <div className="admin-skeleton h-11 w-full" />
-                </div>
-              ) : null}
-              {cliVendors.map((provider) => {
-                const providerAccounts = accounts.filter((account) => account.provider === provider)
-                const count = vendorCliEntries(provider).length
-                return (
-                  <button
-                    key={provider}
-                    type="button"
-                    aria-pressed={activeCliVendor === provider}
-                    onClick={() => setCliVendor(provider)}
-                    className={railItemClass(activeCliVendor === provider)}
-                  >
-                    <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md', providerTileClass(provider))}>
-                      {isLoginProvider(provider) ? (
-                        <ProviderIcon id={provider} className="h-5 w-5" />
-                      ) : (
-                        <span className="text-sm font-bold">{provider.slice(0, 1).toUpperCase()}</span>
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-admin">{providerLabel(provider, t)}</span>
-                      <span className="mt-0.5 block truncate text-xs text-admin-muted">
-                        {providerAccounts.length > 0
-                          ? `${t('modelManagement.proxyAccounts', { count: providerAccounts.length })} · ${t('modelManagement.modelsCount', { count })}`
-                          : t('modelManagement.modelsCount', { count })}
-                      </span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          <div className="min-w-0 border-t border-admin lg:border-l lg:border-t-0">
-            {mode === 'KEY' ? (
-              <div className="p-4">
-                <div className="mb-2 flex flex-wrap items-center gap-3">
-                  <span className="text-base font-semibold text-admin">{keyVendorName(activeKeyVendor)}</span>
-                  <span className="text-xs text-admin-muted">
-                    {t('modelManagement.directSource')} · {t('modelManagement.modelsCount', { count: activeKeyEntries.length })}
-                  </span>
-                </div>
-                {activeKeyEntries.length === 0 ? (
-                  <div className="px-2 py-10 text-center">
-                    <span className="mx-auto flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-admin-surface-muted text-admin-muted">
-                      <Inbox className="h-5 w-5" aria-hidden />
-                    </span>
-                    <p className="mt-3 text-sm font-medium text-admin">
-                      {t('modelManagement.emptyVendorTitle', { vendor: keyVendorName(activeKeyVendor) })}
-                    </p>
-                    <p className="mt-1 text-xs text-admin-muted">{t('modelManagement.emptyVendorHint')}</p>
-                  </div>
-                ) : (
-                  <ul className="space-y-2">{activeKeyEntries.map((entry) => entryRow(entry))}</ul>
-                )}
-              </div>
-            ) : (
-              <div className="p-4">
-                {statusQuery.isError ? (
-                  <div className="flex items-start gap-3 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
-                    <AlertCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-danger-emphasis" aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-danger-emphasis">{t('error')}</p>
-                      <button
-                        type="button"
-                        className={cn(adminSecondaryButtonSmClass, 'mt-2')}
-                        onClick={() => void statusQuery.refetch()}
-                      >
-                        {t('retry')}
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-                {usageQuery.isError ? (
-                  <div className="mb-3 flex items-start gap-3 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
-                    <AlertCircle className="mt-0.5 h-[18px] w-[18px] shrink-0 text-danger-emphasis" aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-danger-emphasis">{t('error')}</p>
-                      <button
-                        type="button"
-                        className={cn(adminSecondaryButtonSmClass, 'mt-2')}
-                        onClick={() => void usageQuery.refetch()}
-                      >
-                        {t('retry')}
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-                {accounts
-                  .filter((account) => account.provider === activeCliVendor)
-                    .map((account) => {
-                      const status = accountStatus(account, t)
-                      const rows = accountEntries(account)
-                      return (
-                        <div key={account.name} className="mb-5 last:mb-0">
-                          <div className="mb-2 flex flex-wrap items-center gap-3">
-                            <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md', providerTileClass(account.provider))}>
-                              {isLoginProvider(account.provider) ? (
-                                <ProviderIcon id={account.provider} className="h-5 w-5" />
-                              ) : (
-                                <span className="text-sm font-bold">{account.provider.slice(0, 1).toUpperCase()}</span>
-                              )}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="flex items-center gap-1.5 text-sm font-semibold text-admin">
-                                {accountTitle(account)}
-                                {status.tone === 'active' ? (
-                                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-admin-success" />
-                                ) : (
-                                  <StatusTag status={status.tone} tone={status.tone} label={status.label} />
-                                )}
-                              </span>
-                              <span className="block text-xs text-admin-muted">
-                                {providerLabel(account.provider, t)} ·{' '}
-                                {t('modelManagement.modelsCount', { count: rows.length })}
-                              </span>
-                            </span>
-                            <span className="flex-1" />
-                            <div className="flex shrink-0 gap-2">
-                              <div className="rounded-lg bg-admin-surface-muted px-3 py-1.5 text-right">
-                                <p className="text-base font-bold tabular-nums text-success-emphasis">{account.success}</p>
-                                <p className="text-[11px] text-admin-muted">{t('proxyServices.statSuccess')}</p>
-                              </div>
-                              <div className="rounded-lg bg-admin-surface-muted px-3 py-1.5 text-right">
-                                <p className="text-base font-bold tabular-nums text-danger-emphasis">{account.failed}</p>
-                                <p className="text-[11px] text-admin-muted">{t('proxyServices.statFailed')}</p>
-                              </div>
-                              <div className="rounded-lg bg-admin-surface-muted px-3 py-1.5 text-right">
-                                <p className="text-base font-bold tabular-nums text-admin">
-                                  {account.usedPercent != null ? `${account.usedPercent}%` : t('proxyServices.quotaUnknown')}
-                                </p>
-                                <p className="text-[11px] text-admin-muted">{t('proxyServices.statQuota')}</p>
-                              </div>
-                            </div>
-                            {canUpdate && status.tone !== 'active' ? (
-                              <button
-                                type="button"
-                                className={cn(adminGhostButtonClass, 'shrink-0')}
-                                onClick={() => startLogin(isLoginProvider(account.provider) ? account.provider : null)}
-                              >
-                                {t('modelManagement.relogin')}
-                              </button>
-                            ) : null}
-                          </div>
-                          {usageQuery.isPending ? (
-                            <p className="px-2 py-3 text-sm text-admin-muted">{t('loading')}</p>
-                          ) : rows.length === 0 ? (
-                            <p className="px-2 py-3 text-sm text-admin-muted">{t('modelManagement.noCliModels')}</p>
-                          ) : (
-                            <ul className="space-y-2">{rows.map((entry) => entryRow(entry, account))}</ul>
-                          )}
-                        </div>
-                      )
-                    })
-                }
-                {detachedCliEntries.length > 0 ? (
-                  <div>
-                    <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-admin">
-                      {t('modelManagement.unmatchedBlock')}
-                      <span className="text-xs font-normal text-admin-muted">
-                        {t('modelManagement.modelsCount', { count: detachedCliEntries.length })}
-                      </span>
-                    </p>
-                    <ul className="space-y-2">{detachedCliEntries.map((entry) => entryRow(entry))}</ul>
-                  </div>
-                ) : null}
-                {cliVendors.length === 0 && statusQuery.isPending === false ? (
-                  <div className="px-2 py-10 text-center">
-                    <span className="mx-auto flex h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-admin-surface-muted text-admin-muted">
-                      <Inbox className="h-5 w-5" aria-hidden />
-                    </span>
-                    <p className="mt-3 text-sm font-medium text-admin">{t('proxyServices.emptyAccounts')}</p>
-                    <p className="mt-1 text-xs text-admin-muted">{t('modelManagement.addCliDesc')}</p>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </div>
-      </article>
+      {mode === 'KEY' ? (
+        <ModelEntriesKeyPane
+          entries={keyEntries}
+          isLoading={entriesQuery.isPending}
+          isError={entriesQuery.isError}
+          errorMessage={entriesQuery.error instanceof Error ? entriesQuery.error.message : undefined}
+          isRefreshing={entriesQuery.isFetching}
+          canUpdate={canUpdate}
+          setDefaultPending={setDefaultMutation.isPending}
+          onRefresh={() => void entriesQuery.refetch()}
+          onEdit={openEntryEdit}
+          onSetDefault={(entry) => setDefaultMutation.mutate(entry)}
+          onDelete={(entry) => {
+            setDeleteTarget(entry)
+            setConfirmingDelete(true)
+          }}
+        />
+      ) : (
+        <ModelEntriesCliPane
+          entries={cliEntries}
+          accounts={accounts}
+          publishedAccounts={usageAccounts}
+          statusPending={statusQuery.isPending}
+          statusError={statusQuery.isError}
+          usagePending={usageQuery.isPending}
+          usageError={usageQuery.isError}
+          isLoading={entriesQuery.isPending}
+          isError={entriesQuery.isError}
+          errorMessage={entriesQuery.error instanceof Error ? entriesQuery.error.message : undefined}
+          isRefreshing={entriesQuery.isFetching || statusQuery.isFetching || usageQuery.isFetching}
+          canUpdate={canUpdate}
+          setDefaultPending={setDefaultMutation.isPending}
+          onRefresh={refreshAll}
+          onRetryStatus={() => void statusQuery.refetch()}
+          onRetryUsage={() => void usageQuery.refetch()}
+          onOpenEntry={openEntryEdit}
+          onSetDefault={(entry) => setDefaultMutation.mutate(entry)}
+          onRelogin={startLogin}
+        />
+      )}
 
       <div className="space-y-2 pt-2">
         <h2 className="text-base font-semibold text-admin">{t('proxyServices.usageKeysTitle')}</h2>
@@ -777,55 +336,6 @@ export function ModelEntriesCard() {
       <section className="overflow-hidden rounded-xl border border-admin bg-admin-surface">
         <ProxyClientKeysPane />
       </section>
-
-      {addOpen ? (
-        <FormDialog
-          title={t('modelManagement.addTitle')}
-          closeLabel={t('settings.cancel')}
-          onClose={() => setAddOpen(false)}
-        >
-          <div className="space-y-3">
-            <button
-              type="button"
-              className="flex w-full items-start gap-3 rounded-xl border border-admin bg-admin-surface p-4 text-left transition hover:border-primary/55 admin-focus-ring"
-              onClick={() => {
-                setAddOpen(false)
-                startLogin(null)
-              }}
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md bg-[rgb(var(--chart-4)/.12)] text-chart-4">
-                <Zap className="h-4 w-4" aria-hidden />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-admin">{t('modelManagement.addCliTitle')}</span>
-                <span className="mt-0.5 block text-xs text-admin-muted">{t('modelManagement.addCliDesc')}</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-start gap-3 rounded-xl border border-admin bg-admin-surface p-4 text-left transition hover:border-primary/55 admin-focus-ring"
-              onClick={() => {
-                setAddOpen(false)
-                setFormTouched(false)
-                setDraft(emptyDraft(keyEntries.length === 0))
-              }}
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-admin-md bg-[rgb(var(--info)/.12)] text-info">
-                <KeyRound className="h-4 w-4" aria-hidden />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-admin">{t('modelManagement.addKeyTitle')}</span>
-                <span className="mt-0.5 block text-xs text-admin-muted">{t('modelManagement.addKeyDesc')}</span>
-              </span>
-            </button>
-          </div>
-          <div className={adminFormActionsClass}>
-            <button type="button" className={adminSecondaryButtonClass} onClick={() => setAddOpen(false)}>
-              {t('settings.cancel')}
-            </button>
-          </div>
-        </FormDialog>
-      ) : null}
 
       <ProxyLoginFlow
         open={loginOpen}
@@ -883,7 +393,7 @@ export function ModelEntriesCard() {
                           const ids = shownModelIds(account.provider, account.modelIds) ?? []
                           if (ids.length === 0) return null
                           return (
-                            <optgroup key={account.name} label={providerLabel(account.provider, t)}>
+                            <optgroup key={account.name} label={account.provider}>
                               {ids.map((id) => (
                                 <option key={`${account.name}-${id}`} value={id}>
                                   {id}
@@ -1034,21 +544,37 @@ export function ModelEntriesCard() {
             </div>
             <PermissionGate code={PERMISSION_CODES.aiModelUpdate}>
               <div className={adminFormActionsClass}>
-                {draft.id != null ? (
+                {draft.id != null && draft.mode !== 'CLI' ? (
                   <button
                     type="button"
                     className={cn(adminDangerGhostButtonClass, 'mr-auto')}
                     disabled={deleteMutation.isPending}
-                    onClick={() => setConfirmingDelete(true)}
+                    onClick={() => {
+                      setDeleteTarget({
+                        id: draft.id!,
+                        displayName: draft.displayName,
+                        modelSpec: draft.modelSpec,
+                        apiKeyConfigured: Boolean(draft.apiKeyHint),
+                        apiKeyHint: draft.apiKeyHint ?? '',
+                        baseUrl: draft.baseUrl || null,
+                        sourceAgentId: draft.sourceAgentId,
+                        embeddingSpec: draft.embeddingSpec || null,
+                        enabled: draft.enabled,
+                        defaultEntry: draft.defaultEntry,
+                        version: draft.version ?? 0,
+                        updatedAt: null,
+                        mode: draft.mode,
+                        alias: draft.alias || null,
+                        derived: false,
+                        derivedSource: null,
+                      })
+                      setConfirmingDelete(true)
+                    }}
                   >
                     {t('settings.remove')}
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  className={adminSecondaryButtonClass}
-                  onClick={() => setDraft(null)}
-                >
+                <button type="button" className={adminSecondaryButtonClass} onClick={() => setDraft(null)}>
                   {t('settings.cancel')}
                 </button>
                 <button type="submit" disabled={saveMutation.isPending || aliasInvalid} className={adminPrimaryButtonClass}>
@@ -1067,29 +593,38 @@ export function ModelEntriesCard() {
         </FormDialog>
       ) : null}
 
-      {confirmingDelete && draft && draft.id != null ? (
+      {confirmingDelete && deleteTarget ? (
         <FormDialog
           title={t('settings.deleteConfirmTitle')}
           closeLabel={t('settings.cancel')}
-          onClose={() => setConfirmingDelete(false)}
+          onClose={() => {
+            setConfirmingDelete(false)
+            setDeleteTarget(null)
+          }}
           size="s"
           danger
         >
           <p className="text-sm text-admin">
-            {t('settings.deleteConfirmBody', { name: draft.displayName.trim() || draft.modelSpec })}
+            {t('settings.deleteConfirmBody', {
+              name: deleteTarget.displayName.trim() || deleteTarget.modelSpec,
+            })}
           </p>
           <div className={adminFormActionsClass}>
-            <button type="button" className={adminSecondaryButtonClass} onClick={() => setConfirmingDelete(false)}>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={() => {
+                setConfirmingDelete(false)
+                setDeleteTarget(null)
+              }}
+            >
               {t('settings.cancel')}
             </button>
             <button
               type="button"
               className={adminDangerButtonMdClass}
               disabled={deleteMutation.isPending}
-              onClick={() => {
-                if (draft.id == null) return
-                deleteMutation.mutate(draft.id)
-              }}
+              onClick={() => deleteMutation.mutate(deleteTarget.id)}
             >
               {t('settings.remove')}
             </button>
