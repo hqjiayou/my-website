@@ -134,4 +134,48 @@ test.describe('Agent Console V2 (mock API)', () => {
     await expect(page.getByRole('link', { name: 'Runs' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Debug' })).toHaveCount(0)
   })
+
+  test('overview model chain opens models; tools no longer hosts chain editor', async ({ page }) => {
+    await loginWithMocks(page)
+    await page.goto('/agent/42/agent')
+    await expect(page.getByRole('heading', { name: 'Demo Agent' })).toBeVisible()
+
+    const modelCard = page.locator('a[href="/agent/42/agent/config/models"]').filter({ hasText: 'Model Chain' })
+    await expect(modelCard).toBeVisible()
+    await modelCard.click()
+    await page.waitForURL('**/agent/42/agent/config/models')
+    await expect(page.getByRole('navigation', { name: 'Configuration' }).getByRole('link', { name: 'Model chain' })).toBeVisible()
+    await expect(page.getByText('Chat chain').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Save' }).first()).toBeVisible()
+
+    await page.getByRole('link', { name: 'Skills / MCP' }).click()
+    await page.waitForURL('**/agent/42/agent/config/tools')
+    await expect(page.getByRole('heading', { name: 'Chat chain' })).toHaveCount(0)
+    await expect(page.getByText('Chain template')).toHaveCount(0)
+    await expect(page.getByText(/Runtime|MCP/i).first()).toBeVisible()
+  })
+
+  test('config root and nav respect first accessible page by permission', async ({ page }) => {
+    await loginWithMocks(page, {
+      permissions: [
+        'admin:agent:list',
+        'admin:ai-prompt:read',
+        'admin:ai-kb:list',
+        'admin:ai-conversation:list',
+      ],
+    })
+
+    await page.goto('/agent/42/agent/config')
+    await page.waitForURL('**/agent/42/agent/config/prompt')
+    await expect(page.getByRole('link', { name: 'Model chain' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Prompt' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Knowledge' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Skills / MCP' })).toBeVisible()
+
+    await page.getByRole('link', { name: 'Configuration' }).click()
+    await page.waitForURL('**/agent/42/agent/config/prompt')
+
+    await page.goto('/agent/42/agent/config/models')
+    await expect(page.getByText('This account has no site AI permissions.')).toBeVisible()
+  })
 })

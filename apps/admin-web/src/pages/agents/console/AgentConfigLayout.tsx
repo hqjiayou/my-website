@@ -1,14 +1,13 @@
-import { BookOpen, Braces, Cpu, Plug } from 'lucide-react'
 import { Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom'
+import { Navigate, NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom'
 
 import { RouteFallback } from '@/components/page'
 import { cn } from '@/lib/cn'
-import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
+import { buildAgentConfigNavItems, firstAgentConfigPath } from '../agentConfigNav'
 import type { AgentWorkspaceOutletContext } from '../agentWorkspaceLayout'
 
 const subNavClass =
@@ -16,7 +15,7 @@ const subNavClass =
 
 /**
  * 配置区壳：紧凑二级导航（约 184–208px）+ 右侧业务 Outlet。
- * PR-2 只搭骨架；业务面板由子路由薄容器挂载现有组件。
+ * 子导航可见性与各子页权限一致；无任何子页权限时提示无权限。
  */
 export function AgentConfigLayout() {
   const { t } = useTranslation('sites')
@@ -26,26 +25,7 @@ export function AgentConfigLayout() {
   const canPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
   const canKnowledge = useHasPermission(PERMISSION_CODES.aiKbList)
   const canModel = useHasPermission(PERMISSION_CODES.aiModelRead)
-
-  const items = [
-    canModel || canPrompt
-      ? { key: 'models', to: ROUTES.apps.agentConfigModels(id), icon: Cpu, labelKey: 'workspace.configNav.models' }
-      : null,
-    canPrompt
-      ? { key: 'prompt', to: ROUTES.apps.agentConfigPrompt(id), icon: Braces, labelKey: 'workspace.configNav.prompt' }
-      : null,
-    canKnowledge
-      ? {
-          key: 'knowledge',
-          to: ROUTES.apps.agentConfigKnowledge(id),
-          icon: BookOpen,
-          labelKey: 'workspace.configNav.knowledge',
-        }
-      : null,
-    canPrompt
-      ? { key: 'tools', to: ROUTES.apps.agentConfigTools(id), icon: Plug, labelKey: 'workspace.configNav.tools' }
-      : null,
-  ].filter(Boolean) as Array<{ key: string; to: string; icon: typeof Cpu; labelKey: string }>
+  const items = buildAgentConfigNavItems(id, { canModel, canPrompt, canKnowledge })
 
   if (items.length === 0) {
     return <p className="text-sm text-admin-muted">{t('aiWorkspace.noPermission')}</p>
@@ -76,4 +56,16 @@ export function AgentConfigLayout() {
       </div>
     </div>
   )
+}
+
+/** `/config` 根路径：按权限落到第一个可访问子页，不固定 models。 */
+export function RedirectToAgentConfigIndex() {
+  const { agentId } = useParams()
+  const canPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
+  const canKnowledge = useHasPermission(PERMISSION_CODES.aiKbList)
+  const canModel = useHasPermission(PERMISSION_CODES.aiModelRead)
+  if (agentId == null || agentId === '') return null
+  const target = firstAgentConfigPath(agentId, { canModel, canPrompt, canKnowledge })
+  if (!target) return null
+  return <Navigate to={target} replace />
 }

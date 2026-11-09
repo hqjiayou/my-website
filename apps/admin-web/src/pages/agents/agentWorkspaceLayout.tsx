@@ -20,6 +20,7 @@ import { ROUTES } from '@/router/config/routePaths'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
 
+import { firstAgentConfigPath } from './agentConfigNav'
 import { AgentCreateDialog } from './agentCreateDialog'
 
 export interface AgentWorkspaceOutletContext {
@@ -114,15 +115,18 @@ export function AgentWorkspaceLayout() {
 
   const tabs = useMemo(() => {
     if (!site) return []
+    const configTo =
+      firstAgentConfigPath(site.id, { canModel, canPrompt, canKnowledge }) ??
+      ROUTES.apps.agentConfigModels(site.id)
     const items: Array<{ key: WorkspaceTabKey; to: string; end?: boolean; visible: boolean }> = [
       { key: 'overview', to: ROUTES.apps.agent(site.id), end: true, visible: canAi },
-      { key: 'config', to: ROUTES.apps.agentConfigModels(site.id), visible: canConfig },
+      { key: 'config', to: configTo, visible: canConfig },
       { key: 'debug', to: ROUTES.apps.agentDebug(site.id), visible: canPrompt },
       { key: 'runs', to: ROUTES.apps.agentRuns(site.id), visible: canConversations },
       { key: 'settings', to: ROUTES.apps.agentSettings(site.id), visible: true },
     ]
     return items.filter((item) => item.visible)
-  }, [canAi, canConfig, canConversations, canPrompt, site])
+  }, [canAi, canConfig, canConversations, canKnowledge, canModel, canPrompt, site])
 
   useEffect(() => {
     if (!menuOpen) return

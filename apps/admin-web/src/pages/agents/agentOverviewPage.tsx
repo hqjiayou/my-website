@@ -322,7 +322,7 @@ export function AgentOverviewPage() {
             value={modelValueNode}
             sub={modelChainReady ? undefined : modelDetail}
             footerLabel={t('agentOverview.actions.openRuntime')}
-            to={ROUTES.apps.agentConfigTools(site.id)}
+            to={ROUTES.apps.agentConfigModels(site.id)}
           />
           <Fact
             icon={Code}

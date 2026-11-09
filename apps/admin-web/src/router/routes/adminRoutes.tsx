@@ -77,6 +77,10 @@ const AgentConfigLayout = lazyNamed(
   () => import('@/pages/agents/console/AgentConfigLayout'),
   'AgentConfigLayout',
 )
+const RedirectToAgentConfigIndex = lazyNamed(
+  () => import('@/pages/agents/console/AgentConfigLayout'),
+  'RedirectToAgentConfigIndex',
+)
 const AgentConfigModelsPage = lazyNamed(
   () => import('@/pages/agents/console/AgentConfigModelsPage'),
   'AgentConfigModelsPage',
@@ -178,7 +182,7 @@ export const adminRoutes = (
       <Route path="agent">
         <Route index element={<AgentOverviewPage />} />
         <Route path="config" element={<AgentConfigLayout />}>
-          <Route index element={<Navigate to="models" replace />} />
+          <Route index element={<RedirectToAgentConfigIndex />} />
           <Route path="models" element={<AgentConfigModelsPage />} />
           <Route path="prompt" element={<AgentPromptPage />} />
           <Route path="knowledge" element={<AgentKnowledgePage />} />
