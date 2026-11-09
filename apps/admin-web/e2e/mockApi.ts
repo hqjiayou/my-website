@@ -526,8 +526,81 @@ export async function installAgentConsoleMocks(page: Page, options: MockAuthOpti
       await json(route, ok(SKILL_CATALOG))
       return
     }
+    if (/\/preview\/model/.test(path) && method === 'GET') {
+      const mode = url.searchParams.get('mode') === 'CLI' ? 'CLI' : 'KEY'
+      const entries = MODEL_ENTRIES.filter((entry) => (entry.mode ?? 'KEY') === mode && entry.enabled)
+      const primary = entries[0] ?? MODEL_ENTRY_KEY
+      await json(
+        route,
+        ok({
+          available: true,
+          mode,
+          modelSpec: primary.modelSpec,
+          entryId: primary.id,
+          entries: entries.map((entry) => ({
+            id: entry.id,
+            displayName: entry.displayName,
+            modelSpec: entry.modelSpec,
+            mode: entry.mode,
+            enabled: entry.enabled,
+          })),
+        }),
+      )
+      return
+    }
     if (/\/preview\/skills/.test(path) || /\/skills/.test(path)) {
       await json(route, ok(SKILL_CATALOG.skills.map(({ id, description, version }) => ({ id, description, version }))))
+      return
+    }
+    if (/\/conversations\/\d+\/messages$/.test(path) && method === 'GET') {
+      await json(
+        route,
+        ok([
+          {
+            id: 1,
+            role: 'USER',
+            content: 'Hello from preview',
+            createdAt: '2026-11-09T01:00:00Z',
+            agentMeta: null,
+          },
+          {
+            id: 2,
+            role: 'ASSISTANT',
+            content: 'Mock reply without run meta',
+            createdAt: '2026-11-09T01:00:01Z',
+            agentMeta: null,
+          },
+        ]),
+      )
+      return
+    }
+    if (/\/conversations/.test(path) && method === 'GET') {
+      await json(
+        route,
+        ok({
+          records: [
+            {
+              id: 101,
+              title: 'Preview debug session',
+              source: 'ADMIN_PREVIEW',
+              agentUserId: null,
+              lastMessageAt: '2026-11-09T01:00:01Z',
+              createdAt: '2026-11-09T01:00:00Z',
+            },
+            {
+              id: 102,
+              title: 'Portal user chat',
+              source: 'PORTAL',
+              agentUserId: 7,
+              lastMessageAt: '2026-11-08T12:00:00Z',
+              createdAt: '2026-11-08T11:00:00Z',
+            },
+          ],
+          total: 2,
+          pageNum: Number(url.searchParams.get('pageNum') ?? 1),
+          pageSize: Number(url.searchParams.get('pageSize') ?? 20),
+        }),
+      )
       return
     }
     if (/\/mcp-selection$/.test(path) && method === 'PUT') {

@@ -675,6 +675,14 @@ export default {
       view: 'View',
       sourcePortal: 'Portal',
       sourcePreview: 'Preview',
+      userLabel: 'Site user #{{id}}',
+      previewNoUser: 'Admin preview (no site user)',
+      createdAt: 'Created {{time}}',
+      lastMessageAt: 'Last message {{time}}',
+      noTraceHint: 'This is a conversation record, not a full distributed trace. Model, usage and tools appear only when a message carries run metadata; there is no latency, cost or success rate.',
+      noRunMeta: 'No run metadata: conversation record only, not a full trace.',
+      messagesError: 'Failed to load messages.',
+      messagesEmpty: 'No messages in this conversation.',
       columns: {
         title: 'Title',
         agentUserId: 'Site user',
@@ -816,6 +824,22 @@ export default {
       copied: 'Copied',
       quote: 'Quote',
       quoteDismiss: 'Dismiss quote',
+      inspector: {
+        toggle: 'Debug',
+        open: 'Open debug parameters',
+        close: 'Close debug parameters',
+        title: 'Debug parameters',
+        scopeHint: 'Applies only to the current turns of this preview. Nothing is written to the Agent’s prompt, skills or MCP defaults.',
+        location: {
+          title: 'Send browser location',
+          hint: 'Off by default. Turning it on asks the browser for location permission; coordinates stay in this page’s memory, are sent with later messages, and are cleared when you turn it off. A location failure never blocks chat.',
+          status: {
+            requesting: 'Waiting for browser permission…',
+            on: 'Authorized. Later messages include coordinates.',
+            failed: 'Could not get location (denied, timed out or unavailable). Location will not be sent.',
+          },
+        },
+      },
       errors: {
         EXTERNAL_DEPENDENCY_BLOCKED: 'AI provider unavailable (no model / key configured, or upstream failure).',
         MCP_UNAVAILABLE: 'MCP tool server unavailable; this turn did not run.',
@@ -857,7 +881,9 @@ export default {
       },
       run: {
         title: 'This run',
-        servedModel: 'Upstream actually ran {{model}}',
+        servedModel: 'Served model differs from the request: {{model}} (a fallback may have taken over)',
+        requestedModel: 'Requested model',
+        actualModel: 'Served model',
         skillsApplied: 'Skills applied',
         skillsMissing: 'Skills not found: {{ids}}',
         thinking: 'Thinking',

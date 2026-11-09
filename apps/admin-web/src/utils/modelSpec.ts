@@ -3,6 +3,22 @@ export function modelIdFromSpec(spec: string) {
   return spec.startsWith('openai:') ? spec.slice('openai:'.length) : spec
 }
 
+/** 请求 spec 与执行层回报的 model 同口径比较：回报可能是裸 model_name，也可能带 provider 前缀。 */
+export function isSameModel(requestedSpec: string, served: string): boolean {
+  const partOf = (spec: string) => {
+    const idx = spec.indexOf(':')
+    return idx >= 0 ? spec.slice(idx + 1) : spec
+  }
+  const requested = requestedSpec.trim()
+  const actual = served.trim()
+  return (
+    actual === requested ||
+    actual === partOf(requested) ||
+    modelIdFromSpec(actual) === modelIdFromSpec(requested) ||
+    partOf(actual) === partOf(requested)
+  )
+}
+
 /** 嵌入类登记上限，与后端 AgentEmbeddingClassUtils.MAX_EMBEDDING_CLASSES 一致：前端先拦，后端仍会校验。 */
 export const MAX_EMBEDDING_CLASSES = 4
 

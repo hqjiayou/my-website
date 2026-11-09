@@ -672,6 +672,14 @@ export default {
       view: '查看',
       sourcePortal: '用户端',
       sourcePreview: '预览',
+      userLabel: '站点用户 #{{id}}',
+      previewNoUser: '管理员预览（无站点用户）',
+      createdAt: '创建于 {{time}}',
+      lastMessageAt: '最后消息 {{time}}',
+      noTraceHint: '这里是会话记录，不是完整的分布式 Trace。仅当消息带有运行元数据时才显示真实的模型、用量和工具；不含耗时、成本或成功率。',
+      noRunMeta: '无运行元数据：仅会话记录，非完整 Trace。',
+      messagesError: '消息加载失败。',
+      messagesEmpty: '该会话暂无消息。',
       columns: {
         title: '标题',
         agentUserId: '站点用户',
@@ -813,6 +821,22 @@ export default {
       copied: '已复制',
       quote: '引用',
       quoteDismiss: '取消引用',
+      inspector: {
+        toggle: '调试',
+        open: '打开调试参数',
+        close: '关闭调试参数',
+        title: '调试参数',
+        scopeHint: '只影响本页预览的当前轮次，不会写入 Agent 的 Prompt、Skills 或 MCP 默认配置。',
+        location: {
+          title: '附带浏览器定位',
+          hint: '默认关闭。开启后浏览器会请求定位授权；坐标只缓存在本页内存并随后续消息发送，关闭即清除。定位失败不影响对话。',
+          status: {
+            requesting: '正在等待浏览器授权…',
+            on: '已授权，后续消息会附带坐标。',
+            failed: '未能获取定位（被拒绝、超时或不可用），不会发送位置。',
+          },
+        },
+      },
       errors: {
         EXTERNAL_DEPENDENCY_BLOCKED: 'AI 提供方不可用（未配置模型 / 密钥，或上游失败）。',
         MCP_UNAVAILABLE: 'MCP 工具服务不可用，本轮未执行。',
@@ -848,7 +872,9 @@ export default {
       },
       run: {
         title: '本轮执行',
-        servedModel: '上游实际运行的是 {{model}}',
+        servedModel: '实际作答模型与请求不同：{{model}}（可能已由备援接手）',
+        requestedModel: '请求模型',
+        actualModel: '实际作答',
         skillsApplied: '已应用 skills',
         skillsMissing: '未找到的 skill：{{ids}}',
         thinking: '思考过程',

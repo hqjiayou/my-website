@@ -10,45 +10,31 @@ import {
   type TextMessagePartProps,
 } from '@assistant-ui/react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowUp, Check, ChevronDown, Copy, MessageSquare, Quote, SlidersHorizontal, X } from 'lucide-react'
+import { ArrowUp, Check, Copy, MessageSquare, Quote, SlidersHorizontal, TriangleAlert, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { ROUTES } from '@/router/config/routePaths'
 import type {
   AiCitation,
   AiMessage,
   AiPreviewAgentEvent,
   AiPreviewHistoryMessage,
   AiPreviewTodoItem,
-  AiPreviewTodoStatus,
-  AiRunUsage,
-  AiSearchSummary,
 } from '@/types/ai'
 
-import { modelIdFromSpec } from '@/utils/modelSpec'
-import { createJavaPreviewAdapter } from './agentAiPreviewAdapter'
+import { isSameModel, modelIdFromSpec } from '@/utils/modelSpec'
+import {
+  AgentAiDebugInspector,
+  type PreviewLocationStatus,
+  type RunTrace,
+} from './agentAiDebugInspector'
+import {
+  createJavaPreviewAdapter,
+  requestPreviewLocation,
+  type PreviewLocation,
+} from './agentAiPreviewAdapter'
 import { PreviewVisualizationPart } from './agentAiPreviewCards'
-import { AiRunUsageLine } from './agentAiRunMeta'
-import { skillCatalogDescription } from './agentAiSkillCatalogText'
-
-interface ToolCallTrace {
-  toolCallId: string
-  toolName: string
-  state: 'running' | 'ok' | 'failed'
-  summary?: AiSearchSummary
-}
-
-interface RunTrace {
-  skillsApplied: string[]
-  skillsMissing: string[]
-  thinking: string
-  tools: ToolCallTrace[]
-  usage: AiRunUsage | null
-  model: string | null
-}
 
 function PreviewAssistantLabel() {
   const spec = useAuiState((state) => {
@@ -60,24 +46,6 @@ function PreviewAssistantLabel() {
   return (
     <p className="mb-2 inline-flex max-w-full truncate rounded-md bg-card-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
       {spec}
-    </p>
-  )
-}
-
-function RunLivePulse() {
-  const isRunning = useAuiState((state) => state.thread.isRunning)
-  if (!isRunning) return null
-  return <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-info" aria-hidden />
-}
-
-function RunThinkingPlaceholder() {
-  const { t } = useTranslation('sites')
-  const isRunning = useAuiState((state) => state.thread.isRunning)
-  if (!isRunning) return null
-  return (
-    <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="animate-pulse">{t('aiWorkspace.preview.thinking')}</span>
-      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-info" aria-hidden />
     </p>
   )
 }
@@ -276,120 +244,7 @@ const EMPTY_TRACE: RunTrace = {
   tools: [],
   usage: null,
   model: null,
-}
-
-/** 预览勾选行：checkbox + 共用 catalog 说明折叠。 */
-function PreviewSkillRow({
-  id,
-  description,
-  checked,
-  onToggle,
-}: {
-  id: string
-  description: string | null | undefined
-  checked: boolean
-  onToggle: () => void
-}) {
-  const { t } = useTranslation('sites')
-  const [expanded, setExpanded] = useState(false)
-  const text = skillCatalogDescription(id, description, t)
-
-  return (
-    <li>
-      <div className="flex items-start gap-2">
-        <input
-          type="checkbox"
-          className="admin-check mt-1"
-          checked={checked}
-          onChange={onToggle}
-          aria-label={id}
-        />
-        <div className="min-w-0 flex-1">
-          {text ? (
-            <button
-              type="button"
-              className="flex w-full items-center gap-1 text-left"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((value) => !value)}
-            >
-              <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">{id}</span>
-              <ChevronDown
-                className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ${
-                  expanded ? 'rotate-180' : ''
-                }`}
-                aria-hidden
-              />
-            </button>
-          ) : (
-            <span className="block truncate font-mono text-xs text-foreground">{id}</span>
-          )}
-          {text && expanded ? (
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p>
-          ) : null}
-        </div>
-      </div>
-    </li>
-  )
-}
-
-function PreviewMcpSection({ agentId }: { agentId: number }) {
-  const { t } = useTranslation('sites')
-  const [open, setOpen] = useState(false)
-  const runtimeQuery = useQuery({
-    queryKey: ['sites', agentId, 'ai', 'runtime'],
-    queryFn: () => aiApi.getRuntime(agentId),
-  })
-  const servers = runtimeQuery.data?.status?.mcpServers ?? []
-
-  return (
-    <section className="rounded-xl border border-border bg-card p-3">
-      <div className="mb-0 flex items-center gap-2">
-        <button
-          type="button"
-          aria-expanded={open}
-          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
-          onClick={() => setOpen((value) => !value)}
-        >
-          <h4 className="font-medium text-foreground">{t('aiWorkspace.preview.mcp.title')}</h4>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 ${
-              open ? 'rotate-180' : ''
-            }`}
-            aria-hidden
-          />
-        </button>
-        <Link
-          to={ROUTES.apps.agentRuntime(agentId)}
-          className="shrink-0 text-[11px] text-primary underline-offset-2 hover:underline"
-        >
-          {t('aiWorkspace.preview.mcp.openRuntime')}
-        </Link>
-      </div>
-      {open ? (
-        <>
-          <p className="mt-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.mcp.hint')}</p>
-          {runtimeQuery.isPending ? (
-            <p className="mt-2 text-xs text-muted-foreground">{t('aiWorkspace.loading')}</p>
-          ) : runtimeQuery.isError || runtimeQuery.data?.reachable === false ? (
-            <p className="mt-2 text-xs text-danger-emphasis">{t('aiWorkspace.preview.mcp.error')}</p>
-          ) : servers.length === 0 ? (
-            <p className="mt-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.mcp.empty')}</p>
-          ) : (
-            <ul className="mt-2 space-y-1">
-              {servers.map((server) => (
-                <li key={server.name} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate font-mono text-foreground">{server.name}</span>
-                  <span className="shrink-0 text-muted-foreground">
-                    {t(server.enabled ? 'aiWorkspace.preview.mcp.enabled' : 'aiWorkspace.preview.mcp.disabled')}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      ) : null}
-    </section>
-  )
+  requestedModel: null,
 }
 
 type RunError = { errorCode: string; message?: string }
@@ -402,19 +257,6 @@ const KNOWN_ERROR_CODES = new Set([
   'SYSTEM_ERROR',
   'MODEL_ENTRY_UNAVAILABLE',
 ])
-
-const TODO_STATUS_CLASS: Record<AiPreviewTodoStatus, string> = {
-  PENDING: 'bg-card-muted text-muted-foreground',
-  IN_PROGRESS: 'bg-info-muted text-info-emphasis',
-  COMPLETED: 'bg-success-muted text-success-emphasis',
-  CANCELLED: 'bg-card-muted text-muted-foreground line-through',
-}
-
-const TOOL_STATE_CLASS: Record<ToolCallTrace['state'], string> = {
-  running: 'text-info-emphasis',
-  ok: 'text-success-emphasis',
-  failed: 'text-danger-emphasis',
-}
 
 /** adapter 每轮读取的最新选择；闭包持有，避免选择变化时重建 runtime（会丢失预览线程）。 */
 function previewConversationStorageKey(agentId: number) {
@@ -456,7 +298,24 @@ function createPreviewSelection(initialConversationId: number | null) {
   let requestedSpec = ''
   let conversationId: number | null = initialConversationId
   let persistedHistory: AiPreviewHistoryMessage[] = []
+  // 定位默认关闭；只有 Inspector 授权成功后才缓存坐标并启用，关闭即清除。
+  let locationEnabled = false
+  let cachedLocation: PreviewLocation | undefined
+  let locationEpoch = 0
   return {
+    getLocationEnabled: () => locationEnabled,
+    getCachedLocation: () => cachedLocation,
+    setLocation: (next: PreviewLocation) => {
+      cachedLocation = next
+      locationEnabled = true
+    },
+    clearLocation: () => {
+      cachedLocation = undefined
+      locationEnabled = false
+    },
+    // 授权请求是异步的：每次开/关递增，过期的回调据此丢弃，避免关闭后又被迟到的授权写回。
+    nextLocationEpoch: () => ++locationEpoch,
+    isLocationEpoch: (epoch: number) => epoch === locationEpoch,
     getSkills: () => skills,
     setSkills: (next: string[]) => {
       skills = next
@@ -489,7 +348,7 @@ function createPreviewSelection(initialConversationId: number | null) {
   }
 }
 
-function applyAgentEvent(trace: RunTrace, event: AiPreviewAgentEvent): RunTrace {
+function applyAgentEvent(trace: RunTrace, event: AiPreviewAgentEvent, requestedSpec: string): RunTrace {
   switch (event.type) {
     case 'start':
       return {
@@ -499,6 +358,7 @@ function applyAgentEvent(trace: RunTrace, event: AiPreviewAgentEvent): RunTrace 
         tools: [],
         usage: null,
         model: null,
+        requestedModel: requestedSpec || null,
       }
     case 'thinking':
       return { ...trace, thinking: trace.thinking + event.delta }
@@ -542,9 +402,9 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   const [restoredMessages, setRestoredMessages] = useState<AiMessage[]>([])
   const [mode, setMode] = useState<'CLI' | 'KEY'>('CLI')
   const [modeChosen, setModeChosen] = useState(false)
-  const [panelOpen, setPanelOpen] = useState(false)
-  const [traceOpen, setTraceOpen] = useState(true)
-  const [skillsOpen, setSkillsOpen] = useState(true)
+  // 调试 Inspector 默认收起：聊天区占满，需要时再右侧停靠（xl+）或抽屉打开（xl 以下）。
+  const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [locationStatus, setLocationStatus] = useState<PreviewLocationStatus>('off')
   const [modelEntryId, setModelEntryId] = useState<number | null>(null)
   // 首次挂载不带 mode，拿服务端默认判定；用户切换 CLI/KEY 后带 mode 重查，与 previewStream 同一路径回填。
   const modelQuery = useQuery({
@@ -603,7 +463,10 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
     }
   }, [agentId, selection])
 
-  const servedModel = trace.model ? modelIdFromSpec(trace.model) : ''
+  const fallbackServed =
+    trace.requestedModel != null && trace.model != null && !isSameModel(trace.requestedModel, trace.model)
+      ? modelIdFromSpec(trace.model)
+      : ''
 
   // 服务端默认模式只采纳一次（用户未手动选时）：按 React 官方推荐的渲染期调整，
   // 不在 effect 里同步 setState。采纳后 modeChosen=true 使查询键切换为带 mode 重查，
@@ -645,6 +508,26 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
     setSelectedSkills(next)
   }
 
+  // 定位只在用户显式打开开关（用户手势）时请求；失败/拒绝只改状态，不影响发送。
+  const toggleLocation = (enable: boolean) => {
+    const epoch = selection.nextLocationEpoch()
+    selection.clearLocation()
+    if (!enable) {
+      setLocationStatus('off')
+      return
+    }
+    setLocationStatus('requesting')
+    void requestPreviewLocation().then((coords) => {
+      if (!selection.isLocationEpoch(epoch)) return
+      if (!coords) {
+        setLocationStatus('failed')
+        return
+      }
+      selection.setLocation(coords)
+      setLocationStatus('on')
+    })
+  }
+
   const beginNewConversation = () => {
     writeStoredConversationId(agentId, null)
     selection.setConversationId(null)
@@ -663,6 +546,8 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
         getRequestedSpec: selection.getRequestedSpec,
         getConversationId: selection.getConversationId,
         getPersistedHistory: selection.getPersistedHistory,
+        getLocationEnabled: selection.getLocationEnabled,
+        getCachedLocation: selection.getCachedLocation,
         onAgentEvent: (event) => {
           if (event.type === 'error') {
             if (event.errorCode === 'MODEL_ENTRY_UNAVAILABLE') {
@@ -680,247 +565,54 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
           }
           if (event.type === 'start') setRunError(null)
           if (event.type === 'done') updateTodos(event.todos)
-          setTrace((current) => applyAgentEvent(current, event))
+          const requestedSpec = selection.getRequestedSpec()
+          setTrace((current) => applyAgentEvent(current, event, requestedSpec))
         },
       }),
     [agentId, selection, updateTodos],
   )
   const runtime = useLocalRuntime(adapter)
 
-  const skillsQuery = useQuery({
-    queryKey: ['sites', agentId, 'ai', 'preview', 'skills'],
-    queryFn: () => aiApi.listPreviewSkills(agentId),
-  })
-
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className="flex h-full min-h-0 flex-col gap-4 xl:flex-row">
-        <div className="xl:flex xl:h-full xl:w-80 xl:shrink-0 xl:flex-col">
-          <button
-            type="button"
-            className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-3 py-2.5 text-sm font-medium text-foreground xl:hidden"
-            aria-expanded={panelOpen}
-            onClick={() => setPanelOpen((value) => !value)}
-          >
-            <span className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4" aria-hidden />
-              {t('aiWorkspace.preview.panel')}
-            </span>
-            <ChevronDown className={`h-4 w-4 transition-transform ${panelOpen ? 'rotate-180' : ''}`} aria-hidden />
-          </button>
-          <div
-            className={`${panelOpen ? 'mt-3' : 'hidden'} space-y-4 text-sm xl:mt-0 xl:block xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-0.5`}
-          >
-            <section className="rounded-xl border border-border bg-card p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {(['CLI', 'KEY'] as const).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={mode === value}
-                    className={
-                      mode === value
-                        ? 'rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground'
-                        : 'rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground'
-                    }
-                    onClick={() => chooseMode(value)}
-                  >
-                    {value === 'CLI' ? t('aiWorkspace.preview.modeCli') : t('aiWorkspace.preview.modeKey')}
-                  </button>
-                ))}
-              </div>
-              {entries.length > 0 ? (
-                <label className="mt-3 flex flex-col gap-1.5 text-xs text-muted-foreground">
-                  {t('aiWorkspace.preview.nextEntry')}
-                  <select
-                    aria-label={t('aiWorkspace.preview.nextEntry')}
-                    value={modelEntryId ?? ''}
-                    onChange={(event) => chooseEntry(event.target.value)}
-                    className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-foreground"
-                  >
-                    <option value="">{t('aiWorkspace.preview.entryDefault')}</option>
-                    {entries.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.displayName}
-                      </option>
-                    ))}
-                    {modelEntryId != null && !picked ? (
-                      <option value={modelEntryId}>{t('aiWorkspace.preview.entryUnavailable')}</option>
-                    ) : null}
-                  </select>
-                </label>
-              ) : null}
-              <p className="mt-3 text-sm text-muted-foreground">
-                {modelQuery.isPending
-                  ? t('aiWorkspace.loading')
-                  : namedMissing
-                    ? t('aiWorkspace.preview.errors.MODEL_ENTRY_UNAVAILABLE')
-                    : activeModel
-                      ? t('aiWorkspace.preview.using', { model: activeModel })
-                      : t('aiWorkspace.preview.noEntry')}
-              </p>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{t('aiWorkspace.preview.hint')}</p>
-            </section>
-
-            <section className="rounded-xl border border-border bg-card p-3">
-              <button
-                type="button"
-                aria-expanded={traceOpen}
-                className="mb-2 flex w-full items-center justify-between gap-2 text-left"
-                onClick={() => setTraceOpen((value) => !value)}
-              >
-                <h4 className="font-medium text-foreground">{t('aiWorkspace.preview.run.title')}</h4>
-                <ChevronDown
-                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 ${
-                    traceOpen ? 'rotate-180' : ''
-                  }`}
-                  aria-hidden
-                />
-              </button>
-              {traceOpen ? (
-                <>
-                  {servedModel && activeModel && servedModel !== activeModel ? (
-                    <p className="mb-2 text-xs text-warning-emphasis">
-                      {t('aiWorkspace.preview.run.servedModel', { model: servedModel })}
-                    </p>
-                  ) : null}
-                  <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.skillsApplied')}</p>
-                  <p className="mb-2 font-mono text-xs text-foreground">
-                    {trace.skillsApplied.length ? trace.skillsApplied.join(', ') : '—'}
-                  </p>
-                  {trace.skillsMissing.length ? (
-                    <p className="mb-2 text-xs text-warning-emphasis">
-                      {t('aiWorkspace.preview.run.skillsMissing', { ids: trace.skillsMissing.join(', ') })}
-                    </p>
-                  ) : null}
-                  {trace.thinking ? (
-                    <>
-                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        {t('aiWorkspace.preview.run.thinking')}
-                        <RunLivePulse />
-                      </p>
-                      <div className="mb-2 mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-card-muted px-2 py-1.5 text-xs leading-5 text-muted-foreground">
-                        {trace.thinking}
-                      </div>
-                    </>
-                  ) : (
-                    <RunThinkingPlaceholder />
-                  )}
-                  <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.tools')}</p>
-                  {trace.tools.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.noTools')}</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {trace.tools.map((tool) => (
-                        <li key={tool.toolCallId || tool.toolName} className="text-xs">
-                          <div className="flex justify-between gap-2">
-                            <span className="flex min-w-0 items-center gap-1.5 truncate font-mono text-foreground">
-                              {tool.state === 'running' ? (
-                                <span className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-info" aria-hidden />
-                              ) : null}
-                              <span className="truncate">{tool.toolName}</span>
-                            </span>
-                            <span className={TOOL_STATE_CLASS[tool.state]}>
-                              {t(`aiWorkspace.preview.run.toolState.${tool.state}`)}
-                            </span>
-                          </div>
-                          {tool.summary ? (
-                            <p className="mt-0.5 truncate text-muted-foreground">
-                              {t('aiWorkspace.preview.run.searchDetail', {
-                                query: tool.summary.query,
-                                count: tool.summary.hitCount,
-                              })}
-                            </p>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {trace.usage ? (
-                    <div className="mt-2">
-                      <AiRunUsageLine usage={trace.usage} />
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-            </section>
-
-            <PreviewMcpSection agentId={agentId} />
-
-            <section className="rounded-xl border border-border bg-card p-3">
-              <button
-                type="button"
-                aria-expanded={skillsOpen}
-                className="mb-2 flex w-full items-center justify-between gap-2 text-left"
-                onClick={() => setSkillsOpen((value) => !value)}
-              >
-                <h4 className="font-medium text-foreground">{t('aiWorkspace.preview.skills.title')}</h4>
-                <ChevronDown
-                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 ${
-                    skillsOpen ? 'rotate-180' : ''
-                  }`}
-                  aria-hidden
-                />
-              </button>
-              {skillsOpen ? (
-                <>
-                  <p className="mb-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.skills.hint')}</p>
-                  {skillsQuery.isPending ? (
-                    <p className="text-muted-foreground">{t('aiWorkspace.loading')}</p>
-                  ) : skillsQuery.isError ? (
-                    <div className="text-danger-emphasis">
-                      <p>{t('aiWorkspace.preview.skills.error')}</p>
-                      <button type="button" className="mt-1 underline" onClick={() => void skillsQuery.refetch()}>
-                        {t('aiWorkspace.retry')}
-                      </button>
-                    </div>
-                  ) : skillsQuery.data.length === 0 ? (
-                    <p className="text-muted-foreground">{t('aiWorkspace.preview.skills.empty')}</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {skillsQuery.data.map((skill) => (
-                        <PreviewSkillRow
-                          key={skill.id}
-                          id={skill.id}
-                          description={skill.description}
-                          checked={selectedSkills.includes(skill.id)}
-                          onToggle={() => toggleSkill(skill.id)}
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </>
-              ) : null}
-            </section>
-
-            <section className="rounded-xl border border-border bg-card p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="font-medium text-foreground">{t('aiWorkspace.preview.todos.title')}</h4>
-                {todos.length ? (
-                  <button type="button" className="text-xs underline" onClick={() => updateTodos([])}>
-                    {t('aiWorkspace.preview.todos.clear')}
-                  </button>
-                ) : null}
-              </div>
-              {todos.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.todos.empty')}</p>
-              ) : (
-                <ul className="space-y-1">
-                  {todos.map((todo) => (
-                    <li key={todo.id} className="flex items-start justify-between gap-2 text-xs">
-                      <span className="text-foreground">{todo.title}</span>
-                      <span className={`shrink-0 rounded px-1.5 py-0.5 ${TODO_STATUS_CLASS[todo.status]}`}>
-                        {t(`aiWorkspace.preview.todos.status.${todo.status}`)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="mt-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.todos.hint')}</p>
-            </section>
-          </div>
-        </div>
+      <div className="flex h-full min-h-0 gap-4">
         <ThreadPrimitive.Root className="flex min-h-[20rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card-muted">
+          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 sm:px-6">
+            <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              <span className="mr-1.5 rounded-md bg-card px-1.5 py-0.5 font-medium text-foreground">
+                {mode === 'CLI' ? t('aiWorkspace.preview.modeCli') : t('aiWorkspace.preview.modeKey')}
+              </span>
+              {modelQuery.isPending ? (
+                t('aiWorkspace.loading')
+              ) : namedMissing ? (
+                t('aiWorkspace.preview.errors.MODEL_ENTRY_UNAVAILABLE')
+              ) : activeModel ? (
+                <span className="font-mono">{activeModel}</span>
+              ) : (
+                t('aiWorkspace.preview.noEntry')
+              )}
+            </p>
+            <button
+              type="button"
+              aria-expanded={inspectorOpen}
+              aria-label={inspectorOpen ? t('aiWorkspace.preview.inspector.close') : t('aiWorkspace.preview.inspector.open')}
+              title={inspectorOpen ? t('aiWorkspace.preview.inspector.close') : t('aiWorkspace.preview.inspector.open')}
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-foreground transition hover:bg-card-muted"
+              onClick={() => setInspectorOpen((value) => !value)}
+            >
+              <SlidersHorizontal className="h-4 w-4" aria-hidden />
+              <span className="hidden sm:inline">{t('aiWorkspace.preview.inspector.toggle')}</span>
+            </button>
+          </div>
+          {fallbackServed ? (
+            <p
+              role="status"
+              className="flex items-start gap-1.5 border-b border-border bg-warning-muted px-3 py-1.5 text-xs text-warning-emphasis sm:px-6"
+            >
+              <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              {t('aiWorkspace.preview.run.servedModel', { model: fallbackServed })}
+            </p>
+          ) : null}
           {conversationId != null ? (
             <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground sm:px-6">
               <span>{t('aiWorkspace.preview.conversation.resume', { id: conversationId })}</span>
@@ -929,7 +621,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
               </button>
             </div>
           ) : null}
-          <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-6 py-4 sm:px-10">
+          <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-3 py-4 sm:px-10">
             {restoredMessages.length > 0 ? (
               <ul className="mb-4 space-y-3 border-b border-border pb-4">
                 {restoredMessages.map((item) => {
@@ -1007,6 +699,27 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             </div>
           </ComposerPrimitive.Root>
         </ThreadPrimitive.Root>
+        <AgentAiDebugInspector
+          agentId={agentId}
+          open={inspectorOpen}
+          onClose={() => setInspectorOpen(false)}
+          mode={mode}
+          onChooseMode={chooseMode}
+          entries={entries}
+          modelEntryId={modelEntryId}
+          entryPicked={picked != null}
+          onChooseEntry={chooseEntry}
+          modelPending={modelQuery.isPending}
+          namedMissing={namedMissing}
+          activeModel={activeModel}
+          trace={trace}
+          selectedSkills={selectedSkills}
+          onToggleSkill={toggleSkill}
+          todos={todos}
+          onClearTodos={() => updateTodos([])}
+          locationStatus={locationStatus}
+          onToggleLocation={toggleLocation}
+        />
       </div>
     </AssistantRuntimeProvider>
   )

@@ -29,7 +29,17 @@ function sessionTimeZone(): string | undefined {
   }
 }
 
-function sessionLocation(): Promise<{ latitude: number; longitude: number; accuracyMeters?: number } | undefined> {
+export interface PreviewLocation {
+  latitude: number
+  longitude: number
+  accuracyMeters?: number
+}
+
+/**
+ * 浏览器定位授权：只在调试 Inspector 里用户显式打开定位开关时调用（须由用户手势触发）。
+ * 发送链路（adapter.run）从不调用它，也不等待它；失败/超时/拒绝一律返回 undefined。
+ */
+export function requestPreviewLocation(): Promise<PreviewLocation | undefined> {
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
     return Promise.resolve(undefined)
   }
@@ -332,6 +342,10 @@ export interface PreviewAdapterOptions {
   getConversationId: () => number | null
   /** 本地线程为空时（例如刷新后）用库内消息拼 history。 */
   getPersistedHistory: () => AiPreviewHistoryMessage[]
+  /** 定位默认关闭；仅 Inspector 里显式开启后才随请求发送。 */
+  getLocationEnabled: () => boolean
+  /** 已授权并缓存的坐标；adapter 只读缓存，不触发浏览器定位、不等待。 */
+  getCachedLocation: () => PreviewLocation | undefined
   onAgentEvent: (event: AiPreviewAgentEvent) => void
 }
 
@@ -397,7 +411,7 @@ export function createJavaPreviewAdapter(
       const conversationId = options.getConversationId()
       const requestedModel = options.getRequestedSpec()
       const timezone = sessionTimeZone()
-      const location = await sessionLocation()
+      const location = options.getLocationEnabled() ? options.getCachedLocation() : undefined
 
       const response = await streamPreviewChat(
         agentId,

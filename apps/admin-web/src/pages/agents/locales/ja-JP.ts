@@ -675,6 +675,14 @@ export default {
       view: '表示',
       sourcePortal: 'ユーザー端',
       sourcePreview: 'プレビュー',
+      userLabel: 'サイトユーザー #{{id}}',
+      previewNoUser: '管理者プレビュー（サイトユーザーなし）',
+      createdAt: '作成 {{time}}',
+      lastMessageAt: '最終メッセージ {{time}}',
+      noTraceHint: 'これは会話記録であり、完全な分散トレースではありません。モデル・使用量・ツールはメッセージに実行メタデータがある場合のみ表示され、所要時間・コスト・成功率はありません。',
+      noRunMeta: '実行メタデータなし：会話記録のみで、完全なトレースではありません。',
+      messagesError: 'メッセージの読み込みに失敗しました。',
+      messagesEmpty: 'この会話にはメッセージがありません。',
       columns: {
         title: 'タイトル',
         agentUserId: 'サイトユーザー',
@@ -816,6 +824,22 @@ export default {
       copied: 'コピーしました',
       quote: '引用',
       quoteDismiss: '引用を取り消す',
+      inspector: {
+        toggle: 'デバッグ',
+        open: 'デバッグ設定を開く',
+        close: 'デバッグ設定を閉じる',
+        title: 'デバッグ設定',
+        scopeHint: 'このプレビューの現在のターンにのみ影響します。エージェントのプロンプト・スキル・MCP の既定値には書き込まれません。',
+        location: {
+          title: 'ブラウザの位置情報を送る',
+          hint: '既定はオフです。オンにするとブラウザに位置情報の許可を求めます。座標はこのページのメモリにだけ保持され、以降のメッセージに付いて送られ、オフにすると消去されます。取得に失敗しても会話は止まりません。',
+          status: {
+            requesting: 'ブラウザの許可を待っています…',
+            on: '許可済み。以降のメッセージに座標が付きます。',
+            failed: '位置情報を取得できませんでした（拒否・タイムアウト・利用不可）。位置は送信されません。',
+          },
+        },
+      },
       errors: {
         EXTERNAL_DEPENDENCY_BLOCKED: 'AI プロバイダーを利用できません（モデル / キー未設定、または上流の障害）。',
         MCP_UNAVAILABLE: 'MCP ツールサーバーを利用できないため、このターンは実行されませんでした。',
@@ -857,7 +881,9 @@ export default {
       },
       run: {
         title: '今回の実行',
-        servedModel: '上流が実際に動かしたのは {{model}} です',
+        servedModel: '実際に応答したモデルがリクエストと異なります：{{model}}（フォールバックに切り替わった可能性）',
+        requestedModel: 'リクエストしたモデル',
+        actualModel: '実際の応答モデル',
         skillsApplied: '適用された skills',
         skillsMissing: '見つからない skill：{{ids}}',
         thinking: '思考プロセス',
