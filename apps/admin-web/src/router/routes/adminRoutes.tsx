@@ -25,6 +25,30 @@ const RedirectToAgent = lazyNamed(
   () => import('@/pages/agents/agentRedirect'),
   'RedirectToAgent',
 )
+const RedirectToAgentSettings = lazyNamed(
+  () => import('@/pages/agents/agentRedirect'),
+  'RedirectToAgentSettings',
+)
+const RedirectToAgentConfigPrompt = lazyNamed(
+  () => import('@/pages/agents/agentRedirect'),
+  'RedirectToAgentConfigPrompt',
+)
+const RedirectToAgentConfigKnowledge = lazyNamed(
+  () => import('@/pages/agents/agentRedirect'),
+  'RedirectToAgentConfigKnowledge',
+)
+const RedirectToAgentConfigTools = lazyNamed(
+  () => import('@/pages/agents/agentRedirect'),
+  'RedirectToAgentConfigTools',
+)
+const RedirectToAgentDebug = lazyNamed(
+  () => import('@/pages/agents/agentRedirect'),
+  'RedirectToAgentDebug',
+)
+const RedirectToAgentRuns = lazyNamed(
+  () => import('@/pages/agents/agentRedirect'),
+  'RedirectToAgentRuns',
+)
 const AgentOverviewPage = lazyNamed(
   () => import('@/pages/agents/agentOverviewPage'),
   'AgentOverviewPage',
@@ -49,8 +73,18 @@ const AgentRuntimePage = lazyNamed(
   () => import('@/pages/agents/agentPages'),
   'AgentRuntimePage',
 )
-const AgentBasicPage = lazyNamed(() => import('@/pages/agents/agentBasicPage'), 'AgentBasicPage')
-const AgentAccessPage = lazyNamed(() => import('@/pages/agents/agentAccessPage'), 'AgentAccessPage')
+const AgentConfigLayout = lazyNamed(
+  () => import('@/pages/agents/console/AgentConfigLayout'),
+  'AgentConfigLayout',
+)
+const AgentConfigModelsPage = lazyNamed(
+  () => import('@/pages/agents/console/AgentConfigModelsPage'),
+  'AgentConfigModelsPage',
+)
+const AgentSettingsPage = lazyNamed(
+  () => import('@/pages/agents/console/AgentSettingsPage'),
+  'AgentSettingsPage',
+)
 const AgentThemePage = lazyNamed(() => import('@/pages/agents/agentThemePage'), 'AgentThemePage')
 const AgentContentsPage = lazyNamed(
   () => import('@/pages/agents/agentContentsPage'),
@@ -134,18 +168,32 @@ export const adminRoutes = (
     <Route path={ROUTES.apps.agentDetailPattern} element={<AgentWorkspaceLayout />}>
       <Route index element={<Navigate to="agent" replace />} />
       <Route path="overview" element={<RedirectToAgent />} />
-      <Route path="basic" element={<AgentBasicPage />} />
-      <Route path="access" element={<AgentAccessPage />} />
+      {/* 旧设置路径：有等价能力的进 settings；主题/内容/文件仍可达。 */}
+      <Route path="basic" element={<RedirectToAgentSettings />} />
+      <Route path="access" element={<RedirectToAgentSettings />} />
       <Route path="theme" element={<AgentThemePage />} />
-      <Route path="domain" element={<Navigate to="../basic" replace />} />
+      <Route path="domain" element={<RedirectToAgentSettings />} />
       <Route path="contents" element={<AgentContentsPage />} />
       <Route path="ai" element={<RedirectToAgent />} />
-      <Route path="agent" element={<AgentOverviewPage />} />
-      <Route path="agent/prompt" element={<AgentPromptPage />} />
-      <Route path="agent/knowledge" element={<AgentKnowledgePage />} />
-      <Route path="agent/conversations" element={<AgentConversationsPage />} />
-      <Route path="agent/preview" element={<AgentPreviewPage />} />
-      <Route path="agent/runtime" element={<AgentRuntimePage />} />
+      <Route path="agent">
+        <Route index element={<AgentOverviewPage />} />
+        <Route path="config" element={<AgentConfigLayout />}>
+          <Route index element={<Navigate to="models" replace />} />
+          <Route path="models" element={<AgentConfigModelsPage />} />
+          <Route path="prompt" element={<AgentPromptPage />} />
+          <Route path="knowledge" element={<AgentKnowledgePage />} />
+          <Route path="tools" element={<AgentRuntimePage />} />
+        </Route>
+        <Route path="debug" element={<AgentPreviewPage />} />
+        <Route path="runs" element={<AgentConversationsPage />} />
+        <Route path="settings" element={<AgentSettingsPage />} />
+        {/* 旧 Agent 子路径 → V2 等价入口（绝对路径，禁止相对解析漂移）。 */}
+        <Route path="prompt" element={<RedirectToAgentConfigPrompt />} />
+        <Route path="knowledge" element={<RedirectToAgentConfigKnowledge />} />
+        <Route path="preview" element={<RedirectToAgentDebug />} />
+        <Route path="conversations" element={<RedirectToAgentRuns />} />
+        <Route path="runtime" element={<RedirectToAgentConfigTools />} />
+      </Route>
       <Route path="files" element={<AgentFilesPage />} />
     </Route>
     <Route path={ROUTES.apps.style} element={<StyleSettingsPage />} />

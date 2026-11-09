@@ -3,13 +3,13 @@
 ```yaml
 artifact_type: SPEC
 status: CURRENT
-last_verified: 2026-10-30
+last_verified: 2026-11-09
 source_of_truth: apps/admin-web/src
 ```
 
 ## 总览
 
-管理后台 React 应用。主纵向域走 **REAL API**。侧栏父级叫 agent；智能体、API 管理、AI 用量三项同组（图标分别为 layers／zap／chart）。打开 `/agent` 进入最近更新的智能体工作区（没有智能体时只留下新建），API 管理在同一菜单下的 `/agent/api`，页签切换两种：CLI 代理（登录 GPT CLI、Claude、Gemini 或 Muse，查看该账号用量和模型，客户端 key 在这一页；Cursor 不能登录）和供应商 API key（模型 spec 与 key，不经过登录账号）。AI 用量在 `/ai/usage`。智能体用哪一条在接入里选，这里不改智能体。工作台导航只留对话、接入和基础信息。对话预览左栏顺序为本轮执行 → MCP（状态只读，选择在运行状态页）→ Skills（说明可折叠、目录文案走 i18n）→ Todo；成功轮次落库为 `ADMIN_PREVIEW`，对话记录页可标「预览」并续写。接入页的 CLI 仍保存代理地址、客户端 key 和已登录账号放出的模型；客户端 key 这一行是进代理的门禁，已保存时默认保留、展开后才从代理上的客户端 key 里更换。API key 那一行是直连默认入口，显示名称、spec 和末四位，只从 API 管理里已有的条目里选一条绑到当前智能体。概览左侧上方是当前模型、Prompt 和知识库，下面是 Harness（三个平台文件是否装上、技能、运行上限、MCP），右侧是对话列表（模型、条数、上下文、输入和输出 token）。
+管理后台 React 应用。主纵向域走 **REAL API**。侧栏父级叫 agent；智能体、模型 API、AI 用量等同组。`/agent` 为智能体列表（列显示管理、状态/类型服务端筛选、行级 `···` 操作；无全局 `q/sort` 时不开放本地伪装搜索）。Agent 工作区取消常驻二级侧栏，改为横向 Tabs：`概览 / 配置 / 调试 / 运行记录 / 设置`；配置内子导航为 `模型链 / Prompt / 知识空间 / Tools`（薄容器复用既有业务面板）。Settings 聚合 Basic＋Access（平台默认只读）并以高级入口保留 Theme／Contents／Files。旧路径 `prompt/knowledge/preview/conversations/runtime/basic/access` 绝对重定向到 V2 等价页；`theme/contents/files` 仍直达。对话预览左栏顺序为本轮执行 → MCP（状态只读，选择在运行状态／Tools 页）→ Skills → Todo；成功轮次落库为 `ADMIN_PREVIEW`。概览左侧上方是当前模型、Prompt 和知识库，下面是 Harness，右侧是对话列表。
 
 ## 域 × 数据源
 

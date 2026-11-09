@@ -1,27 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Activity,
-  BookOpen,
-  Bot,
-  Braces,
-  MessageSquare,
-  MessagesSquare,
-  Plus,
-  Plug,
-  SlidersHorizontal,
-  type LucideIcon,
-} from 'lucide-react'
-import { Suspense, useMemo, useState } from 'react'
+import { Bot, MoreHorizontal, Plus } from 'lucide-react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { agentApi, SITE_STATUS, type Site } from '@/api'
 import { FormDialog, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
-  adminDangerGhostButtonMdClass,
   adminFormActionsClass,
+  adminGhostButtonClass,
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
@@ -46,23 +35,25 @@ function formatUpdatedAt(value: string) {
   return date.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-interface WorkspaceNavItem {
-  key: string
-  path: string
-  icon: LucideIcon
-  end?: boolean
-}
+type WorkspaceTabKey = 'overview' | 'config' | 'debug' | 'runs' | 'settings'
 
-interface WorkspaceNavGroup {
-  key: string
-  items: WorkspaceNavItem[]
+function resolveActiveTab(pathname: string): WorkspaceTabKey {
+  if (/\/agent\/[^/]+\/agent\/config(?:\/|$)/.test(pathname)) return 'config'
+  if (/\/agent\/[^/]+\/agent\/debug(?:\/|$)/.test(pathname)) return 'debug'
+  if (/\/agent\/[^/]+\/agent\/runs(?:\/|$)/.test(pathname)) return 'runs'
+  if (/\/agent\/[^/]+\/agent\/settings(?:\/|$)/.test(pathname)) return 'settings'
+  if (/\/agent\/[^/]+\/(?:basic|access|theme|contents|files)(?:\/|$)/.test(pathname)) return 'settings'
+  return 'overview'
 }
 
 export function AgentWorkspaceLayout() {
   const { t } = useTranslation('sites')
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const { agentId } = useParams()
   const parsedId = Number(agentId)
@@ -72,6 +63,8 @@ export function AgentWorkspaceLayout() {
   const canPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
   const canKnowledge = useHasPermission(PERMISSION_CODES.aiKbList)
   const canConversations = useHasPermission(PERMISSION_CODES.aiConversationList)
+  const canModel = useHasPermission(PERMISSION_CODES.aiModelRead)
+  const canConfig = canPrompt || canKnowledge || canModel
   const canAi = canPrompt || canKnowledge || canConversations
 
   const { data: site, isPending, isError, error } = useQuery({
@@ -85,6 +78,7 @@ export function AgentWorkspaceLayout() {
     enabled: canList,
   })
   const agents = agentsQuery.data?.records ?? []
+  const activeTab = resolveActiveTab(location.pathname)
 
   const statusMutation = useMutation({
     mutationFn: () => {
@@ -97,6 +91,7 @@ export function AgentWorkspaceLayout() {
     onSuccess: () => {
       toast.success(t('list.messages.statusUpdated'))
       void queryClient.invalidateQueries({ queryKey: ['sites'] })
+      setMenuOpen(false)
     },
     onError: (err: Error) => {
       toast.error(err.message)
@@ -117,45 +112,33 @@ export function AgentWorkspaceLayout() {
     onError: (err: Error) => toast.error(err.message),
   })
 
-  const navGroups = useMemo<WorkspaceNavGroup[]>(() => {
+  const tabs = useMemo(() => {
     if (!site) return []
-    const groups: WorkspaceNavGroup[] = []
+    const items: Array<{ key: WorkspaceTabKey; to: string; end?: boolean; visible: boolean }> = [
+      { key: 'overview', to: ROUTES.apps.agent(site.id), end: true, visible: canAi },
+      { key: 'config', to: ROUTES.apps.agentConfigModels(site.id), visible: canConfig },
+      { key: 'debug', to: ROUTES.apps.agentDebug(site.id), visible: canPrompt },
+      { key: 'runs', to: ROUTES.apps.agentRuns(site.id), visible: canConversations },
+      { key: 'settings', to: ROUTES.apps.agentSettings(site.id), visible: true },
+    ]
+    return items.filter((item) => item.visible)
+  }, [canAi, canConfig, canConversations, canPrompt, site])
 
-    if (canAi) {
-      const agentItems: WorkspaceNavItem[] = [
-        { key: 'agentOverview', path: ROUTES.apps.agent(site.id), icon: Bot, end: true },
-      ]
-      if (canPrompt) {
-        agentItems.push(
-          { key: 'agentPreview', path: ROUTES.apps.agentPreview(site.id), icon: MessageSquare },
-          { key: 'agentPrompt', path: ROUTES.apps.agentPrompt(site.id), icon: Braces },
-        )
-      }
-      if (canKnowledge) {
-        agentItems.push({ key: 'agentKnowledge', path: ROUTES.apps.agentKnowledge(site.id), icon: BookOpen })
-      }
-      if (canConversations) {
-        agentItems.push({
-          key: 'agentConversations',
-          path: ROUTES.apps.agentConversations(site.id),
-          icon: MessagesSquare,
-        })
-      }
-      if (canPrompt) {
-        agentItems.push({ key: 'agentRuntime', path: ROUTES.apps.agentRuntime(site.id), icon: Activity })
-      }
-      groups.push({ key: 'agent', items: agentItems })
+  useEffect(() => {
+    if (!menuOpen) return
+    function onPointerDown(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
     }
-
-    groups.push({
-      key: 'settings',
-      items: [
-        { key: 'access', path: ROUTES.apps.agentAccess(site.id), icon: Plug },
-        { key: 'basic', path: ROUTES.apps.agentBasic(site.id), icon: SlidersHorizontal },
-      ],
-    })
-    return groups
-  }, [canAi, canConversations, canKnowledge, canPrompt, site])
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
 
   if (!Number.isFinite(parsedId) || isError || (!isPending && !site)) {
     return (
@@ -171,13 +154,20 @@ export function AgentWorkspaceLayout() {
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3.5">
-        <div className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[13px] bg-gradient-to-br from-[rgb(var(--primary))] to-[rgb(var(--info))] text-admin-on-primary shadow-admin-pop">
-          <Bot className="h-6 w-6" />
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-admin bg-admin-surface px-4 py-3 sm:px-5">
+        <Link
+          to={ROUTES.apps.sites}
+          className={cn(adminGhostButtonClass, 'shrink-0')}
+          aria-label={t('workspace.backToList')}
+        >
+          ←
+        </Link>
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-primary/12 text-primary">
+          <Bot className="h-5 w-5" aria-hidden />
         </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl font-bold text-admin">{site.agentName}</h1>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-lg font-semibold text-admin sm:text-xl">{site.agentName}</h1>
             <StatusTag status={site.status} label={t(`status.${site.status}`, { defaultValue: site.status })} />
           </div>
           <p className="mt-0.5 flex flex-wrap items-center text-xs text-admin-muted">
@@ -194,77 +184,132 @@ export function AgentWorkspaceLayout() {
             ) : null}
           </p>
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {agents.length > 1 ? (
-            <select
-              className={cn(headerControlClass, 'w-44 border-admin bg-admin-surface text-admin')}
-              value={site.id}
-              onChange={(event) => navigate(ROUTES.apps.agent(event.target.value))}
-            >
-              {agents.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.agentName}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          {canStatus ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {canPrompt ? (
             <button
               type="button"
-              className={adminSecondaryButtonClass}
-              disabled={statusMutation.isPending}
-              onClick={() => statusMutation.mutate()}
+              className={adminPrimaryButtonClass}
+              onClick={() => navigate(ROUTES.apps.agentDebug(site.id))}
             >
-              {site.status === SITE_STATUS.ACTIVE ? t('list.actions.disable') : t('list.actions.enable')}
+              {t('workspace.actions.debug')}
             </button>
           ) : null}
-          {canDelete ? (
+          <div ref={menuRef} className="relative">
             <button
               type="button"
-              className={adminDangerGhostButtonMdClass}
-              disabled={deleteMutation.isPending}
-              onClick={() => setDeleteOpen(true)}
+              className={cn(adminGhostButtonClass, 'h-9 w-9 justify-center px-0')}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label={t('workspace.actions.more')}
+              onClick={() => setMenuOpen((value) => !value)}
             >
-              {t('list.actions.delete')}
+              <MoreHorizontal className="h-4 w-4" aria-hidden />
             </button>
-          ) : null}
-          <PermissionGate code={PERMISSION_CODES.agentCreate}>
-            <button type="button" className={adminPrimaryButtonClass} onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" />
-              {t('list.createSite')}
-            </button>
-          </PermissionGate>
-        </div>
-      </div>
-
-      <div className="grid items-start gap-3 lg:grid-cols-[13.5rem_minmax(0,1fr)]">
-        <aside className="rounded-xl border border-admin bg-admin-surface p-2 lg:sticky lg:top-[calc(4rem+var(--admin-page-padding))] lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
-          {navGroups.map((group) => (
-            <div key={group.key} className="mb-3 last:mb-0">
-              <p className="admin-nav-group-title px-3 pb-1">{t(`workspace.groups.${group.key}`)}</p>
-              <nav className="flex flex-col gap-0.5">
-                {group.items.map((item) => (
-                  <NavLink
-                    key={item.key}
-                    to={item.path}
-                    end={item.end}
-                    className="admin-nav-item admin-focus-ring flex items-center gap-3 px-3 text-sm font-medium"
+            {menuOpen ? (
+              <div
+                role="menu"
+                className="absolute top-full right-0 z-30 mt-1 min-w-44 rounded-lg border border-admin bg-admin-surface p-1 shadow-admin-pop"
+              >
+                {agents.length > 1 ? (
+                  <div className="border-b border-admin px-2 py-2">
+                    <label className="mb-1 block text-[10px] font-semibold tracking-wide text-admin-muted uppercase">
+                      {t('workspace.actions.switchAgent')}
+                    </label>
+                    <select
+                      className={cn(headerControlClass, 'w-full border-admin bg-admin-surface text-admin')}
+                      value={site.id}
+                      onChange={(event) => {
+                        navigate(ROUTES.apps.agent(event.target.value))
+                        setMenuOpen(false)
+                      }}
+                    >
+                      {agents.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.agentName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                {canStatus ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
+                    disabled={statusMutation.isPending}
+                    onClick={() => statusMutation.mutate()}
                   >
-                    <item.icon className="h-4.5 w-4.5 shrink-0" />
-                    {t(`workspace.nav.${item.key}`)}
-                  </NavLink>
-                ))}
-              </nav>
-            </div>
-          ))}
-        </aside>
-
-        <div className="min-w-0">
-          <Suspense fallback={<RouteFallback />}>
-            <Outlet context={{ site } satisfies AgentWorkspaceOutletContext} />
-          </Suspense>
+                    {site.status === SITE_STATUS.ACTIVE ? t('list.actions.disable') : t('list.actions.enable')}
+                  </button>
+                ) : null}
+                <PermissionGate code={PERMISSION_CODES.agentCreate}>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setCreateOpen(true)
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden />
+                    {t('list.createSite')}
+                  </button>
+                </PermissionGate>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    navigate(ROUTES.apps.agentSettings(site.id))
+                  }}
+                >
+                  {t('workspace.tabs.settings')}
+                </button>
+                {canDelete ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin-danger hover:bg-admin-danger-muted"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setDeleteOpen(true)
+                    }}
+                  >
+                    {t('list.actions.delete')}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
+
+      <div className="rounded-xl border border-admin bg-admin-surface px-2 sm:px-3">
+        <nav className="flex gap-0.5 overflow-x-auto" aria-label={t('workspace.title')}>
+          {tabs.map((tab) => (
+            <NavLink
+              key={tab.key}
+              to={tab.to}
+              end={tab.end}
+              className={cn(
+                'admin-focus-ring shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-medium text-admin-muted transition hover:text-admin',
+                activeTab === tab.key && 'border-primary text-primary',
+              )}
+            >
+              {t(`workspace.tabs.${tab.key}`)}
+            </NavLink>
+          ))}
+        </nav>
+      </div>
+
+      <div className="min-w-0">
+        <Suspense fallback={<RouteFallback />}>
+          <Outlet context={{ site } satisfies AgentWorkspaceOutletContext} />
+        </Suspense>
+      </div>
+
       {createOpen ? <AgentCreateDialog onClose={() => setCreateOpen(false)} /> : null}
       {deleteOpen ? (
         <FormDialog
@@ -274,15 +319,9 @@ export function AgentWorkspaceLayout() {
           size="s"
           danger
         >
-          <p className="text-sm text-admin">
-            {t('list.messages.confirmDelete', { name: site.agentName })}
-          </p>
+          <p className="text-sm text-admin">{t('list.messages.confirmDelete', { name: site.agentName })}</p>
           <div className={adminFormActionsClass}>
-            <button
-              type="button"
-              className={adminSecondaryButtonClass}
-              onClick={() => setDeleteOpen(false)}
-            >
+            <button type="button" className={adminSecondaryButtonClass} onClick={() => setDeleteOpen(false)}>
               {t('list.actions.cancel')}
             </button>
             <button

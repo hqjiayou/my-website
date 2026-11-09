@@ -19,4 +19,8 @@ npm run test:boundary
 
 `test:table`：表格底座纯逻辑（排序作用域、列隐藏下限、筛选重置页码、选择集合、批量 available 过滤）。
 
-**BROWSER E2E: NOT IMPLEMENTED** — 不得将 lint/build 称为 E2E PASS。
+`test:e2e`：真实栈 golden path（需 docker E2E）。
+
+`test:e2e:mock`：Agent Console V2 布局/路由冒烟（Mock API + `vite preview`；不证明真实后端）。
+
+**BROWSER E2E: 真实栈与 mock 冒烟分开标注，不得将 lint/build 称为 E2E PASS。**

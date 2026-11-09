@@ -17,6 +17,7 @@ export function DataTableToolbar({
   placeholder,
   isRefreshing,
   debounceMs,
+  showSearch = true,
   filters,
   trailing,
   className,
@@ -29,6 +30,7 @@ export function DataTableToolbar({
   placeholder?: string
   isRefreshing?: boolean
   debounceMs?: number
+  showSearch?: boolean
   filters?: ReactNode
   trailing?: ReactNode
   className?: string
@@ -44,6 +46,7 @@ export function DataTableToolbar({
         placeholder={placeholder}
         isRefreshing={isRefreshing}
         debounceMs={debounceMs}
+        showSearch={showSearch}
         extra={filters}
         className="min-w-0 flex-1"
       />

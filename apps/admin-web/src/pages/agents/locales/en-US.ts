@@ -43,6 +43,7 @@ export default {
       allAgentType: 'All types',
       search: 'Search',
       reset: 'Reset',
+      serverOnlyHint: 'Only server-side status and type filters are available; global name/code search waits on the API.',
     },
     actions: {
       openWorkspace: 'Open',
@@ -343,6 +344,30 @@ export default {
     title: 'Agent',
     loading: 'Loading…',
     backToList: 'Back',
+    tabs: {
+      overview: 'Overview',
+      config: 'Configuration',
+      debug: 'Debug',
+      runs: 'Runs',
+      settings: 'Settings',
+    },
+    configNav: {
+      models: 'Model chain',
+      prompt: 'Prompt',
+      knowledge: 'Knowledge',
+      tools: 'Skills / MCP',
+    },
+    actions: {
+      debug: 'Debug',
+      more: 'More actions',
+      switchAgent: 'Switch agent',
+    },
+    settings: {
+      basicSection: 'Basic information',
+      accessSection: 'Access & chain summary',
+      advancedSection: 'Advanced',
+      advancedHint: 'Theme, page content, and media library remain available from the links below.',
+    },
     groups: {
       agent: 'Chat',
       materials: 'Content',

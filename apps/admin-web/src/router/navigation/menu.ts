@@ -112,26 +112,29 @@ export function resolveNavTitleKey(pathname: string): string | undefined {
   if (/^\/agent\/[^/]+\/agent\/?$/.test(pathname)) {
     return 'items.agentOverview'
   }
-  if (/^\/agent\/[^/]+\/agent\/prompt(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/agent\/config\/models(?:\/|$)/.test(pathname)) {
+    return 'items.agentConfigModels'
+  }
+  if (/^\/agent\/[^/]+\/agent\/config\/prompt(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/agent\/prompt(?:\/|$)/.test(pathname)) {
     return 'items.agentPrompt'
   }
-  if (/^\/agent\/[^/]+\/agent\/knowledge(?:\/|$)/.test(pathname)) {
+  if (/^\/agent\/[^/]+\/agent\/config\/knowledge(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/agent\/knowledge(?:\/|$)/.test(pathname)) {
     return 'items.agentKnowledge'
   }
-  if (/^\/agent\/[^/]+\/agent\/conversations(?:\/|$)/.test(pathname)) {
-    return 'items.agentConversations'
+  if (/^\/agent\/[^/]+\/agent\/config\/tools(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/agent\/runtime(?:\/|$)/.test(pathname)) {
+    return 'items.agentConfigTools'
   }
-  if (/^\/agent\/[^/]+\/agent\/preview(?:\/|$)/.test(pathname)) {
-    return 'items.agentPreview'
+  if (/^\/agent\/[^/]+\/agent\/config(?:\/|$)/.test(pathname)) {
+    return 'items.agentConfig'
   }
-  if (/^\/agent\/[^/]+\/agent\/runtime(?:\/|$)/.test(pathname)) {
-    return 'items.agentRuntime'
+  if (/^\/agent\/[^/]+\/agent\/debug(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/agent\/preview(?:\/|$)/.test(pathname)) {
+    return 'items.agentDebug'
   }
-  if (/^\/agent\/[^/]+\/basic(?:\/|$)/.test(pathname)) {
-    return 'items.agentBasic'
+  if (/^\/agent\/[^/]+\/agent\/runs(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/agent\/conversations(?:\/|$)/.test(pathname)) {
+    return 'items.agentRuns'
   }
-  if (/^\/agent\/[^/]+\/access(?:\/|$)/.test(pathname)) {
-    return 'items.agentAccess'
+  if (/^\/agent\/[^/]+\/agent\/settings(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/(?:basic|access)(?:\/|$)/.test(pathname)) {
+    return 'items.agentSettings'
   }
   if (/^\/agent\/[^/]+\/theme(?:\/|$)/.test(pathname)) {
     return 'items.agentTheme'

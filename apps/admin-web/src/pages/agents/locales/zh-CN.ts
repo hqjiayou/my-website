@@ -43,6 +43,7 @@ export default {
       allAgentType: '全部类型',
       search: '查询',
       reset: '重置',
+      serverOnlyHint: '当前仅支持服务端状态与类型筛选；名称/Code 全局搜索待后端接口就绪后开放。',
     },
     actions: {
       openWorkspace: '打开',
@@ -342,6 +343,30 @@ export default {
     title: '智能体',
     loading: '加载中…',
     backToList: '返回列表',
+    tabs: {
+      overview: '概览',
+      config: '配置',
+      debug: '调试',
+      runs: '运行记录',
+      settings: '设置',
+    },
+    configNav: {
+      models: '模型链',
+      prompt: 'Prompt',
+      knowledge: '知识空间',
+      tools: 'Skills / MCP',
+    },
+    actions: {
+      debug: '运行调试',
+      more: '更多操作',
+      switchAgent: '切换智能体',
+    },
+    settings: {
+      basicSection: '基本信息',
+      accessSection: '接入与模型链摘要',
+      advancedSection: '高级',
+      advancedHint: '站点外观、页面内容与媒体库仍可通过下列入口访问。',
+    },
     groups: {
       agent: '对话',
       materials: '内容',

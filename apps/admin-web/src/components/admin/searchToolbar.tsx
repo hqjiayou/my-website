@@ -19,6 +19,8 @@ interface SearchToolbarProps {
   className?: string
   /** >0 时对 value 防抖后触发 onSearch；Enter 仍立即提交当前 value。挂载时不触发。 */
   debounceMs?: number
+  /** 无服务端搜索能力时隐藏输入框，只保留筛选 slot 与重置/刷新。 */
+  showSearch?: boolean
 }
 
 export function SearchToolbar({
@@ -32,6 +34,7 @@ export function SearchToolbar({
   extra,
   className,
   debounceMs = 0,
+  showSearch = true,
 }: SearchToolbarProps) {
   const { t } = useTranslation('common')
   const debouncedValue = useDebouncedValue(value, debounceMs)
@@ -54,18 +57,20 @@ export function SearchToolbar({
 
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
-      <form onSubmit={handleSubmit} className="flex items-center gap-2">
-        <div className="relative w-56">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-muted" />
-          <input
-            className="admin-field-chrome h-9 w-full rounded-lg border border-admin bg-admin-surface pr-3 pl-9 text-sm text-admin outline-none placeholder:text-admin-muted"
-            placeholder={placeholder ?? t('table.searchPlaceholder')}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            aria-label={placeholder ?? t('table.searchPlaceholder')}
-          />
-        </div>
-      </form>
+      {showSearch ? (
+        <form onSubmit={handleSubmit} className="flex items-center gap-2">
+          <div className="relative w-56">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-muted" />
+            <input
+              className="admin-field-chrome h-9 w-full rounded-lg border border-admin bg-admin-surface pr-3 pl-9 text-sm text-admin outline-none placeholder:text-admin-muted"
+              placeholder={placeholder ?? t('table.searchPlaceholder')}
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              aria-label={placeholder ?? t('table.searchPlaceholder')}
+            />
+          </div>
+        </form>
+      ) : null}
 
       {extra ? <div className="flex flex-wrap items-center gap-2">{extra}</div> : null}
 

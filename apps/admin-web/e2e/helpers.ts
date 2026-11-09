@@ -57,7 +57,7 @@ export function fieldByLabelText(page: Page, label: string) {
 }
 
 /**
- * Create an agent (formerly "site") through the real 3-step wizard UI.
+ * Create an agent through the current create dialog UI.
  * Returns the new agent id parsed from the workspace URL.
  */
 export async function createAgentViaUi(
@@ -66,14 +66,11 @@ export async function createAgentViaUi(
   agentCode: string,
 ): Promise<string> {
   await page.goto('/agent/create')
-  await page.getByLabel('Site Name', { exact: true }).fill(agentName)
-  await page.getByLabel('Site Code', { exact: true }).fill(agentCode)
-  await page.getByRole('button', { name: 'Next' }).click()
-  // Appearance step: defaults are valid, continue.
-  await page.getByRole('button', { name: 'Next' }).click()
-  await page.getByRole('button', { name: 'Create Site' }).click()
-  await page.waitForURL(/\/apps\/sites\/\d+\/agent$/)
-  const match = /\/apps\/sites\/(\d+)\/agent$/.exec(page.url())
+  await page.locator('form input').nth(0).fill(agentName)
+  await page.locator('form input').nth(1).fill(agentCode)
+  await page.getByRole('button', { name: /Create|创建/i }).click()
+  await page.waitForURL(/\/agent\/\d+\/agent$/)
+  const match = /\/agent\/(\d+)\/agent$/.exec(page.url())
   expect(match, `expected workspace URL after create, got ${page.url()}`).not.toBeNull()
   return match![1]
 }

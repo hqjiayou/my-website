@@ -322,7 +322,7 @@ export function AgentOverviewPage() {
             value={modelValueNode}
             sub={modelChainReady ? undefined : modelDetail}
             footerLabel={t('agentOverview.actions.openRuntime')}
-            to={ROUTES.apps.agentRuntime(site.id)}
+            to={ROUTES.apps.agentConfigTools(site.id)}
           />
           <Fact
             icon={Code}
@@ -330,7 +330,7 @@ export function AgentOverviewPage() {
             badge={promptBadge}
             value={promptValueNode}
             footerLabel={t('agentOverview.actions.openPrompt')}
-            to={ROUTES.apps.agentPrompt(site.id)}
+            to={ROUTES.apps.agentConfigPrompt(site.id)}
           />
           <Fact
             icon={BookOpen}
@@ -338,7 +338,7 @@ export function AgentOverviewPage() {
             value={knowledgeValueNode}
             sub={knowledgeSub}
             footerLabel={t('agentOverview.actions.openKnowledge')}
-            to={ROUTES.apps.agentKnowledge(site.id)}
+            to={ROUTES.apps.agentConfigKnowledge(site.id)}
           />
         </div>
         <HarnessPanel

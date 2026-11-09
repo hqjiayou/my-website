@@ -43,6 +43,7 @@ export default {
       allAgentType: 'すべての種別',
       search: '検索',
       reset: 'リセット',
+      serverOnlyHint: '現状はサーバー側のステータスと種別フィルタのみ対応。名前／Code の全体検索は API 準備後に開放します。',
     },
     actions: {
       openWorkspace: '開く',
@@ -342,6 +343,30 @@ export default {
     title: 'エージェント',
     loading: '読み込み中…',
     backToList: '一覧へ',
+    tabs: {
+      overview: '概要',
+      config: '設定',
+      debug: 'デバッグ',
+      runs: '実行履歴',
+      settings: '設定',
+    },
+    configNav: {
+      models: 'モデルチェーン',
+      prompt: 'Prompt',
+      knowledge: 'ナレッジ',
+      tools: 'Skills / MCP',
+    },
+    actions: {
+      debug: 'デバッグ',
+      more: 'その他',
+      switchAgent: 'エージェント切替',
+    },
+    settings: {
+      basicSection: '基本情報',
+      accessSection: '接続とチェーン要約',
+      advancedSection: '詳細',
+      advancedHint: 'テーマ、ページコンテンツ、メディア庫は下のリンクから引き続き利用できます。',
+    },
     groups: {
       agent: '対話',
       materials: 'コンテンツ',
