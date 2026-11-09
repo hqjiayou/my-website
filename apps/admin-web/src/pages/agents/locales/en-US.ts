@@ -296,7 +296,7 @@ export default {
   },
   access: {
     title: 'Access',
-    description: 'This agent can use both call paths. Chat preview and the user app switch by mode, each with its own default entry. Vector search does not switch with them: it uses the embedding classes from the registration below — the embedding models of the registered API key entries take part in indexing and search, with this site’s registration winning over the global one — or the service embedding model when nothing is registered. The CLI client key is not used for embeddings.',
+    description: 'Read-only view of the platform CLI/KEY default entries and this agent’s own model chains. Change platform defaults on the Model API page; change this agent’s call order in the Runtime chain editor.',
     loading: 'Loading models and accounts…',
     loadError: 'Could not load access settings.',
     noPermission: 'This account cannot see model entries.',

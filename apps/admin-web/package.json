@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:boundary": "node scripts/check-agent-platform-default-boundary.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

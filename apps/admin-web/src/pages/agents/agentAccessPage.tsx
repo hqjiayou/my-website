@@ -13,8 +13,11 @@ import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
 /**
  * 该模式当前生效的平台入口（与 Java 平台链同规则，Issue #210 UoW-6）：入口已全平台
  * 注册、与查看的 agent 无关；带来源标注的入口（原专属）优先层在前，层内默认在前、
- * id 升序，第一个默认即主用。本页只读呈现（Issue #216 撤除本页的平台写路径），
- * 入口维护在模型 API 管理页。
+ * id 升序，第一个默认即主用。
+ *
+ * 边界（Issue #216 / Agent Console V2 P0）：本页只读呈现平台默认与本 Agent 链摘要，
+ * 禁止 create/updateModelEntry（尤其 defaultEntry 写路径）。平台入口维护只在
+ * `/ai/model-entries`；本 Agent 链编辑只在 Runtime 的 `updateAgentChain`。
  */
 function entryFor(entries: AiModelEntry[], mode: 'CLI' | 'KEY') {
   const enabled = entries.filter((entry) => entry.enabled && (entry.mode ?? 'KEY') === mode)
@@ -111,8 +114,8 @@ function AgentChainSummaryCard({
       <ul className="space-y-2">
         {CHAIN_ROWS.map((mode) => {
           const ids = chain ? (mode === 'KEY' ? chain.keyEntryIds : chain.cliEntryIds) : []
-          // 主用口径与链编辑器/运行时解析一致：名单序内第一个默认成员，无默认取首位。
-          const primaryId = ids.find((id) => entryById.get(id)?.defaultEntry) ?? ids[0]
+          // Agent 链主用＝名单序首位（与链编辑器 index===0 一致），不拿平台 defaultEntry 冒充。
+          const primaryId = ids[0]
           const primary = primaryId != null ? entryById.get(primaryId) : undefined
           return (
             <li key={mode} className="flex flex-wrap items-center gap-2 text-sm">
