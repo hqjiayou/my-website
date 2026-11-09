@@ -40,6 +40,12 @@ export default {
     discardBody: '抽屉内的选择尚未应用。确定关闭并丢弃吗？',
     discardConfirm: '放弃',
   },
+  unsavedChanges: {
+    title: '有未保存的修改',
+    body: '当前配置尚未保存。离开将丢弃这些修改。',
+    stay: '继续编辑',
+    leave: '放弃并离开',
+  },
   breadcrumb: '面包屑',
   error: {
     network: '网络错误，请稍后重试',

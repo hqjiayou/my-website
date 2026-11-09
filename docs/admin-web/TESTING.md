@@ -21,6 +21,6 @@ npm run test:boundary
 
 `test:e2e`：真实栈 golden path（需 docker E2E）。
 
-`test:e2e:mock`：Agent Console V2 布局/路由与 PR-4 配置 ResourcePicker 冒烟（Mock API + `vite preview`；不证明真实后端；含 `04`/`05`/`06`）。
+`test:e2e:mock`：Agent Console V2 布局/路由与配置 ResourcePicker 冒烟（Mock API + `vite preview`；不证明真实后端；含 `04`/`05`/`06`/`07` PR-4.1 未保存离开与部分关联失败）。
 
 **BROWSER E2E: 真实栈与 mock 冒烟分开标注，不得将 lint/build 称为 E2E PASS。**

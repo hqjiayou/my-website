@@ -375,6 +375,8 @@ export default {
       colDocs: '文档',
       colOwner: '创建者',
       documentsTitle: '文档与索引',
+      linkAllFailed: '关联失败（{{failed}} 个）',
+      linkPartial: '已关联 {{ok}} 个，失败 {{failed}} 个：{{names}}',
     },
     configPrompt: {
       title: 'Prompt',
@@ -740,6 +742,7 @@ export default {
         save: '保存选择',
         saving: '保存中…',
         saved: 'MCP 选择已保存',
+        discard: '放弃修改',
         loadError: 'MCP 选择加载失败。',
       },
     },

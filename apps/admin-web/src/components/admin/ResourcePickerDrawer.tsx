@@ -58,11 +58,11 @@ export interface ResourcePickerDrawerProps<T> {
 /**
  * 通用资源选择抽屉：搜索 / 状态 / 单多选 / 确认与取消。
  * 业务过滤与服务端保存由调用方适配层负责。
+ * open→挂载内层并冻结基线；关闭卸载。打开期间勿用 initialSelectedIds 作 key，避免后台刷新重置勾选。
  */
 export function ResourcePickerDrawer<T>(props: ResourcePickerDrawerProps<T>) {
   if (!props.open) return null
-  // open 时挂载内层，用 initialSelectedIds 作 key，避免 effect 重置。
-  return <ResourcePickerDrawerSession key={props.initialSelectedIds?.join('\u0001') ?? ''} {...props} />
+  return <ResourcePickerDrawerSession {...props} />
 }
 
 function ResourcePickerDrawerSession<T>({
@@ -94,17 +94,19 @@ function ResourcePickerDrawerSession<T>({
 }: ResourcePickerDrawerProps<T>) {
   const { t } = useTranslation('common')
   const [query, setQuery] = useState('')
-  const [selectedIds, setSelectedIds] = useState<string[]>(initialSelectedIds)
+  // 打开瞬间快照：dirty 与初始勾选都相对此基线，不随父级后续 props 漂移。
+  const [baselineIds] = useState(() => [...initialSelectedIds])
+  const [selectedIds, setSelectedIds] = useState(() => [...initialSelectedIds])
   const [discardOpen, setDiscardOpen] = useState(false)
 
   const alreadySet = useMemo(() => new Set(alreadySelectedIds), [alreadySelectedIds])
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
 
   const dirty = useMemo(() => {
-    if (selectedIds.length !== initialSelectedIds.length) return true
-    const initial = new Set(initialSelectedIds)
-    return selectedIds.some((id) => !initial.has(id))
-  }, [initialSelectedIds, selectedIds])
+    if (selectedIds.length !== baselineIds.length) return true
+    const baseline = new Set(baselineIds)
+    return selectedIds.some((id) => !baseline.has(id))
+  }, [baselineIds, selectedIds])
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -144,7 +146,7 @@ function ResourcePickerDrawerSession<T>({
         placement="end"
         size="l"
       >
-        <div className="flex h-full min-h-0 flex-col gap-3">
+        <div className="flex h-full min-h-0 flex-col gap-3" data-testid="resource-picker-session">
           <label className="relative block">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-admin-muted" aria-hidden />
             <input

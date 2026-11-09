@@ -6,7 +6,8 @@ import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
 import { ResourcePickerDrawer, StatusTag } from '@/components/admin'
-import { adminSecondaryButtonClass } from '@/components/admin/controls'
+import { adminGhostButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
+import { useUnsavedDirtyKey } from '@/hooks/useUnsavedChangesGuard'
 import { cn } from '@/lib/cn'
 import { PermissionGate } from '@/router/permission'
 import type { AiMcpSelectionMode, AiRuntimeLimits } from '@/types/ai'
@@ -166,6 +167,7 @@ function McpSelectionSection({
       (mode === 'CUSTOM' &&
         (selected.length !== saved.serverNames.length ||
           selected.some((name) => !saved.serverNames.includes(name)))))
+  useUnsavedDirtyKey(`agent-mcp-${agentId}`, serverDirty)
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -326,16 +328,28 @@ function McpSelectionSection({
           ) : null}
 
           <PermissionGate code={PERMISSION_CODES.aiPromptUpdate}>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
-              disabled={saveMutation.isPending || customEmpty || !serverDirty}
-              onClick={() => saveMutation.mutate()}
-            >
-              {saveMutation.isPending
-                ? t('aiWorkspace.runtime.mcpSelection.saving')
-                : t('aiWorkspace.runtime.mcpSelection.save')}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+                disabled={saveMutation.isPending || customEmpty || !serverDirty}
+                onClick={() => saveMutation.mutate()}
+              >
+                {saveMutation.isPending
+                  ? t('aiWorkspace.runtime.mcpSelection.saving')
+                  : t('aiWorkspace.runtime.mcpSelection.save')}
+              </button>
+              {serverDirty ? (
+                <button
+                  type="button"
+                  className={adminGhostButtonClass}
+                  disabled={saveMutation.isPending}
+                  onClick={() => setDraft(null)}
+                >
+                  {t('aiWorkspace.runtime.mcpSelection.discard')}
+                </button>
+              ) : null}
+            </div>
           </PermissionGate>
         </div>
       )}

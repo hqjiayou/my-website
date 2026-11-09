@@ -16,6 +16,7 @@ import {
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
+import { useUnsavedDirtyKey } from '@/hooks/useUnsavedChangesGuard'
 import { ROUTES } from '@/router/config/routePaths'
 import { PermissionGate } from '@/router/permission'
 import type { AiAgentPromptConfig, AiPreviewSkill } from '@/types/ai'
@@ -91,6 +92,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
     (draft.systemPrompt !== serverDraft.systemPrompt ||
       draft.temperature !== serverDraft.temperature ||
       draft.defaultSkillIds.join(',') !== serverDraft.defaultSkillIds.join(','))
+  useUnsavedDirtyKey(`agent-prompt-${agentId}`, dirty)
   // temperature 非法（非数或超出 0–2）走字段级错误：错误文字替换字段下帮助位，不再只弹 toast。
   const temperatureInvalid = current != null && parseTemperature(current.temperature) === undefined
   const templates = templatesQuery.data ?? []

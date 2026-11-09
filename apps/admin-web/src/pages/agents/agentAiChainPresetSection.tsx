@@ -15,6 +15,7 @@ import {
   adminSecondaryButtonClass,
   adminSecondaryButtonSmClass,
 } from '@/components/admin/controls'
+import { useUnsavedDirtyKey } from '@/hooks/useUnsavedChangesGuard'
 import { cn } from '@/lib/cn'
 import { PermissionGate, useHasPermission } from '@/router/permission'
 import type { AiAgentChain, AiChainMode, AiChainPreset, AiModelEntry } from '@/types/ai'
@@ -70,6 +71,7 @@ function ChainModeRow({
   const serverList = serverIds(chain, mode)
   const currentIds = draft ?? serverList
   const dirty = draft != null && draft.join(',') !== serverList.join(',')
+  useUnsavedDirtyKey(`agent-chain-${agentId}-${mode}`, dirty)
   const modeEntries = entries.filter((entry) => (entry.mode ?? 'KEY') === mode)
 
   const moveMember = (index: number, delta: number) => {

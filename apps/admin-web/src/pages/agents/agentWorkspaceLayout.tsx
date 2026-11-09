@@ -15,6 +15,7 @@ import {
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
 import { RouteFallback } from '@/components/page'
+import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { PermissionGate, useHasPermission } from '@/router/permission'
@@ -55,6 +56,7 @@ export function AgentWorkspaceLayout() {
   const menuRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const location = useLocation()
+  const { tryNavigate, dialog: unsavedDialog } = useUnsavedChangesGuard()
   const queryClient = useQueryClient()
   const { agentId } = useParams()
   const parsedId = Number(agentId)
@@ -193,7 +195,7 @@ export function AgentWorkspaceLayout() {
             <button
               type="button"
               className={adminPrimaryButtonClass}
-              onClick={() => navigate(ROUTES.apps.agentDebug(site.id))}
+              onClick={() => tryNavigate(ROUTES.apps.agentDebug(site.id))}
             >
               {t('workspace.actions.debug')}
             </button>
@@ -223,7 +225,7 @@ export function AgentWorkspaceLayout() {
                       className={cn(headerControlClass, 'w-full border-admin bg-admin-surface text-admin')}
                       value={site.id}
                       onChange={(event) => {
-                        navigate(ROUTES.apps.agent(event.target.value))
+                        tryNavigate(ROUTES.apps.agent(event.target.value))
                         setMenuOpen(false)
                       }}
                     >
@@ -266,7 +268,7 @@ export function AgentWorkspaceLayout() {
                   className="flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
                   onClick={() => {
                     setMenuOpen(false)
-                    navigate(ROUTES.apps.agentSettings(site.id))
+                    tryNavigate(ROUTES.apps.agentSettings(site.id))
                   }}
                 >
                   {t('workspace.tabs.settings')}
@@ -339,6 +341,7 @@ export function AgentWorkspaceLayout() {
           </div>
         </FormDialog>
       ) : null}
+      {unsavedDialog}
     </section>
   )
 }

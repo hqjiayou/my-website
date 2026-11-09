@@ -16,9 +16,15 @@ import { PermissionGate, useHasPermission } from '@/router/permission'
 import type { AiKnowledgeBase } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 
+type LinkBatchResult = {
+  succeeded: number[]
+  failed: Array<{ id: number; message: string }>
+}
+
 /**
  * Agent 知识空间关联：与文档管理分离。
  * 抽屉确认后立刻调用 link（关联本身即服务端写）；解绑需二次确认且不删平台空间。
+ * 批量关联用 allSettled：部分成功如实反馈并刷新，不把半成功伪装成全失败。
  */
 export function AgentKnowledgeSubscriptions({ agentId }: { agentId: number }) {
   const { t } = useTranslation('sites')
@@ -40,17 +46,55 @@ export function AgentKnowledgeSubscriptions({ agentId }: { agentId: number }) {
   }
 
   const linkMutation = useMutation({
-    mutationFn: async (ids: number[]) => {
-      for (const baseId of ids) {
-        await aiApi.linkKnowledgeBase(baseId, agentId)
-      }
+    mutationFn: async (ids: number[]): Promise<LinkBatchResult> => {
+      const unique = [...new Set(ids)]
+      const settled = await Promise.allSettled(
+        unique.map((baseId) => aiApi.linkKnowledgeBase(baseId, agentId)),
+      )
+      const succeeded: number[] = []
+      const failed: Array<{ id: number; message: string }> = []
+      settled.forEach((result, index) => {
+        const id = unique[index]
+        if (result.status === 'fulfilled') {
+          succeeded.push(id)
+          return
+        }
+        const reason = result.reason
+        failed.push({
+          id,
+          message: reason instanceof Error ? reason.message : String(reason ?? 'error'),
+        })
+      })
+      return { succeeded, failed }
     },
-    onSuccess: () => {
-      toast.success(t('list.messages.subscribed'))
-      setPickerOpen(false)
+    onSuccess: (result) => {
       invalidate()
+      const nameOf = (id: number) =>
+        basesQuery.data?.find((base) => base.id === id)?.name ?? `#${id}`
+      if (result.failed.length === 0) {
+        toast.success(t('list.messages.subscribed'))
+        setPickerOpen(false)
+        return
+      }
+      if (result.succeeded.length === 0) {
+        toast.error(
+          t('workspace.configKnowledge.linkAllFailed', { failed: result.failed.length }),
+        )
+        return
+      }
+      toast.warning(
+        t('workspace.configKnowledge.linkPartial', {
+          ok: result.succeeded.length,
+          failed: result.failed.length,
+          names: result.failed.map((item) => nameOf(item.id)).join(', '),
+        }),
+      )
+      // 已成功项会从 linkable 消失；保留抽屉以便对失败项重试，不重复打成功项。
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : t('list.messages.subscribed')),
+    onError: (error) => {
+      invalidate()
+      toast.error(error instanceof Error ? error.message : t('list.messages.subscribed'))
+    },
   })
 
   const unlinkMutation = useMutation({
@@ -170,7 +214,10 @@ export function AgentKnowledgeSubscriptions({ agentId }: { agentId: number }) {
         onRetry={() => void basesQuery.refetch()}
         confirmLabel={t('workspace.configKnowledge.confirmLink')}
         onConfirm={(ids) => {
-          const numeric = ids.map(Number).filter((id) => Number.isFinite(id))
+          const linkedSet = new Set(linked.map((base) => base.id))
+          const numeric = ids
+            .map(Number)
+            .filter((id) => Number.isFinite(id) && !linkedSet.has(id))
           if (numeric.length === 0) {
             setPickerOpen(false)
             return

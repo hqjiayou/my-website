@@ -40,6 +40,12 @@ export default {
     discardBody: 'ドロワー内の未適用の選択があります。閉じて破棄しますか？',
     discardConfirm: '破棄',
   },
+  unsavedChanges: {
+    title: '未保存の変更があります',
+    body: '設定はまだ保存されていません。離れると変更は破棄されます。',
+    stay: '編集を続ける',
+    leave: '破棄して離れる',
+  },
   breadcrumb: 'パンくず',
   error: {
     network: 'ネットワークエラー。しばらくしてから再試行してください。',

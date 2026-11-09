@@ -376,6 +376,8 @@ export default {
       colDocs: 'Documents',
       colOwner: 'Owner',
       documentsTitle: 'Documents & indexing',
+      linkAllFailed: 'Link failed ({{failed}})',
+      linkPartial: 'Linked {{ok}}, failed {{failed}}: {{names}}',
     },
     configPrompt: {
       title: 'Prompt',
@@ -743,6 +745,7 @@ export default {
         save: 'Save selection',
         saving: 'Saving…',
         saved: 'MCP selection saved',
+        discard: 'Discard changes',
         loadError: 'Failed to load the MCP selection.',
       },
     },

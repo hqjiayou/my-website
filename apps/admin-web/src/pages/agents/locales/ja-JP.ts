@@ -375,6 +375,8 @@ export default {
       colDocs: '文書',
       colOwner: '所有者',
       documentsTitle: '文書と索引',
+      linkAllFailed: '関連付けに失敗しました（{{failed}} 件）',
+      linkPartial: '{{ok}} 件関連済み、{{failed}} 件失敗：{{names}}',
     },
     configPrompt: {
       title: 'Prompt',
@@ -743,6 +745,7 @@ export default {
         save: '選択を保存',
         saving: '保存中…',
         saved: 'MCP 選択を保存しました',
+        discard: '変更を破棄',
         loadError: 'MCP 選択の読み込みに失敗しました。',
       },
     },

@@ -223,6 +223,20 @@ const KNOWLEDGE_BASE_OTHER = {
   updatedAt: '2026-11-09T00:00:00Z',
 }
 
+/** 关联 POST 故意失败，用于 PR-4.1 部分成功冒烟。 */
+const KNOWLEDGE_BASE_FAIL = {
+  id: 9,
+  agentId: 43,
+  ownerAgentName: 'Other Agent',
+  name: 'Fail KB',
+  isDefault: false,
+  owned: false,
+  documentCount: 1,
+  linkedAgentIds: [] as number[],
+  createdAt: '2026-11-01T00:00:00Z',
+  updatedAt: '2026-11-09T00:00:00Z',
+}
+
 export type MockAuthOptions = {
   /** 覆盖 /admin/auth/me 的 permissions；用于无权限冒烟。 */
   permissions?: string[]
@@ -274,6 +288,7 @@ export async function installAgentConsoleMocks(page: Page, options: MockAuthOpti
   const knowledgeBases = [
     { ...KNOWLEDGE_BASE_OWNED, linkedAgentIds: [] as number[] },
     { ...KNOWLEDGE_BASE_OTHER, linkedAgentIds: [] as number[] },
+    { ...KNOWLEDGE_BASE_FAIL, linkedAgentIds: [] as number[] },
   ]
 
   await page.route('**/api/**', async (route) => {
@@ -432,6 +447,10 @@ export async function installAgentConsoleMocks(page: Page, options: MockAuthOpti
       const parts = path.split('/')
       const baseId = Number(parts[4])
       const targetAgentId = Number(parts[6])
+      if (baseId === 9) {
+        await json(route, { code: 50001, message: 'mock link failed', data: null }, 500)
+        return
+      }
       const base = knowledgeBases.find((item) => item.id === baseId)
       if (base && !base.linkedAgentIds.includes(targetAgentId)) {
         base.linkedAgentIds.push(targetAgentId)
