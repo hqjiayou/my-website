@@ -34,7 +34,7 @@
         <spring-cloud.version>2025.0.1</spring-cloud.version>
         <mybatis-plus.version>3.5.18.1</mybatis-plus.version>
         <springdoc-openapi.version>2.8.17</springdoc-openapi.version>
-        <minio.version>9.0.3</minio.version>
+        <minio.version>9.0.4</minio.version>
         <okhttp.version>5.5.1</okhttp.version>
     </properties>
 
