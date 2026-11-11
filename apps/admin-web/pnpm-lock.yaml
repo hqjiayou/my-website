@@ -60,8 +60,8 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
       zustand:
-        specifier: ^5.0.13
-        version: 5.0.15(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
+        specifier: ^5.0.16
+        version: 5.0.16(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -2497,8 +2497,8 @@ packages:
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
-  zustand@5.0.15:
-    resolution: {integrity: sha512-MpSEjRiBkA9crSYeOUH32rJC7SVqAbm0Fqcqge/bUi2PPoLcBWKOsG+C8mevmpr8TwXHBVkChbbJiyvkE+i/3A==}
+  zustand@5.0.16:
+    resolution: {integrity: sha512-Uv7e327ihlCfayfja3hDc0M64Upev1LWBKpRobdK4NyovDDPeeX4imWXc/wzC1yc6fkYPoAY/ncKVPAs2jrtQw==}
     engines: {node: '>=12.20.0'}
     peerDependencies:
       '@types/react': '>=18.0.0'
@@ -2517,7 +2517,7 @@ packages:
 
 snapshots:
 
-  '@assistant-ui/core@0.3.16(@assistant-ui/store@0.3.11(@assistant-ui/tap@0.9.15(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react@19.2.6))(@assistant-ui/tap@0.9.15(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(assistant-cloud@0.1.42)(react@19.2.6)(zustand@5.0.15(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6)))':
+  '@assistant-ui/core@0.3.16(@assistant-ui/store@0.3.11(@assistant-ui/tap@0.9.15(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react@19.2.6))(@assistant-ui/tap@0.9.15(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(assistant-cloud@0.1.42)(react@19.2.6)(zustand@5.0.16(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6)))':
     dependencies:
       '@assistant-ui/store': 0.3.11(@assistant-ui/tap@0.9.15(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react@19.2.6)
       '@assistant-ui/tap': 0.9.15(@types/react@19.2.14)(react@19.2.6)
@@ -2527,14 +2527,14 @@ snapshots:
       '@types/react': 19.2.14
       assistant-cloud: 0.1.42
       react: 19.2.6
-      zustand: 5.0.15(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
+      zustand: 5.0.16(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
     transitivePeerDependencies:
       - ioredis
       - redis
 
   '@assistant-ui/react@0.15.17(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.2.9)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))':
     dependencies:
-      '@assistant-ui/core': 0.3.16(@assistant-ui/store@0.3.11(@assistant-ui/tap@0.9.15(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react@19.2.6))(@assistant-ui/tap@0.9.15(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(assistant-cloud@0.1.42)(react@19.2.6)(zustand@5.0.15(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6)))
+      '@assistant-ui/core': 0.3.16(@assistant-ui/store@0.3.11(@assistant-ui/tap@0.9.15(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react@19.2.6))(@assistant-ui/tap@0.9.15(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(assistant-cloud@0.1.42)(react@19.2.6)(zustand@5.0.16(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6)))
       '@assistant-ui/store': 0.3.11(@assistant-ui/tap@0.9.15(@types/react@19.2.14)(react@19.2.6))(@types/react@19.2.14)(react@19.2.6)
       '@assistant-ui/tap': 0.9.15(@types/react@19.2.14)(react@19.2.6)
       assistant-cloud: 0.1.42
@@ -2545,7 +2545,7 @@ snapshots:
       react-textarea-autosize: 8.5.9(@types/react@19.2.14)(react@19.2.6)
       safe-content-frame: 0.0.28
       zod: 4.6.7
-      zustand: 5.0.15(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
+      zustand: 5.0.16(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6))
     optionalDependencies:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
@@ -4741,7 +4741,7 @@ snapshots:
 
   zod@4.6.7: {}
 
-  zustand@5.0.15(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6)):
+  zustand@5.0.16(@types/react@19.2.14)(immer@11.2.9)(react@19.2.6)(use-sync-external-store@1.6.0(react@19.2.6)):
     optionalDependencies:
       '@types/react': 19.2.14
       immer: 11.2.9
