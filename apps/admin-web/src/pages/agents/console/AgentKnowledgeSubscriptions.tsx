@@ -116,10 +116,12 @@ export function AgentKnowledgeSubscriptions({ agentId }: { agentId: number }) {
   const linkable = bases.filter((base) => base.agentId !== agentId && !base.linkedAgentIds.includes(agentId))
 
   return (
-    <div className="space-y-3 rounded-xl border border-admin bg-admin-surface p-4 sm:p-5">
+    <div className="space-y-2 rounded-xl border border-admin bg-admin-surface px-4 py-3 sm:px-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold text-admin">{t('workspace.configKnowledge.subscriptionsTitle')}</h3>
+          <p className="text-xs font-semibold tracking-wide text-admin-muted uppercase">
+            {t('workspace.configKnowledge.subscriptionsTitle')}
+          </p>
           <p className="mt-1 text-xs text-admin-muted">{t('workspace.configKnowledge.subscriptionsHint')}</p>
         </div>
         <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>

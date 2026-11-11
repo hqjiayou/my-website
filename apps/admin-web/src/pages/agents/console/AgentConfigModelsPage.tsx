@@ -25,18 +25,22 @@ export function AgentConfigModelsPage() {
     return <p className="text-sm text-admin-muted">{t('aiWorkspace.noPermission')}</p>
   }
 
-  const cli = chainQuery.data?.cliEntryIds.length ?? 0
-  const key = chainQuery.data?.keyEntryIds.length ?? 0
+  const summary = chainQuery.isPending
+    ? t('workspace.loading')
+    : chainQuery.isError
+      ? t('aiWorkspace.retry')
+      : t('aiWorkspace.chainPreset.summary', {
+          cli: chainQuery.data?.cliEntryIds.length ?? 0,
+          key: chainQuery.data?.keyEntryIds.length ?? 0,
+        })
 
   return (
     <AgentConfigSectionShell
       title={t('aiWorkspace.chainPreset.title')}
       description={t('aiWorkspace.chainPreset.pageDescription')}
-      summary={t('aiWorkspace.chainPreset.summary', { cli, key })}
+      summary={summary}
     >
-      <div className="rounded-xl border border-admin bg-admin-surface p-4 sm:p-5">
-        <AgentAiChainPresetSection key={site.id} agentId={site.id} />
-      </div>
+      <AgentAiChainPresetSection key={site.id} agentId={site.id} />
     </AgentConfigSectionShell>
   )
 }

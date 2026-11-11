@@ -9,6 +9,21 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLayoutStore } from '@/stores/layout'
 import { buildSidebarEntries, sidebarGroupHasActiveChild, type SidebarGroup, type SidebarLink } from '@/utils/menu'
 
+/** ≥lg 才应用桌面折叠宽；移动端抽屉始终 256，避免继承 64px 图标栏。 */
+function useDesktopSidebar() {
+  const [desktop, setDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : true,
+  )
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)')
+    const sync = () => setDesktop(media.matches)
+    sync()
+    media.addEventListener('change', sync)
+    return () => media.removeEventListener('change', sync)
+  }, [])
+  return desktop
+}
+
 /** 左侧导航壳（含移动端遮罩）。菜单数据来自 auth，属业务配置，此处只负责展示与交互。 */
 export function Sidebar() {
   const location = useLocation()
@@ -17,11 +32,13 @@ export function Sidebar() {
   const sidebarCollapsed = useAdminPreferencesStore((state) => state.preferences.sidebarCollapsed)
   const menus = useAuthStore((state) => state.menus)
   const sidebarEntries = useMemo(() => buildSidebarEntries(menus), [menus])
+  const desktop = useDesktopSidebar()
+  const compact = sidebarCollapsed && desktop
 
   const [manualGroupOpen, setManualGroupOpen] = useState<Record<string, boolean>>({})
 
   function isGroupExpanded(group: SidebarGroup) {
-    if (sidebarCollapsed) return false
+    if (compact) return false
     if (sidebarGroupHasActiveChild(group, location.pathname)) return true
     return manualGroupOpen[group.id] === true
   }
@@ -31,7 +48,7 @@ export function Sidebar() {
   }, [location.pathname, closeSidebar])
 
   function toggleGroup(group: SidebarGroup) {
-    if (sidebarCollapsed) return
+    if (compact) return
     if (sidebarGroupHasActiveChild(group, location.pathname)) return
     setManualGroupOpen((prev) => {
       const expandedNow = prev[group.id] === true
@@ -58,7 +75,7 @@ export function Sidebar() {
   }
 
   function renderGroup(group: SidebarGroup) {
-    if (sidebarCollapsed) {
+    if (compact) {
       return (
         <div key={group.id} className="flex flex-col gap-1">
           {group.children.map((child) => renderLeafLink(child, true))}
@@ -110,21 +127,21 @@ export function Sidebar() {
       />
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-admin bg-admin-sidebar transition-all duration-200 ease-out lg:translate-x-0',
-          sidebarCollapsed ? 'w-16' : 'w-64',
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-admin bg-admin-sidebar transition-all duration-200 ease-out lg:translate-x-0',
+          compact && 'lg:w-16',
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
         <div
           className={cn(
             'flex h-16 shrink-0 items-center gap-3 border-b border-admin px-4 max-lg:pr-12',
-            sidebarCollapsed && 'justify-center px-2',
+            compact && 'lg:justify-center lg:px-2',
           )}
         >
           <span className="admin-brand-mark" title={tLayout('sidebar.title')}>
             MW
           </span>
-          {!sidebarCollapsed ? (
+          {!compact ? (
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-admin-muted">{tLayout('sidebar.kicker')}</p>
               <p className="truncate text-[15px] font-semibold leading-tight text-admin">{tLayout('sidebar.title')}</p>
@@ -142,15 +159,15 @@ export function Sidebar() {
 
         <nav className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
           {sidebarEntries.length === 0 ? (
-            <p className={cn('text-sm text-admin-muted', sidebarCollapsed ? 'text-center' : 'px-3')}>
-              {sidebarCollapsed ? '—' : tLayout('sidebar.emptyMenus')}
+            <p className={cn('text-sm text-admin-muted', compact ? 'text-center' : 'px-3')}>
+              {compact ? '—' : tLayout('sidebar.emptyMenus')}
             </p>
           ) : (
             sidebarEntries.map((entry) =>
               entry.type === 'group' ? (
                 renderGroup(entry)
               ) : (
-                <div key={entry.path}>{renderLeafLink(entry, sidebarCollapsed)}</div>
+                <div key={entry.path}>{renderLeafLink(entry, compact)}</div>
               ),
             )
           )}

@@ -211,11 +211,7 @@ export function AgentsPage() {
               onSelect: (item) => navigate(ROUTES.apps.agentDebug(item.id)),
             })
           }
-          actions.push({
-            id: 'subscriptions',
-            label: t('list.associations.manageSubscriptions'),
-            onSelect: (item) => setSubscriptionAgent(item),
-          })
+          // 订阅管理已在「订阅」列内联入口，行菜单不再重复。
           return (
             <div onClick={(event) => event.stopPropagation()}>
               <DataTableRowActions row={row} actions={actions} />

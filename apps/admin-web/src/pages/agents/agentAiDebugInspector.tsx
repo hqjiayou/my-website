@@ -1,7 +1,7 @@
 import { useAuiState } from '@assistant-ui/react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, X } from 'lucide-react'
-import { useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
@@ -236,6 +236,8 @@ export function AgentAiDebugInspector({
   const { t } = useTranslation('sites')
   const [traceOpen, setTraceOpen] = useState(true)
   const [skillsOpen, setSkillsOpen] = useState(true)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const previouslyFocused = useRef<HTMLElement | null>(null)
 
   const skillsQuery = useQuery({
     queryKey: ['sites', agentId, 'ai', 'preview', 'skills'],
@@ -246,6 +248,21 @@ export function AgentAiDebugInspector({
   const servedLabel = trace.model ? modelIdFromSpec(trace.model) : ''
   const fellBack =
     trace.requestedModel != null && trace.model != null && !isSameModel(trace.requestedModel, trace.model)
+
+  // 移动端抽屉：锁滚动、聚焦关闭钮；关闭后归还焦点。桌面旁栏不锁 body。
+  useEffect(() => {
+    if (!open) return
+    const mobile = window.matchMedia('(max-width: 1279px)').matches
+    previouslyFocused.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    if (mobile) document.body.style.overflow = 'hidden'
+    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 0)
+    return () => {
+      window.clearTimeout(focusTimer)
+      if (mobile) document.body.style.overflow = previousOverflow
+      previouslyFocused.current?.focus()
+    }
+  }, [open])
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Escape') onClose()
@@ -267,7 +284,8 @@ export function AgentAiDebugInspector({
         onKeyDown={handleKeyDown}
         className={
           open
-            ? 'fixed inset-y-0 right-0 z-50 flex w-[min(22rem,100vw)] flex-col border-l border-border bg-card shadow-admin-overlay xl:static xl:z-auto xl:h-full xl:w-80 xl:shrink-0 xl:rounded-xl xl:border xl:shadow-none'
+            ? // 移动端顶部锚定、底部留出聊天输入；xl 起恢复旁栏。
+              'fixed inset-x-0 top-0 z-50 flex max-h-[min(70dvh,100%)] w-full flex-col border-b border-border bg-card shadow-admin-overlay sm:inset-x-auto sm:right-0 sm:left-auto sm:w-[min(22rem,100vw)] sm:border-b-0 sm:border-l xl:static xl:z-auto xl:h-full xl:max-h-none xl:w-80 xl:shrink-0 xl:rounded-xl xl:border xl:shadow-none'
             : 'hidden'
         }
       >
@@ -279,6 +297,7 @@ export function AgentAiDebugInspector({
             </p>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             aria-label={t('aiWorkspace.preview.inspector.close')}
             title={t('aiWorkspace.preview.inspector.close')}

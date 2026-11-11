@@ -357,7 +357,7 @@ export function ProxyClientKeysPane() {
       ) : null}
 
       {status && !status.reachable ? (
-        <div className="px-4 py-6">
+        <div className="px-4 py-4">
           <p className="text-base font-medium text-admin">{t('proxyServices.unreachable')}</p>
           <p className="mt-2 font-mono text-sm text-admin-muted">{status.baseUrl || t('proxyServices.port')}</p>
           <p className="mt-2 text-sm text-admin-muted">{t('proxyServices.unreachableHint')}</p>

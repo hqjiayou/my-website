@@ -32,15 +32,18 @@ export function AgentConfigLayout() {
   }
 
   return (
-    <div className="grid items-start gap-4 md:grid-cols-[12.5rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,1fr)]">
-      <aside className="rounded-xl border border-admin bg-admin-surface p-2 md:sticky md:top-[calc(4rem+var(--admin-page-padding))]">
-        <nav className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible" aria-label={t('workspace.tabs.config')}>
+    <div className="grid items-start gap-4 lg:grid-cols-[12.5rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,1fr)]">
+      <aside className="rounded-xl border border-admin bg-admin-surface p-2 lg:sticky lg:top-[calc(4rem+var(--admin-page-padding))]">
+        <nav
+          className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible"
+          aria-label={t('workspace.tabs.config')}
+        >
           {items.map((item) => (
             <NavLink
               key={item.key}
               to={item.to}
               className={({ isActive }) =>
-                cn(subNavClass, 'whitespace-nowrap md:w-full', isActive && 'bg-primary/12 text-primary')
+                cn(subNavClass, 'whitespace-nowrap lg:w-full', isActive && 'bg-primary/12 text-primary')
               }
             >
               <item.icon className="h-4 w-4 shrink-0" aria-hidden />

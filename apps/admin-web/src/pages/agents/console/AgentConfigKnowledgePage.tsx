@@ -25,24 +25,23 @@ export function AgentConfigKnowledgePage() {
     return <p className="text-sm text-admin-muted">{t('aiWorkspace.noPermission')}</p>
   }
 
-  const linked =
-    basesQuery.data?.filter(
-      (base) => base.agentId === site.id || base.linkedAgentIds.includes(site.id),
-    ).length ?? 0
+  const linked = basesQuery.data?.filter(
+    (base) => base.agentId === site.id || base.linkedAgentIds.includes(site.id),
+  ).length
+  const summary = basesQuery.isPending
+    ? t('workspace.loading')
+    : basesQuery.isError
+      ? t('aiWorkspace.retry')
+      : t('workspace.configKnowledge.summary', { linked: linked ?? 0 })
 
   return (
     <AgentConfigSectionShell
       title={t('workspace.configKnowledge.title')}
       description={t('workspace.configKnowledge.pageDescription')}
-      summary={t('workspace.configKnowledge.summary', { linked })}
+      summary={summary}
     >
       <AgentKnowledgeSubscriptions key={site.id} agentId={site.id} />
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-admin">{t('workspace.configKnowledge.documentsTitle')}</h3>
-        <div className="rounded-xl border border-admin bg-admin-surface p-4 sm:p-5">
-          <AgentAiKnowledgePanel key={site.id} agentId={site.id} />
-        </div>
-      </div>
+      <AgentAiKnowledgePanel key={site.id} agentId={site.id} />
     </AgentConfigSectionShell>
   )
 }

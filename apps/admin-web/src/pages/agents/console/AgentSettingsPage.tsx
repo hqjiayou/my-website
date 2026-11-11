@@ -23,26 +23,26 @@ export function AgentSettingsPage() {
   ] as const
 
   return (
-    <div className="space-y-4">
-      <section className="space-y-2">
+    <div className="space-y-3">
+      <section className="space-y-1.5">
         <h2 className="text-sm font-semibold text-admin">{t('workspace.settings.basicSection')}</h2>
         <AgentBasicPage />
       </section>
 
-      <section className="space-y-2">
+      <section className="space-y-1.5">
         <h2 className="text-sm font-semibold text-admin">{t('workspace.settings.accessSection')}</h2>
         <AgentAccessPage />
       </section>
 
-      <section className="rounded-xl border border-admin bg-admin-surface p-4 sm:p-5">
+      <section className="rounded-xl border border-admin bg-admin-surface px-4 py-3 sm:px-5">
         <h2 className="text-sm font-semibold text-admin">{t('workspace.settings.advancedSection')}</h2>
-        <p className="mt-1 text-xs text-admin-muted">{t('workspace.settings.advancedHint')}</p>
-        <ul className="mt-3 divide-y divide-border">
+        <p className="mt-0.5 text-xs text-admin-muted">{t('workspace.settings.advancedHint')}</p>
+        <ul className="mt-2 divide-y divide-border">
           {advanced.map((item) => (
             <li key={item.key}>
               <Link
                 to={item.to}
-                className="flex items-center justify-between gap-3 py-3 text-sm font-medium text-admin transition hover:text-primary"
+                className="flex items-center justify-between gap-3 py-2.5 text-sm font-medium text-admin transition hover:text-primary"
               >
                 <span>{t(item.labelKey)}</span>
                 <ChevronRight className="h-4 w-4 text-admin-muted" aria-hidden />

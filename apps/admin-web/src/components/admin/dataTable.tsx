@@ -224,11 +224,24 @@ export function DataTable<T>({
                 const key = rowKey(row)
                 const selectable = selection?.isRowSelectable?.(row) ?? true
                 const selected = selection?.selectedKeys.some((item) => item === key) ?? false
+                const clickable = onRowClick != null
                 return (
                   <tr
                     key={key}
-                    className={cn('admin-table-hover', selected && 'bg-primary/8', onRowClick && 'cursor-pointer')}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    className={cn('admin-table-hover', selected && 'bg-primary/8', clickable && 'cursor-pointer')}
+                    tabIndex={clickable ? 0 : undefined}
+                    role={clickable ? 'link' : undefined}
+                    onClick={clickable ? () => onRowClick(row) : undefined}
+                    onKeyDown={
+                      clickable
+                        ? (event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              onRowClick(row)
+                            }
+                          }
+                        : undefined
+                    }
                   >
                     {showSelection ? (
                       <td className="px-4 align-middle" onClick={(event) => event.stopPropagation()}>

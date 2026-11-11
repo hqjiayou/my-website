@@ -146,7 +146,7 @@ function ResourcePickerDrawerSession<T>({
         placement="end"
         size="l"
       >
-        <div className="flex h-full min-h-0 flex-col gap-3" data-testid="resource-picker-session">
+        <div className="flex h-full min-h-0 flex-col gap-2" data-testid="resource-picker-session">
           <label className="relative block">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-admin-muted" aria-hidden />
             <input
@@ -176,11 +176,11 @@ function ResourcePickerDrawerSession<T>({
               <table className="w-full min-w-[28rem] border-collapse text-left text-sm">
                 <thead className="sticky top-0 bg-admin-surface-muted text-xs font-semibold tracking-wide text-admin-muted uppercase">
                   <tr>
-                    <th className="w-10 px-3 py-2" scope="col">
+                    <th className="w-10 px-3 py-1.5" scope="col">
                       <span className="sr-only">{t('table.selectRow')}</span>
                     </th>
                     {columns.map((column) => (
-                      <th key={column.id} className={cn('px-3 py-2', column.className)} scope="col">
+                      <th key={column.id} className={cn('px-3 py-1.5', column.className)} scope="col">
                         {column.header}
                       </th>
                     ))}
@@ -202,7 +202,7 @@ function ResourcePickerDrawerSession<T>({
                           locked ? 'bg-admin-surface-muted/60 opacity-70' : 'hover:bg-admin-surface-muted/40',
                         )}
                       >
-                        <td className="px-3 py-2 align-middle">
+                        <td className="px-3 py-1.5 align-middle">
                           <input
                             type={mode === 'single' ? 'radio' : 'checkbox'}
                             className="admin-check"
@@ -215,7 +215,7 @@ function ResourcePickerDrawerSession<T>({
                           />
                         </td>
                         {columns.map((column) => (
-                          <td key={column.id} className={cn('px-3 py-2 align-middle', column.className)}>
+                          <td key={column.id} className={cn('px-3 py-1.5 align-middle', column.className)}>
                             {column.cell(item)}
                             {column.id === columns[0]?.id ? (
                               <span className="mt-1 flex flex-wrap gap-1">
