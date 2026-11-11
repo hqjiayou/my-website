@@ -140,6 +140,16 @@ class AdminAuthMvcTest {
                 .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
+    @Test
+    void loginMalformedJsonReturnsBadRequestNotSystemError() throws Exception {
+        mockMvc.perform(post("/api/auth/admin/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{username:admin_it,password:x}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(1001))
+                .andExpect(jsonPath("$.data").value(nullValue()));
+    }
+
     static Stream<Arguments> validationPasswordBlankLocales() {
         return Stream.of(
                 Arguments.of((String) null, "パスワードは必須です"),
