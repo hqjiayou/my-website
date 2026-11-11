@@ -174,8 +174,8 @@ export function AgentAccessPage() {
   const entryById = new Map(entries.map((entry) => [entry.id, entry]))
 
   return (
-    <section className="w-full space-y-3">
-      <div className="grid gap-3 lg:grid-cols-2">
+    <section className="@container/agent-access w-full space-y-3">
+      <div className="grid gap-3 @[40rem]:grid-cols-2">
         <PlatformEntryCard mode="CLI" entry={entryFor(entries, 'CLI')} agentId={site.id} />
         <PlatformEntryCard mode="KEY" entry={entryFor(entries, 'KEY')} agentId={site.id} />
       </div>

@@ -1,7 +1,9 @@
 import { X, TriangleAlert } from 'lucide-react'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 
 import { cn } from '@/lib/cn'
+
+import { focusInitialInPanel, registerModalLayer } from './modalLayer'
 
 /** 系统管理增删改共用的浮层。普通弹窗点遮罩或按 Esc 关闭；危险确认必须显式选择。 */
 export function FormDialog({
@@ -26,18 +28,37 @@ export function FormDialog({
   children: ReactNode
 }) {
   const resolvedSize = size ?? (wide ? 'l' : 'm')
+  const titleId = useId()
+  const panelRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const previouslyFocused = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
-    if (danger) return
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
+    previouslyFocused.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const panel = panelRef.current
+    const release = registerModalLayer({
+      panel,
+      onEscape: danger ? null : onClose,
+    })
+    const focusTimer = window.setTimeout(() => {
+      if (panel) focusInitialInPanel(panel, titleRef.current)
+    }, 0)
+    return () => {
+      window.clearTimeout(focusTimer)
+      release()
+      previouslyFocused.current?.focus?.()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
   }, [danger, onClose])
 
   const widthClass =
-    placement === 'end' ? 'h-full w-full max-w-[560px]' : resolvedSize === 's' ? 'max-w-[400px]' : resolvedSize === 'l' ? 'max-w-[720px]' : 'max-w-[560px]'
+    placement === 'end'
+      ? 'h-full w-full max-w-[560px]'
+      : resolvedSize === 's'
+        ? 'max-w-[400px]'
+        : resolvedSize === 'l'
+          ? 'max-w-[720px]'
+          : 'max-w-[560px]'
 
   return (
     <div
@@ -50,14 +71,17 @@ export function FormDialog({
         type="button"
         className="admin-overlay absolute inset-0"
         aria-label={closeLabel}
+        tabIndex={-1}
         onClick={danger ? undefined : onClose}
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="form-dialog-title"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className={cn(
-          'shadow-admin-overlay relative z-10 flex w-full flex-col border border-admin bg-admin-surface',
+          'shadow-admin-overlay relative z-10 flex w-full flex-col border border-admin bg-admin-surface outline-none',
           placement === 'end' ? 'h-full border-y-0 border-r-0' : 'max-h-[min(90vh,48rem)] overflow-hidden rounded-xl',
           widthClass,
         )}
@@ -70,7 +94,12 @@ export function FormDialog({
               </span>
             ) : null}
             <div className="min-w-0">
-              <h2 id="form-dialog-title" className="truncate text-base font-semibold text-admin">
+              <h2
+                id={titleId}
+                ref={titleRef}
+                tabIndex={-1}
+                className="truncate text-base font-semibold text-admin outline-none"
+              >
                 {title}
               </h2>
               {description ? <p className="truncate text-sm text-admin-muted">{description}</p> : null}

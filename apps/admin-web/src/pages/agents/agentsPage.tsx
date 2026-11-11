@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { agentApi } from '@/api'
@@ -91,7 +91,13 @@ export function AgentsPage() {
         hideable: false,
         cell: (row) => (
           <div className="min-w-0">
-            <div className="truncate font-semibold text-admin">{row.agentName}</div>
+            <Link
+              to={ROUTES.apps.agent(row.id)}
+              className="admin-focus-ring block truncate font-semibold text-admin hover:underline"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {row.agentName}
+            </Link>
             <div className="truncate font-mono text-xs text-admin-muted">{row.agentCode}</div>
             {row.defaultDomain ? (
               <div className="truncate text-xs text-admin-muted">{row.defaultDomain}</div>

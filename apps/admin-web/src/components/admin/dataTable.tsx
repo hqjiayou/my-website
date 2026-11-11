@@ -1,5 +1,5 @@
 import { AlertCircle, RefreshCw } from 'lucide-react'
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, type MouseEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { cn } from '@/lib/cn'
@@ -14,6 +14,18 @@ import type {
   TableSortOrder,
   TableSortScope,
 } from './table/types'
+
+const ROW_INTERACTIVE_SELECTOR =
+  'button, a, input, select, textarea, label, [role="button"], [role="menuitem"], [role="option"], [contenteditable="true"]'
+
+function shouldIgnoreRowClick(event: MouseEvent): boolean {
+  const target = event.target
+  if (!(target instanceof Element)) return true
+  if (target.closest(ROW_INTERACTIVE_SELECTOR)) return true
+  const selection = window.getSelection()
+  if (selection && selection.type === 'Range' && selection.toString().length > 0) return true
+  return false
+}
 
 /** @deprecated 使用 DataTableColumnDef；保留别名以兼容现有页面 import。 */
 export type DataTableColumn<T> = DataTableColumnDef<T>
@@ -57,7 +69,10 @@ export interface DataTableProps<T> {
   sort?: DataTableSortProps
   selection?: DataTableSelectionProps<T>
   className?: string
-  /** 行点击（复选框与按钮区域应 stopPropagation）。 */
+  /**
+   * 行鼠标点击（可选）。不在 `<tr>` 上模拟 link/键盘导航；
+   * 来自控件/链接/文本选择的事件会被忽略。主导航应提供真实 Link。
+   */
   onRowClick?: (row: T) => void
 }
 
@@ -229,16 +244,11 @@ export function DataTable<T>({
                   <tr
                     key={key}
                     className={cn('admin-table-hover', selected && 'bg-primary/8', clickable && 'cursor-pointer')}
-                    tabIndex={clickable ? 0 : undefined}
-                    role={clickable ? 'link' : undefined}
-                    onClick={clickable ? () => onRowClick(row) : undefined}
-                    onKeyDown={
+                    onClick={
                       clickable
                         ? (event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault()
-                              onRowClick(row)
-                            }
+                            if (shouldIgnoreRowClick(event)) return
+                            onRowClick(row)
                           }
                         : undefined
                     }

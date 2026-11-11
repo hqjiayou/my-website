@@ -410,6 +410,17 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   const [modeChosen, setModeChosen] = useState(false)
   // 调试 Inspector 默认收起：聊天区占满，需要时再右侧停靠（xl+）或抽屉打开（xl 以下）。
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  /** 与 Inspector 遮罩断点一致：窄屏模态时聊天区 inert，避免只露出输入框却被挡住仍可 Tab。 */
+  const [inspectorModal, setInspectorModal] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1279px)').matches : true,
+  )
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1279px)')
+    const sync = () => setInspectorModal(media.matches)
+    sync()
+    media.addEventListener('change', sync)
+    return () => media.removeEventListener('change', sync)
+  }, [])
   const [locationStatus, setLocationStatus] = useState<PreviewLocationStatus>('off')
   const [modelEntryId, setModelEntryId] = useState<number | null>(null)
   // 首次挂载不带 mode，拿服务端默认判定；用户切换 CLI/KEY 后带 mode 重查，与 previewStream 同一路径回填。
@@ -582,7 +593,10 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div className="flex h-full min-h-0 gap-4">
-        <ThreadPrimitive.Root className="flex min-h-[20rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card-muted">
+        <ThreadPrimitive.Root
+          className="flex min-h-[20rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card-muted"
+          inert={inspectorOpen && inspectorModal ? true : undefined}
+        >
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 sm:px-6">
             <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
               <span className="mr-1.5 rounded-md bg-card px-1.5 py-0.5 font-medium text-foreground">

@@ -113,15 +113,48 @@ test.describe('Agent Console V2 (mock API)', () => {
     await expect(createDialog.getByText('Name', { exact: true })).toBeVisible()
     await expect(createDialog.getByText('Code', { exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
 
-    const kindSelect = page.locator('select').filter({ has: page.locator('option[value="AI_ONLY"]') }).first()
+    const demoRow = page.getByRole('row', { name: /Demo Agent/ })
+    const kindSelect = demoRow.locator('select').filter({ has: page.locator('option[value="AI_ONLY"]') })
     await expect(kindSelect).toBeVisible()
+    await kindSelect.focus()
+    await page.keyboard.press('ArrowDown')
+    await expect(page).toHaveURL(/\/agent\/?$/)
     await kindSelect.selectOption('SITE')
+    await expect(page).toHaveURL(/\/agent\/?$/)
 
-    await page.getByRole('row', { name: /Demo Agent/ }).getByRole('button', { name: 'Row actions' }).click()
-    await page.getByRole('menuitem', { name: 'Manage subscriptions' }).click()
+    // 订阅入口在订阅列内联按钮，不在行菜单。
+    await demoRow.getByRole('button', { name: 'Manage subscriptions' }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
     await expect(page.getByText('Demo KB')).toBeVisible()
+    await page.keyboard.press('Escape')
+  })
+
+  test('list row link navigation; inline controls and last-row menu do not hijack', async ({ page }) => {
+    await loginWithMocks(page)
+    await page.goto('/agent')
+
+    const demoLink = page.getByRole('link', { name: 'Demo Agent' })
+    await expect(demoLink).toBeVisible()
+    await demoLink.click()
+    await page.waitForURL('**/agent/42/agent')
+    await page.goto('/agent')
+
+    const otherRow = page.getByRole('row', { name: /Other Agent/ })
+    await otherRow.getByRole('button', { name: 'Row actions' }).click()
+    await expect(page.getByRole('menuitem', { name: 'Open' })).toBeVisible()
+    await expect(page).toHaveURL(/\/agent\/?$/)
+    await page.keyboard.press('Escape')
+
+    const otherKind = otherRow.locator('select').first()
+    await otherKind.focus()
+    await page.keyboard.press(' ')
+    await expect(page).toHaveURL(/\/agent\/?$/)
+
+    // 非交互区点击仍可进入工作区（鼠标捷径，不是唯一入口）。
+    await otherRow.getByText('other-agent').click()
+    await page.waitForURL('**/agent/43/agent')
   })
 
   test('hides AI tabs without AI permissions', async ({ page }) => {

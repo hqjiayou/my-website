@@ -119,9 +119,9 @@ export function AgentKnowledgeSubscriptions({ agentId }: { agentId: number }) {
     <div className="space-y-2 rounded-xl border border-admin bg-admin-surface px-4 py-3 sm:px-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold tracking-wide text-admin-muted uppercase">
+          <h3 className="text-xs font-semibold tracking-wide text-admin-muted uppercase">
             {t('workspace.configKnowledge.subscriptionsTitle')}
-          </p>
+          </h3>
           <p className="mt-1 text-xs text-admin-muted">{t('workspace.configKnowledge.subscriptionsHint')}</p>
         </div>
         <PermissionGate code={PERMISSION_CODES.aiKbUpdate}>
