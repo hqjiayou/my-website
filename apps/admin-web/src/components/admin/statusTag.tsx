@@ -37,9 +37,53 @@ interface StatusTagProps extends StatusTagVariantProps {
   className?: string
 }
 
+/** ACTIVE/DISABLED/unknown/loading/error 及常见业务同义词 → tone。未识别一律 neutral（unknown）。 */
 function resolveTone(status: string): StatusTagVariantProps['tone'] {
-  if (status === ROLE_STATUS.ACTIVE || status === 'ACTIVE') return 'active'
-  if (status === ROLE_STATUS.DISABLED || status === 'DISABLED') return 'disabled'
+  const normalized = status.trim().toUpperCase()
+  if (
+    normalized === ROLE_STATUS.ACTIVE ||
+    normalized === 'ACTIVE' ||
+    normalized === 'LIVE' ||
+    normalized === 'CONFIGURED' ||
+    normalized === 'ENABLED' ||
+    normalized === 'OK' ||
+    normalized === 'READY'
+  ) {
+    return 'active'
+  }
+  if (
+    normalized === ROLE_STATUS.DISABLED ||
+    normalized === 'DISABLED' ||
+    normalized === 'INACTIVE' ||
+    normalized === 'OFF'
+  ) {
+    return 'disabled'
+  }
+  if (
+    normalized === 'ERROR' ||
+    normalized === 'FAILED' ||
+    normalized === 'DANGER' ||
+    normalized === 'FAIL'
+  ) {
+    return 'danger'
+  }
+  if (
+    normalized === 'WARNING' ||
+    normalized === 'BLOCKED' ||
+    normalized === 'DEGRADED' ||
+    normalized === 'UNAVAILABLE'
+  ) {
+    return 'warning'
+  }
+  if (
+    normalized === 'LOADING' ||
+    normalized === 'PENDING' ||
+    normalized === 'INFO' ||
+    normalized === 'PROBING'
+  ) {
+    return 'info'
+  }
+  // UNKNOWN / NEUTRAL / 空串 / 其它 → neutral
   return 'neutral'
 }
 
@@ -55,7 +99,7 @@ export function StatusTag({ status, label, tone, className }: StatusTagProps) {
 
   return (
     <span className={cn(statusTagVariants({ tone: resolvedTone }), className)}>
-      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dot)} />
+      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dot)} aria-hidden />
       {displayLabel}
     </span>
   )

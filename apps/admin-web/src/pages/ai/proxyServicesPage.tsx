@@ -79,7 +79,7 @@ function PacingStrip({
     <dl className="grid gap-3 border-b border-admin px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
       {rows.map((row) => (
         <div key={row.label}>
-          <dt className="text-[11px] text-admin-muted">{row.label}</dt>
+          <dt className="text-xs text-admin-muted">{row.label}</dt>
           <dd className="mt-1 text-sm text-admin">{row.value}</dd>
         </div>
       ))}
@@ -247,7 +247,7 @@ export function ProxyLoginFlow({
               type="button"
               disabled={loginMutation.isPending || pendingLogin !== null}
               onClick={() => loginMutation.mutate(option.id)}
-              className="flex flex-col items-center gap-2 rounded-xl border border-admin bg-admin-surface px-2 py-4 text-admin transition hover:border-primary/55 hover:shadow-sm disabled:opacity-60"
+              className="admin-focus-ring flex flex-col items-center gap-2 rounded-xl border border-admin bg-admin-surface px-2 py-4 text-admin transition hover:border-primary/55 hover:shadow-admin-pop disabled:opacity-60"
             >
               <span className={cn('flex h-[42px] w-[42px] items-center justify-center rounded-xl', providerTileClass(option.id))}>
                 <ProviderIcon id={option.id} className="h-[21px] w-[21px]" />

@@ -76,10 +76,10 @@ export function keyVendorName(prefix: string) {
 
 /** 家族图标砖：按 spec 协议前缀映射色板 token。CLI 厂商砖走 ProviderIcon，不经这里。 */
 export function familyTile(prefix: string): { letter: string; className: string } {
-  if (prefix === 'google') return { letter: 'G', className: 'bg-[rgb(var(--info)/.12)] text-info' }
-  if (prefix === 'openai') return { letter: 'O', className: 'bg-[rgb(var(--chart-2)/.12)] text-chart-2' }
-  if (prefix === 'anthropic') return { letter: 'A', className: 'bg-[rgb(var(--chart-3)/.12)] text-chart-3' }
-  if (prefix === 'azure') return { letter: 'Az', className: 'bg-[rgb(var(--chart-1)/.12)] text-chart-1' }
+  if (prefix === 'google') return { letter: 'G', className: 'bg-info/12 text-info' }
+  if (prefix === 'openai') return { letter: 'O', className: 'bg-chart-2/12 text-chart-2' }
+  if (prefix === 'anthropic') return { letter: 'A', className: 'bg-chart-3/12 text-chart-3' }
+  if (prefix === 'azure') return { letter: 'Az', className: 'bg-chart-1/12 text-chart-1' }
   return { letter: 'M', className: 'bg-admin-surface-muted text-admin-muted' }
 }
 

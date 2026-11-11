@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useOutletContext } from 'react-router-dom'
 
 import { aiApi } from '@/api'
+import { StatusTag } from '@/components/admin'
 import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
 import type { AiAgentChain, AiChainMode, AiModelEntry } from '@/types/ai'
@@ -17,7 +18,7 @@ import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
  *
  * 边界（Issue #216 / Agent Console V2）：本页是只读「平台入口参考」＋本 Agent 链摘要，
  * 禁止 create/updateModelEntry（尤其 defaultEntry 写路径）。平台入口维护只在
- * `/ai/model-entries`；本 Agent 链编辑只在 Runtime 的 `updateAgentChain`。
+ * `/ai/model-entries`；本 Agent 链编辑只在配置 · 模型页的 `updateAgentChain`。
  */
 function entryFor(entries: AiModelEntry[], mode: 'CLI' | 'KEY') {
   const enabled = entries.filter((entry) => entry.enabled && (entry.mode ?? 'KEY') === mode)
@@ -61,8 +62,8 @@ function PlatformEntryCard({
         <span
           className={
             isCli
-              ? 'shrink-0 rounded-md bg-info-muted px-2 py-0.5 text-[11px] font-medium text-info-emphasis'
-              : 'shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary'
+              ? 'shrink-0 rounded-md bg-info-muted px-2 py-0.5 text-xs font-medium text-info-emphasis'
+              : 'shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary'
           }
         >
           {mode}
@@ -74,14 +75,10 @@ function PlatformEntryCard({
       {entry ? (
         <div className="space-y-2">
           <p className="text-sm font-medium text-foreground">{entry.displayName}</p>
-          <p className="font-mono text-xs text-admin-muted">{entry.modelSpec}</p>
+          <p className="font-mono text-xs text-admin-muted break-all">{entry.modelSpec}</p>
           <div className="flex flex-wrap gap-1.5">
-            <span className="rounded-md bg-success-muted px-2 py-0.5 text-[11px] font-medium text-success-emphasis">
-              {t('aiWorkspace.runtime.enabled')}
-            </span>
-            <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-              {t('aiWorkspace.chainPreset.defaultMark')}
-            </span>
+            <StatusTag status="ACTIVE" label={t('aiWorkspace.runtime.enabled')} />
+            <StatusTag status="info" tone="info" label={t('aiWorkspace.chainPreset.defaultMark')} />
           </div>
         </div>
       ) : null}
@@ -137,7 +134,10 @@ function AgentChainSummaryCard({
         })}
       </ul>
       <p className="mt-4 text-sm">
-        <Link to={ROUTES.apps.agentRuntime(agentId)} className="font-medium text-admin underline-offset-2 hover:underline">
+        <Link
+          to={ROUTES.apps.agentConfigModels(agentId)}
+          className="font-medium text-admin underline-offset-2 hover:underline"
+        >
           {t('access.openRuntime')}
         </Link>
       </p>
@@ -168,7 +168,11 @@ export function AgentAccessPage() {
     return <p className="text-sm text-admin-muted">{t('access.loading')}</p>
   }
   if (entriesQuery.isError || chainQuery.isError) {
-    return <p className="text-sm text-danger-emphasis">{t('access.loadError')}</p>
+    return (
+      <p className="text-sm text-danger-emphasis" role="alert">
+        {t('access.loadError')}
+      </p>
+    )
   }
 
   const entries = entriesQuery.data ?? []

@@ -46,7 +46,7 @@ export function AiModelEntriesPage() {
     <section className="admin-content-data">
       <AdminPageHeader title={t('modelManagement.title')} description={t('modelManagement.description')} />
       <div className="space-y-4">
-        <div className="flex gap-2 rounded-xl border border-info/28 bg-[rgb(var(--info)/.07)] px-4 py-3 text-sm text-admin">
+        <div className="flex gap-2 rounded-xl border border-info/28 bg-info-muted px-4 py-3 text-sm text-admin">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
           <p>{t('settings.fallbackHint')}</p>
         </div>

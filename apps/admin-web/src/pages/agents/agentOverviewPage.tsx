@@ -110,8 +110,8 @@ function Fact({
     <Link
       to={to}
       className={cn(
-        'flex flex-col gap-2 rounded-[14px] border border-admin bg-admin-surface px-4 py-3.5 transition admin-focus-ring',
-        'hover:border-[rgb(var(--muted-foreground)/.35)] hover:shadow-admin-pop',
+        'admin-focus-ring flex flex-col gap-2 rounded-xl border border-admin bg-admin-surface px-4 py-3.5 transition',
+        'hover:border-muted-foreground/35 hover:shadow-admin-pop',
       )}
     >
       <p className="flex items-center gap-1.5 text-xs font-semibold text-admin-muted">
@@ -121,7 +121,7 @@ function Fact({
       </p>
       {value}
       {sub ? <p className="text-xs leading-5 text-admin-muted">{sub}</p> : null}
-      <p className="mt-auto flex items-center gap-1 border-t border-dashed border-admin pt-2 text-xs font-semibold text-[rgb(var(--primary))]">
+      <p className="mt-auto flex items-center gap-1 border-t border-dashed border-admin pt-2 text-xs font-semibold text-primary">
         {footerLabel}
         <ArrowRight className="h-3 w-3" />
       </p>
@@ -307,7 +307,7 @@ export function AgentOverviewPage() {
       <div className="space-y-1.5">
         <p className="text-sm font-semibold leading-5 text-admin">{promptTitle}</p>
         {promptSummary ? (
-          <blockquote className="line-clamp-2 border-l-[3px] border-[rgb(var(--primary)/.35)] pl-2.5 text-xs leading-relaxed text-admin-muted">
+          <blockquote className="line-clamp-2 border-l-[3px] border-primary/35 pl-2.5 text-xs leading-relaxed text-admin-muted">
             {promptSummary}
           </blockquote>
         ) : null}

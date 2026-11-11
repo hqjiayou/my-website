@@ -306,7 +306,7 @@ export default {
   },
   access: {
     title: 'プラットフォーム入口の参考',
-    description: '読み取り専用の「プラットフォーム入口参考」：プラットフォーム CLI/KEY 既定入口と、このエージェント自身のモデルチェーン要約を表示します。プラットフォーム既定の変更はモデル API 管理、呼び出し順の変更は実行状態のチェーンエディターで行います。',
+    description: '読み取り専用の「プラットフォーム入口参考」：プラットフォーム CLI/KEY 既定入口と、このエージェント自身のモデルチェーン要約を表示します。プラットフォーム既定の変更はモデル API 管理、呼び出し順の変更は設定・モデルのチェーンエディターで行います。',
     referenceBadge: '読み取り専用参考',
     loading: 'モデルとアカウントを読み込み中…',
     loadError: '接続設定を読めませんでした。',
@@ -346,9 +346,9 @@ export default {
     openApi: 'API キーを開く',
     pickKey: '先にクライアント key を選んでください',
     openModelEntries: 'モデル API 管理を開く',
-    chainHint: 'このエージェント自身のチェーンの要約です。メンバーの追加・削除・並び替えは実行状態ページのチェーンエディターで行います。',
+    chainHint: 'このエージェント自身のチェーンの要約です。メンバーの追加・削除・並び替えは設定 · モデルページのチェーンエディターで行います。',
     chainMembers: 'メンバー {{count}} 件',
-    openRuntime: '実行状態を開く',
+    openRuntime: 'モデルチェーン設定を開く',
   },
   workspace: {
     title: 'エージェント',
@@ -724,6 +724,7 @@ export default {
       noMcp: 'MCP server は未設定です',
       enabled: '有効',
       disabled: '無効',
+      statusUnknown: '不明',
       mcpReady: {
         probe: 'MCP 接続を確認',
         probing: '確認中…',
@@ -888,10 +889,10 @@ export default {
       },
       mcp: {
         title: 'MCP',
-        hint: '読み取り専用：プラットフォームプロセスが組み立て、ターン単位では選べません。疎通とプローブはランタイムページです。',
+        hint: '読み取り専用：プラットフォームプロセスが組み立て、ターン単位では選べません。疎通とプローブは設定・Skills / MCP です。',
         empty: 'MCP server は未設定です',
         error: 'MCP 状態の取得に失敗しました',
-        openRuntime: 'ランタイムを開く',
+        openRuntime: 'Skills / MCP を開く',
         enabled: '有効',
         disabled: '無効',
       },

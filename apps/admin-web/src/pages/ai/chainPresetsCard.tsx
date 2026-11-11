@@ -284,7 +284,7 @@ export function ChainPresetsCard() {
                     />
                     <span className={cn(!entry.enabled && 'text-admin-muted')}>
                       {entryLabel(entry)}
-                      <span className="ml-1 text-[11px] text-admin-muted">
+                      <span className="ml-1 text-xs text-admin-muted">
                         {(entry.mode ?? 'KEY') === 'CLI' ? 'CLI' : 'KEY'}
                         {entry.defaultEntry ? ` · ${t('settings.chainPresets.defaultMark')}` : ''}
                         {entry.enabled ? '' : ` · ${t('settings.chainPresets.disabledMark')}`}

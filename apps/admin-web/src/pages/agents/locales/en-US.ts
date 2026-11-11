@@ -307,7 +307,7 @@ export default {
   },
   access: {
     title: 'Platform entry reference',
-    description: 'Read-only platform entry reference: platform CLI/KEY defaults and this agent’s own model-chain summary. Change platform defaults on the Model API page; change this agent’s call order in the Runtime chain editor.',
+    description: 'Read-only platform entry reference: platform CLI/KEY defaults and this agent’s own model-chain summary. Change platform defaults on the Model API page; change this agent’s call order in the chain editor on Config → Models.',
     referenceBadge: 'Read-only reference',
     loading: 'Loading models and accounts…',
     loadError: 'Could not load access settings.',
@@ -347,9 +347,9 @@ export default {
     openApi: 'Open API keys',
     pickKey: 'Choose a client key first',
     openModelEntries: 'Open Model API',
-    chainHint: 'A summary of this agent’s own chains. Add, remove, and reorder members in the chain editor on the Runtime page.',
+    chainHint: 'A summary of this agent’s own chains. Add, remove, and reorder members in the chain editor on Config → Models.',
     chainMembers: '{{count}} members',
-    openRuntime: 'Open runtime status',
+    openRuntime: 'Open model chain settings',
   },
   workspace: {
     title: 'Agent',
@@ -724,6 +724,7 @@ export default {
       noMcp: 'No MCP servers configured',
       enabled: 'Enabled',
       disabled: 'Disabled',
+      statusUnknown: 'Unknown',
       mcpReady: {
         probe: 'Probe MCP',
         probing: 'Probing…',
@@ -888,10 +889,10 @@ export default {
       },
       mcp: {
         title: 'MCP',
-        hint: 'Read-only: assembled by the platform process; not selectable per turn. Connectivity and probes live on the Runtime page.',
+        hint: 'Read-only: assembled by the platform process; not selectable per turn. Connectivity and probes live under Config → Skills / MCP.',
         empty: 'No MCP servers configured',
         error: 'Failed to load MCP status',
-        openRuntime: 'Open runtime',
+        openRuntime: 'Open Skills / MCP',
         enabled: 'On',
         disabled: 'Off',
       },

@@ -63,7 +63,7 @@ export function DataTableColumnMenu({
           role="menu"
           className="absolute top-full right-0 z-30 mt-1 min-w-48 rounded-lg border border-admin bg-admin-surface p-2 shadow-admin-pop"
         >
-          <p className="px-1.5 pb-1.5 text-[10px] font-semibold tracking-wide text-admin-muted uppercase">
+          <p className="px-1.5 pb-1.5 text-xs font-semibold tracking-wide text-admin-muted uppercase">
             {t('table.columnVisibility')}
           </p>
           <ul className="space-y-0.5">
@@ -79,7 +79,7 @@ export function DataTableColumnMenu({
                   >
                     <input
                       type="checkbox"
-                      className="h-3.5 w-3.5 accent-[rgb(var(--primary))]"
+                      className="admin-check"
                       checked={column.visible}
                       disabled={locked}
                       onChange={() => {

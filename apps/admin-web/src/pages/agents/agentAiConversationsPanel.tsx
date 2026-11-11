@@ -38,7 +38,7 @@ function SourceBadge({ source }: { source: AiConversationListItem['source'] }) {
   return (
     <span
       className={cn(
-        'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium',
+        'shrink-0 rounded-md px-1.5 py-0.5 text-xs font-medium',
         isPreview ? 'bg-info-muted text-info-emphasis' : 'bg-admin-surface-muted text-admin-muted',
       )}
     >
@@ -117,8 +117,8 @@ export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
                 ))}
               </ul>
             ) : isError ? (
-              <div className="flex flex-col items-center gap-2 px-3.5 py-8 text-center">
-                <AlertCircle className="h-5 w-5 text-admin-danger" />
+              <div className="flex flex-col items-center gap-2 px-3.5 py-8 text-center" role="alert">
+                <AlertCircle className="h-5 w-5 text-admin-danger" aria-hidden />
                 <p className="text-sm text-admin-danger">
                   {error instanceof Error ? error.message : tCommon('table.error')}
                 </p>
@@ -139,8 +139,8 @@ export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
                       type="button"
                       onClick={() => setSelectedId(item.id)}
                       className={cn(
-                        'w-full border-b border-admin px-3.5 py-3 text-left transition last:border-b-0 hover:bg-admin-surface-muted',
-                        selectedId === item.id && 'admin-active-inset bg-[rgb(var(--primary)/.1)]',
+                        'admin-focus-ring w-full border-b border-admin px-3.5 py-3 text-left transition last:border-b-0 hover:bg-admin-surface-muted',
+                        selectedId === item.id && 'admin-active-inset bg-primary/10',
                       )}
                     >
                       <div className="flex items-center gap-2">
@@ -239,8 +239,8 @@ export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
               {messagesPending ? (
                 <p className="m-auto px-4 text-sm text-admin-muted">{t('aiWorkspace.loading')}</p>
               ) : messagesError ? (
-                <div className="m-auto flex flex-col items-center gap-2 px-4 py-8 text-center">
-                  <AlertCircle className="h-5 w-5 text-admin-danger" />
+                <div className="m-auto flex flex-col items-center gap-2 px-4 py-8 text-center" role="alert">
+                  <AlertCircle className="h-5 w-5 text-admin-danger" aria-hidden />
                   <p className="text-sm text-admin-danger">{t('aiWorkspace.conversations.messagesError')}</p>
                   {messagesErrorValue instanceof Error ? (
                     <p className="max-w-sm break-words text-xs text-admin-muted">{messagesErrorValue.message}</p>
@@ -268,7 +268,7 @@ export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
                       >
                         <p
                           className={cn(
-                            'mb-1 flex items-center gap-1.5 text-[11px] font-medium text-admin-muted',
+                            'mb-1 flex items-center gap-1.5 text-xs font-medium text-admin-muted',
                             isUser && 'justify-end',
                           )}
                         >
@@ -289,7 +289,7 @@ export function AgentAiConversationsPanel({ agentId }: { agentId: number }) {
                           item.agentMeta ? (
                             <AiRunMetaSummary meta={item.agentMeta} />
                           ) : (
-                            <p className="mt-1 text-[11px] leading-4 text-admin-muted">
+                            <p className="mt-1 text-xs leading-4 text-admin-muted">
                               {t('aiWorkspace.conversations.noRunMeta')}
                             </p>
                           )

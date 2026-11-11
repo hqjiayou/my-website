@@ -442,7 +442,7 @@ export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
   return (
     <div className="space-y-4">
       {chainQuery.isError || entriesQuery.isError ? (
-        <div className="flex items-center gap-2.5 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
+        <div className="flex items-center gap-2.5 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3" role="alert">
           <AlertCircle className="h-4.5 w-4.5 shrink-0 text-danger-emphasis" aria-hidden />
           <p className="min-w-0 flex-1 text-sm text-danger-emphasis">
             {t('aiWorkspace.chainPreset.loadError')}

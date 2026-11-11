@@ -45,7 +45,7 @@ export function AgentSettingsPage() {
             <li key={item.key}>
               <Link
                 to={item.to}
-                className="flex items-center justify-between gap-3 py-2.5 text-sm font-medium text-admin transition hover:text-primary"
+                className="admin-focus-ring flex items-center justify-between gap-3 rounded-md py-2.5 text-sm font-medium text-admin transition hover:text-primary"
               >
                 <span>{t(item.labelKey)}</span>
                 <ChevronRight className="h-4 w-4 text-admin-muted" aria-hidden />

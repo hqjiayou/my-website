@@ -132,7 +132,7 @@ export function DataTable<T>({
                 <th className="h-10 w-10 px-4">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 accent-[rgb(var(--primary))]"
+                    className="admin-check"
                     aria-label={t('table.selectPage')}
                     checked={allPageSelected}
                     disabled={selectablePageKeys.length === 0 || isLoading || isError}
@@ -257,7 +257,7 @@ export function DataTable<T>({
                       <td className="px-4 align-middle" onClick={(event) => event.stopPropagation()}>
                         <input
                           type="checkbox"
-                          className="h-4 w-4 accent-[rgb(var(--primary))]"
+                          className="admin-check"
                           aria-label={t('table.selectRow')}
                           checked={selected}
                           disabled={!selectable}

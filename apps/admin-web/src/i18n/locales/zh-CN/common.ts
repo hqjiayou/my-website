@@ -68,6 +68,9 @@ export default {
     status: {
       ACTIVE: '启用',
       DISABLED: '禁用',
+      UNKNOWN: '未知',
+      LOADING: '加载中',
+      ERROR: '错误',
     },
     resourceType: {
       MENU: '菜单',

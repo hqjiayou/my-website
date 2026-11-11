@@ -68,6 +68,9 @@ export default {
     status: {
       ACTIVE: '有効',
       DISABLED: '無効',
+      UNKNOWN: '不明',
+      LOADING: '読み込み中',
+      ERROR: 'エラー',
     },
     resourceType: {
       MENU: 'メニュー',

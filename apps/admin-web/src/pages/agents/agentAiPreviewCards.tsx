@@ -105,7 +105,7 @@ function WeatherCard({ payload, title }: { payload: AiWeatherCardPayload; title?
                   : '')
               return (
                 <div key={`${point.time}-${index}`} className="flex min-w-0 flex-1 flex-col items-center" title={tooltip}>
-                  <span className="mb-1 h-3 text-[10px] leading-3 text-muted-foreground">
+                  <span className="mb-1 h-4 text-xs leading-4 text-muted-foreground">
                     {index % 6 === 0 ? formatValue(point.temperatureC) : ''}
                   </span>
                   <div className="flex h-12 w-full items-end">
@@ -114,7 +114,7 @@ function WeatherCard({ payload, title }: { payload: AiWeatherCardPayload; title?
                       style={{ height: `${heightPercent}%` }}
                     />
                   </div>
-                  <span className="mt-1 h-3 font-mono text-[10px] leading-3 text-muted-foreground">
+                  <span className="mt-1 h-4 font-mono text-xs leading-4 text-muted-foreground">
                     {index % 6 === 0 ? hourOf(point.time) : ''}
                   </span>
                 </div>

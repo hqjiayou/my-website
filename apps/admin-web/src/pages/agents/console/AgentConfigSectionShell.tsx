@@ -44,7 +44,7 @@ export function AgentConfigSectionShell({
                 editState === 'saved' && 'bg-success-muted text-success-emphasis',
                 editState === 'error' && 'bg-danger-muted text-danger-emphasis',
               )}
-              role="status"
+              role={editState === 'error' ? 'alert' : 'status'}
             >
               {editStateLabel}
             </span>

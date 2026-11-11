@@ -68,6 +68,9 @@ export default {
     status: {
       ACTIVE: 'Active',
       DISABLED: 'Disabled',
+      UNKNOWN: 'Unknown',
+      LOADING: 'Loading',
+      ERROR: 'Error',
     },
     resourceType: {
       MENU: 'Menu',

@@ -81,7 +81,7 @@ export function FormDialog({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          'shadow-admin-overlay relative z-10 flex w-full flex-col border border-admin bg-admin-surface outline-none',
+          'shadow-admin-overlay relative z-10 flex w-full flex-col border border-admin bg-admin-surface outline-none motion-safe:transition-transform',
           placement === 'end' ? 'h-full border-y-0 border-r-0' : 'max-h-[min(90vh,48rem)] overflow-hidden rounded-xl',
           widthClass,
         )}

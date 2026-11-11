@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/cn'
 
 import {
+  adminDangerButtonMdClass,
   adminFieldClass,
   adminFormActionsClass,
   adminGhostButtonClass,
@@ -189,7 +190,7 @@ function ResourcePickerDrawerSession<T>({
             >
               <p>{errorMessage ?? t('table.error')}</p>
               {onRetry ? (
-                <button type="button" className="mt-2 underline" onClick={onRetry}>
+                <button type="button" className="admin-focus-ring mt-2 underline" onClick={onRetry}>
                   {t('table.retry')}
                 </button>
               ) : null}
@@ -336,7 +337,7 @@ function ResourcePickerDrawerSession<T>({
             </button>
             <button
               type="button"
-              className={adminPrimaryButtonClass}
+              className={adminDangerButtonMdClass}
               onClick={() => {
                 setDiscardOpen(false)
                 onClose()

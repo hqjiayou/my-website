@@ -25,14 +25,11 @@ const LIMIT_KEYS: Array<keyof AiRuntimeLimits> = [
   'historyMaxChars',
 ]
 
-function statusTone(status: string | null) {
-  if (status === 'LIVE' || status === 'CONFIGURED') {
-    return { chip: 'bg-success-muted text-success-emphasis', dot: 'bg-success' }
-  }
-  if (status === 'DISABLED') {
-    return { chip: 'bg-card-muted text-muted-foreground', dot: 'bg-muted-foreground' }
-  }
-  return { chip: 'bg-warning-muted text-warning-emphasis', dot: 'bg-warning' }
+function runtimeStatusTone(status: string | null): 'active' | 'disabled' | 'warning' | 'neutral' {
+  if (status === 'LIVE' || status === 'CONFIGURED') return 'active'
+  if (status === 'DISABLED') return 'disabled'
+  if (status == null || status === '') return 'neutral'
+  return 'warning'
 }
 
 function McpReadyProbe({ agentId }: { agentId: number }) {
@@ -57,7 +54,9 @@ function McpReadyProbe({ agentId }: { agentId: number }) {
           {probeQuery.isFetching ? t('aiWorkspace.runtime.mcpReady.probing') : t('aiWorkspace.runtime.mcpReady.probe')}
         </button>
         {probeQuery.isError ? (
-          <p className="text-xs text-danger-emphasis">{t('aiWorkspace.runtime.mcpReady.loadError')}</p>
+          <p className="text-xs text-danger-emphasis" role="alert">
+            {t('aiWorkspace.runtime.mcpReady.loadError')}
+          </p>
         ) : null}
         {probe && !probe.reachable ? (
           <p className="text-xs text-warning-emphasis">
@@ -462,7 +461,10 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
     return (
       <div>
         {header}
-        <p className="rounded-xl border border-warning/30 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis">
+        <p
+          className="rounded-xl border border-warning/30 bg-warning-muted px-4 py-3 text-sm text-warning-emphasis"
+          role="alert"
+        >
           {t('aiWorkspace.runtime.unreachable', { code: runtime.errorCode ?? 'SYSTEM_ERROR' })}
         </p>
         <McpSelectionSection agentId={agentId} fallbackServers={[]} />
@@ -471,9 +473,6 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
   }
 
   const status = runtime.status
-  const providerTone = statusTone(status.providerStatus)
-  const retrievalTone = statusTone(status.retrievalStatus)
-  const mcpTone = statusTone(status.mcpStatus)
 
   return (
     <div>
@@ -490,10 +489,12 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
                 {status.provider ? modelIdFromSpec(status.provider) : '—'}
               </p>
             </div>
-            <span className={cn('ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium', providerTone.chip)}>
-              <span className={cn('h-1.5 w-1.5 rounded-full', providerTone.dot)} aria-hidden />
-              {status.providerStatus ?? '—'}
-            </span>
+            <StatusTag
+              className="ml-auto"
+              status={status.providerStatus ?? 'UNKNOWN'}
+              tone={runtimeStatusTone(status.providerStatus)}
+              label={status.providerStatus ?? t('aiWorkspace.runtime.statusUnknown')}
+            />
           </div>
           <p className="text-xs leading-5 text-muted-foreground">
             {t('aiWorkspace.runtime.fallbacks', {
@@ -502,13 +503,16 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
           </p>
           <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
             <span className="text-xs text-muted-foreground">{t('aiWorkspace.runtime.retrieval')}</span>
-            <span className={cn('inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium', retrievalTone.chip)}>
-              <span className={cn('h-1.5 w-1.5 rounded-full', retrievalTone.dot)} aria-hidden />
-              {status.retrievalStatus ?? '—'}
-            </span>
+            <StatusTag
+              status={status.retrievalStatus ?? 'UNKNOWN'}
+              tone={runtimeStatusTone(status.retrievalStatus)}
+              label={status.retrievalStatus ?? t('aiWorkspace.runtime.statusUnknown')}
+            />
           </div>
           {status.retrievalStatus === 'BLOCKED' && status.retrievalBlockedReason ? (
-            <p className="mt-2 text-xs text-warning-emphasis">{status.retrievalBlockedReason}</p>
+            <p className="mt-2 text-xs text-warning-emphasis" role="status">
+              {status.retrievalBlockedReason}
+            </p>
           ) : null}
         </section>
 
@@ -518,10 +522,12 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
               <Wrench className="h-4 w-4" aria-hidden />
             </span>
             <h3 className="text-sm font-semibold text-admin">MCP</h3>
-            <span className={cn('ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium', mcpTone.chip)}>
-              <span className={cn('h-1.5 w-1.5 rounded-full', mcpTone.dot)} aria-hidden />
-              {status.mcpStatus ?? '—'}
-            </span>
+            <StatusTag
+              className="ml-auto"
+              status={status.mcpStatus ?? 'UNKNOWN'}
+              tone={runtimeStatusTone(status.mcpStatus)}
+              label={status.mcpStatus ?? t('aiWorkspace.runtime.statusUnknown')}
+            />
           </div>
           {status.mcpServers.length === 0 ? (
             <p className="text-xs text-muted-foreground">{t('aiWorkspace.runtime.noMcp')}</p>
@@ -575,7 +581,7 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
             </span>
             <h3 className="text-sm font-semibold text-admin">{t('aiWorkspace.preview.skills.title')}</h3>
             {skillsQuery.data ? (
-              <span className="ml-auto rounded-md bg-card px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+              <span className="ml-auto rounded-md bg-card px-2 py-0.5 font-mono text-xs text-muted-foreground">
                 {skillsQuery.data.length}
               </span>
             ) : null}
@@ -583,7 +589,9 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
           {skillsQuery.isPending ? (
             <p className="text-xs text-muted-foreground">{t('aiWorkspace.loading')}</p>
           ) : skillsQuery.isError ? (
-            <p className="text-xs text-danger-emphasis">{t('aiWorkspace.preview.skills.error')}</p>
+            <p className="text-xs text-danger-emphasis" role="alert">
+              {t('aiWorkspace.preview.skills.error')}
+            </p>
           ) : skillsQuery.data.length === 0 ? (
             <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.skills.empty')}</p>
           ) : (

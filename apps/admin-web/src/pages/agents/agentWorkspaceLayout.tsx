@@ -259,7 +259,7 @@ export function AgentWorkspaceLayout() {
                   <button
                     type="button"
                     role="menuitem"
-                    className="flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
+                    className="admin-focus-ring flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
                     disabled={statusMutation.isPending}
                     onClick={() => {
                       setMenuOpen(false)
@@ -273,7 +273,7 @@ export function AgentWorkspaceLayout() {
                   <button
                     type="button"
                     role="menuitem"
-                    className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
+                    className="admin-focus-ring flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
                     onClick={() => {
                       setMenuOpen(false)
                       setCreateOpen(true)
@@ -286,7 +286,7 @@ export function AgentWorkspaceLayout() {
                 <button
                   type="button"
                   role="menuitem"
-                  className="flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
+                  className="admin-focus-ring flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
                   onClick={() => {
                     setMenuOpen(false)
                     tryNavigate(ROUTES.apps.agentSettings(site.id))
@@ -298,7 +298,7 @@ export function AgentWorkspaceLayout() {
                   <button
                     type="button"
                     role="menuitem"
-                    className="flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin-danger hover:bg-admin-danger-muted"
+                    className="admin-focus-ring flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin-danger hover:bg-admin-danger-muted"
                     onClick={() => {
                       setMenuOpen(false)
                       setDeleteOpen(true)

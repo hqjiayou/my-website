@@ -44,7 +44,7 @@ function PreviewAssistantLabel() {
   })
   if (!spec) return null
   return (
-    <p className="mb-2 inline-flex max-w-full truncate rounded-md bg-card-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+    <p className="mb-2 inline-flex max-w-full truncate rounded-md bg-card-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
       {spec}
     </p>
   )
@@ -177,7 +177,7 @@ function PreviewTextPart({ text, status }: TextMessagePartProps) {
               type="button"
               aria-expanded={openCite === n}
               title={citation.title || citation.sourceId}
-              className="mx-0.5 rounded bg-info-muted px-1 align-baseline font-mono text-[10px] font-medium leading-4 text-info-emphasis transition hover:underline"
+              className="mx-0.5 rounded bg-info-muted px-1 align-baseline font-mono text-xs font-medium leading-4 text-info-emphasis transition hover:underline"
               onClick={() => setOpenCite(openCite === n ? null : n)}
             >
               [{n}]

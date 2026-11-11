@@ -586,3 +586,24 @@ html[data-density='compact'] {
 .admin-switch:disabled {
   opacity: 0.4;
 }
+
+.admin-check:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* 浮层/菜单/骨架等过渡尊重系统「减少动态效果」偏好。 */
+@media (prefers-reduced-motion: reduce) {
+  .admin-icon-button,
+  .admin-nav-item,
+  .admin-switch,
+  .admin-switch::after,
+  .admin-skeleton,
+  [class*='shadow-admin-'],
+  [role='dialog'],
+  [role='menu'],
+  .admin-overlay {
+    animation: none !important;
+    transition: none !important;
+  }
+}

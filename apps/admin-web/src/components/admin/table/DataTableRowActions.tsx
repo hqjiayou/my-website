@@ -146,7 +146,7 @@ export function DataTableRowActions<T>({
             disabled={action.disabled}
             title={action.disabled ? action.disabledReason : undefined}
             className={cn(
-              'flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition',
+              'admin-focus-ring flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition',
               action.danger ? 'text-admin-danger hover:bg-admin-danger-muted' : 'text-admin hover:bg-admin-surface-muted',
               action.disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
             )}

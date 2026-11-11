@@ -153,8 +153,8 @@ function PreviewMcpSection({ agentId }: { agentId: number }) {
           />
         </button>
         <Link
-          to={ROUTES.apps.agentRuntime(agentId)}
-          className="shrink-0 text-[11px] text-primary underline-offset-2 hover:underline"
+          to={ROUTES.apps.agentConfigTools(agentId)}
+          className="admin-focus-ring shrink-0 rounded-sm text-xs text-primary underline-offset-2 hover:underline"
         >
           {t('aiWorkspace.preview.mcp.openRuntime')}
         </Link>

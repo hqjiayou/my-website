@@ -306,7 +306,7 @@ export default {
   },
   access: {
     title: '平台入口参考',
-    description: '只读「平台入口参考」：展示平台 CLI/KEY 默认入口与本智能体自有模型链摘要。改平台默认请去模型 API 管理；改本智能体调用顺序请去运行状态里的对话链编辑器。',
+    description: '只读「平台入口参考」：展示平台 CLI/KEY 默认入口与本智能体自有模型链摘要。改平台默认请去模型 API 管理；改本智能体调用顺序请去配置 · 模型页的对话链编辑器。',
     referenceBadge: '只读参考',
     loading: '正在读取模型和登录账号…',
     loadError: '接入信息没有读出来。',
@@ -346,9 +346,9 @@ export default {
     openApi: '打开 API 管理',
     pickKey: '先选择客户端 key',
     openModelEntries: '打开模型 API 管理',
-    chainHint: '本智能体自有双链的摘要；成员的增删与排序在运行状态页的对话链编辑器里完成。',
+    chainHint: '本智能体自有双链的摘要；成员的增删与排序在配置 · 模型页的对话链编辑器里完成。',
     chainMembers: '{{count}} 个成员',
-    openRuntime: '打开运行状态',
+    openRuntime: '打开模型链配置',
   },
   workspace: {
     title: '智能体',
@@ -721,6 +721,7 @@ export default {
       noMcp: '未配置 MCP server',
       enabled: '启用',
       disabled: '停用',
+      statusUnknown: '未知',
       mcpReady: {
         probe: '探测 MCP 连通',
         probing: '探测中…',
@@ -879,10 +880,10 @@ export default {
       },
       mcp: {
         title: 'MCP',
-        hint: '只读：由平台进程装配，不能按轮勾选。连通与探测在运行状态页。',
+        hint: '只读：由平台进程装配，不能按轮勾选。连通与探测在配置 · Skills / MCP。',
         empty: '未配置 MCP server',
         error: 'MCP 状态加载失败',
-        openRuntime: '打开运行状态',
+        openRuntime: '打开 Skills / MCP',
         enabled: '启用',
         disabled: '停用',
       },

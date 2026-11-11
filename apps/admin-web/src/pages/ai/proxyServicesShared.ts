@@ -30,10 +30,10 @@ export function isReady(account: { disabled: boolean; unavailable: boolean }) {
 
 /** 家族色映射（设计稿）：GPT=chart-2、Claude=chart-3、Gemini=info、Muse/其他=chart-4。 */
 export function providerTileClass(provider: string) {
-  if (provider === 'codex') return 'bg-[rgb(var(--chart-2)/.13)] text-[rgb(var(--chart-2))]'
-  if (provider === 'claude') return 'bg-[rgb(var(--chart-3)/.14)] text-[rgb(var(--chart-3))]'
-  if (provider === 'antigravity') return 'bg-[rgb(var(--info)/.12)] text-[rgb(var(--info))]'
-  if (provider === 'meta') return 'bg-[rgb(var(--chart-4)/.12)] text-[rgb(var(--chart-4))]'
+  if (provider === 'codex') return 'bg-chart-2/15 text-chart-2'
+  if (provider === 'claude') return 'bg-chart-3/15 text-chart-3'
+  if (provider === 'antigravity') return 'bg-info/12 text-info'
+  if (provider === 'meta') return 'bg-chart-4/12 text-chart-4'
   return 'bg-admin-surface-muted text-admin-muted'
 }
 

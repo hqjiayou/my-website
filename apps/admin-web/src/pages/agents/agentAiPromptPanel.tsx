@@ -178,9 +178,9 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
   }
   if (configQuery.isError || !current || !server) {
     return (
-      <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis">
+      <div className="rounded-lg border border-danger/35 bg-danger-muted px-4 py-3 text-sm text-danger-emphasis" role="alert">
         <p>{configQuery.error instanceof Error ? configQuery.error.message : tSites('aiWorkspace.error')}</p>
-        <button type="button" className="mt-2 underline" onClick={() => void configQuery.refetch()}>
+        <button type="button" className="admin-focus-ring mt-2 underline" onClick={() => void configQuery.refetch()}>
           {tSites('aiWorkspace.retry')}
         </button>
       </div>
@@ -240,7 +240,9 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
           onChange={(event) => setDraft({ ...current, temperature: event.target.value })}
         />
         {temperatureInvalid ? (
-          <span className="block text-xs text-danger-emphasis">{t('prompts.temperatureInvalid')}</span>
+          <span className="block text-xs text-danger-emphasis" role="alert">
+            {t('prompts.temperatureInvalid')}
+          </span>
         ) : (
           <span className="block text-xs text-admin-muted">{t('prompts.temperatureHint')}</span>
         )}
