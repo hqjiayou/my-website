@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: SPEC
 status: CURRENT
-last_verified: 2026-11-09
+last_verified: 2026-11-11
 source_of_truth: apps/admin-web/src
 ```
 

@@ -3,7 +3,7 @@
 ```yaml
 artifact_type: RUNBOOK
 status: CURRENT
-last_verified: 2026-10-10
+last_verified: 2026-11-11
 ```
 
 ```bash
@@ -15,6 +15,12 @@ node scripts/check-import-casing.mjs
 npm run test:boundary
 npm run test:sse
 ```
+
+## INT-2A 真实联调（2026-11-11，commit 见 git log）
+
+拓扑（本机）：Gateway `:8080`、Auth `:8083`、Admin `:8081`、agent-app `:8082`、agent-services `:3001`、proxy-services `:8317`、Postgres/Redis/Minio（local-dev）、admin-web Vite `:5173`。**不是** `e2e/docker-compose.e2e.yml` 可抛栈。
+
+真实验证（独立测试 Agent / KEY 入口，测后删除）：Agent CRUD、status、kind、乐观锁 409、KEY 创建/留空 Key 保密/删、平台 `defaultEntry` 不改 Agent chain、CLI `sync-cli` + `derived=true` 409 只读、proxy 可达、OAuth 启动（`antigravity`/`claude`/`codex`）、无角色账号 403。OAuth 完整回调与真实推理属 INT-2C / 外部凭证面，INT-2A 不记完整 SSE PASS。
 
 `test:boundary`：静态扫描 `src/pages/agents/**`，禁止 `createModelEntry` / `updateModelEntry` / `defaultEntry: true`（Agent Console V2 P0；平台默认只允许在模型 API 管理页写入）。
 
