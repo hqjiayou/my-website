@@ -4,6 +4,7 @@ import { useBlocker, useNavigate } from 'react-router-dom'
 
 import { FormDialog } from '@/components/admin'
 import { adminFormActionsClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
+import { ROUTES } from '@/router/config/routePaths'
 
 import {
   getUnsavedDirtySnapshot,
@@ -32,9 +33,12 @@ export function useUnsavedChangesGuard() {
   const navigate = useNavigate()
   const when = useSyncExternalStore(subscribeUnsavedDirty, getUnsavedDirtySnapshot, () => false)
 
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) => when && currentLocation.pathname !== nextLocation.pathname,
-  )
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (!when || currentLocation.pathname === nextLocation.pathname) return false
+    // 401 / 主动登出进登录页不得被草稿永久卡住。
+    if (nextLocation.pathname === ROUTES.login) return false
+    return true
+  })
 
   useEffect(() => {
     if (!when) return

@@ -28,6 +28,8 @@ export interface ResourcePickerDrawerProps<T> {
   description?: string
   items: T[]
   getId: (item: T) => string
+  /** 屏幕阅读器名称：资源显示名，而非裸数字 ID。 */
+  getAccessibleName?: (item: T) => string
   columns: Array<ResourcePickerColumn<T>>
   /** 打开时的已选 ID（抽屉内编辑副本；确认才回传）。 */
   initialSelectedIds?: string[]
@@ -70,6 +72,7 @@ function ResourcePickerDrawerSession<T>({
   description,
   items,
   getId,
+  getAccessibleName,
   columns,
   initialSelectedIds = [],
   mode = 'multiple',
@@ -101,6 +104,7 @@ function ResourcePickerDrawerSession<T>({
 
   const alreadySet = useMemo(() => new Set(alreadySelectedIds), [alreadySelectedIds])
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const itemById = useMemo(() => new Map(items.map((item) => [getId(item), item])), [getId, items])
 
   const dirty = useMemo(() => {
     if (selectedIds.length !== baselineIds.length) return true
@@ -108,14 +112,21 @@ function ResourcePickerDrawerSession<T>({
     return selectedIds.some((id) => !baseline.has(id))
   }, [baselineIds, selectedIds])
 
+  // 已选但列表中已消失的失效引用：仍展示，便于辨识并取消勾选移除。
+  const orphanSelectedIds = useMemo(
+    () => selectedIds.filter((id) => !itemById.has(id)),
+    [itemById, selectedIds],
+  )
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
     if (!needle) return items
     return items.filter((item) => {
-      const haystack = (searchText?.(item) ?? getId(item)).toLowerCase()
+      const accessible = getAccessibleName?.(item) ?? ''
+      const haystack = `${searchText?.(item) ?? ''} ${accessible} ${getId(item)}`.toLowerCase()
       return haystack.includes(needle)
     })
-  }, [getId, items, query, searchText])
+  }, [getAccessibleName, getId, items, query, searchText])
 
   function requestClose() {
     if (dirty) {
@@ -136,6 +147,15 @@ function ResourcePickerDrawerSession<T>({
     )
   }
 
+  function rowAriaLabel(item: T, id: string, reason: string | null, already: boolean) {
+    const name = getAccessibleName?.(item)?.trim() || searchText?.(item)?.trim() || id
+    const parts = [name]
+    if (already) parts.push(alreadySelectedLabel ?? t('resourcePicker.alreadySelected'))
+    if (reason) parts.push(reason)
+    if (id !== name) parts.push(id)
+    return parts.join(' · ')
+  }
+
   return (
     <>
       <FormDialog
@@ -146,8 +166,8 @@ function ResourcePickerDrawerSession<T>({
         placement="end"
         size="l"
       >
-        <div className="flex h-full min-h-0 flex-col gap-2" data-testid="resource-picker-session">
-          <label className="relative block">
+        <div className="flex min-h-0 flex-1 flex-col gap-2" data-testid="resource-picker-session">
+          <label className="relative block shrink-0">
             <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-admin-muted" aria-hidden />
             <input
               className={cn(adminFieldClass, 'pl-9')}
@@ -159,9 +179,14 @@ function ResourcePickerDrawerSession<T>({
           </label>
 
           {isLoading ? (
-            <p className="text-sm text-admin-muted">{t('table.loading')}</p>
+            <p className="text-sm text-admin-muted" role="status">
+              {t('table.loading')}
+            </p>
           ) : isError ? (
-            <div className="rounded-lg border border-danger/35 bg-danger-muted px-3 py-2 text-sm text-danger-emphasis">
+            <div
+              className="rounded-lg border border-danger/35 bg-danger-muted px-3 py-2 text-sm text-danger-emphasis"
+              role="alert"
+            >
               <p>{errorMessage ?? t('table.error')}</p>
               {onRetry ? (
                 <button type="button" className="mt-2 underline" onClick={onRetry}>
@@ -169,8 +194,12 @@ function ResourcePickerDrawerSession<T>({
                 </button>
               ) : null}
             </div>
-          ) : filtered.length === 0 ? (
-            <p className="text-sm text-admin-muted">{emptyMessage ?? t('table.noMatches')}</p>
+          ) : filtered.length === 0 && orphanSelectedIds.length === 0 ? (
+            <p className="text-sm text-admin-muted" role="status">
+              {query.trim()
+                ? t('table.noMatches')
+                : (emptyMessage ?? t('table.empty'))}
+            </p>
           ) : (
             <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-admin">
               <table className="w-full min-w-[28rem] border-collapse text-left text-sm">
@@ -187,6 +216,31 @@ function ResourcePickerDrawerSession<T>({
                   </tr>
                 </thead>
                 <tbody>
+                  {orphanSelectedIds.map((id) => {
+                    const checked = selectedSet.has(id)
+                    return (
+                      <tr key={`orphan-${id}`} className="border-t border-admin bg-warning-muted/40">
+                        <td className="px-3 py-1.5 align-middle">
+                          <input
+                            type={mode === 'single' ? 'radio' : 'checkbox'}
+                            className="admin-check"
+                            name={mode === 'single' ? 'resource-picker-single' : undefined}
+                            checked={checked}
+                            aria-label={`${id} · ${t('resourcePicker.unavailable')}`}
+                            onChange={() => toggle(id, false)}
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 align-middle" colSpan={columns.length}>
+                          <span className="font-mono text-xs text-admin">{id}</span>
+                          <span className="mt-1 flex flex-wrap gap-1">
+                            <span className="rounded-full bg-warning-muted px-1.5 py-0.5 text-xs font-medium text-warning-emphasis">
+                              {t('resourcePicker.unavailable')}
+                            </span>
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
                   {filtered.map((item) => {
                     const id = getId(item)
                     const reason = disabledReason?.(item) ?? null
@@ -200,6 +254,7 @@ function ResourcePickerDrawerSession<T>({
                         className={cn(
                           'border-t border-admin',
                           locked ? 'bg-admin-surface-muted/60 opacity-70' : 'hover:bg-admin-surface-muted/40',
+                          checked && !locked ? 'bg-primary/5' : null,
                         )}
                       >
                         <td className="px-3 py-1.5 align-middle">
@@ -209,7 +264,7 @@ function ResourcePickerDrawerSession<T>({
                             name={mode === 'single' ? 'resource-picker-single' : undefined}
                             checked={checked}
                             disabled={locked}
-                            aria-label={id}
+                            aria-label={rowAriaLabel(item, id, reason, already)}
                             title={reason ?? undefined}
                             onChange={() => toggle(id, locked)}
                           />
@@ -220,12 +275,12 @@ function ResourcePickerDrawerSession<T>({
                             {column.id === columns[0]?.id ? (
                               <span className="mt-1 flex flex-wrap gap-1">
                                 {already ? (
-                                  <span className="rounded-full bg-info-muted px-1.5 py-0.5 text-[10px] font-medium text-info-emphasis">
+                                  <span className="rounded-full bg-info-muted px-1.5 py-0.5 text-xs font-medium text-info-emphasis">
                                     {alreadySelectedLabel ?? t('resourcePicker.alreadySelected')}
                                   </span>
                                 ) : null}
                                 {reason ? (
-                                  <span className="rounded-full bg-warning-muted px-1.5 py-0.5 text-[10px] font-medium text-warning-emphasis">
+                                  <span className="rounded-full bg-warning-muted px-1.5 py-0.5 text-xs font-medium text-warning-emphasis">
                                     {reason}
                                   </span>
                                 ) : null}
@@ -241,10 +296,16 @@ function ResourcePickerDrawerSession<T>({
             </div>
           )}
 
-          <div className={cn(adminFormActionsClass, 'mt-auto border-t border-admin pt-3')}>
-            <p className="mr-auto text-xs text-admin-muted">
-              {t('table.selectedCount', { count: selectedIds.length })}
-            </p>
+          <div
+            className={cn(
+              adminFormActionsClass,
+              'sticky bottom-0 z-[1] mt-auto border-t border-admin bg-admin-surface pt-3',
+            )}
+          >
+            <div className="mr-auto min-w-0 text-xs text-admin-muted">
+              <p>{t('table.selectedCount', { count: selectedIds.length })}</p>
+              <p className="mt-0.5 leading-4">{t('resourcePicker.cancelDoesNotSave')}</p>
+            </div>
             <button type="button" className={adminGhostButtonClass} onClick={requestClose}>
               {cancelLabel ?? t('resourcePicker.cancel')}
             </button>

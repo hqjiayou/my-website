@@ -594,10 +594,10 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
     <AssistantRuntimeProvider runtime={runtime}>
       <div className="flex h-full min-h-0 gap-4">
         <ThreadPrimitive.Root
-          className="flex min-h-[20rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card-muted"
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card-muted"
           inert={inspectorOpen && inspectorModal ? true : undefined}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 sm:px-6">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2 sm:px-6">
             <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
               <span className="mr-1.5 rounded-md bg-card px-1.5 py-0.5 font-medium text-foreground">
                 {mode === 'CLI' ? t('aiWorkspace.preview.modeCli') : t('aiWorkspace.preview.modeKey')}
@@ -627,21 +627,21 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
           {fallbackServed ? (
             <p
               role="status"
-              className="flex items-start gap-1.5 border-b border-border bg-warning-muted px-3 py-1.5 text-xs text-warning-emphasis sm:px-6"
+              className="flex shrink-0 items-start gap-1.5 border-b border-border bg-warning-muted px-3 py-1.5 text-xs text-warning-emphasis sm:px-6"
             >
               <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
               {t('aiWorkspace.preview.run.servedModel', { model: fallbackServed })}
             </p>
           ) : null}
           {conversationId != null ? (
-            <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground sm:px-6">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground sm:px-6">
               <span>{t('aiWorkspace.preview.conversation.resume', { id: conversationId })}</span>
               <button type="button" className="shrink-0 underline" onClick={beginNewConversation}>
                 {t('aiWorkspace.preview.conversation.new')}
               </button>
             </div>
           ) : null}
-          <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-3 py-4 sm:px-10">
+          <ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-10">
             {restoredMessages.length > 0 ? (
               <ul className="mb-4 space-y-3 border-b border-border pb-4">
                 {restoredMessages.map((item) => {
@@ -681,7 +681,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             <ThreadPrimitive.Messages>{() => <PreviewMessage />}</ThreadPrimitive.Messages>
           </ThreadPrimitive.Viewport>
           {runError ? (
-            <div role="alert" className="border-t border-danger/35 bg-danger-muted px-3 py-2 text-xs text-danger-emphasis">
+            <div role="alert" className="shrink-0 border-t border-danger/35 bg-danger-muted px-3 py-2 text-xs text-danger-emphasis">
               <p>
                 {t(
                   `aiWorkspace.preview.errors.${
@@ -693,7 +693,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
               {runError.message ? <p className="mt-0.5 break-all text-danger-emphasis">{runError.message}</p> : null}
             </div>
           ) : null}
-          <ComposerPrimitive.Root className="px-3 pb-3 pt-1 sm:px-6">
+          <ComposerPrimitive.Root className="shrink-0 px-3 pb-3 pt-1 sm:px-6">
             <ComposerPrimitive.Quote className="mb-2 flex items-start gap-2 rounded-xl border border-border bg-card px-2.5 py-2">
               <ComposerPrimitive.QuoteText className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground line-clamp-3" />
               <ComposerPrimitive.QuoteDismiss

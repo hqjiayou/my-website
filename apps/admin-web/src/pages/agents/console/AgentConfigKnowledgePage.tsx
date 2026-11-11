@@ -28,11 +28,15 @@ export function AgentConfigKnowledgePage() {
   const linked = basesQuery.data?.filter(
     (base) => base.agentId === site.id || base.linkedAgentIds.includes(site.id),
   ).length
-  const summary = basesQuery.isPending
-    ? t('workspace.loading')
-    : basesQuery.isError
-      ? t('aiWorkspace.retry')
-      : t('workspace.configKnowledge.summary', { linked: linked ?? 0 })
+  const summary = basesQuery.isPending ? (
+    t('workspace.loading')
+  ) : basesQuery.isError ? (
+    <button type="button" className="underline" onClick={() => void basesQuery.refetch()}>
+      {t('aiWorkspace.retry')}
+    </button>
+  ) : (
+    t('workspace.configKnowledge.summary', { linked: linked ?? 0 })
+  )
 
   return (
     <AgentConfigSectionShell
@@ -41,7 +45,10 @@ export function AgentConfigKnowledgePage() {
       summary={summary}
     >
       <AgentKnowledgeSubscriptions key={site.id} agentId={site.id} />
-      <AgentAiKnowledgePanel key={site.id} agentId={site.id} />
+      <div className="space-y-2 border-t border-admin pt-4">
+        <h3 className="text-sm font-semibold text-admin">{t('workspace.configKnowledge.documentsTitle')}</h3>
+        <AgentAiKnowledgePanel key={site.id} agentId={site.id} />
+      </div>
     </AgentConfigSectionShell>
   )
 }

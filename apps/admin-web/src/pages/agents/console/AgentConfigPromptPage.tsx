@@ -22,9 +22,7 @@ export function AgentConfigPromptPage() {
       title={t('workspace.configPrompt.title')}
       description={t('workspace.configPrompt.pageDescription')}
     >
-      <div className="rounded-xl border border-admin bg-admin-surface p-4 sm:p-5">
-        <AgentAiPromptPanel key={site.id} agentId={site.id} />
-      </div>
+      <AgentAiPromptPanel key={site.id} agentId={site.id} />
     </AgentConfigSectionShell>
   )
 }

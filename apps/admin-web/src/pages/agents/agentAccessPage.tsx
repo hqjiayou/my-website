@@ -15,7 +15,7 @@ import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
  * 注册、与查看的 agent 无关；带来源标注的入口（原专属）优先层在前，层内默认在前、
  * id 升序，第一个默认即主用。
  *
- * 边界（Issue #216 / Agent Console V2 P0）：本页只读呈现平台默认与本 Agent 链摘要，
+ * 边界（Issue #216 / Agent Console V2）：本页是只读「平台入口参考」＋本 Agent 链摘要，
  * 禁止 create/updateModelEntry（尤其 defaultEntry 写路径）。平台入口维护只在
  * `/ai/model-entries`；本 Agent 链编辑只在 Runtime 的 `updateAgentChain`。
  */
@@ -52,6 +52,7 @@ function PlatformEntryCard({
         <div>
           <h3 className="text-sm font-semibold text-foreground">
             {t(isCli ? 'access.cliTitle' : 'access.keyTitle')}
+            <span className="ml-2 text-xs font-medium text-admin-muted">{t('access.referenceBadge')}</span>
           </h3>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             {t(isCli ? 'access.cliDescription' : 'access.keyDescription')}

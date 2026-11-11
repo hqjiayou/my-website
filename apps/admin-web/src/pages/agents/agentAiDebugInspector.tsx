@@ -335,6 +335,7 @@ export function AgentAiDebugInspector({
           </button>
         </header>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 text-sm">
+          {/* 顺序：模型 → 执行/tool → Skills/MCP → Todo → Usage → 定位 */}
           <section className="rounded-xl border border-border bg-card p-3">
             <div className="flex flex-wrap items-center gap-2">
               {(['CLI', 'KEY'] as const).map((value) => (
@@ -387,37 +388,6 @@ export function AgentAiDebugInspector({
           </section>
 
           <section className="rounded-xl border border-border bg-card p-3">
-            <label className="flex items-start justify-between gap-3">
-              <span className="min-w-0">
-                <span className="block font-medium text-foreground">
-                  {t('aiWorkspace.preview.inspector.location.title')}
-                </span>
-                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                  {t('aiWorkspace.preview.inspector.location.hint')}
-                </span>
-              </span>
-              <input
-                type="checkbox"
-                role="switch"
-                className="admin-switch mt-0.5"
-                checked={locationStatus === 'on' || locationStatus === 'requesting'}
-                onChange={(event) => onToggleLocation(event.target.checked)}
-                aria-label={t('aiWorkspace.preview.inspector.location.title')}
-              />
-            </label>
-            {locationStatus !== 'off' ? (
-              <p
-                className={`mt-2 text-xs ${
-                  locationStatus === 'failed' ? 'text-warning-emphasis' : 'text-muted-foreground'
-                }`}
-                role={locationStatus === 'failed' ? 'alert' : 'status'}
-              >
-                {t(`aiWorkspace.preview.inspector.location.status.${locationStatus}`)}
-              </p>
-            ) : null}
-          </section>
-
-          <section className="rounded-xl border border-border bg-card p-3">
             <button
               type="button"
               aria-expanded={traceOpen}
@@ -434,18 +404,18 @@ export function AgentAiDebugInspector({
             </button>
             {traceOpen ? (
               <>
-                {requestedLabel ? (
-                  <p className="text-xs text-muted-foreground">
-                    {t('aiWorkspace.preview.run.requestedModel')}
-                    <span className="ml-1 break-all font-mono text-foreground">{requestedLabel}</span>
-                  </p>
-                ) : null}
-                {servedLabel ? (
-                  <p className="mb-2 text-xs text-muted-foreground">
-                    {t('aiWorkspace.preview.run.actualModel')}
-                    <span className="ml-1 break-all font-mono text-foreground">{servedLabel}</span>
-                  </p>
-                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  {t('aiWorkspace.preview.run.requestedModel')}
+                  <span className="ml-1 break-all font-mono text-foreground">
+                    {requestedLabel || t('aiWorkspace.preview.run.notProvided')}
+                  </span>
+                </p>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  {t('aiWorkspace.preview.run.actualModel')}
+                  <span className="ml-1 break-all font-mono text-foreground">
+                    {servedLabel || t('aiWorkspace.preview.run.notProvided')}
+                  </span>
+                </p>
                 {fellBack ? (
                   <p className="mb-2 text-xs text-warning-emphasis">
                     {t('aiWorkspace.preview.run.servedModel', { model: servedLabel })}
@@ -453,7 +423,9 @@ export function AgentAiDebugInspector({
                 ) : null}
                 <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.skillsApplied')}</p>
                 <p className="mb-2 font-mono text-xs text-foreground">
-                  {trace.skillsApplied.length ? trace.skillsApplied.join(', ') : '—'}
+                  {trace.skillsApplied.length
+                    ? trace.skillsApplied.join(', ')
+                    : t('aiWorkspace.preview.run.notProvided')}
                 </p>
                 {trace.skillsMissing.length ? (
                   <p className="mb-2 text-xs text-warning-emphasis">
@@ -503,16 +475,9 @@ export function AgentAiDebugInspector({
                     ))}
                   </ul>
                 )}
-                {trace.usage ? (
-                  <div className="mt-2">
-                    <AiRunUsageLine usage={trace.usage} />
-                  </div>
-                ) : null}
               </>
             ) : null}
           </section>
-
-          <PreviewMcpSection agentId={agentId} />
 
           <section className="rounded-xl border border-border bg-card p-3">
             <button
@@ -560,6 +525,8 @@ export function AgentAiDebugInspector({
             ) : null}
           </section>
 
+          <PreviewMcpSection agentId={agentId} />
+
           <section className="rounded-xl border border-border bg-card p-3">
             <div className="mb-2 flex items-center justify-between">
               <h4 className="font-medium text-foreground">{t('aiWorkspace.preview.todos.title')}</h4>
@@ -584,6 +551,46 @@ export function AgentAiDebugInspector({
               </ul>
             )}
             <p className="mt-2 text-xs text-muted-foreground">{t('aiWorkspace.preview.todos.hint')}</p>
+          </section>
+
+          <section className="rounded-xl border border-border bg-card p-3">
+            <h4 className="mb-2 font-medium text-foreground">{t('aiWorkspace.preview.run.usageTitle')}</h4>
+            {trace.usage ? (
+              <AiRunUsageLine usage={trace.usage} />
+            ) : (
+              <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.run.notProvided')}</p>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-border bg-card p-3">
+            <label className="flex items-start justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block font-medium text-foreground">
+                  {t('aiWorkspace.preview.inspector.location.title')}
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                  {t('aiWorkspace.preview.inspector.location.hint')}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                className="admin-switch mt-0.5"
+                checked={locationStatus === 'on' || locationStatus === 'requesting'}
+                onChange={(event) => onToggleLocation(event.target.checked)}
+                aria-label={t('aiWorkspace.preview.inspector.location.title')}
+              />
+            </label>
+            {locationStatus !== 'off' ? (
+              <p
+                className={`mt-2 text-xs ${
+                  locationStatus === 'failed' ? 'text-warning-emphasis' : 'text-muted-foreground'
+                }`}
+                role={locationStatus === 'failed' ? 'alert' : 'status'}
+              >
+                {t(`aiWorkspace.preview.inspector.location.status.${locationStatus}`)}
+              </p>
+            ) : null}
           </section>
         </div>
       </aside>

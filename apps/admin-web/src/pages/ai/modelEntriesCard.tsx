@@ -35,7 +35,7 @@ import {
   type ModelEntryDraft,
   type ModelEntryMode,
 } from './modelEntriesShared'
-import { ProxyClientKeysPane, ProxyLoginFlow } from './proxyServicesPage'
+import { ProxyLoginFlow } from './proxyServicesPage'
 import { shownModelIds } from './proxyServicesShared'
 
 const EMPTY_ENTRIES: AiModelEntry[] = []
@@ -328,14 +328,6 @@ export function ModelEntriesCard({ mode, onModeChange }: ModelEntriesCardProps) 
           onRelogin={startLogin}
         />
       )}
-
-      <div className="space-y-2 pt-2">
-        <h2 className="text-base font-semibold text-admin">{t('proxyServices.usageKeysTitle')}</h2>
-        <p className="text-sm text-admin-muted">{t('modelManagement.keysPaneHint')}</p>
-      </div>
-      <section className="overflow-hidden rounded-xl border border-admin bg-admin-surface">
-        <ProxyClientKeysPane />
-      </section>
 
       <ProxyLoginFlow
         open={loginOpen}

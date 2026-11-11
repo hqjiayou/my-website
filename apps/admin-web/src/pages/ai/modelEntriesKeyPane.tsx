@@ -128,7 +128,11 @@ export function ModelEntriesKeyPane({
       {
         id: 'modelSpec',
         header: t('modelManagement.columns.modelSpec'),
-        cell: (row) => <span className="font-mono text-xs text-admin">{row.modelSpec}</span>,
+        cell: (row) => (
+          <span className="block max-w-[18rem] break-all font-mono text-xs text-admin" title={row.modelSpec}>
+            {row.modelSpec}
+          </span>
+        ),
         sortValue: (row) => row.modelSpec,
         sortable: true,
       },
@@ -147,8 +151,11 @@ export function ModelEntriesKeyPane({
       {
         id: 'baseUrl',
         header: t('modelManagement.columns.baseUrl'),
-        defaultVisible: false,
-        cell: (row) => <span className="truncate font-mono text-xs text-admin-muted">{row.baseUrl || '—'}</span>,
+        cell: (row) => (
+          <span className="block max-w-[16rem] break-all font-mono text-xs text-admin-muted" title={row.baseUrl ?? undefined}>
+            {row.baseUrl || '—'}
+          </span>
+        ),
       },
       {
         id: 'enabled',

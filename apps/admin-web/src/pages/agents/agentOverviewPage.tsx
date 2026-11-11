@@ -11,6 +11,7 @@ import { ROUTES } from '@/router/config/routePaths'
 import { useHasPermission } from '@/router/permission'
 import type { AiChainMode, AiModelEntry, AiRuntimeLimits, AiRuntimeStatus } from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
+import { isApiError } from '@/utils/http/apiError'
 
 import { SkillCatalogItem } from './agentAiSkillCatalog'
 import type { AgentWorkspaceOutletContext } from './agentWorkspaceLayout'
@@ -32,6 +33,10 @@ function modelFace(spec: string) {
   return { family, name }
 }
 
+function isForbiddenError(error: unknown) {
+  return isApiError(error) && (error.status === 403 || error.code === 1003)
+}
+
 /**
  * 组链节点卡（DESIGN_SYSTEM §10 组链可视化）：名称＋模型两行呈现；每行首个节点
  * 为主用（主色边＋5% 底＋主用标签），已停用节点虚线边＋55% 透明。
@@ -41,31 +46,35 @@ function ChainNode({
   model,
   main,
   disabled,
+  missing,
   mainLabel,
 }: {
   name: string
   model: string
   main?: boolean
   disabled?: boolean
+  missing?: boolean
   mainLabel: string
 }) {
   return (
     <span
       className={cn(
         'min-w-0 rounded-[10px] border px-3 py-2',
-        main ? 'border-primary/50 bg-primary/5' : 'border-admin bg-admin-surface',
-        disabled && 'border-dashed opacity-55',
+        main && !missing ? 'border-primary/50 bg-primary/5' : 'border-admin bg-admin-surface',
+        (disabled || missing) && 'border-dashed opacity-55',
       )}
     >
       <span className="flex items-center gap-1.5">
         <span className="truncate text-[13px] font-semibold text-admin">{name}</span>
-        {main ? (
+        {main && !missing ? (
           <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
             {mainLabel}
           </span>
         ) : null}
       </span>
-      <span className="block truncate text-xs text-admin-muted">{model}</span>
+      <span className={cn('block truncate text-xs', missing ? 'text-warning-emphasis' : 'text-admin-muted')}>
+        {model}
+      </span>
     </span>
   )
 }
@@ -130,13 +139,14 @@ const LIMIT_KEYS: Array<keyof AiRuntimeLimits> = [
   'historyMaxChars',
 ]
 
+type ChainSlot = { id: number; entry: AiModelEntry | null }
+
 /** 概览：上面是模型、Prompt、知识库，下面是 Harness。 */
 export function AgentOverviewPage() {
   const { t } = useTranslation('sites')
   const { site } = useOutletContext<AgentWorkspaceOutletContext>()
   const canPrompt = useHasPermission(PERMISSION_CODES.aiPromptRead)
   const canKnowledge = useHasPermission(PERMISSION_CODES.aiKbList)
-  const unavailable = t('agentOverview.unavailable')
 
   const runtimeQuery = useQuery({
     queryKey: ['sites', site.id, 'ai', 'runtime'],
@@ -167,81 +177,101 @@ export function AgentOverviewPage() {
   })
   const knowledgeQuery = useQuery({
     queryKey: ['sites', site.id, 'ai', 'knowledge', 'overview'],
-    queryFn: () => aiApi.listKnowledgeDocuments(site.id, { pageNum: 1, pageSize: 100 }),
+    // 仅取分页元数据 total；pageSize 尽量小，避免用样本冒充全量索引统计。
+    queryFn: () => aiApi.listKnowledgeDocuments(site.id, { pageNum: 1, pageSize: 1 }),
     enabled: canKnowledge,
   })
 
   const runtime = runtimeQuery.data
   const runtimeStatus = runtime?.status ?? null
   const configuredModel = runtimeStatus?.provider ?? null
-  const knowledgeDocs = knowledgeQuery.data?.records ?? []
-  const indexedCount = knowledgeDocs.filter((doc) => doc.indexStatus === 'INDEXED').length
-  const failedCount = knowledgeDocs.filter((doc) => doc.indexStatus === 'FAILED').length
+  const modelsConfigTo = ROUTES.apps.agentConfigModels(site.id)
 
-  const modelValue = !canPrompt || runtimeQuery.isPending
-    ? unavailable
-    : runtime == null || !runtime.reachable || runtimeStatus == null
-      ? t('agentOverview.model.unreachable')
-      : configuredModel
-        ? modelFace(configuredModel).name
-        : unavailable
-  const modelDetail = runtimeStatus
-    ? [
-        runtimeStatus.fallbackProviders.length > 0
-          ? runtimeStatus.fallbackProviders.map((spec) => modelFace(spec).name).join('、')
-          : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : undefined
   const chainEntryById = new Map((modelEntriesQuery.data ?? []).map((entry) => [entry.id, entry]))
   const chainRows = (['KEY', 'CLI'] as AiChainMode[])
-    .map((mode) => ({
-      mode,
-      entries: (chainQuery.data
+    .map((mode) => {
+      const ids = chainQuery.data
         ? mode === 'KEY'
           ? chainQuery.data.keyEntryIds
           : chainQuery.data.cliEntryIds
         : []
-      )
-        .map((id) => chainEntryById.get(id))
-        .filter((entry): entry is AiModelEntry => entry != null),
-    }))
-    .filter((row) => row.entries.length > 0)
-  const modelChainReady =
+      const slots: ChainSlot[] = ids.map((id) => ({ id, entry: chainEntryById.get(id) ?? null }))
+      return { mode, slots }
+    })
+    .filter((row) => row.slots.length > 0)
+
+  const modelForbidden =
+    !canPrompt ||
+    isForbiddenError(runtimeQuery.error) ||
+    isForbiddenError(chainQuery.error) ||
+    isForbiddenError(modelEntriesQuery.error)
+  const modelLoading = canPrompt && (runtimeQuery.isPending || chainQuery.isPending || modelEntriesQuery.isPending)
+  const modelError =
     canPrompt &&
-    !runtimeQuery.isPending &&
-    runtime != null &&
-    runtime.reachable &&
-    runtimeStatus != null &&
-    chainQuery.data != null &&
-    modelEntriesQuery.data != null &&
-    chainRows.length > 0
-  const modelValueNode = modelChainReady ? (
-    <div className="space-y-2">
-      {chainRows.map((row) => (
-        <div key={row.mode} className="flex items-center gap-2">
-          <span className="w-16 shrink-0 text-xs font-semibold uppercase text-admin-muted">{row.mode}</span>
-          <div className="flex flex-wrap items-center gap-2">
-            {row.entries.map((entry, index) => (
-              <Fragment key={entry.id}>
-                {index > 0 ? <ChainConnector label={t('agentOverview.model.fallbackTrigger')} /> : null}
-                <ChainNode
-                  name={entry.displayName}
-                  model={modelFace(entry.modelSpec).name}
-                  main={index === 0}
-                  disabled={!entry.enabled}
-                  mainLabel={t('aiWorkspace.chainPreset.primaryMark')}
-                />
-              </Fragment>
-            ))}
+    !modelLoading &&
+    (runtimeQuery.isError || chainQuery.isError || modelEntriesQuery.isError) &&
+    !modelForbidden
+  const modelEmpty = canPrompt && !modelLoading && !modelError && chainRows.length === 0
+  const modelChainReady = canPrompt && !modelLoading && !modelError && !modelForbidden && chainRows.length > 0
+
+  let modelValueNode: ReactNode
+  if (!canPrompt || modelForbidden) {
+    modelValueNode = <p className="text-sm font-semibold leading-5 text-admin">{t('agentOverview.noPermission')}</p>
+  } else if (modelLoading) {
+    modelValueNode = <p className="text-sm font-semibold leading-5 text-admin-muted">{t('agentOverview.loading')}</p>
+  } else if (modelError) {
+    modelValueNode = <p className="text-sm font-semibold leading-5 text-danger-emphasis">{t('agentOverview.loadError')}</p>
+  } else if (modelEmpty) {
+    const unreachable = runtime == null || !runtime.reachable || runtimeStatus == null
+    modelValueNode = (
+      <p className="text-sm font-semibold leading-5 text-admin">
+        {unreachable
+          ? t('agentOverview.model.unreachable')
+          : configuredModel
+            ? modelFace(configuredModel).name
+            : t('agentOverview.model.notConfigured')}
+      </p>
+    )
+  } else {
+    modelValueNode = (
+      <div className="space-y-2">
+        {chainRows.map((row) => (
+          <div key={row.mode} className="flex items-center gap-2">
+            <span className="w-16 shrink-0 text-xs font-semibold uppercase text-admin-muted">{row.mode}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {row.slots.map((slot, index) => (
+                <Fragment key={slot.id}>
+                  {index > 0 ? <ChainConnector label={t('agentOverview.model.fallbackTrigger')} /> : null}
+                  {slot.entry ? (
+                    <ChainNode
+                      name={slot.entry.displayName}
+                      model={modelFace(slot.entry.modelSpec).name}
+                      main={index === 0}
+                      disabled={!slot.entry.enabled}
+                      mainLabel={t('aiWorkspace.chainPreset.primaryMark')}
+                    />
+                  ) : (
+                    <ChainNode
+                      name={`#${slot.id}`}
+                      model={t('agentOverview.model.missingEntry')}
+                      main={index === 0}
+                      missing
+                      mainLabel={t('aiWorkspace.chainPreset.primaryMark')}
+                    />
+                  )}
+                </Fragment>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
-  ) : (
-    <p className="text-sm font-semibold leading-5 text-admin">{modelValue}</p>
-  )
+        ))}
+      </div>
+    )
+  }
+
+  const modelSub =
+    modelChainReady && chainRows.some((row) => row.slots.some((slot) => slot.entry == null)) ? (
+      <span className="text-warning-emphasis">{t('agentOverview.model.missingHint')}</span>
+    ) : undefined
 
   // #214 UoW-4：Prompt 卡改读 agent 本地副本（配置预设引用已退役）；标题行展示
   // 来源模板留痕名，摘要为本地副本的 systemPrompt 本体。
@@ -251,66 +281,70 @@ export function AgentOverviewPage() {
     (promptConfig.promptTemplateId != null ||
       Boolean(promptConfig.systemPrompt?.trim()) ||
       promptConfig.temperature != null)
-  const promptValue = !canPrompt || promptConfigQuery.isPending
-    ? unavailable
-    : promptConfigured
-      ? t('agentOverview.prompt.configured')
-      : t('agentOverview.prompt.notConfigured')
-  const promptBadge =
-    canPrompt && !promptConfigQuery.isPending ? (
-      <StatusTag status={promptConfigured ? SITE_STATUS.ACTIVE : SITE_STATUS.DISABLED} label={promptValue} />
-    ) : undefined
-  const promptSummary = promptConfig?.systemPrompt?.trim() || null
-  const promptTitle =
-    promptConfig?.promptTemplateName ??
-    (promptConfig?.promptTemplateId != null ? `#${promptConfig.promptTemplateId}` : promptValue)
-  const promptValueNode = promptConfigured ? (
-    <div className="space-y-1.5">
-      <p className="text-sm font-semibold leading-5 text-admin">{promptTitle}</p>
-      {promptSummary ? (
-        <blockquote className="line-clamp-2 border-l-[3px] border-[rgb(var(--primary)/.35)] pl-2.5 text-xs leading-relaxed text-admin-muted">
-          {promptSummary}
-        </blockquote>
-      ) : null}
-    </div>
-  ) : (
-    <p className="text-sm font-semibold leading-5 text-admin">{promptValue}</p>
-  )
+  const promptForbidden = !canPrompt || isForbiddenError(promptConfigQuery.error)
+  const promptLoading = canPrompt && promptConfigQuery.isPending
+  const promptError = canPrompt && promptConfigQuery.isError && !promptForbidden
 
-  const knowledgeReady = canKnowledge && !knowledgeQuery.isPending
-  const knowledgeTotal = knowledgeQuery.data?.total ?? 0
-  const knowledgeValue = knowledgeReady ? String(knowledgeTotal) : unavailable
-  const knowledgeValueNode = knowledgeReady ? (
-    <div className="space-y-1.5">
+  let promptValueNode: ReactNode
+  let promptBadge: ReactNode
+  if (!canPrompt || promptForbidden) {
+    promptValueNode = <p className="text-sm font-semibold leading-5 text-admin">{t('agentOverview.noPermission')}</p>
+  } else if (promptLoading) {
+    promptValueNode = <p className="text-sm font-semibold leading-5 text-admin-muted">{t('agentOverview.loading')}</p>
+  } else if (promptError) {
+    promptValueNode = <p className="text-sm font-semibold leading-5 text-danger-emphasis">{t('agentOverview.loadError')}</p>
+  } else if (promptConfigured) {
+    const promptSummary = promptConfig?.systemPrompt?.trim() || null
+    const promptTitle =
+      promptConfig?.promptTemplateName ??
+      (promptConfig?.promptTemplateId != null
+        ? `#${promptConfig.promptTemplateId}`
+        : t('agentOverview.prompt.configured'))
+    promptBadge = (
+      <StatusTag status={SITE_STATUS.ACTIVE} label={t('agentOverview.prompt.configured')} />
+    )
+    promptValueNode = (
+      <div className="space-y-1.5">
+        <p className="text-sm font-semibold leading-5 text-admin">{promptTitle}</p>
+        {promptSummary ? (
+          <blockquote className="line-clamp-2 border-l-[3px] border-[rgb(var(--primary)/.35)] pl-2.5 text-xs leading-relaxed text-admin-muted">
+            {promptSummary}
+          </blockquote>
+        ) : null}
+      </div>
+    )
+  } else {
+    promptBadge = (
+      <StatusTag status={SITE_STATUS.DISABLED} label={t('agentOverview.prompt.notConfigured')} />
+    )
+    promptValueNode = (
+      <p className="text-sm font-semibold leading-5 text-admin">{t('agentOverview.prompt.notConfigured')}</p>
+    )
+  }
+
+  // 知识 total 来自服务端分页元数据，可信；indexed/failed 若按 pageSize:100 样本推算则不得冒充全量。
+  const knowledgeForbidden = !canKnowledge || isForbiddenError(knowledgeQuery.error)
+  const knowledgeLoading = canKnowledge && knowledgeQuery.isPending
+  const knowledgeError = canKnowledge && knowledgeQuery.isError && !knowledgeForbidden
+  const knowledgeTotal = knowledgeQuery.data?.total
+
+  let knowledgeValueNode: ReactNode
+  if (!canKnowledge || knowledgeForbidden) {
+    knowledgeValueNode = <p className="text-sm font-semibold leading-5 text-admin">{t('agentOverview.noPermission')}</p>
+  } else if (knowledgeLoading) {
+    knowledgeValueNode = <p className="text-sm font-semibold leading-5 text-admin-muted">{t('agentOverview.loading')}</p>
+  } else if (knowledgeError) {
+    knowledgeValueNode = (
+      <p className="text-sm font-semibold leading-5 text-danger-emphasis">{t('agentOverview.loadError')}</p>
+    )
+  } else {
+    knowledgeValueNode = (
       <p className="flex items-baseline gap-1.5">
-        <span className="text-2xl font-bold leading-none text-admin">{knowledgeValue}</span>
+        <span className="text-2xl font-bold leading-none text-admin">{knowledgeTotal ?? 0}</span>
         <span className="text-xs text-admin-muted">{t('agentOverview.knowledge.documents')}</span>
       </p>
-      {knowledgeTotal > 0 ? (
-        <div className="h-1.5 overflow-hidden rounded-full bg-admin-surface-muted">
-          <div
-            className="h-full rounded-full bg-[rgb(var(--chart-2))]"
-            style={{ width: `${Math.min(100, Math.round((indexedCount / knowledgeTotal) * 100))}%` }}
-          />
-        </div>
-      ) : null}
-    </div>
-  ) : (
-    <p className="text-sm font-semibold leading-5 text-admin">{knowledgeValue}</p>
-  )
-  const knowledgeSub = knowledgeReady ? (
-    <>
-      {t('agentOverview.knowledge.indexed')} {indexedCount}
-      {failedCount > 0 ? (
-        <>
-          {' · '}
-          <span className="font-semibold text-admin-danger">
-            {t('agentOverview.knowledge.failed')} {failedCount}
-          </span>
-        </>
-      ) : null}
-    </>
-  ) : undefined
+    )
+  }
 
   return (
     <section className="w-full">
@@ -320,9 +354,13 @@ export function AgentOverviewPage() {
             icon={Zap}
             label={t('agentOverview.cards.modelChain')}
             value={modelValueNode}
-            sub={modelChainReady ? undefined : modelDetail}
-            footerLabel={t('agentOverview.actions.openRuntime')}
-            to={ROUTES.apps.agentConfigModels(site.id)}
+            sub={modelSub}
+            footerLabel={
+              modelChainReady && chainRows.some((row) => row.slots.some((slot) => slot.entry == null))
+                ? t('agentOverview.actions.fixModels')
+                : t('agentOverview.actions.openRuntime')
+            }
+            to={modelsConfigTo}
           />
           <Fact
             icon={Code}
@@ -336,39 +374,52 @@ export function AgentOverviewPage() {
             icon={BookOpen}
             label={t('agentOverview.cards.knowledge')}
             value={knowledgeValueNode}
-            sub={knowledgeSub}
             footerLabel={t('agentOverview.actions.openKnowledge')}
             to={ROUTES.apps.agentConfigKnowledge(site.id)}
           />
         </div>
-        <HarnessPanel
-          pending={!canPrompt || runtimeQuery.isPending}
-          unreachable={runtime == null || !runtime.reachable || runtimeStatus == null}
-          status={runtimeStatus}
-          skills={skillsQuery.data}
-          skillsPending={skillsQuery.isPending}
-          skillsError={skillsQuery.isError}
-        />
+        {canPrompt ? (
+          <HarnessPanel
+            pending={runtimeQuery.isPending}
+            forbidden={isForbiddenError(runtimeQuery.error)}
+            error={runtimeQuery.isError && !isForbiddenError(runtimeQuery.error)}
+            unreachable={runtime == null || !runtime.reachable || runtimeStatus == null}
+            status={runtimeStatus}
+            skills={skillsQuery.data}
+            skillsPending={skillsQuery.isPending}
+            skillsError={skillsQuery.isError}
+            skillsForbidden={isForbiddenError(skillsQuery.error)}
+          />
+        ) : (
+          <article className="rounded-xl border border-admin bg-admin-surface px-4 py-4">
+            <p className="text-sm text-admin-muted">{t('agentOverview.noPermission')}</p>
+          </article>
+        )}
       </div>
-
     </section>
   )
 }
 
 function HarnessPanel({
   pending,
+  forbidden,
+  error,
   unreachable,
   status,
   skills,
   skillsPending,
   skillsError,
+  skillsForbidden,
 }: {
   pending: boolean
+  forbidden: boolean
+  error: boolean
   unreachable: boolean
   status: AiRuntimeStatus | null
   skills: Array<{ id: string; description: string | null; version: string | null }> | undefined
   skillsPending: boolean
   skillsError: boolean
+  skillsForbidden: boolean
 }) {
   const { t } = useTranslation('sites')
   const files = status?.harness
@@ -380,7 +431,11 @@ function HarnessPanel({
         <p className="text-xs text-admin-muted">{t('agentOverview.harness.hint')}</p>
       </div>
       {pending ? (
-        <p className="px-4 py-4 text-sm text-admin-muted">{t('agentOverview.unavailable')}</p>
+        <p className="px-4 py-4 text-sm text-admin-muted">{t('agentOverview.loading')}</p>
+      ) : forbidden ? (
+        <p className="px-4 py-4 text-sm text-admin-muted">{t('agentOverview.noPermission')}</p>
+      ) : error ? (
+        <p className="px-4 py-4 text-sm text-danger-emphasis">{t('agentOverview.loadError')}</p>
       ) : unreachable || !status ? (
         <p className="px-4 py-4 text-sm text-danger-emphasis">{t('agentOverview.model.unreachable')}</p>
       ) : (
@@ -399,8 +454,8 @@ function HarnessPanel({
                     label={t(on ? 'agentOverview.harness.present' : 'agentOverview.harness.missing')}
                   />
                   <div className="min-w-0">
-                    <p className="truncate font-mono text-[12.5px] font-semibold text-admin">{key}</p>
-                    <p className="truncate text-[11.5px] text-admin-muted">{t(`agentOverview.harness.${key}`)}</p>
+                    <p className="truncate font-mono text-xs font-semibold text-admin">{key}</p>
+                    <p className="truncate text-xs text-admin-muted">{t(`agentOverview.harness.${key}`)}</p>
                   </div>
                 </div>
               )
@@ -410,7 +465,9 @@ function HarnessPanel({
             <section className="border-b border-admin px-4 py-3 lg:border-b-0 lg:border-r">
               <h3 className="text-xs font-medium uppercase tracking-wide text-admin-muted">{t('agentOverview.harness.skills')}</h3>
               {skillsPending ? (
-                <p className="mt-2 text-sm text-admin-muted">…</p>
+                <p className="mt-2 text-sm text-admin-muted">{t('agentOverview.loading')}</p>
+              ) : skillsForbidden ? (
+                <p className="mt-2 text-sm text-admin-muted">{t('agentOverview.noPermission')}</p>
               ) : skillsError ? (
                 <p className="mt-2 text-sm text-danger-emphasis">{t('aiWorkspace.preview.skills.error')}</p>
               ) : !skills || skills.length === 0 ? (
@@ -478,4 +535,3 @@ function HarnessPanel({
     </article>
   )
 }
-

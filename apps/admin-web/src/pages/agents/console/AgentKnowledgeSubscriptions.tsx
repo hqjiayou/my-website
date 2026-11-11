@@ -116,10 +116,10 @@ export function AgentKnowledgeSubscriptions({ agentId }: { agentId: number }) {
   const linkable = bases.filter((base) => base.agentId !== agentId && !base.linkedAgentIds.includes(agentId))
 
   return (
-    <div className="space-y-2 rounded-xl border border-admin bg-admin-surface px-4 py-3 sm:px-5">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="text-xs font-semibold tracking-wide text-admin-muted uppercase">
+          <h3 className="text-sm font-semibold text-admin">
             {t('workspace.configKnowledge.subscriptionsTitle')}
           </h3>
           <p className="mt-1 text-xs text-admin-muted">{t('workspace.configKnowledge.subscriptionsHint')}</p>
@@ -191,6 +191,7 @@ export function AgentKnowledgeSubscriptions({ agentId }: { agentId: number }) {
         description={t('workspace.configKnowledge.pickerHint')}
         items={linkable}
         getId={(base) => String(base.id)}
+        getAccessibleName={(base) => base.name}
         alreadySelectedIds={linked.map((base) => String(base.id))}
         alreadySelectedLabel={t('workspace.configKnowledge.linkedTag')}
         searchText={(base) => `${base.name} ${base.ownerAgentName ?? ''} ${base.id}`}

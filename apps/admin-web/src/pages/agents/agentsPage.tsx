@@ -255,7 +255,7 @@ export function AgentsPage() {
         }
       />
 
-      <div className="mb-3 space-y-3">
+      <div className="mb-3">
         <DataTableToolbar
           value=""
           onChange={() => undefined}
@@ -312,7 +312,8 @@ export function AgentsPage() {
             />
           }
         />
-        <p className="text-xs text-admin-muted">{t('list.filters.serverOnlyHint')}</p>
+        {/* 简短辅助，不单独占多余整行高度 */}
+        <p className="mt-1 text-xs leading-4 text-admin-muted">{t('list.filters.serverOnlyHint')}</p>
       </div>
 
       <DataTable

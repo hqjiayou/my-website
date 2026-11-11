@@ -31,7 +31,13 @@ function agentPanelPage(
     const fillHeight = FILL_HEIGHT_PANELS.has(navKey)
 
     return (
-      <section className={fillHeight ? 'flex h-[calc(100vh-11rem)] min-h-[28rem] flex-col' : 'w-full'}>
+      <section
+        className={
+          fillHeight
+            ? 'flex min-h-[28rem] flex-1 flex-col'
+            : 'w-full'
+        }
+      >
         {allowed ? (
           <article
             className={

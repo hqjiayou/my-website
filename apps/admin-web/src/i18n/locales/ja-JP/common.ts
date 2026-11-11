@@ -36,6 +36,8 @@ export default {
     confirm: '選択を追加',
     cancel: 'キャンセル',
     alreadySelected: '追加済み',
+    unavailable: '利用不可',
+    cancelDoesNotSave: 'キャンセルでは選択を保存しません',
     discardTitle: '選択を破棄しますか？',
     discardBody: 'ドロワー内の未適用の選択があります。閉じて破棄しますか？',
     discardConfirm: '破棄',

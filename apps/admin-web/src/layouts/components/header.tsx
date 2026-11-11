@@ -1,4 +1,4 @@
-import { ChevronDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings2, X } from 'lucide-react'
+import { ChevronDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -21,7 +21,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLayoutStore } from '@/stores/layout'
 import { resolveMenuTitle } from '@/utils/menu'
 
-/** 顶栏壳：标题、搜索、用户操作与外观设置。 */
+/** 顶栏壳：面包屑/标题、密度、用户操作与外观设置（无全局假搜索）。 */
 export function Header() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -105,14 +105,6 @@ export function Header() {
               </button>
             ))}
           </div>
-
-          <label className="admin-focus-within hidden h-9 w-60 items-center gap-2 rounded-lg border border-admin bg-admin-surface-muted px-3 text-sm text-admin-muted transition md:flex">
-            <Search className="h-4 w-4 shrink-0" />
-            <input
-              className="w-full border-none bg-transparent text-sm text-admin outline-none placeholder:text-admin-muted"
-              placeholder={tLayout('search.placeholder')}
-            />
-          </label>
 
           <div ref={userMenuRef} className="relative">
             <button

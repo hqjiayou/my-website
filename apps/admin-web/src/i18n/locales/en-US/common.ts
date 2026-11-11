@@ -36,6 +36,8 @@ export default {
     confirm: 'Add selected',
     cancel: 'Cancel',
     alreadySelected: 'Already added',
+    unavailable: 'Unavailable',
+    cancelDoesNotSave: 'Cancel does not save selection',
     discardTitle: 'Discard selection?',
     discardBody: 'You have unsaved selection changes in this drawer. Close without applying?',
     discardConfirm: 'Discard',

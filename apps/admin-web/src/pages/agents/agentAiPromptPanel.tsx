@@ -17,6 +17,7 @@ import {
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
 import { useUnsavedDirtyKey } from '@/hooks/useUnsavedChangesGuard'
+import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { PermissionGate } from '@/router/permission'
 import type { AiAgentPromptConfig, AiPreviewSkill } from '@/types/ai'
@@ -187,12 +188,19 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-xs text-admin-muted">{t('prompts.hint')}</p>
+    <div className="flex max-w-[880px] flex-col gap-4">
+      {dirty ? (
+        <p
+          className="rounded-lg bg-warning-muted px-2.5 py-1 text-xs font-medium text-warning-emphasis"
+          role="status"
+        >
+          {tSites('aiWorkspace.chainPreset.dirty')}
+        </p>
+      ) : null}
 
-      <div>
+      <div className="rounded-lg border border-admin bg-admin-surface-muted/40 px-3 py-2">
         <p className="text-xs font-medium text-admin-muted">{t('prompts.sourceLabel')}</p>
-        <p className="mt-1.5 text-sm text-admin">
+        <p className="mt-1 text-sm text-admin">
           {server.promptTemplateId == null
             ? t('prompts.sourceNone')
             : (server.promptTemplateName ?? `#${server.promptTemplateId}`)}
@@ -203,8 +211,8 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
       <label className="block space-y-1.5">
         <span className="text-xs font-medium text-admin-muted">{t('prompts.systemPrompt')}</span>
         <textarea
-          className={adminFieldClass}
-          rows={8}
+          className={cn(adminFieldClass, 'min-h-[12rem] font-mono text-sm leading-6')}
+          rows={10}
           maxLength={8000}
           value={current.systemPrompt}
           placeholder={t('prompts.systemPromptHint')}
@@ -321,6 +329,9 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
         description={t('prompts.skillPickerHint')}
         items={skillCatalog}
         getId={(skill) => skill.id}
+        getAccessibleName={(skill) =>
+          skill.version ? `${skill.id} v${skill.version}` : skill.id
+        }
         initialSelectedIds={current.defaultSkillIds.filter((id) => catalogById.has(id))}
         alreadySelectedIds={[]}
         alreadySelectedSelectable
@@ -329,7 +340,9 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
           {
             id: 'id',
             header: t('prompts.skillColId'),
-            cell: (skill) => <span className="font-mono text-xs">{skill.id}</span>,
+            cell: (skill) => (
+              <SkillCatalogItem id={skill.id} version={skill.version} description={skill.description} />
+            ),
           },
           {
             id: 'version',

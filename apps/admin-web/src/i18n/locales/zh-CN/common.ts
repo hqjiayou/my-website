@@ -36,6 +36,8 @@ export default {
     confirm: '添加所选',
     cancel: '取消',
     alreadySelected: '已添加',
+    unavailable: '不可用',
+    cancelDoesNotSave: '取消不会保存勾选',
     discardTitle: '放弃选择？',
     discardBody: '抽屉内的选择尚未应用。确定关闭并丢弃吗？',
     discardConfirm: '放弃',

@@ -29,7 +29,7 @@ export function AgentConfigSectionShell({
 }) {
   return (
     <section className={cn('space-y-4', className)}>
-      <header className="space-y-1">
+      <header className="space-y-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-admin">{title}</h2>
@@ -38,19 +38,20 @@ export function AgentConfigSectionShell({
           {editState && editState !== 'clean' && editStateLabel ? (
             <span
               className={cn(
-                'shrink-0 rounded-full px-2.5 py-1 text-xs font-medium',
+                'sticky top-2 z-[1] shrink-0 rounded-full px-2.5 py-1 text-xs font-medium',
                 editState === 'dirty' && 'bg-warning-muted text-warning-emphasis',
                 editState === 'saving' && 'bg-info-muted text-info-emphasis',
                 editState === 'saved' && 'bg-success-muted text-success-emphasis',
                 editState === 'error' && 'bg-danger-muted text-danger-emphasis',
               )}
+              role="status"
             >
               {editStateLabel}
             </span>
           ) : null}
         </div>
         {summary ? (
-          <div className="rounded-xl border border-admin bg-admin-surface-muted/50 px-3 py-2 text-sm text-admin">
+          <div className="rounded-lg border border-admin bg-admin-surface-muted/40 px-3 py-2 text-sm text-admin">
             {summary}
           </div>
         ) : null}

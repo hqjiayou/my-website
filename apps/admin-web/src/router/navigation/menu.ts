@@ -101,52 +101,17 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ]
 
-/** 根据 pathname 解析顶栏 i18n 标题 key（站点工作区等动态路径单独处理）。 */
+/**
+ * 根据 pathname 解析顶栏 i18n 标题 key（站点工作区等动态路径单独处理）。
+ * Agent 工作区内顶栏只保留「智能体」位置上下文；Agent 名 / Tabs / 配置子导航在主体区展示，
+ * 避免「页面标题 + Agent 标题 + 配置标题」三层堆叠。
+ */
 export function resolveNavTitleKey(pathname: string): string | undefined {
   if (pathname === ROUTES.apps.agentCreate || pathname.startsWith(`${ROUTES.apps.agentCreate}/`)) {
     return 'items.agentCreate'
   }
-  if (/^\/agent\/(?!api(?:\/|$)|create(?:\/|$))[^/]+\/?$/.test(pathname)) {
-    return 'items.agentOverview'
-  }
-  if (/^\/agent\/[^/]+\/agent\/?$/.test(pathname)) {
-    return 'items.agentOverview'
-  }
-  if (/^\/agent\/[^/]+\/agent\/config\/models(?:\/|$)/.test(pathname)) {
-    return 'items.agentConfigModels'
-  }
-  if (/^\/agent\/[^/]+\/agent\/config\/prompt(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/agent\/prompt(?:\/|$)/.test(pathname)) {
-    return 'items.agentPrompt'
-  }
-  if (/^\/agent\/[^/]+\/agent\/config\/knowledge(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/agent\/knowledge(?:\/|$)/.test(pathname)) {
-    return 'items.agentKnowledge'
-  }
-  if (/^\/agent\/[^/]+\/agent\/config\/tools(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/agent\/runtime(?:\/|$)/.test(pathname)) {
-    return 'items.agentConfigTools'
-  }
-  if (/^\/agent\/[^/]+\/agent\/config(?:\/|$)/.test(pathname)) {
-    return 'items.agentConfig'
-  }
-  if (/^\/agent\/[^/]+\/agent\/debug(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/agent\/preview(?:\/|$)/.test(pathname)) {
-    return 'items.agentDebug'
-  }
-  if (/^\/agent\/[^/]+\/agent\/runs(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/agent\/conversations(?:\/|$)/.test(pathname)) {
-    return 'items.agentRuns'
-  }
-  if (/^\/agent\/[^/]+\/agent\/settings(?:\/|$)/.test(pathname) || /^\/agent\/[^/]+\/(?:basic|access)(?:\/|$)/.test(pathname)) {
-    return 'items.agentSettings'
-  }
-  if (/^\/agent\/[^/]+\/theme(?:\/|$)/.test(pathname)) {
-    return 'items.agentTheme'
-  }
-  if (/^\/agent\/[^/]+\/domain(?:\/|$)/.test(pathname)) {
-    return 'items.agentDomain'
-  }
-  if (/^\/agent\/[^/]+\/contents(?:\/|$)/.test(pathname)) {
-    return 'items.agentContents'
-  }
-  if (/^\/agent\/[^/]+\/files(?:\/|$)/.test(pathname)) {
-    return 'items.agentFiles'
+  if (/^\/agent\/(?!api(?:\/|$)|create(?:\/|$))[^/]+(?:\/|$)/.test(pathname)) {
+    return 'items.sites'
   }
 
   let best: { labelKey: string; pathLength: number } | undefined

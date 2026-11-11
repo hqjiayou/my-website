@@ -203,14 +203,22 @@ function McpSelectionSection({
   ]
 
   return (
-    <section className="mt-3 rounded-xl border border-admin bg-admin-surface p-4">
-      <div className="mb-3 flex items-center gap-2">
+    <section className="mt-4 space-y-3 border-t border-admin pt-4">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-info-muted text-info-emphasis">
           <Wrench className="h-4 w-4" aria-hidden />
         </span>
-        <h3 className="text-sm font-semibold text-admin">
-          {t('aiWorkspace.runtime.mcpSelection.title')}
-        </h3>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-admin">
+            {t('aiWorkspace.runtime.mcpSelection.title')}
+          </h3>
+          <p className="text-xs text-admin-muted">{t('aiWorkspace.runtime.mcpSelection.editableHint')}</p>
+        </div>
+        {serverDirty ? (
+          <span className="ml-auto rounded-full bg-warning-muted px-2 py-0.5 text-xs font-medium text-warning-emphasis">
+            {t('aiWorkspace.chainPreset.dirty')}
+          </span>
+        ) : null}
       </div>
 
       {selectionQuery.isPending ? (
@@ -360,6 +368,7 @@ function McpSelectionSection({
         description={t('aiWorkspace.runtime.mcpSelection.pickerHint')}
         items={registry}
         getId={(server) => server.name}
+        getAccessibleName={(server) => server.name}
         initialSelectedIds={selected}
         alreadySelectedSelectable
         disabledReason={(server) =>
@@ -431,7 +440,12 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
   const runtime = runtimeQuery.data
   const header = (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-      <p className="text-sm text-muted-foreground">{t('aiWorkspace.runtime.hint')}</p>
+      <div className="min-w-0 space-y-1">
+        <span className="inline-flex rounded-full bg-admin-surface-muted px-2 py-0.5 text-xs font-medium text-admin-muted">
+          {t('aiWorkspace.runtime.readonlyBadge')}
+        </span>
+        <p className="text-sm text-muted-foreground">{t('aiWorkspace.runtime.hint')}</p>
+      </div>
       <button
         type="button"
         className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-card-muted disabled:opacity-50"

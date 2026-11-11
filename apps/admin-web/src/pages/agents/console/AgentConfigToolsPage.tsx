@@ -22,9 +22,7 @@ export function AgentConfigToolsPage() {
       title={t('workspace.configTools.title')}
       description={t('workspace.configTools.pageDescription')}
     >
-      <div className="rounded-xl border border-admin bg-admin-surface p-4 sm:p-5">
-        <AgentAiRuntimePanel key={site.id} agentId={site.id} />
-      </div>
+      <AgentAiRuntimePanel key={site.id} agentId={site.id} />
     </AgentConfigSectionShell>
   )
 }

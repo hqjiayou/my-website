@@ -120,6 +120,14 @@ function ChainModeRow({
 
   return (
     <div className="space-y-3">
+      {dirty ? (
+        <p
+          className="rounded-lg bg-warning-muted px-2.5 py-1 text-xs font-medium text-warning-emphasis"
+          role="status"
+        >
+          {t('aiWorkspace.chainPreset.dirty')} · {mode}
+        </p>
+      ) : null}
       <div className="flex items-start gap-2">
         <span className="w-16 shrink-0 pt-2 text-xs font-semibold uppercase text-admin-muted">
           {mode}
@@ -257,6 +265,7 @@ function ChainModeRow({
         description={t('aiWorkspace.chainPreset.pickerHint')}
         items={modeEntries}
         getId={(entry) => String(entry.id)}
+        getAccessibleName={(entry) => entry.displayName || entry.modelSpec || `#${entry.id}`}
         alreadySelectedIds={currentIds.map(String)}
         alreadySelectedLabel={t('aiWorkspace.chainPreset.alreadyInChain')}
         disabledReason={(entry) =>
@@ -370,6 +379,7 @@ function ChainModeRow({
           <p className="text-sm text-admin">
             {t('aiWorkspace.chainPreset.loadConfirmBody', {
               name: presets.find((preset) => preset.id === Number(templateSelection))?.name ?? '',
+              mode,
             })}
           </p>
           <div className={adminFormActionsClass}>
@@ -431,7 +441,6 @@ export function AgentAiChainPresetSection({ agentId }: { agentId: number }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-admin-muted">{t('aiWorkspace.chainPreset.hint')}</p>
       {chainQuery.isError || entriesQuery.isError ? (
         <div className="flex items-center gap-2.5 rounded-xl border border-danger/35 bg-danger-muted px-4 py-3">
           <AlertCircle className="h-4.5 w-4.5 shrink-0 text-danger-emphasis" aria-hidden />

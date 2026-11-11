@@ -25,14 +25,22 @@ export function AgentConfigModelsPage() {
     return <p className="text-sm text-admin-muted">{t('aiWorkspace.noPermission')}</p>
   }
 
-  const summary = chainQuery.isPending
-    ? t('workspace.loading')
-    : chainQuery.isError
-      ? t('aiWorkspace.retry')
-      : t('aiWorkspace.chainPreset.summary', {
-          cli: chainQuery.data?.cliEntryIds.length ?? 0,
-          key: chainQuery.data?.keyEntryIds.length ?? 0,
-        })
+  const summary = chainQuery.isPending ? (
+    t('workspace.loading')
+  ) : chainQuery.isError ? (
+    <button
+      type="button"
+      className="underline"
+      onClick={() => void chainQuery.refetch()}
+    >
+      {t('aiWorkspace.retry')}
+    </button>
+  ) : (
+    t('aiWorkspace.chainPreset.summary', {
+      cli: chainQuery.data?.cliEntryIds.length ?? 0,
+      key: chainQuery.data?.keyEntryIds.length ?? 0,
+    })
+  )
 
   return (
     <AgentConfigSectionShell

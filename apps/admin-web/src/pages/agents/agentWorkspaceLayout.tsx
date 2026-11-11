@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, MoreHorizontal, Plus } from 'lucide-react'
+import { ArrowLeft, Bot, MoreHorizontal, Plus } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -52,6 +52,7 @@ export function AgentWorkspaceLayout() {
   const { t } = useTranslation('sites')
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [statusConfirmOpen, setStatusConfirmOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -82,6 +83,8 @@ export function AgentWorkspaceLayout() {
   })
   const agents = agentsQuery.data?.records ?? []
   const activeTab = resolveActiveTab(location.pathname)
+  // 设置/长表单 1200；数据与调试 1460。Debug 不用更窄的 form 宽，避免聊天被挤死。
+  const contentWidthClass = activeTab === 'settings' ? 'admin-content-form' : 'admin-content-data'
 
   const statusMutation = useMutation({
     mutationFn: () => {
@@ -95,6 +98,7 @@ export function AgentWorkspaceLayout() {
       toast.success(t('list.messages.statusUpdated'))
       void queryClient.invalidateQueries({ queryKey: ['sites'] })
       setMenuOpen(false)
+      setStatusConfirmOpen(false)
     },
     onError: (err: Error) => {
       toast.error(err.message)
@@ -158,35 +162,49 @@ export function AgentWorkspaceLayout() {
     return <p className="text-sm text-admin-muted">{t('workspace.loading')}</p>
   }
 
+  const nextStatusLabel =
+    site.status === SITE_STATUS.ACTIVE ? t('list.actions.disable') : t('list.actions.enable')
+
+  // Debug/Runs：grid + minmax(0,1fr) 接到 100dvh；其它页保持自然高度，避免空高。
+  const fillViewport = activeTab === 'debug' || activeTab === 'runs'
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-admin bg-admin-surface px-4 py-3 sm:px-5">
+    <>
+    <section
+      className={cn(
+        fillViewport
+          ? 'grid min-h-[calc(100dvh-4rem-2*var(--admin-page-padding))] grid-rows-[auto_auto_minmax(0,1fr)] gap-4'
+          : 'space-y-4',
+        contentWidthClass,
+      )}
+    >
+      <div className="flex flex-wrap items-start gap-3 rounded-xl border border-admin bg-admin-surface px-4 py-3 sm:items-center sm:px-5">
         <Link
           to={ROUTES.apps.sites}
-          className={cn(adminGhostButtonClass, 'shrink-0')}
-          aria-label={t('workspace.backToList')}
+          className={cn(adminGhostButtonClass, 'shrink-0 gap-1.5')}
         >
-          ←
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          <span>{t('workspace.backToList')}</span>
         </Link>
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-primary/12 text-primary">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/12 text-primary">
           <Bot className="h-5 w-5" aria-hidden />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[12rem]">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-lg font-semibold text-admin sm:text-xl">{site.agentName}</h1>
+            {/* 名称优先完整展示；琐碎元信息可换行/窄屏隐藏，避免截断主名。 */}
+            <h1 className="min-w-0 text-lg font-semibold break-words text-admin sm:text-xl">{site.agentName}</h1>
             <StatusTag status={site.status} label={t(`status.${site.status}`, { defaultValue: site.status })} />
           </div>
-          <p className="mt-0.5 flex flex-wrap items-center text-xs text-admin-muted">
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-admin-muted">
             <span className="font-mono">{site.agentCode}</span>
-            <span className="mx-1.5">·</span>
+            <span aria-hidden>·</span>
             <span>{t(`agentType.${site.agentType}`, { defaultValue: site.agentType })}</span>
             {site.updatedAt ? (
-              <>
-                <span className="mx-1.5">·</span>
-                <span>
-                  {t('list.columns.updatedAt')} {formatUpdatedAt(site.updatedAt)}
+              <span className="hidden sm:inline">
+                <span className="mx-0.5" aria-hidden>
+                  ·
                 </span>
-              </>
+                {t('list.columns.updatedAt')} {formatUpdatedAt(site.updatedAt)}
+              </span>
             ) : null}
           </p>
         </div>
@@ -218,7 +236,7 @@ export function AgentWorkspaceLayout() {
               >
                 {agents.length > 1 ? (
                   <div className="border-b border-admin px-2 py-2">
-                    <label className="mb-1 block text-[10px] font-semibold tracking-wide text-admin-muted uppercase">
+                    <label className="mb-1 block text-xs font-semibold tracking-wide text-admin-muted uppercase">
                       {t('workspace.actions.switchAgent')}
                     </label>
                     <select
@@ -243,9 +261,12 @@ export function AgentWorkspaceLayout() {
                     role="menuitem"
                     className="flex w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-admin hover:bg-admin-surface-muted"
                     disabled={statusMutation.isPending}
-                    onClick={() => statusMutation.mutate()}
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setStatusConfirmOpen(true)
+                    }}
                   >
-                    {site.status === SITE_STATUS.ACTIVE ? t('list.actions.disable') : t('list.actions.enable')}
+                    {nextStatusLabel}
                   </button>
                 ) : null}
                 <PermissionGate code={PERMISSION_CODES.agentCreate}>
@@ -294,29 +315,65 @@ export function AgentWorkspaceLayout() {
 
       <div className="rounded-xl border border-admin bg-admin-surface px-2 sm:px-3">
         <nav className="flex gap-0.5 overflow-x-auto" aria-label={t('workspace.title')}>
-          {tabs.map((tab) => (
-            <NavLink
-              key={tab.key}
-              to={tab.to}
-              end={tab.end}
-              className={cn(
-                'admin-focus-ring shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-medium text-admin-muted transition hover:text-admin',
-                activeTab === tab.key && 'border-primary text-primary',
-              )}
-            >
-              {t(`workspace.tabs.${tab.key}`)}
-            </NavLink>
-          ))}
+          {tabs.map((tab) => {
+            const selected = activeTab === tab.key
+            return (
+              <NavLink
+                key={tab.key}
+                to={tab.to}
+                end={tab.end}
+                aria-current={selected ? 'page' : undefined}
+                className={cn(
+                  'admin-focus-ring shrink-0 border-b-2 border-transparent px-3 py-3 text-sm font-medium text-admin-muted transition hover:text-admin',
+                  selected && 'border-primary text-primary',
+                )}
+              >
+                {t(`workspace.tabs.${tab.key}`)}
+              </NavLink>
+            )
+          })}
         </nav>
       </div>
 
-      <div className="min-w-0">
+      <div className="flex min-h-0 min-w-0 flex-col">
         <Suspense fallback={<RouteFallback />}>
           <Outlet context={{ site } satisfies AgentWorkspaceOutletContext} />
         </Suspense>
       </div>
+    </section>
 
       {createOpen ? <AgentCreateDialog onClose={() => setCreateOpen(false)} /> : null}
+      {statusConfirmOpen ? (
+        <FormDialog
+          title={nextStatusLabel}
+          closeLabel={t('list.actions.cancel')}
+          onClose={() => setStatusConfirmOpen(false)}
+          size="s"
+          danger={site.status === SITE_STATUS.ACTIVE}
+        >
+          <p className="text-sm text-admin">
+            {t(
+              site.status === SITE_STATUS.ACTIVE
+                ? 'list.messages.confirmDisable'
+                : 'list.messages.confirmEnable',
+              { name: site.agentName },
+            )}
+          </p>
+          <div className={adminFormActionsClass}>
+            <button type="button" className={adminSecondaryButtonClass} onClick={() => setStatusConfirmOpen(false)}>
+              {t('list.actions.cancel')}
+            </button>
+            <button
+              type="button"
+              className={site.status === SITE_STATUS.ACTIVE ? adminDangerButtonMdClass : adminPrimaryButtonClass}
+              disabled={statusMutation.isPending}
+              onClick={() => statusMutation.mutate()}
+            >
+              {nextStatusLabel}
+            </button>
+          </div>
+        </FormDialog>
+      ) : null}
       {deleteOpen ? (
         <FormDialog
           title={t('list.messages.deleteConfirmTitle')}
@@ -342,6 +399,6 @@ export function AgentWorkspaceLayout() {
         </FormDialog>
       ) : null}
       {unsavedDialog}
-    </section>
+    </>
   )
 }

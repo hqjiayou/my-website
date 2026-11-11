@@ -1,8 +1,9 @@
 import { ChevronDown, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation } from 'react-router-dom'
 
+import { focusInitialInPanel, registerModalLayer } from '@/components/admin/modalLayer'
 import { cn } from '@/lib/cn'
 import { useAdminPreferencesStore } from '@/stores/adminPreferencesStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -34,6 +35,9 @@ export function Sidebar() {
   const sidebarEntries = useMemo(() => buildSidebarEntries(menus), [menus])
   const desktop = useDesktopSidebar()
   const compact = sidebarCollapsed && desktop
+  const asideRef = useRef<HTMLElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const previouslyFocused = useRef<HTMLElement | null>(null)
 
   const [manualGroupOpen, setManualGroupOpen] = useState<Record<string, boolean>>({})
 
@@ -46,6 +50,26 @@ export function Sidebar() {
   useEffect(() => {
     closeSidebar()
   }, [location.pathname, closeSidebar])
+
+  // 窄屏抽屉：Esc / Tab 约束 / 打开聚焦 / 关闭还原焦点；桌面常驻侧栏不走模态层。
+  useEffect(() => {
+    if (desktop || !isSidebarOpen) return
+    previouslyFocused.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const panel = asideRef.current
+    const release = registerModalLayer({
+      panel,
+      onEscape: closeSidebar,
+    })
+    const focusTimer = window.setTimeout(() => {
+      if (panel) focusInitialInPanel(panel, closeButtonRef.current)
+    }, 0)
+    return () => {
+      window.clearTimeout(focusTimer)
+      release()
+      previouslyFocused.current?.focus?.()
+    }
+  }, [closeSidebar, desktop, isSidebarOpen])
 
   function toggleGroup(group: SidebarGroup) {
     if (compact) return
@@ -126,8 +150,15 @@ export function Sidebar() {
         onClick={closeSidebar}
       />
       <aside
+        ref={asideRef}
+        id="admin-sidebar"
+        tabIndex={-1}
+        role={desktop ? 'navigation' : isSidebarOpen ? 'dialog' : 'navigation'}
+        aria-modal={desktop || !isSidebarOpen ? undefined : true}
+        aria-label={tLayout('sidebar.title')}
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-admin bg-admin-sidebar transition-all duration-200 ease-out lg:translate-x-0',
+          // 手机抽屉固定 w-64（256）；桌面折叠才变 lg:w-16，不把折叠偏好带进抽屉。
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-admin bg-admin-sidebar outline-none transition-all duration-200 ease-out lg:translate-x-0',
           compact && 'lg:w-16',
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full',
         )}
@@ -148,6 +179,7 @@ export function Sidebar() {
             </div>
           ) : null}
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={closeSidebar}
             className="admin-icon-button admin-focus-ring absolute top-4 right-2 lg:hidden"

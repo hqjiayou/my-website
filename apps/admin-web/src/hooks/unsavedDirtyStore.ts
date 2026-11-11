@@ -29,3 +29,10 @@ export function getUnsavedDirtySnapshot() {
   }
   return false
 }
+
+/** 会话过期强制退出等场景：清空全部草稿标记，避免 useBlocker 卡住登出导航。 */
+export function clearAllUnsavedDirtyKeys() {
+  if (dirtyKeys.size === 0) return
+  dirtyKeys.clear()
+  emit()
+}

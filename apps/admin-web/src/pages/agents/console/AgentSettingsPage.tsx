@@ -9,8 +9,9 @@ import { AgentBasicPage } from '../agentBasicPage'
 import type { AgentWorkspaceOutletContext } from '../agentWorkspaceLayout'
 
 /**
- * 设置聚合页：Basic + Access（只读平台默认）就地展示；
+ * 设置聚合页：Basic + Access（只读平台入口参考）就地展示；
  * Theme / Contents / Files 以高级入口保留，避免丢功能。
+ * 生命周期（启停/删除）保留在工作区「更多」菜单，确认文案含 Agent 名。
  */
 export function AgentSettingsPage() {
   const { t } = useTranslation('sites')
@@ -23,7 +24,8 @@ export function AgentSettingsPage() {
   ] as const
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Agent 名/状态已在工作区信息带；此处 Basic 区块承载可编辑基础信息，避免再叠一层大标题。 */}
       <section className="space-y-1.5">
         <h2 className="text-sm font-semibold text-admin">{t('workspace.settings.basicSection')}</h2>
         <AgentBasicPage />
@@ -31,6 +33,7 @@ export function AgentSettingsPage() {
 
       <section className="space-y-1.5">
         <h2 className="text-sm font-semibold text-admin">{t('workspace.settings.accessSection')}</h2>
+        <p className="text-xs text-admin-muted">{t('workspace.settings.accessHint')}</p>
         <AgentAccessPage />
       </section>
 
