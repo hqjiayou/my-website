@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FilterTabs, FormDialog, StatusTag } from '@/components/admin'
+import { FilterTabs, FormDialog, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonMdClass,
@@ -361,6 +361,7 @@ function LessonDetailBody({
             disabled={actionMutation.isPending}
             onClick={approve}
           >
+            {actionMutation.isPending ? <Spinner /> : null}
             {actionMutation.isPending
               ? t('settings.experience.approving')
               : t('settings.experience.approve')}
@@ -421,6 +422,7 @@ function LessonDetailBody({
               disabled={actionMutation.isPending}
               onClick={() => actionMutation.mutate(confirming)}
             >
+              {actionMutation.isPending ? <Spinner /> : null}
               {confirming === 'reject'
                 ? t('settings.experience.reject')
                 : t('settings.experience.disable')}
@@ -519,7 +521,7 @@ function ExtractPanel({ onDone }: { onDone: () => void }) {
           />
         </label>
         <button type="submit" className={adminPrimaryButtonClass} disabled={extractMutation.isPending}>
-          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          {extractMutation.isPending ? <Spinner /> : <Sparkles className="h-3.5 w-3.5" aria-hidden />}
           {extractMutation.isPending
             ? t('settings.experience.extracting')
             : t('settings.experience.extract')}
@@ -591,6 +593,7 @@ function ManualCreateForm({ onCreated }: { onCreated: () => void }) {
       <TextAreaField label={t('settings.experience.lessonField')} value={lesson} onChange={setLesson} />
       <TextAreaField label={t('settings.experience.evidenceField')} value={evidence} onChange={setEvidence} />
       <button type="submit" className={adminPrimaryButtonClass} disabled={!valid || createMutation.isPending}>
+        {createMutation.isPending ? <Spinner /> : null}
         {createMutation.isPending ? t('settings.experience.creating') : t('settings.experience.create')}
       </button>
     </form>

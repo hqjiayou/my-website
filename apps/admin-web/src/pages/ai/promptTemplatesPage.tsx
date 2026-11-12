@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { AdminPageHeader, FormDialog } from '@/components/admin'
+import { AdminPageHeader, FormDialog, Spinner } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
@@ -285,6 +285,7 @@ export function AiPromptTemplatesPage() {
                 disabled={!canUpdate || nameMissing || temperatureInvalid || saveMutation.isPending}
                 onClick={submitDraft}
               >
+                {saveMutation.isPending ? <Spinner /> : null}
                 {saveMutation.isPending ? t('promptTemplates.saving') : t('promptTemplates.save')}
               </button>
             </div>
@@ -313,6 +314,7 @@ export function AiPromptTemplatesPage() {
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleting.id)}
             >
+              {deleteMutation.isPending ? <Spinner /> : null}
               {t('promptTemplates.delete')}
             </button>
           </div>

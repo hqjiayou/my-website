@@ -5,7 +5,7 @@ import { useOutletContext } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { agentApi } from '@/api'
-import { StatusTag } from '@/components/admin'
+import { Spinner, StatusTag } from '@/components/admin'
 import { adminFieldClass, adminPrimaryButtonClass } from '@/components/admin/controls'
 import { useHasPermission } from '@/router/permission'
 import { PERMISSION_CODES } from '@/types/rbac'
@@ -130,6 +130,7 @@ export function AgentBasicPage() {
               disabled={!dirty || updateMutation.isPending}
               className={adminPrimaryButtonClass}
             >
+              {updateMutation.isPending ? <Spinner /> : null}
               {updateMutation.isPending ? t('basic.actions.saving') : t('basic.actions.save')}
             </button>
           ) : (

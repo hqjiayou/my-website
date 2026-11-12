@@ -61,6 +61,11 @@ export default {
     description: '您没有访问此页面的权限。如需开通，请联系系统管理员。',
     backHome: '返回首页',
   },
+  notFound: {
+    title: '页面不存在',
+    description: '您访问的页面不存在或已被移动。',
+    backHome: '返回首页',
+  },
   auth: {
     restoringSession: '正在恢复登录状态…',
   },

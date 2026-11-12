@@ -33,6 +33,7 @@ export {
   type ResourcePickerMode,
 } from './ResourcePickerDrawer'
 export { SearchToolbar } from './searchToolbar'
+export { Spinner } from './spinner'
 export { StatusTag } from './statusTag'
 export {
   AdminDataTable,

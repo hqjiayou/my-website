@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { AdminPageHeader, FormDialog, StatusTag } from '@/components/admin'
+import { AdminPageHeader, FormDialog, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
@@ -838,6 +838,7 @@ function McpServersCard() {
                 disabled={saveMutation.isPending}
                 onClick={handleSave}
               >
+                {saveMutation.isPending ? <Spinner /> : null}
                 {saveMutation.isPending ? t('settings.saving') : t('settings.save')}
               </button>
             </div>

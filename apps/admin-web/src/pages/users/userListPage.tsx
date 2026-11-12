@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { rbacApi } from '@/api/rbacApi'
-import { AdminPageHeader, DataTable, FormDialog, StatusTag } from '@/components/admin'
+import { AdminPageHeader, DataTable, FormDialog, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
@@ -217,6 +217,7 @@ export function UserListPage() {
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleting.id)}
             >
+              {deleteMutation.isPending ? <Spinner /> : null}
               {t('list.actions.delete')}
             </button>
           </div>

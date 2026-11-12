@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FormDialog } from '@/components/admin'
+import { FormDialog, Spinner } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
@@ -353,6 +353,7 @@ export function ChainPresetsCard() {
                 disabled={!canUpdate || draft.name.trim() === '' || saveMutation.isPending}
                 onClick={() => saveMutation.mutate(draft)}
               >
+                {saveMutation.isPending ? <Spinner /> : null}
                 {saveMutation.isPending
                   ? t('settings.chainPresets.saving')
                   : t('settings.chainPresets.save')}
@@ -387,6 +388,7 @@ export function ChainPresetsCard() {
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleting.id)}
             >
+              {deleteMutation.isPending ? <Spinner /> : null}
               {t('settings.chainPresets.delete')}
             </button>
           </div>

@@ -18,7 +18,7 @@ import {
   type HeroLayout,
   type AgentFontStyle,
 } from '@/api'
-import { AdminPageHeader } from '@/components/admin'
+import { AdminPageHeader, Spinner } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { AgentAppearancePreview } from '@/pages/apps/style/agentAppearancePreview'
 import { PermissionGate, useHasPermission } from '@/router/permission'
@@ -216,6 +216,7 @@ function StyleSettingsWorkspace({
             disabled={saveMutation.isPending}
             className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/92 disabled:opacity-60"
           >
+            {saveMutation.isPending ? <Spinner className="mr-1.5" /> : null}
             {saveMutation.isPending ? t('saving') : t('saveConfig')}
           </button>
         </PermissionGate>

@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus, Zap } from 'lucide-react'
+import { Plus, Zap } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FilterTabs, FormDialog } from '@/components/admin'
+import { FilterTabs, FormDialog, Spinner } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
@@ -572,7 +572,7 @@ export function ModelEntriesCard({ mode, onModeChange }: ModelEntriesCardProps) 
                 <button type="submit" disabled={saveMutation.isPending || aliasInvalid} className={adminPrimaryButtonClass}>
                   {saveMutation.isPending ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      <Spinner />
                       {t('settings.saving')}
                     </>
                   ) : (
@@ -618,6 +618,7 @@ export function ModelEntriesCard({ mode, onModeChange }: ModelEntriesCardProps) 
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleteTarget.id)}
             >
+              {deleteMutation.isPending ? <Spinner /> : null}
               {t('settings.remove')}
             </button>
           </div>

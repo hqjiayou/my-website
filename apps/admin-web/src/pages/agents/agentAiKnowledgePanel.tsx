@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { DataTable, FormDialog, type DataTableColumn } from '@/components/admin'
+import { DataTable, FormDialog, Spinner, type DataTableColumn } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFieldClass,
@@ -638,6 +638,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                   disabled={!newBaseName.trim() || createBaseMutation.isPending}
                   onClick={() => createBaseMutation.mutate(newBaseName.trim())}
                 >
+                  {createBaseMutation.isPending ? <Spinner /> : null}
                   {t('aiWorkspace.knowledge.baseCreate')}
                 </button>
                 <button type="button" className={adminSecondaryButtonClass} onClick={() => setNewBaseName(null)}>
@@ -779,6 +780,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 disabled={createMutation.isPending || updateMutation.isPending}
                 className={adminPrimaryButtonClass}
               >
+                {createMutation.isPending || updateMutation.isPending ? <Spinner /> : null}
                 {t('aiWorkspace.knowledge.save')}
               </button>
             </div>
@@ -930,6 +932,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 disabled={uploadBusy || queuedCount === 0}
                 className={adminPrimaryButtonClass}
               >
+                {uploadBusy ? <Spinner /> : null}
                 {uploadBusy
                   ? t('aiWorkspace.knowledge.uploading')
                   : t('aiWorkspace.knowledge.uploadStart', { count: queuedCount })}
@@ -964,6 +967,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deletingDoc.id)}
             >
+              {deleteMutation.isPending ? <Spinner /> : null}
               {t('aiWorkspace.knowledge.delete')}
             </button>
           </div>
@@ -995,6 +999,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
               disabled={deleteBaseMutation.isPending}
               onClick={() => deleteBaseMutation.mutate(deletingBase.id)}
             >
+              {deleteBaseMutation.isPending ? <Spinner /> : null}
               {t('aiWorkspace.knowledge.baseDelete')}
             </button>
           </div>

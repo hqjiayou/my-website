@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 
 import { rbacApi } from '@/api/rbacApi'
 import { adminFormActionsClass, adminPrimaryButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
-import { AdminPageHeader } from '@/components/admin'
+import { AdminPageHeader, Spinner } from '@/components/admin'
 import { cn } from '@/lib/cn'
 import { ROUTES } from '@/router/config/routePaths'
 import { isSuperAdminRole, useHasPermission } from '@/router/permission'
@@ -230,6 +230,7 @@ function RoleMenuEditor({
             onClick={() => saveMutation.mutate()}
             className={adminPrimaryButtonClass}
           >
+            {saveMutation.isPending ? <Spinner /> : null}
             {saveMutation.isPending ? t('permissions.actions.saving') : t('permissions.actions.save')}
           </button>
         ) : null}

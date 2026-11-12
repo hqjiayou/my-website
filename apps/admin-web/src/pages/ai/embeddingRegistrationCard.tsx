@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { StatusTag } from '@/components/admin'
+import { Spinner, StatusTag } from '@/components/admin'
 import {
   adminFieldClass,
   adminGhostButtonClass,
@@ -171,6 +171,7 @@ export function EmbeddingRegistrationCard({ baseId }: { baseId?: number }) {
               disabled={!dirty || saveMutation.isPending}
               onClick={save}
             >
+              {saveMutation.isPending ? <Spinner /> : null}
               {saveMutation.isPending
                 ? t('settings.embeddingRegistration.saving')
                 : t('settings.embeddingRegistration.save')}

@@ -61,6 +61,11 @@ export default {
     description: 'このページを表示する権限がありません。必要な場合は管理者にお問い合わせください。',
     backHome: 'ホームに戻る',
   },
+  notFound: {
+    title: 'ページが見つかりません',
+    description: 'アクセスしたページは存在しないか、移動した可能性があります。',
+    backHome: 'ホームに戻る',
+  },
   auth: {
     restoringSession: 'ログイン状態を復元しています…',
   },

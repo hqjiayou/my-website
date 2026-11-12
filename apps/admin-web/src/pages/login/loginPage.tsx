@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { authApi } from '@/api/authApi'
+import { Spinner } from '@/components/admin'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
 import {
@@ -164,8 +165,9 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/92 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/92 disabled:cursor-not-allowed disabled:opacity-60"
           >
+            {submitting ? <Spinner /> : null}
             {submitting ? t('actions.submitting') : t('actions.submit')}
           </button>
         </form>

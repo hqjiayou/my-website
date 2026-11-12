@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { ResourcePickerDrawer, StatusTag } from '@/components/admin'
+import { ResourcePickerDrawer, Spinner, StatusTag } from '@/components/admin'
 import { adminGhostButtonClass, adminSecondaryButtonClass } from '@/components/admin/controls'
 import { useUnsavedDirtyKey } from '@/hooks/useUnsavedChangesGuard'
 import { cn } from '@/lib/cn'
@@ -342,6 +342,7 @@ function McpSelectionSection({
                 disabled={saveMutation.isPending || customEmpty || !serverDirty}
                 onClick={() => saveMutation.mutate()}
               >
+                {saveMutation.isPending ? <Spinner /> : null}
                 {saveMutation.isPending
                   ? t('aiWorkspace.runtime.mcpSelection.saving')
                   : t('aiWorkspace.runtime.mcpSelection.save')}
