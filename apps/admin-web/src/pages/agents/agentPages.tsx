@@ -42,15 +42,15 @@ function agentPanelPage(
           <article
             className={
               fillHeight
-                ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 sm:p-5'
-                : 'rounded-xl border border-border bg-card p-4 sm:p-5'
+                ? 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-admin bg-admin-surface p-4 sm:p-5'
+                : 'rounded-xl border border-admin bg-admin-surface p-4 sm:p-5'
             }
           >
             {/* key：切换 Agent 时整体重挂载，面板内的草稿 / 预览 runtime / 调试状态不跨 Agent 泄漏。 */}
             <Panel key={site.id} agentId={site.id} />
           </article>
         ) : (
-          <p className="rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
+          <p className="rounded-xl border border-admin bg-admin-surface px-4 py-6 text-sm text-admin-muted">
             {t('aiWorkspace.noPermission')}
           </p>
         )}

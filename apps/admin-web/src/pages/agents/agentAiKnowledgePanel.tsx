@@ -395,7 +395,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
       case 'uploading':
         return 'border-ring/40 bg-card-muted/50'
       default:
-        return 'border-border bg-card'
+        return 'border-admin bg-admin-surface'
     }
   }
 
@@ -408,9 +408,9 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
       case 'failed':
         return 'text-danger-emphasis'
       case 'uploading':
-        return 'text-muted-foreground'
+        return 'text-admin-muted'
       default:
-        return 'text-muted-foreground'
+        return 'text-admin-muted'
     }
   }
 
@@ -436,7 +436,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           <div>
             <div>{item.title}</div>
             {item.originalFilename ? (
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-admin-muted">
                 {item.originalFilename}
                 {item.sourceFormat ? ` · ${item.sourceFormat}` : ''}
                 {item.fileSizeBytes != null ? ` · ${formatFileSize(item.fileSizeBytes)}` : ''}
@@ -461,7 +461,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                   ? 'text-success-emphasis'
                   : item.indexStatus === 'FAILED'
                     ? 'text-danger-emphasis'
-                    : 'text-muted-foreground'
+                    : 'text-admin-muted'
               }
               title={item.indexStatus === 'FAILED' ? (item.indexError ?? undefined) : undefined}
             >
@@ -503,7 +503,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 </button>
               </PermissionGate>
             ) : (
-              <span className="text-xs text-muted-foreground">{t('aiWorkspace.knowledge.sharedBadge')}</span>
+              <span className="text-xs text-admin-muted">{t('aiWorkspace.knowledge.sharedBadge')}</span>
             )}
             {item.hasOriginal ? (
               <button
@@ -568,14 +568,14 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
         queueUploadFiles(Array.from(event.dataTransfer.files))
       }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card-muted/50 px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-admin bg-card-muted/50 px-3 py-2.5">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-sm">
-            <span className="shrink-0 text-xs font-medium text-muted-foreground">
+            <span className="shrink-0 text-xs font-medium text-admin-muted">
               {t('aiWorkspace.knowledge.baseLabel')}
             </span>
             <select
-              className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm"
+              className="rounded-lg border border-admin bg-admin-surface px-2.5 py-1.5 text-sm"
               value={selectedBaseId == null ? '' : String(selectedBaseId)}
               onChange={(event) => {
                 setSelectedBaseId(event.target.value === '' ? null : Number(event.target.value))
@@ -597,7 +597,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             </select>
           </label>
           <select
-            className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm"
+            className="rounded-lg border border-admin bg-admin-surface px-2.5 py-1.5 text-sm"
             value={filters.status}
             onChange={(event) =>
               setFilters((prev) => ({
@@ -627,7 +627,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             ) : (
               <span className="flex items-center gap-1">
                 <input
-                  className="w-36 rounded-lg border border-border px-2 py-1.5 text-sm"
+                  className="w-36 rounded-lg border border-admin px-2 py-1.5 text-sm"
                   value={newBaseName}
                   onChange={(event) => setNewBaseName(event.target.value)}
                   placeholder={t('aiWorkspace.knowledge.baseNamePlaceholder')}
@@ -680,7 +680,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-admin-muted">
         {uploadBusy ? t('aiWorkspace.knowledge.uploading') : t('aiWorkspace.knowledge.dropHint')}
       </p>
 
@@ -726,7 +726,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
               </p>
             ) : null}
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-admin-muted">
                 {t('aiWorkspace.knowledge.titleLabel')}
               </span>
               <input
@@ -738,7 +738,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
               />
             </label>
             <label className="flex min-h-0 flex-1 flex-col space-y-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-admin-muted">
                 {t('aiWorkspace.knowledge.contentLabel')}
               </span>
               <textarea
@@ -750,7 +750,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             </label>
             {editor.mode === 'edit' ? (
               <label className="block space-y-1.5">
-                <span className="text-xs font-medium text-muted-foreground">
+                <span className="text-xs font-medium text-admin-muted">
                   {t('aiWorkspace.knowledge.allStatus')}
                 </span>
                 <select
@@ -771,7 +771,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 </select>
               </label>
             ) : null}
-            <div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-border bg-admin-surface px-5 py-4">
+            <div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-admin bg-admin-surface px-5 py-4">
               <button type="button" className={adminSecondaryButtonClass} onClick={() => setEditor(null)}>
                 {t('aiWorkspace.knowledge.cancel')}
               </button>
@@ -797,11 +797,11 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
           size="l"
         >
           <form className="flex min-h-0 flex-col gap-4" onSubmit={onUploadSubmit}>
-            <p className="text-xs leading-relaxed text-muted-foreground">
+            <p className="text-xs leading-relaxed text-admin-muted">
               {t('aiWorkspace.knowledge.uploadHint')}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-admin-muted">
                 {t('aiWorkspace.knowledge.uploadModeLabel')}
               </span>
               {(['CLI', 'KEY'] as const).map((value) => (
@@ -813,7 +813,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                   className={
                     uploadMode === value
                       ? 'rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground'
-                      : 'rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground'
+                      : 'rounded-lg border border-admin bg-admin-surface px-3 py-1.5 text-xs font-medium text-admin'
                   }
                   onClick={() => chooseUploadMode(value)}
                 >
@@ -821,7 +821,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 </button>
               ))}
             </div>
-            <p className="text-xs leading-relaxed text-muted-foreground">
+            <p className="text-xs leading-relaxed text-admin-muted">
               {t('aiWorkspace.knowledge.uploadTranscribeHint')}
             </p>
             <input
@@ -835,12 +835,12 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
             <button
               type="button"
               disabled={uploadBusy}
-              className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card-muted/40 px-4 py-8 text-sm transition hover:border-ring/50 hover:bg-card-muted disabled:opacity-50"
+              className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-admin bg-card-muted/40 px-4 py-8 text-sm transition hover:border-ring/50 hover:bg-admin-surface-muted disabled:opacity-50"
               onClick={() => uploadInputRef.current?.click()}
             >
-              <FileUp className="size-6 text-muted-foreground" aria-hidden />
-              <span className="font-medium text-foreground">{t('aiWorkspace.knowledge.chooseFile')}</span>
-              <span className="text-xs text-muted-foreground">{t('aiWorkspace.knowledge.queueHint')}</span>
+              <FileUp className="size-6 text-admin-muted" aria-hidden />
+              <span className="font-medium text-admin">{t('aiWorkspace.knowledge.chooseFile')}</span>
+              <span className="text-xs text-admin-muted">{t('aiWorkspace.knowledge.queueHint')}</span>
             </button>
 
             {uploadItems.length > 0 ? (
@@ -866,8 +866,8 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        <span className="truncate font-medium text-foreground">{item.file.name}</span>
-                        <span className="shrink-0 text-xs text-muted-foreground">
+                        <span className="truncate font-medium text-admin">{item.file.name}</span>
+                        <span className="shrink-0 text-xs text-admin-muted">
                           {formatFileSize(item.file.size)}
                         </span>
                       </div>
@@ -883,7 +883,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                       <button
                         type="button"
                         disabled={uploadBusy}
-                        className="shrink-0 rounded-md p-1 text-muted-foreground transition hover:bg-card-muted hover:text-foreground disabled:opacity-40"
+                        className="shrink-0 rounded-md p-1 text-admin-muted transition hover:bg-admin-surface-muted hover:text-admin disabled:opacity-40"
                         aria-label={t('aiWorkspace.knowledge.removeQueued')}
                         onClick={() => removeUploadItem(item.id)}
                       >
@@ -894,14 +894,14 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
                 ))}
               </ul>
             ) : (
-              <p className="rounded-lg border border-border bg-card-muted/30 px-3 py-6 text-center text-sm text-muted-foreground">
+              <p className="rounded-lg border border-admin bg-card-muted/30 px-3 py-6 text-center text-sm text-admin-muted">
                 {t('aiWorkspace.knowledge.queueEmpty')}
               </p>
             )}
 
             {singleQueued ? (
               <label className="block space-y-1.5">
-                <span className="text-xs font-medium text-muted-foreground">
+                <span className="text-xs font-medium text-admin-muted">
                   {t('aiWorkspace.knowledge.titleLabel')}
                 </span>
                 <input
@@ -916,7 +916,7 @@ export function AgentAiKnowledgePanel({ agentId }: { agentId: number }) {
               </label>
             ) : null}
 
-            <div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-border bg-admin-surface px-5 pt-4">
+            <div className="sticky bottom-0 -mx-5 mt-auto flex justify-end gap-2 border-t border-admin bg-admin-surface px-5 pt-4">
               <button
                 type="button"
                 disabled={uploadBusy}

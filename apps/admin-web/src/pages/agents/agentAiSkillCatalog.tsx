@@ -12,9 +12,9 @@ export function SkillCatalogItem({
   id,
   version,
   description,
-  titleClassName = 'font-mono text-xs font-medium text-foreground',
-  descriptionClassName = 'mt-1 text-xs leading-5 text-muted-foreground',
-  versionClassName = 'ml-1.5 font-normal text-muted-foreground',
+  titleClassName = 'font-mono text-xs font-medium text-admin',
+  descriptionClassName = 'mt-1 text-xs leading-5 text-admin-muted',
+  versionClassName = 'ml-1.5 font-normal text-admin-muted',
 }: {
   id: string
   version?: string | null
@@ -49,7 +49,7 @@ export function SkillCatalogItem({
           {version ? <span className={versionClassName}>v{version}</span> : null}
         </span>
         <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ${
+          className={`h-3.5 w-3.5 shrink-0 text-admin-muted transition-transform duration-150 ${
             expanded ? 'rotate-180' : ''
           }`}
           aria-hidden

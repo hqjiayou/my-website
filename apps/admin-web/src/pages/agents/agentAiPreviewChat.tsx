@@ -44,7 +44,7 @@ function PreviewAssistantLabel() {
   })
   if (!spec) return null
   return (
-    <p className="mb-2 inline-flex max-w-full truncate rounded-md bg-card-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+    <p className="mb-2 inline-flex max-w-full truncate rounded-md bg-admin-surface-muted px-1.5 py-0.5 font-mono text-xs text-admin-muted">
       {spec}
     </p>
   )
@@ -66,7 +66,7 @@ function PreviewMessageActions({ align }: { align: 'start' | 'end' }) {
       <ActionBarPrimitive.Copy
         aria-label={t('aiWorkspace.preview.copy')}
         title={isCopied ? t('aiWorkspace.preview.copied') : t('aiWorkspace.preview.copy')}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-card hover:text-foreground"
+        className="flex h-7 w-7 items-center justify-center rounded-md text-admin-muted transition hover:bg-admin-surface hover:text-admin"
       >
         {isCopied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
       </ActionBarPrimitive.Copy>
@@ -74,7 +74,7 @@ function PreviewMessageActions({ align }: { align: 'start' | 'end' }) {
         type="button"
         aria-label={t('aiWorkspace.preview.quote')}
         title={t('aiWorkspace.preview.quote')}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-card hover:text-foreground"
+        className="flex h-7 w-7 items-center justify-center rounded-md text-admin-muted transition hover:bg-admin-surface hover:text-admin"
         onClick={() => {
           const text = aui.message.getCopyText().trim()
           if (!text) return
@@ -122,21 +122,21 @@ function CitationSourceCard({
     )
   }
   return (
-    <div className="mt-2 rounded-lg border border-border bg-card px-3 py-2 text-xs">
+    <div className="mt-2 rounded-lg border border-admin bg-admin-surface px-3 py-2 text-xs">
       <div className="flex items-start justify-between gap-2">
-        <p className="font-medium text-foreground">{t('aiWorkspace.preview.citations.source', { n })}</p>
+        <p className="font-medium text-admin">{t('aiWorkspace.preview.citations.source', { n })}</p>
         <button
           type="button"
           aria-label={t('aiWorkspace.preview.citations.close')}
-          className="rounded p-0.5 text-muted-foreground transition hover:text-foreground"
+          className="rounded p-0.5 text-admin-muted transition hover:text-admin"
           onClick={onClose}
         >
           <X className="h-3.5 w-3.5" aria-hidden />
         </button>
       </div>
-      <p className="mt-1 break-words text-foreground">{citation.title || citation.sourceId}</p>
-      {locationParts.length ? <p className="mt-0.5 text-muted-foreground">{locationParts.join(' · ')}</p> : null}
-      <p className="mt-0.5 text-muted-foreground">
+      <p className="mt-1 break-words text-admin">{citation.title || citation.sourceId}</p>
+      {locationParts.length ? <p className="mt-0.5 text-admin-muted">{locationParts.join(' · ')}</p> : null}
+      <p className="mt-0.5 text-admin-muted">
         {t('aiWorkspace.preview.citations.score', { percent: similarityPercent(citation.score) })}
       </p>
     </div>
@@ -161,7 +161,7 @@ function PreviewTextPart({ text, status }: TextMessagePartProps) {
   const open = openCite != null ? byNumber.get(openCite) : undefined
   const running = status.type === 'running'
   if (running && !text) {
-    return <p className="animate-pulse text-sm text-muted-foreground">{t('aiWorkspace.preview.thinking')}</p>
+    return <p className="animate-pulse text-sm text-admin-muted">{t('aiWorkspace.preview.thinking')}</p>
   }
   return (
     <>
@@ -228,7 +228,7 @@ function PreviewMessage() {
   }
   return (
     <MessagePrimitive.Root className="group mb-3 mr-auto flex w-fit max-w-[min(40rem,86%)] flex-col items-start">
-      <div className="w-fit max-w-full rounded-2xl border border-border bg-card px-3.5 py-2.5 text-sm leading-6 text-foreground">
+      <div className="w-fit max-w-full rounded-2xl border border-admin bg-admin-surface px-3.5 py-2.5 text-sm leading-6 text-admin">
         <PreviewAssistantLabel />
         <MessagePrimitive.Content components={PREVIEW_PART_COMPONENTS} />
       </div>
@@ -594,12 +594,12 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
     <AssistantRuntimeProvider runtime={runtime}>
       <div className="flex h-full min-h-0 gap-4">
         <ThreadPrimitive.Root
-          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card-muted"
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-admin bg-admin-surface-muted"
           inert={inspectorOpen && inspectorModal ? true : undefined}
         >
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2 sm:px-6">
-            <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-              <span className="mr-1.5 rounded-md bg-card px-1.5 py-0.5 font-medium text-foreground">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-admin px-3 py-2 sm:px-6">
+            <p className="min-w-0 flex-1 truncate text-xs text-admin-muted">
+              <span className="mr-1.5 rounded-md bg-admin-surface px-1.5 py-0.5 font-medium text-admin">
                 {mode === 'CLI' ? t('aiWorkspace.preview.modeCli') : t('aiWorkspace.preview.modeKey')}
               </span>
               {modelQuery.isPending ? (
@@ -617,7 +617,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
               aria-expanded={inspectorOpen}
               aria-label={inspectorOpen ? t('aiWorkspace.preview.inspector.close') : t('aiWorkspace.preview.inspector.open')}
               title={inspectorOpen ? t('aiWorkspace.preview.inspector.close') : t('aiWorkspace.preview.inspector.open')}
-              className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-foreground transition hover:bg-card-muted"
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-admin bg-admin-surface px-2.5 text-xs font-medium text-admin transition hover:bg-admin-surface-muted"
               onClick={() => setInspectorOpen((value) => !value)}
             >
               <SlidersHorizontal className="h-4 w-4" aria-hidden />
@@ -627,14 +627,14 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
           {fallbackServed ? (
             <p
               role="status"
-              className="flex shrink-0 items-start gap-1.5 border-b border-border bg-warning-muted px-3 py-1.5 text-xs text-warning-emphasis sm:px-6"
+              className="flex shrink-0 items-start gap-1.5 border-b border-admin bg-warning-muted px-3 py-1.5 text-xs text-warning-emphasis sm:px-6"
             >
               <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
               {t('aiWorkspace.preview.run.servedModel', { model: fallbackServed })}
             </p>
           ) : null}
           {conversationId != null ? (
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground sm:px-6">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-admin px-3 py-2 text-xs text-admin-muted sm:px-6">
               <span>{t('aiWorkspace.preview.conversation.resume', { id: conversationId })}</span>
               <button type="button" className="shrink-0 underline" onClick={beginNewConversation}>
                 {t('aiWorkspace.preview.conversation.new')}
@@ -643,7 +643,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
           ) : null}
           <ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-10">
             {restoredMessages.length > 0 ? (
-              <ul className="mb-4 space-y-3 border-b border-border pb-4">
+              <ul className="mb-4 space-y-3 border-b border-admin pb-4">
                 {restoredMessages.map((item) => {
                   const isUser = item.role === 'USER'
                   return (
@@ -655,7 +655,7 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
                         className={
                           isUser
                             ? 'w-fit max-w-full rounded-2xl bg-primary px-3.5 py-2.5 text-sm leading-6 text-primary-foreground'
-                            : 'w-fit max-w-full rounded-2xl border border-border bg-card px-3.5 py-2.5 text-sm leading-6 text-foreground'
+                            : 'w-fit max-w-full rounded-2xl border border-admin bg-admin-surface px-3.5 py-2.5 text-sm leading-6 text-admin'
                         }
                       >
                         <p className="whitespace-pre-wrap break-words">{item.content}</p>
@@ -668,11 +668,11 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             <ThreadPrimitive.Empty>
               {restoredMessages.length === 0 ? (
                 <div className="flex min-h-full flex-col items-center justify-center gap-2 px-4 py-16 text-center">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-muted-foreground">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full border border-admin bg-admin-surface text-admin-muted">
                     <MessageSquare className="h-5 w-5" aria-hidden />
                   </span>
-                  <p className="text-sm font-medium text-foreground">{t('aiWorkspace.preview.empty')}</p>
-                  <p className="max-w-md text-xs leading-5 text-muted-foreground">
+                  <p className="text-sm font-medium text-admin">{t('aiWorkspace.preview.empty')}</p>
+                  <p className="max-w-md text-xs leading-5 text-admin-muted">
                     {t('aiWorkspace.preview.emptyHint')}
                   </p>
                 </div>
@@ -694,19 +694,19 @@ export function AgentAiPreviewChat({ agentId }: { agentId: number }) {
             </div>
           ) : null}
           <ComposerPrimitive.Root className="shrink-0 px-3 pb-3 pt-1 sm:px-6">
-            <ComposerPrimitive.Quote className="mb-2 flex items-start gap-2 rounded-xl border border-border bg-card px-2.5 py-2">
-              <ComposerPrimitive.QuoteText className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground line-clamp-3" />
+            <ComposerPrimitive.Quote className="mb-2 flex items-start gap-2 rounded-xl border border-admin bg-admin-surface px-2.5 py-2">
+              <ComposerPrimitive.QuoteText className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-5 text-admin-muted line-clamp-3" />
               <ComposerPrimitive.QuoteDismiss
                 aria-label={t('aiWorkspace.preview.quoteDismiss')}
                 title={t('aiWorkspace.preview.quoteDismiss')}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-card-muted hover:text-foreground"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-admin-muted transition hover:bg-admin-surface-muted hover:text-admin"
               >
                 <X className="h-3.5 w-3.5" aria-hidden />
               </ComposerPrimitive.QuoteDismiss>
             </ComposerPrimitive.Quote>
-            <div className="flex items-end gap-2 rounded-2xl border border-border bg-card p-1.5">
+            <div className="flex items-end gap-2 rounded-2xl border border-admin bg-admin-surface p-1.5">
               <ComposerPrimitive.Input
-                className="min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-foreground outline-none"
+                className="min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-admin outline-none"
                 placeholder={t('aiWorkspace.preview.placeholder')}
               />
               <ComposerPrimitive.Send

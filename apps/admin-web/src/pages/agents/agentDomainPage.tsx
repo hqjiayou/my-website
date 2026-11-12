@@ -9,8 +9,8 @@ export function AgentDomainPage() {
 
   return (
     <section className="w-full space-y-3">
-      <p className="text-sm text-muted-foreground">{t('detail.placeholders.domainFuture')}</p>
-      <article className="rounded-xl border border-border bg-card p-5">
+      <p className="text-sm text-admin-muted">{t('detail.placeholders.domainFuture')}</p>
+      <article className="rounded-xl border border-admin bg-admin-surface p-5">
         <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-lg border border-admin bg-admin-surface-muted p-3">
             <p className="text-xs text-admin-muted">{t('detail.labels.domain')}</p>
