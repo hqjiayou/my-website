@@ -50,6 +50,7 @@
 | [`.cursor/rules/admin-web.mdc`](.cursor/rules/admin-web.mdc) | `admin-web` 实现边界 |
 | [`.cursor/rules/admin-web-router.mdc`](.cursor/rules/admin-web-router.mdc) | router 目录 |
 | [`.cursor/rules/admin-web-styles.mdc`](.cursor/rules/admin-web-styles.mdc) | 全局样式分层 |
+| [`.cursor/rules/admin-web-design.mdc`](.cursor/rules/admin-web-design.mdc) | 设计系统硬约束与自检清单 |
 | [`.cursor/rules/agent-portal.mdc`](.cursor/rules/agent-portal.mdc) | `agent-portal` 实现边界（站点用户端 PWA） |
 | [`.cursor/rules/docs.mdc`](.cursor/rules/docs.mdc) | 文档与 CURRENT_STATE 同步 |
 
@@ -79,6 +80,13 @@
 
 1. [`docs/decisions/ADR-0004`](docs/decisions/ADR-0004-ai-must-fail-honestly-without-provider.md)、[`ADR-0005`](docs/decisions/ADR-0005-java-business-truth-python-ai-execution.md)
 2. [`.cursor/rules/agent-services.mdc`](.cursor/rules/agent-services.mdc)（原《Agent 服务技术选型与架构设计 V1》已于 2026-10-29 移除，见 git 历史）
+
+## 前端权威文档（admin-web）
+
+修改 `apps/admin-web/` 前阅读：
+
+1. [`docs/admin-web/CURRENT_STATE.md`](docs/admin-web/CURRENT_STATE.md)
+2. [`docs/admin-web/DESIGN_SYSTEM.md`](docs/admin-web/DESIGN_SYSTEM.md)（视觉与组件规格正源；新增/修改页面或元素前必读，硬约束与自检清单见 [`.cursor/rules/admin-web-design.mdc`](.cursor/rules/admin-web-design.mdc)）
 
 ## Menu / 5E 现状
 

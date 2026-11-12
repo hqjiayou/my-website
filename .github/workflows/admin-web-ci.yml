@@ -53,3 +53,13 @@ jobs:
         run: node scripts/check-import-casing.mjs
       - name: build
         run: pnpm build
+      - name: check agent platform boundary
+        run: pnpm test:boundary
+      - name: check table foundation
+        run: pnpm test:table
+      - name: check preview SSE
+        run: pnpm test:sse
+      - name: install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: mock E2E
+        run: pnpm test:e2e:mock
