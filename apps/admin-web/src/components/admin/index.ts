@@ -37,7 +37,6 @@ export { SearchToolbar } from './searchToolbar'
 export { Spinner } from './spinner'
 export { StatusTag } from './statusTag'
 export {
-  AdminDataTable,
   DataTableBulkActions,
   DataTableColumnMenu,
   DataTableEmptyState,
