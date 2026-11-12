@@ -26,6 +26,7 @@ export {
   adminSecondaryButtonClass,
 } from './controls'
 export { FormDialog } from './formDialog'
+export { FormField } from './formField'
 export {
   ResourcePickerDrawer,
   type ResourcePickerColumn,

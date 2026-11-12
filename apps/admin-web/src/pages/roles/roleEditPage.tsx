@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -14,7 +14,7 @@ import {
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
-import { AdminPageHeader, Spinner } from '@/components/admin'
+import { AdminPageHeader, FormField, Spinner } from '@/components/admin'
 import { ROUTES } from '@/router/config/routePaths'
 import { ROLE_STATUS } from '@/types/rbac'
 
@@ -145,25 +145,25 @@ export function RoleEditPage({
             onSubmit={createForm.handleSubmit((values) => createMutation.mutate(values))}
             noValidate
           >
-            <Field label={t('edit.fields.roleCode')} error={createForm.formState.errors.roleCode?.message}>
+            <FormField required label={t('edit.fields.roleCode')} error={createForm.formState.errors.roleCode?.message}>
               <input
                 className={inputClassName}
                 {...createForm.register('roleCode')}
                 placeholder={t('edit.placeholders.roleCode')}
               />
-            </Field>
-            <Field label={t('edit.fields.roleName')} error={createForm.formState.errors.roleName?.message}>
+            </FormField>
+            <FormField required label={t('edit.fields.roleName')} error={createForm.formState.errors.roleName?.message}>
               <input className={inputClassName} {...createForm.register('roleName')} />
-            </Field>
-            <Field label={t('edit.fields.description')} error={createForm.formState.errors.description?.message}>
+            </FormField>
+            <FormField label={t('edit.fields.description')} error={createForm.formState.errors.description?.message}>
               <textarea className={textareaClassName} rows={3} {...createForm.register('description')} />
-            </Field>
-            <Field label={t('edit.fields.status')} error={createForm.formState.errors.status?.message}>
+            </FormField>
+            <FormField required label={t('edit.fields.status')} error={createForm.formState.errors.status?.message}>
               <select className={inputClassName} {...createForm.register('status')}>
                 <option value={ROLE_STATUS.ACTIVE}>{tc('enum.status.ACTIVE')}</option>
                 <option value={ROLE_STATUS.DISABLED}>{tc('enum.status.DISABLED')}</option>
               </select>
-            </Field>
+            </FormField>
             <FormActions
               submitting={createMutation.isPending}
               onCancel={close}
@@ -178,21 +178,21 @@ export function RoleEditPage({
             onSubmit={editForm.handleSubmit((values) => updateMutation.mutate(values))}
             noValidate
           >
-            <Field label={t('edit.fields.roleCode')}>
+            <FormField label={t('edit.fields.roleCode')}>
               <input className={inputClassName} value={role?.roleCode ?? ''} readOnly disabled />
-            </Field>
-            <Field label={t('edit.fields.roleName')} error={editForm.formState.errors.roleName?.message}>
+            </FormField>
+            <FormField required label={t('edit.fields.roleName')} error={editForm.formState.errors.roleName?.message}>
               <input className={inputClassName} {...editForm.register('roleName')} />
-            </Field>
-            <Field label={t('edit.fields.description')} error={editForm.formState.errors.description?.message}>
+            </FormField>
+            <FormField label={t('edit.fields.description')} error={editForm.formState.errors.description?.message}>
               <textarea className={textareaClassName} rows={3} {...editForm.register('description')} />
-            </Field>
-            <Field label={t('edit.fields.status')} error={editForm.formState.errors.status?.message}>
+            </FormField>
+            <FormField required label={t('edit.fields.status')} error={editForm.formState.errors.status?.message}>
               <select className={inputClassName} {...editForm.register('status')}>
                 <option value={ROLE_STATUS.ACTIVE}>{tc('enum.status.ACTIVE')}</option>
                 <option value={ROLE_STATUS.DISABLED}>{tc('enum.status.DISABLED')}</option>
               </select>
-            </Field>
+            </FormField>
             <FormActions
               submitting={updateMutation.isPending}
               onCancel={close}
@@ -226,23 +226,6 @@ const inputClassName = adminFieldClass
 
 const textareaClassName = adminFieldClass
 
-function Field({
-  label,
-  error,
-  children,
-}: {
-  label: string
-  error?: string
-  children: ReactNode
-}) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-sm font-medium text-admin">{label}</label>
-      {children}
-      {error ? <p className="mt-1 text-xs text-danger-emphasis">{error}</p> : null}
-    </div>
-  )
-}
 
 function FormActions({
   submitting,

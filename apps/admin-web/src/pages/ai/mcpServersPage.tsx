@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { AdminPageHeader, FormDialog, Spinner, StatusTag } from '@/components/admin'
+import { AdminPageHeader, FormDialog, FormField, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
@@ -599,10 +599,11 @@ function McpServersCard() {
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-admin-muted">
-                        {t('settings.mcp.name')}
-                      </span>
+                    <FormField
+                      required
+                      label={t('settings.mcp.name')}
+                      help={draft.isNew ? t('settings.mcp.nameHint') : t('settings.mcp.nameLocked')}
+                    >
                       <input
                         className={`${adminFieldClass} font-mono`}
                         value={draft.name}
@@ -610,14 +611,8 @@ function McpServersCard() {
                         placeholder="my-server"
                         onChange={(event) => updateDraft(draft.localId, { name: event.target.value })}
                       />
-                      <span className="mt-1 block text-xs text-admin-muted">
-                        {draft.isNew ? t('settings.mcp.nameHint') : t('settings.mcp.nameLocked')}
-                      </span>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-admin-muted">
-                        {t('settings.mcp.transport')}
-                      </span>
+                    </FormField>
+                    <FormField label={t('settings.mcp.transport')}>
                       <select
                         className={adminFieldClass}
                         value={draft.transport}
@@ -632,15 +627,12 @@ function McpServersCard() {
                         <option value="sse">sse</option>
                         <option value="stdio">stdio</option>
                       </select>
-                    </label>
+                    </FormField>
                   </div>
 
                   {draft.transport === 'stdio' ? (
                     <>
-                      <label className="block">
-                        <span className="mb-1.5 block text-xs font-medium text-admin-muted">
-                          {t('settings.mcp.command')}
-                        </span>
+                      <FormField required label={t('settings.mcp.command')}>
                         <input
                           className={`${adminFieldClass} font-mono`}
                           value={draft.command}
@@ -650,7 +642,7 @@ function McpServersCard() {
                             updateDraft(draft.localId, { command: event.target.value })
                           }
                         />
-                      </label>
+                      </FormField>
                       <div className="space-y-1.5">
                         <span className="block text-xs font-medium text-admin-muted">
                           {t('settings.mcp.args')}
@@ -691,23 +683,27 @@ function McpServersCard() {
                           {t('settings.mcp.argsAdd')}
                         </button>
                       </div>
-                      <label className="block">
-                        <span className="mb-1.5 block text-xs font-medium text-admin-muted">
-                          {t('settings.mcp.cwd')}
-                        </span>
+                      <FormField label={t('settings.mcp.cwd')}>
                         <input
                           className={`${adminFieldClass} font-mono`}
                           value={draft.cwd}
                           disabled={!canUpdate}
                           onChange={(event) => updateDraft(draft.localId, { cwd: event.target.value })}
                         />
-                      </label>
+                      </FormField>
                     </>
                   ) : (
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-admin-muted">
-                        {t('settings.mcp.url')}
-                      </span>
+                    <FormField
+                      required={!draft.urlConfigured}
+                      label={t('settings.mcp.url')}
+                      help={
+                        draft.urlConfigured
+                          ? draft.urlHint
+                            ? t('settings.mcp.urlHintConfigured', { hint: draft.urlHint })
+                            : t('settings.mcp.urlConfigured')
+                          : t('settings.mcp.urlHintEmpty')
+                      }
+                    >
                       <input
                         className={`${adminFieldClass} font-mono`}
                         type="password"
@@ -719,21 +715,11 @@ function McpServersCard() {
                         }
                         onChange={(event) => updateDraft(draft.localId, { url: event.target.value })}
                       />
-                      <span className="mt-1 block text-xs text-admin-muted">
-                        {draft.urlConfigured
-                          ? draft.urlHint
-                            ? t('settings.mcp.urlHintConfigured', { hint: draft.urlHint })
-                            : t('settings.mcp.urlConfigured')
-                          : t('settings.mcp.urlHintEmpty')}
-                      </span>
-                    </label>
+                    </FormField>
                   )}
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-admin-muted">
-                        {t('settings.mcp.toolPrefix')}
-                      </span>
+                    <FormField label={t('settings.mcp.toolPrefix')} help={t('settings.mcp.toolPrefixHint')}>
                       <input
                         className={`${adminFieldClass} font-mono`}
                         value={draft.toolPrefix}
@@ -742,14 +728,8 @@ function McpServersCard() {
                           updateDraft(draft.localId, { toolPrefix: event.target.value })
                         }
                       />
-                      <span className="mt-1 block text-xs text-admin-muted">
-                        {t('settings.mcp.toolPrefixHint')}
-                      </span>
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-admin-muted">
-                        {t('settings.mcp.timeout')}
-                      </span>
+                    </FormField>
+                    <FormField label={t('settings.mcp.timeout')} help={t('settings.mcp.timeoutHint')}>
                       <input
                         className={adminFieldClass}
                         type="number"
@@ -762,10 +742,7 @@ function McpServersCard() {
                           updateDraft(draft.localId, { timeoutText: event.target.value })
                         }
                       />
-                      <span className="mt-1 block text-xs text-admin-muted">
-                        {t('settings.mcp.timeoutHint')}
-                      </span>
-                    </label>
+                    </FormField>
                   </div>
 
                   <label className="flex items-center gap-2 text-sm text-admin">
