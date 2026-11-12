@@ -232,108 +232,109 @@ html[data-density='compact'] {
   --radius-admin-xl: var(--admin-radius-xl);
 }
 
-/* layout 壳层语义类（全局复用，非单页样式） */
-.bg-admin-page {
+/* layout 壳层语义类（全局复用，非单页样式）
+   2026-11-12 #236：以下语义色/阴影类以 Tailwind v4 @utility 定义，hover:/placeholder: 等变体可正常生效。 */
+@utility bg-admin-page {
   background-color: rgb(var(--background));
 }
 
-.bg-admin-surface {
+@utility bg-admin-surface {
   background-color: rgb(var(--card));
 }
 
-.bg-admin-surface-muted {
+@utility bg-admin-surface-muted {
   background-color: rgb(var(--card-muted));
 }
 
-.bg-admin-sidebar {
+@utility bg-admin-sidebar {
   background-color: rgb(var(--sidebar));
 }
 
-.border-admin {
+@utility border-admin {
   border-color: rgb(var(--border));
 }
 
-.text-admin {
+@utility text-admin {
   color: rgb(var(--foreground));
 }
 
-.text-admin-muted {
+@utility text-admin-muted {
   color: rgb(var(--muted-foreground));
 }
 
-.bg-admin-muted-foreground {
+@utility bg-admin-muted-foreground {
   background-color: rgb(var(--muted-foreground));
 }
 
-.text-admin-sidebar {
+@utility text-admin-sidebar {
   color: rgb(var(--sidebar-foreground));
 }
 
-.bg-admin-primary {
+@utility bg-admin-primary {
   background-color: rgb(var(--primary));
 }
 
-.text-admin-on-primary {
+@utility text-admin-on-primary {
   color: rgb(var(--primary-foreground));
 }
 
-.bg-admin-danger {
+@utility bg-admin-danger {
   background-color: rgb(var(--danger));
 }
 
-.bg-admin-success {
+@utility bg-admin-success {
   background-color: rgb(var(--success));
 }
 
-.bg-admin-warning {
+@utility bg-admin-warning {
   background-color: rgb(var(--warning));
 }
 
-.bg-admin-info {
+@utility bg-admin-info {
   background-color: rgb(var(--info));
 }
 
-.text-admin-on-danger {
+@utility text-admin-on-danger {
   color: rgb(var(--danger-foreground));
 }
 
-.text-admin-danger {
+@utility text-admin-danger {
   color: rgb(var(--danger-emphasis));
 }
 
-.bg-admin-danger-muted {
+@utility bg-admin-danger-muted {
   background-color: var(--danger-muted);
 }
 
-.text-admin-success {
+@utility text-admin-success {
   color: rgb(var(--success-emphasis));
 }
 
-.bg-admin-success-muted {
+@utility bg-admin-success-muted {
   background-color: var(--success-muted);
 }
 
-.text-admin-warning {
+@utility text-admin-warning {
   color: rgb(var(--warning-emphasis));
 }
 
-.bg-admin-warning-muted {
+@utility bg-admin-warning-muted {
   background-color: var(--warning-muted);
 }
 
-.text-admin-info {
+@utility text-admin-info {
   color: rgb(var(--info-emphasis));
 }
 
-.bg-admin-info-muted {
+@utility bg-admin-info-muted {
   background-color: var(--info-muted);
 }
 
-.shadow-admin-pop {
+@utility shadow-admin-pop {
   box-shadow: var(--shadow-pop);
 }
 
-.shadow-admin-overlay {
+@utility shadow-admin-overlay {
   box-shadow: var(--shadow-overlay);
 }
 
