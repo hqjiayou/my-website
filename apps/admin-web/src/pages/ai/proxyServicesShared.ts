@@ -2,7 +2,7 @@ import type { ProxyLoginProvider, ProxyServicesAccount } from '@/types/ai'
 
 /**
  * CLI 代理的共享纯函数（供应商标签、图标砖色、账号标题/状态、模型过滤）：
- * 模型页的条目卡（modelEntriesCard）与代理组件（proxyServicesPage）共用，
+ * 模型页的条目卡（modelEntriesCard）与代理组件（proxyServicesPanels）共用，
  * 独立成非组件模块以免触发 react-refresh 的 only-export-components 规则。
  */
 export const LOGIN_OPTIONS: { id: ProxyLoginProvider; titleKey: string; noteKey: string }[] = [

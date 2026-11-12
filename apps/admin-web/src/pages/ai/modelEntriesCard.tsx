@@ -35,7 +35,7 @@ import {
   type ModelEntryDraft,
   type ModelEntryMode,
 } from './modelEntriesShared'
-import { ProxyLoginFlow } from './proxyServicesPage'
+import { ProxyLoginFlow } from './proxyServicesPanels'
 import { shownModelIds } from './proxyServicesShared'
 
 const EMPTY_ENTRIES: AiModelEntry[] = []

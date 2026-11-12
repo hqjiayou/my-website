@@ -9,7 +9,7 @@ import { cn } from '@/lib/cn'
 import { ChainPresetsCard } from './chainPresetsCard'
 import { ModelEntriesCard } from './modelEntriesCard'
 import { parseModelEntryMode, type ModelEntryMode } from './modelEntriesShared'
-import { ProxyClientKeysPane } from './proxyServicesPage'
+import { ProxyClientKeysPane } from './proxyServicesPanels'
 
 /**
  * 模型 API 管理页：URL `?mode=CLI|KEY` 为模式真相源；

@@ -41,6 +41,9 @@ export function Sidebar() {
 
   const [manualGroupOpen, setManualGroupOpen] = useState<Record<string, boolean>>({})
 
+  // 收起态叶子链接的自研 tooltip：单个 fixed 浮层，位置由悬停/聚焦项的 rect 计算。
+  const [linkTooltip, setLinkTooltip] = useState<{ label: string; top: number; left: number } | null>(null)
+
   function isGroupExpanded(group: SidebarGroup) {
     if (compact) return false
     if (sidebarGroupHasActiveChild(group, location.pathname)) return true
@@ -81,12 +84,21 @@ export function Sidebar() {
   }
 
   function renderLeafLink(item: SidebarLink, compact = false) {
+    const showTooltip = (event: React.MouseEvent<HTMLElement> | React.FocusEvent<HTMLElement>) => {
+      const rect = event.currentTarget.getBoundingClientRect()
+      setLinkTooltip({ label: item.label, left: rect.right + 8, top: rect.top + rect.height / 2 })
+    }
+    const hideTooltip = () => setLinkTooltip(null)
     return (
       <NavLink
         key={item.path}
         to={item.path}
         end
-        title={compact ? item.label : undefined}
+        aria-label={compact ? item.label : undefined}
+        onMouseEnter={compact ? showTooltip : undefined}
+        onMouseLeave={compact ? hideTooltip : undefined}
+        onFocus={compact ? showTooltip : undefined}
+        onBlur={compact ? hideTooltip : undefined}
         className={cn(
           'admin-nav-item admin-focus-ring flex items-center text-sm font-medium',
           compact ? 'justify-center px-0' : 'gap-3 px-3',
@@ -205,6 +217,15 @@ export function Sidebar() {
           )}
         </nav>
       </aside>
+      {compact && linkTooltip ? (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed z-50 -translate-y-1/2 whitespace-nowrap rounded-md border border-admin bg-admin-surface px-2 py-1 text-xs text-admin shadow"
+          style={{ top: linkTooltip.top, left: linkTooltip.left }}
+        >
+          {linkTooltip.label}
+        </div>
+      ) : null}
     </>
   )
 }

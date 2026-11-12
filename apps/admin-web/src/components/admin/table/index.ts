@@ -1,4 +1,3 @@
-export { AdminDataTable } from './AdminDataTable'
 export { DataTableBulkActions } from './DataTableBulkActions'
 export { DataTableColumnMenu, type DataTableColumnMenuItem } from './DataTableColumnMenu'
 export { DataTableEmptyState } from './DataTableEmptyState'
