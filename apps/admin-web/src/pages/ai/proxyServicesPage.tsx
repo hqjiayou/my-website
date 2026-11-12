@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { CopyableText, FormDialog, Spinner, StatusTag } from '@/components/admin'
+import { CopyableText, FormDialog, FormField, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
@@ -468,16 +468,15 @@ export function ProxyClientKeysPane() {
               createMutation.mutate(draftKey.trim())
             }}
           >
-            <label className="block text-xs font-medium text-admin-muted">
-              {t('proxyServices.dialog.key')}
+            <FormField label={t('proxyServices.dialog.key')}>
               <input
-                className={`${adminFieldClass} mt-1.5`}
+                className={adminFieldClass}
                 value={draftKey}
                 autoComplete="off"
                 placeholder={t('proxyServices.dialog.placeholder')}
                 onChange={(event) => setDraftKey(event.target.value)}
               />
-            </label>
+            </FormField>
             <div className={adminFormActionsClass}>
               <button
                 type="button"

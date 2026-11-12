@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { AdminPageHeader, FormDialog, Spinner } from '@/components/admin'
+import { AdminPageHeader, FormDialog, FormField, Spinner } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
@@ -218,10 +218,11 @@ export function AiPromptTemplatesPage() {
           onClose={() => setDraft(null)}
         >
           <div className="space-y-4">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-admin-muted">
-                {t('promptTemplates.name')} <span className="text-danger-emphasis">*</span>
-              </span>
+            <FormField
+              required
+              label={t('promptTemplates.name')}
+              error={nameMissing ? t('promptTemplates.nameRequired') : undefined}
+            >
               <input
                 className={adminFieldClass}
                 value={draft.name}
@@ -229,10 +230,7 @@ export function AiPromptTemplatesPage() {
                 aria-invalid={nameMissing}
                 onChange={(event) => setDraft({ ...draft, name: event.target.value })}
               />
-              <span className="mt-1 block min-h-4 text-xs text-danger-emphasis">
-                {nameMissing ? t('promptTemplates.nameRequired') : null}
-              </span>
-            </label>
+            </FormField>
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-admin-muted">
                 {t('promptTemplates.systemPrompt')}

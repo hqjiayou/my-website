@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FormDialog, Spinner } from '@/components/admin'
+import { FormDialog, FormField, Spinner } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
@@ -260,16 +260,13 @@ export function ChainPresetsCard() {
           onClose={() => setDraft(null)}
         >
           <div className="space-y-4">
-            <label className="block space-y-1">
-              <span className="text-xs font-medium text-admin-muted">
-                {t('settings.chainPresets.name')}
-              </span>
+            <FormField required label={t('settings.chainPresets.name')}>
               <input
                 className={adminFieldClass}
                 value={draft.name}
                 onChange={(event) => setDraft({ ...draft, name: event.target.value })}
               />
-            </label>
+            </FormField>
             <div className="space-y-1">
               <span className="text-xs font-medium text-admin-muted">
                 {t('settings.chainPresets.candidates')}

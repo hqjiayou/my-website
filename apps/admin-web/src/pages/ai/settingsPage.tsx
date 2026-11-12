@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { AdminPageHeader, CopyableText, FormDialog, Spinner, StatusTag } from '@/components/admin'
+import { AdminPageHeader, CopyableText, FormDialog, FormField, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
@@ -212,13 +212,13 @@ function GatewayAccessKeysCard() {
         >
           <form onSubmit={submitIssue} noValidate>
             <div className="space-y-4">
-              <label className="block">
-                <span className="text-xs font-medium text-admin-muted">
-                  {t('settings.gatewayKeys.name')}
-                  <span className="text-admin-danger"> *</span>
-                </span>
+              <FormField
+                required
+                label={t('settings.gatewayKeys.name')}
+                error={nameError ? t('settings.gatewayKeys.nameRequired') : undefined}
+              >
                 <input
-                  className={`${adminFieldClass} mt-1.5`}
+                  className={adminFieldClass}
                   value={name}
                   aria-invalid={nameError}
                   onChange={(event) => {
@@ -226,26 +226,15 @@ function GatewayAccessKeysCard() {
                     if (event.target.value.trim()) setNameError(false)
                   }}
                 />
-                {nameError ? (
-                  <span className="mt-1 block text-xs text-danger-emphasis">
-                    {t('settings.gatewayKeys.nameRequired')}
-                  </span>
-                ) : null}
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-admin-muted">
-                  {t('settings.gatewayKeys.expiresAt')}
-                </span>
+              </FormField>
+              <FormField label={t('settings.gatewayKeys.expiresAt')} help={t('settings.gatewayKeys.expiresAtHint')}>
                 <input
                   type="datetime-local"
-                  className={`${adminFieldClass} mt-1.5`}
+                  className={adminFieldClass}
                   value={expiresAt}
                   onChange={(event) => setExpiresAt(event.target.value)}
                 />
-                <span className="mt-1 block text-xs text-admin-muted">
-                  {t('settings.gatewayKeys.expiresAtHint')}
-                </span>
-              </label>
+              </FormField>
             </div>
             <div className={adminFormActionsClass}>
               <button
@@ -482,10 +471,18 @@ function RuntimeConfigCard() {
               handleSubmit()
             }}
           >
-            <label className="block">
-              <span className="text-xs font-medium text-admin-muted">{t('settings.runtimeConfig.dsn')}</span>
+            <FormField
+              label={t('settings.runtimeConfig.dsn')}
+              help={
+                data.retrievalDatabaseUrlConfigured
+                  ? data.retrievalDatabaseUrlMasked
+                    ? t('settings.runtimeConfig.dsnHintMasked', { masked: data.retrievalDatabaseUrlMasked })
+                    : t('settings.runtimeConfig.dsnHintConfigured')
+                  : t('settings.runtimeConfig.dsnHintEmpty')
+              }
+            >
               <input
-                className={`${adminFieldClass} mt-1.5`}
+                className={adminFieldClass}
                 type="password"
                 autoComplete="new-password"
                 value={dsn}
@@ -496,34 +493,24 @@ function RuntimeConfigCard() {
                 }
                 onChange={(event) => setDsn(event.target.value)}
               />
-              <span className="mt-1 block text-xs text-admin-muted">
-                {data.retrievalDatabaseUrlConfigured
-                  ? data.retrievalDatabaseUrlMasked
-                    ? t('settings.runtimeConfig.dsnHintMasked', { masked: data.retrievalDatabaseUrlMasked })
-                    : t('settings.runtimeConfig.dsnHintConfigured')
-                  : t('settings.runtimeConfig.dsnHintEmpty')}
-              </span>
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-admin-muted">
-                {t('settings.runtimeConfig.embeddingModel')}
-              </span>
+            </FormField>
+            <FormField
+              label={t('settings.runtimeConfig.embeddingModel')}
+              help={t('settings.runtimeConfig.embeddingModelHint')}
+            >
               <input
-                className={`${adminFieldClass} mt-1.5`}
+                className={adminFieldClass}
                 value={embeddingModel}
                 disabled={!canUpdate}
                 onChange={(event) => setEmbeddingModel(event.target.value)}
               />
-              <span className="mt-1 block text-xs text-admin-muted">
-                {t('settings.runtimeConfig.embeddingModelHint')}
-              </span>
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-admin-muted">
-                {t('settings.runtimeConfig.dimensions')}
-              </span>
+            </FormField>
+            <FormField
+              label={t('settings.runtimeConfig.dimensions')}
+              help={t('settings.runtimeConfig.dimensionsHint')}
+            >
               <input
-                className={`${adminFieldClass} mt-1.5`}
+                className={adminFieldClass}
                 type="number"
                 min={1}
                 max={10000}
@@ -532,16 +519,19 @@ function RuntimeConfigCard() {
                 disabled={!canUpdate}
                 onChange={(event) => setDimensions(event.target.value)}
               />
-              <span className="mt-1 block text-xs text-admin-muted">
-                {t('settings.runtimeConfig.dimensionsHint')}
-              </span>
-            </label>
-            <label className="block">
-              <span className="text-xs font-medium text-admin-muted">
-                {t('settings.runtimeConfig.geminiKey')}
-              </span>
+            </FormField>
+            <FormField
+              label={t('settings.runtimeConfig.geminiKey')}
+              help={
+                data.geminiApiKeyConfigured
+                  ? data.geminiApiKeyHint
+                    ? t('settings.runtimeConfig.geminiKeyHint', { hint: data.geminiApiKeyHint })
+                    : t('settings.runtimeConfig.geminiKeyConfigured')
+                  : t('settings.runtimeConfig.geminiKeyEmpty')
+              }
+            >
               <input
-                className={`${adminFieldClass} mt-1.5`}
+                className={adminFieldClass}
                 type="password"
                 autoComplete="new-password"
                 value={geminiKey}
@@ -549,14 +539,7 @@ function RuntimeConfigCard() {
                 placeholder={data.geminiApiKeyConfigured ? t('settings.apiKeyKeep') : ''}
                 onChange={(event) => setGeminiKey(event.target.value)}
               />
-              <span className="mt-1 block text-xs text-admin-muted">
-                {data.geminiApiKeyConfigured
-                  ? data.geminiApiKeyHint
-                    ? t('settings.runtimeConfig.geminiKeyHint', { hint: data.geminiApiKeyHint })
-                    : t('settings.runtimeConfig.geminiKeyConfigured')
-                  : t('settings.runtimeConfig.geminiKeyEmpty')}
-              </span>
-            </label>
+            </FormField>
             <PermissionGate code={PERMISSION_CODES.aiRuntimeConfigUpdate}>
               <div className={adminFormActionsClass}>
                 <button type="submit" disabled={saveMutation.isPending} className={adminPrimaryButtonClass}>

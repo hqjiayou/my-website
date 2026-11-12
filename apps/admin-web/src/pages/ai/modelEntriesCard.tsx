@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FilterTabs, FormDialog, Spinner } from '@/components/admin'
+import { FilterTabs, FormDialog, FormField, Spinner } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
@@ -373,10 +373,9 @@ export function ModelEntriesCard({ mode, onModeChange }: ModelEntriesCardProps) 
                   </p>
                 ) : cliReady ? (
                   <>
-                    <label className="block text-xs font-medium text-admin-muted">
-                      {t('settings.cliModel')}
+                    <FormField label={t('settings.cliModel')} help={t('settings.cliModelHint')}>
                       <select
-                        className={`${adminFieldClass} mt-1.5`}
+                        className={adminFieldClass}
                         value={cliModelId}
                         disabled={!canUpdate}
                         onChange={(event) => setDraft({ ...draft, modelSpec: event.target.value })}
@@ -395,12 +394,10 @@ export function ModelEntriesCard({ mode, onModeChange }: ModelEntriesCardProps) 
                           )
                         })}
                       </select>
-                      <span className="mt-1 block text-xs font-normal text-admin-muted">{t('settings.cliModelHint')}</span>
-                    </label>
-                    <label className="block text-xs font-medium text-admin-muted">
-                      {t('settings.cliKey')}
+                    </FormField>
+                    <FormField label={t('settings.cliKey')} help={t('settings.cliKeyHint')}>
                       <select
-                        className={`${adminFieldClass} mt-1.5`}
+                        className={adminFieldClass}
                         value={draft.apiKey}
                         disabled={!canUpdate}
                         onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
@@ -412,8 +409,7 @@ export function ModelEntriesCard({ mode, onModeChange }: ModelEntriesCardProps) 
                           </option>
                         ))}
                       </select>
-                      <span className="mt-1 block text-xs font-normal text-admin-muted">{t('settings.cliKeyHint')}</span>
-                    </label>
+                    </FormField>
                     <p className="rounded-lg border border-success/35 bg-success-muted px-3 py-2 text-xs text-success-emphasis">
                       {t('settings.cliAddressFixed', { baseUrl: cliBaseUrl })}
                     </p>
@@ -425,42 +421,40 @@ export function ModelEntriesCard({ mode, onModeChange }: ModelEntriesCardProps) 
                 )
               ) : (
                 <>
-                  <label className="block text-xs font-medium text-admin-muted">
-                    {t('settings.name')} <span className="text-danger-emphasis">*</span>
+                  <FormField
+                    required
+                    label={t('settings.name')}
+                    error={nameInvalid ? t('modelManagement.nameRequired') : undefined}
+                  >
                     <input
-                      className={`${adminFieldClass} mt-1.5`}
+                      className={adminFieldClass}
                       value={draft.displayName}
                       disabled={!canUpdate}
                       aria-invalid={nameInvalid}
                       onChange={(event) => setDraft({ ...draft, displayName: event.target.value })}
                     />
-                    {nameInvalid ? (
-                      <span className="mt-1 block text-xs font-normal text-danger-emphasis">
-                        {t('modelManagement.nameRequired')}
-                      </span>
-                    ) : null}
-                  </label>
-                  <label className="block text-xs font-medium text-admin-muted">
-                    {t('settings.spec')} <span className="text-danger-emphasis">*</span>
+                  </FormField>
+                  <FormField
+                    required
+                    label={t('settings.spec')}
+                    error={specInvalid ? t('modelManagement.specRequired') : undefined}
+                  >
                     <input
-                      className={`${adminFieldClass} mt-1.5`}
+                      className={adminFieldClass}
                       value={draft.modelSpec}
                       disabled={!canUpdate}
                       aria-invalid={specInvalid}
                       placeholder={t('settings.specHint')}
                       onChange={(event) => setDraft({ ...draft, modelSpec: event.target.value })}
                     />
-                    {specInvalid ? (
-                      <span className="mt-1 block text-xs font-normal text-danger-emphasis">
-                        {t('modelManagement.specRequired')}
-                      </span>
-                    ) : null}
-                  </label>
-                  <label className="block text-xs font-medium text-admin-muted">
-                    {t('settings.apiKey')}
-                    {draft.id == null ? <span className="text-danger-emphasis"> *</span> : null}
+                  </FormField>
+                  <FormField
+                    required={draft.id == null}
+                    label={t('settings.apiKey')}
+                    help={draft.apiKeyHint ? t('settings.apiKeyHint', { hint: draft.apiKeyHint }) : undefined}
+                  >
                     <input
-                      className={`${adminFieldClass} mt-1.5`}
+                      className={adminFieldClass}
                       type="password"
                       autoComplete="new-password"
                       value={draft.apiKey}
@@ -468,48 +462,40 @@ export function ModelEntriesCard({ mode, onModeChange }: ModelEntriesCardProps) 
                       placeholder={draft.id == null ? '' : t('settings.apiKeyKeep')}
                       onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
                     />
-                    {draft.apiKeyHint ? (
-                      <span className="mt-1 block text-xs font-normal text-admin-muted">
-                        {t('settings.apiKeyHint', { hint: draft.apiKeyHint })}
-                      </span>
-                    ) : null}
-                  </label>
-                  <label className="block text-xs font-medium text-admin-muted">
-                    {t('settings.embeddingSpec')}
+                  </FormField>
+                  <FormField label={t('settings.embeddingSpec')}>
                     <input
-                      className={`${adminFieldClass} mt-1.5`}
+                      className={adminFieldClass}
                       value={draft.embeddingSpec}
                       disabled={!canUpdate}
                       placeholder={t('settings.embeddingSpecHint')}
                       onChange={(event) => setDraft({ ...draft, embeddingSpec: event.target.value })}
                     />
-                  </label>
-                  <label className="block text-xs font-medium text-admin-muted">
-                    {t('settings.baseUrl')}
+                  </FormField>
+                  <FormField label={t('settings.baseUrl')}>
                     <input
-                      className={`${adminFieldClass} mt-1.5`}
+                      className={adminFieldClass}
                       value={draft.baseUrl}
                       disabled={!canUpdate}
                       placeholder={t('settings.baseUrlHint')}
                       onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })}
                     />
-                  </label>
+                  </FormField>
                 </>
               )}
-              <label className="block text-xs font-medium text-admin-muted">
-                {t('settings.alias')}
+              <FormField
+                label={t('settings.alias')}
+                help={t('settings.aliasHint')}
+                error={aliasInvalid ? t('settings.aliasInvalid') : undefined}
+              >
                 <input
-                  className={`${adminFieldClass} mt-1.5`}
+                  className={adminFieldClass}
                   value={draft.alias}
                   disabled={!canUpdate}
                   aria-invalid={aliasInvalid}
                   onChange={(event) => setDraft({ ...draft, alias: event.target.value })}
                 />
-                <span className="mt-1 block text-xs font-normal text-admin-muted">{t('settings.aliasHint')}</span>
-                {aliasInvalid ? (
-                  <span className="mt-1 block text-xs font-normal text-danger-emphasis">{t('settings.aliasInvalid')}</span>
-                ) : null}
-              </label>
+              </FormField>
               {draft.sourceAgentId != null ? (
                 <p className="text-sm text-admin-muted">{t('settings.entryProvenanceNote', { id: draft.sourceAgentId })}</p>
               ) : null}

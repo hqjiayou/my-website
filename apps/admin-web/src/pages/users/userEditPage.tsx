@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -14,7 +14,7 @@ import {
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
-import { AdminPageHeader, Spinner } from '@/components/admin'
+import { AdminPageHeader, FormField, Spinner } from '@/components/admin'
 import { PermissionGate } from '@/router/permission'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
@@ -185,15 +185,15 @@ export function UserEditPage({
             )}
             noValidate
           >
-            <Field label={t('edit.fields.username')} error={createForm.formState.errors.username?.message}>
+            <FormField required label={t('edit.fields.username')} error={createForm.formState.errors.username?.message}>
               <input
                 className={inputClassName}
                 {...createForm.register('username')}
                 placeholder={t('edit.placeholders.username')}
                 autoComplete="off"
               />
-            </Field>
-            <Field label={t('edit.fields.password')} error={createForm.formState.errors.password?.message}>
+            </FormField>
+            <FormField required label={t('edit.fields.password')} error={createForm.formState.errors.password?.message}>
               <input
                 type="password"
                 className={inputClassName}
@@ -201,16 +201,16 @@ export function UserEditPage({
                 placeholder={t('edit.placeholders.password')}
                 autoComplete="new-password"
               />
-            </Field>
-            <Field label={t('edit.fields.displayName')} error={createForm.formState.errors.displayName?.message}>
+            </FormField>
+            <FormField label={t('edit.fields.displayName')} error={createForm.formState.errors.displayName?.message}>
               <input className={inputClassName} {...createForm.register('displayName')} />
-            </Field>
-            <Field label={t('edit.fields.email')} error={createForm.formState.errors.email?.message}>
+            </FormField>
+            <FormField label={t('edit.fields.email')} error={createForm.formState.errors.email?.message}>
               <input type="email" className={inputClassName} {...createForm.register('email')} />
-            </Field>
-            <Field label={t('edit.fields.phone')} error={createForm.formState.errors.phone?.message}>
+            </FormField>
+            <FormField label={t('edit.fields.phone')} error={createForm.formState.errors.phone?.message}>
               <input className={inputClassName} {...createForm.register('phone')} />
-            </Field>
+            </FormField>
             <FormActions
               submitting={createMutation.isPending}
               onCancel={close}
@@ -226,28 +226,28 @@ export function UserEditPage({
             onSubmit={editForm.handleSubmit((values) => updateMutation.mutate(values))}
             noValidate
           >
-            <Field label={t('edit.fields.username')}>
+            <FormField label={t('edit.fields.username')}>
               <input className={inputClassName} value={user?.username ?? ''} readOnly disabled />
               {isSelf ? (
                 <span className="mt-1.5 inline-flex rounded-md border border-info/35 bg-info-muted px-1.5 py-0.5 text-xs text-info-emphasis">
                   {t('list.badges.self')}
                 </span>
               ) : null}
-            </Field>
-            <Field label={t('edit.fields.displayName')} error={editForm.formState.errors.displayName?.message}>
+            </FormField>
+            <FormField label={t('edit.fields.displayName')} error={editForm.formState.errors.displayName?.message}>
               <input className={inputClassName} {...editForm.register('displayName')} disabled={formLocked} />
-            </Field>
-            <Field label={t('edit.fields.email')} error={editForm.formState.errors.email?.message}>
+            </FormField>
+            <FormField label={t('edit.fields.email')} error={editForm.formState.errors.email?.message}>
               <input
                 type="email"
                 className={inputClassName}
                 {...editForm.register('email')}
                 disabled={formLocked}
               />
-            </Field>
-            <Field label={t('edit.fields.phone')} error={editForm.formState.errors.phone?.message}>
+            </FormField>
+            <FormField label={t('edit.fields.phone')} error={editForm.formState.errors.phone?.message}>
               <input className={inputClassName} {...editForm.register('phone')} disabled={formLocked} />
-            </Field>
+            </FormField>
             <FormActions
               submitting={updateMutation.isPending}
               onCancel={close}
@@ -282,23 +282,6 @@ export function UserEditPage({
 
 const inputClassName = adminFieldClass
 
-function Field({
-  label,
-  error,
-  children,
-}: {
-  label: string
-  error?: string
-  children: ReactNode
-}) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-sm font-medium text-admin">{label}</label>
-      {children}
-      {error ? <p className="mt-1 text-xs text-danger-emphasis">{error}</p> : null}
-    </div>
-  )
-}
 
 function FormActions({
   submitting,
