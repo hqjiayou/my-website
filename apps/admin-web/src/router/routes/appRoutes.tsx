@@ -1,8 +1,9 @@
 import { Suspense } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 
 import { RouteFallback } from '@/components/page'
 import { AdminLayout } from '@/layouts'
+import { NotFoundPage } from '@/pages/notFound/notFoundPage'
 
 import { ROUTES } from '../config/routePaths'
 import { AuthGuard, GuestGuard, PermissionGuard } from '../guards'
@@ -39,7 +40,7 @@ export function AppRoutes() {
         <Route element={<PermissionGuard />}>
           <Route element={<AdminLayout />}>{adminRoutes}</Route>
           {legacyRedirects}
-          <Route path="*" element={<Navigate to={ROUTES.dashboard} replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
     </Routes>

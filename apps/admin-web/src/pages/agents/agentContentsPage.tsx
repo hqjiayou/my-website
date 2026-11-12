@@ -20,7 +20,7 @@ import {
   type MediaListItem,
   type UpdateContentInput,
 } from '@/api'
-import { DataTable, FormDialog, type DataTableColumn } from '@/components/admin'
+import { DataTable, FormDialog, Spinner, type DataTableColumn } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFormActionsClass,
@@ -615,6 +615,7 @@ export function AgentContentsPage() {
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleting.id)}
             >
+              {deleteMutation.isPending ? <Spinner /> : null}
               {t('contentManagement.actions.delete')}
             </button>
           </div>

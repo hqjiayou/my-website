@@ -6,7 +6,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'reac
 import { toast } from 'sonner'
 
 import { agentApi, SITE_STATUS, type Site } from '@/api'
-import { FormDialog, StatusTag } from '@/components/admin'
+import { FormDialog, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFormActionsClass,
@@ -369,6 +369,7 @@ export function AgentWorkspaceLayout() {
               disabled={statusMutation.isPending}
               onClick={() => statusMutation.mutate()}
             >
+              {statusMutation.isPending ? <Spinner /> : null}
               {nextStatusLabel}
             </button>
           </div>
@@ -393,6 +394,7 @@ export function AgentWorkspaceLayout() {
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate()}
             >
+              {deleteMutation.isPending ? <Spinner /> : null}
               {t('list.actions.delete')}
             </button>
           </div>

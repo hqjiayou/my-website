@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { rbacApi } from '@/api/rbacApi'
-import { AdminPageHeader, DataTable, FormDialog, StatusTag } from '@/components/admin'
+import { AdminPageHeader, DataTable, FormDialog, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
@@ -285,6 +285,7 @@ export function MenuTreePage() {
               onClick={handleSave}
               className={adminPrimaryButtonClass}
             >
+              {saveMutation.isPending ? <Spinner /> : null}
               {saveMutation.isPending ? t('actions.saving') : t('actions.save')}
             </button>
           </div>
@@ -316,6 +317,7 @@ export function MenuTreePage() {
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleting.id)}
             >
+              {deleteMutation.isPending ? <Spinner /> : null}
               {t('actions.remove')}
             </button>
           </div>

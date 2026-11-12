@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { AdminPageHeader, CopyableText, FormDialog, StatusTag } from '@/components/admin'
+import { AdminPageHeader, CopyableText, FormDialog, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonSmClass,
@@ -256,6 +256,7 @@ function GatewayAccessKeysCard() {
                 {t('settings.gatewayKeys.cancel')}
               </button>
               <button type="submit" disabled={issueMutation.isPending} className={adminPrimaryButtonClass}>
+                {issueMutation.isPending ? <Spinner /> : null}
                 {issueMutation.isPending ? t('settings.gatewayKeys.issuing') : t('settings.gatewayKeys.issue')}
               </button>
             </div>
@@ -288,6 +289,7 @@ function GatewayAccessKeysCard() {
               disabled={revokeMutation.isPending}
               onClick={() => revokeMutation.mutate(revoking.id)}
             >
+              {revokeMutation.isPending ? <Spinner /> : null}
               {t('settings.gatewayKeys.revoke')}
             </button>
           </div>
@@ -558,6 +560,7 @@ function RuntimeConfigCard() {
             <PermissionGate code={PERMISSION_CODES.aiRuntimeConfigUpdate}>
               <div className={adminFormActionsClass}>
                 <button type="submit" disabled={saveMutation.isPending} className={adminPrimaryButtonClass}>
+                  {saveMutation.isPending ? <Spinner /> : null}
                   {saveMutation.isPending ? t('settings.saving') : t('settings.save')}
                 </button>
               </div>
@@ -595,6 +598,7 @@ function RuntimeConfigCard() {
               disabled={saveMutation.isPending}
               onClick={confirmSave}
             >
+              {saveMutation.isPending ? <Spinner /> : null}
               {saveMutation.isPending ? t('settings.saving') : t('settings.runtimeConfig.confirmSave')}
             </button>
           </div>

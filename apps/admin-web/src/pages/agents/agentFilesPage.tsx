@@ -16,7 +16,7 @@ import {
   type MediaListView,
   type MediaScope,
 } from '@/api'
-import { DataTable, FormDialog, type DataTableColumn } from '@/components/admin'
+import { DataTable, FormDialog, Spinner, type DataTableColumn } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFormActionsClass,
@@ -297,7 +297,7 @@ export function AgentFilesPage() {
               onClick={() => fileInputRef.current?.click()}
               className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/92 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Upload className="h-4 w-4" />
+              {uploadMutation.isPending ? <Spinner /> : <Upload className="h-4 w-4" />}
               <span>
                 {uploadMutation.isPending
                   ? t('filesManagement.actions.uploading')
@@ -368,6 +368,7 @@ export function AgentFilesPage() {
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deleting.id)}
             >
+              {deleteMutation.isPending ? <Spinner /> : null}
               {t('filesManagement.actions.delete')}
             </button>
           </div>

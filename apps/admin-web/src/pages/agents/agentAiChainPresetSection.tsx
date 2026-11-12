@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FormDialog, ResourcePickerDrawer, StatusTag } from '@/components/admin'
+import { FormDialog, ResourcePickerDrawer, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFieldClass,
@@ -244,6 +244,7 @@ function ChainModeRow({
             disabled={!dirty || saveMutation.isPending}
             onClick={() => saveMutation.mutate()}
           >
+            {saveMutation.isPending ? <Spinner /> : null}
             {saveMutation.isPending ? t('aiWorkspace.chainPreset.saving') : t('aiWorkspace.chainPreset.save')}
           </button>
         </PermissionGate>
@@ -363,6 +364,7 @@ function ChainModeRow({
             disabled={dirty || templateName.trim() === '' || saveAsMutation.isPending}
             onClick={() => saveAsMutation.mutate()}
           >
+            {saveAsMutation.isPending ? <Spinner /> : null}
             {t('aiWorkspace.chainPreset.saveAsTemplate')}
           </button>
         </PermissionGate>
@@ -396,6 +398,7 @@ function ChainModeRow({
               disabled={loadMutation.isPending}
               onClick={() => loadMutation.mutate()}
             >
+              {loadMutation.isPending ? <Spinner /> : null}
               {t('aiWorkspace.chainPreset.loadConfirmAction')}
             </button>
           </div>

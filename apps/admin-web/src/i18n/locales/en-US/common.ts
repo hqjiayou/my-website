@@ -61,6 +61,11 @@ export default {
     description: 'You do not have permission to view this page. Contact an administrator if you need access.',
     backHome: 'Back to home',
   },
+  notFound: {
+    title: 'Page not found',
+    description: 'The page you are looking for does not exist or has been moved.',
+    backHome: 'Back to home',
+  },
   auth: {
     restoringSession: 'Restoring session…',
   },

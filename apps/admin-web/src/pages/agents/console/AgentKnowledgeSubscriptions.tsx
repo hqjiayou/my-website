@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FormDialog, ResourcePickerDrawer, StatusTag } from '@/components/admin'
+import { FormDialog, ResourcePickerDrawer, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFormActionsClass,
@@ -251,6 +251,7 @@ export function AgentKnowledgeSubscriptions({ agentId }: { agentId: number }) {
               disabled={unlinkMutation.isPending}
               onClick={() => unlinkMutation.mutate(unlinkTarget.id)}
             >
+              {unlinkMutation.isPending ? <Spinner /> : null}
               {t('workspace.configKnowledge.unlink')}
             </button>
           </div>

@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { SITE_CODE_PATTERN, SITE_TAG_PATTERN, SITE_TYPE_PRESETS, agentApi } from '@/api'
-import { FormDialog } from '@/components/admin'
+import { FormDialog, Spinner } from '@/components/admin'
 import {
   adminFieldClass,
   adminPrimaryButtonClass,
@@ -151,6 +151,7 @@ export function AgentCreateDialog({ onClose }: { onClose: () => void }) {
               {t('create.actions.cancel')}
             </button>
             <button type="submit" className={adminPrimaryButtonClass} disabled={createMutation.isPending}>
+              {createMutation.isPending ? <Spinner /> : null}
               {createMutation.isPending ? t('create.actions.creating') : t('create.actions.createSite')}
             </button>
           </div>

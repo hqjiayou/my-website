@@ -14,7 +14,7 @@ import {
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
-import { AdminPageHeader } from '@/components/admin'
+import { AdminPageHeader, Spinner } from '@/components/admin'
 import { PermissionGate } from '@/router/permission'
 import { ROUTES } from '@/router/config/routePaths'
 import { useAuthStore } from '@/stores/authStore'
@@ -328,6 +328,7 @@ function FormActions({
           disabled={submitting || disableSubmit}
           className={adminPrimaryButtonClass}
         >
+          {submitting ? <Spinner /> : null}
           {submitting ? savingLabel : saveLabel}
         </button>
       </PermissionGate>

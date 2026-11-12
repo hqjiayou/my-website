@@ -20,7 +20,7 @@ const router = createBrowserRouter([
     element: (
       <>
         <App />
-        <Toaster position="top-right" richColors />
+        <Toaster position="top-right" />
       </>
     ),
   },

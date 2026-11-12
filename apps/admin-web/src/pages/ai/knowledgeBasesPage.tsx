@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 
 import { agentApi } from '@/api'
 import { aiApi } from '@/api/apps/aiApi'
-import { AdminPageHeader, FormDialog, StatusTag } from '@/components/admin'
+import { AdminPageHeader, FormDialog, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFormActionsClass,
@@ -135,6 +135,7 @@ export function AiKnowledgeBasesPage() {
               disabled={reembedMutation.isPending}
               onClick={() => reembedMutation.mutate()}
             >
+              {reembedMutation.isPending ? <Spinner /> : null}
               {t('knowledgeBases.reembed.action')}
             </button>
           </div>
@@ -362,6 +363,7 @@ function KnowledgeBasesAdminSection() {
                 })
               }
             >
+              {unlinkMutation.isPending ? <Spinner /> : null}
               {t('knowledgeBases.bases.unlink')}
             </button>
           </div>
@@ -606,6 +608,7 @@ function KnowledgeOverviewSection() {
               disabled={retryMutation.isPending}
               onClick={() => retryMutation.mutate()}
             >
+              {retryMutation.isPending ? <Spinner /> : null}
               {t('knowledgeBases.overview.retryAll')}
             </button>
           </div>

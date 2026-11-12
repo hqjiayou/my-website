@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { CopyableText, FormDialog, StatusTag } from '@/components/admin'
+import { CopyableText, FormDialog, Spinner, StatusTag } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminDangerGhostButtonClass,
@@ -490,6 +490,7 @@ export function ProxyClientKeysPane() {
                 {t('proxyServices.dialog.cancel')}
               </button>
               <button type="submit" className={adminPrimaryButtonClass} disabled={createMutation.isPending}>
+                {createMutation.isPending ? <Spinner /> : null}
                 {t('proxyServices.dialog.save')}
               </button>
             </div>
@@ -520,6 +521,7 @@ export function ProxyClientKeysPane() {
               disabled={deleteMutation.isPending}
               onClick={() => deleteMutation.mutate(deletingKey, { onSuccess: () => setDeletingKey(null) })}
             >
+              {deleteMutation.isPending ? <Spinner /> : null}
               {t('proxyServices.delete')}
             </button>
           </div>

@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus, Settings2, X } from 'lucide-react'
+import { Plus, Settings2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { aiApi } from '@/api/apps/aiApi'
-import { FormDialog, ResourcePickerDrawer } from '@/components/admin'
+import { FormDialog, ResourcePickerDrawer, Spinner } from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFieldClass,
@@ -309,7 +309,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
             disabled={!dirty || saveMutation.isPending || temperatureInvalid}
             onClick={submitDraft}
           >
-            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+            {saveMutation.isPending ? <Spinner /> : null}
             {t('prompts.save')}
           </button>
         </PermissionGate>
@@ -416,6 +416,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
             disabled={dirty || templateName.trim() === '' || saveAsMutation.isPending}
             onClick={() => saveAsMutation.mutate()}
           >
+            {saveAsMutation.isPending ? <Spinner /> : null}
             {t('prompts.saveAsTemplate')}
           </button>
         </PermissionGate>
@@ -455,6 +456,7 @@ export function AgentAiPromptPanel({ agentId }: { agentId: number }) {
               disabled={loadMutation.isPending}
               onClick={() => loadMutation.mutate()}
             >
+              {loadMutation.isPending ? <Spinner /> : null}
               {t('prompts.loadConfirmAction')}
             </button>
           </div>

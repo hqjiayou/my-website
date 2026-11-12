@@ -14,7 +14,7 @@ import {
   adminPrimaryButtonClass,
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
-import { AdminPageHeader } from '@/components/admin'
+import { AdminPageHeader, Spinner } from '@/components/admin'
 import { ROUTES } from '@/router/config/routePaths'
 import { ROLE_STATUS } from '@/types/rbac'
 
@@ -263,6 +263,7 @@ function FormActions({
         {cancelLabel}
       </button>
       <button type="submit" disabled={submitting} className={adminPrimaryButtonClass}>
+        {submitting ? <Spinner /> : null}
         {submitting ? savingLabel : saveLabel}
       </button>
     </div>
