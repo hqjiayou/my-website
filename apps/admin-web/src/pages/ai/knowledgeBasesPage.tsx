@@ -1,12 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, ChevronDown, ChevronRight, FileText, X } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { agentApi } from '@/api'
 import { aiApi } from '@/api/apps/aiApi'
-import { AdminPageHeader, FormDialog, Spinner, StatusTag } from '@/components/admin'
+import {
+  AdminPageHeader,
+  DataTable,
+  FormDialog,
+  Spinner,
+  StatusTag,
+  type DataTableColumn,
+} from '@/components/admin'
 import {
   adminDangerButtonMdClass,
   adminFormActionsClass,
@@ -16,7 +23,11 @@ import {
 import { cn } from '@/lib/cn'
 import { AgentAiKnowledgePanel } from '@/pages/agents/agentAiKnowledgePanel'
 import { PermissionGate } from '@/router/permission'
-import type { AiKnowledgeReembedConflict, AiKnowledgeReembedResult } from '@/types/ai'
+import type {
+  AiKnowledgeAgentStat,
+  AiKnowledgeReembedConflict,
+  AiKnowledgeReembedResult,
+} from '@/types/ai'
 import { PERMISSION_CODES } from '@/types/rbac'
 import { isApiError } from '@/utils/http/apiError'
 
@@ -454,6 +465,52 @@ function KnowledgeOverviewSection() {
     onError: (error: Error) => toast.error(error.message),
   })
 
+  const overviewColumns = useMemo<DataTableColumn<AiKnowledgeAgentStat>[]>(
+    () => [
+      {
+        id: 'site',
+        header: t('knowledgeBases.overview.site'),
+        cell: (site) => (
+          <span className="font-semibold">{site.agentName ?? `#${site.agentId}`}</span>
+        ),
+      },
+      {
+        id: 'total',
+        header: t('knowledgeBases.overview.total'),
+        className: 'tabular-nums',
+        cell: (site) => site.totalDocuments,
+      },
+      {
+        id: 'indexed',
+        header: t('knowledgeBases.overview.indexed'),
+        className: 'tabular-nums font-semibold text-success-emphasis',
+        cell: (site) => site.indexedDocuments,
+      },
+      {
+        id: 'failed',
+        header: t('knowledgeBases.overview.failed'),
+        className: 'tabular-nums',
+        cell: (site) => (
+          <span
+            className={cn(
+              'font-semibold',
+              site.failedDocuments > 0 ? 'text-danger-emphasis' : 'text-admin',
+            )}
+          >
+            {site.failedDocuments}
+          </span>
+        ),
+      },
+      {
+        id: 'storage',
+        header: t('knowledgeBases.overview.storage'),
+        className: 'tabular-nums',
+        cell: (site) => formatBytes(site.originalBytes),
+      },
+    ],
+    [t],
+  )
+
   const overview = overviewQuery.data
   if (!overview) {
     return null
@@ -490,7 +547,7 @@ function KnowledgeOverviewSection() {
       <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((stat) => (
           <div key={stat.key} className="rounded-xl border border-admin bg-admin-surface p-4">
-            <div className={cn('text-[23px] font-bold leading-none tabular-nums', stat.valueClassName)}>
+            <div className={cn('text-2xl font-bold leading-none tabular-nums', stat.valueClassName)}>
               {stat.value}
             </div>
             <div className="mt-1 text-xs text-admin-muted">{stat.label}</div>
@@ -504,41 +561,12 @@ function KnowledgeOverviewSection() {
             {t('knowledgeBases.overview.storage')} {formatBytes(overview.originalBytes)}
           </span>
         </div>
-        {overview.sites.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="bg-admin-surface-muted text-[11.5px] font-medium text-admin-muted">
-                  <th className="px-4 py-3">{t('knowledgeBases.overview.site')}</th>
-                  <th className="px-4 py-3">{t('knowledgeBases.overview.total')}</th>
-                  <th className="px-4 py-3">{t('knowledgeBases.overview.indexed')}</th>
-                  <th className="px-4 py-3">{t('knowledgeBases.overview.failed')}</th>
-                  <th className="px-4 py-3">{t('knowledgeBases.overview.storage')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {overview.sites.map((site) => (
-                  <tr key={site.agentId} className="border-t border-admin hover:bg-admin-surface-muted">
-                    <td className="px-4 py-3 font-semibold text-admin">{site.agentName ?? `#${site.agentId}`}</td>
-                    <td className="px-4 py-3 tabular-nums text-admin">{site.totalDocuments}</td>
-                    <td className="px-4 py-3 tabular-nums font-semibold text-success-emphasis">
-                      {site.indexedDocuments}
-                    </td>
-                    <td
-                      className={cn(
-                        'px-4 py-3 tabular-nums font-semibold',
-                        site.failedDocuments > 0 ? 'text-danger-emphasis' : 'text-admin',
-                      )}
-                    >
-                      {site.failedDocuments}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-admin">{formatBytes(site.originalBytes)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
+        <DataTable
+          className="rounded-none border-0"
+          columns={overviewColumns}
+          data={overview.sites}
+          rowKey={(site) => site.agentId}
+        />
       </article>
       {overview.recentFailures.length > 0 ? (
         <article className="overflow-hidden rounded-xl border border-admin bg-admin-surface">

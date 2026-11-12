@@ -42,11 +42,11 @@ function McpReadyProbe({ agentId }: { agentId: number }) {
   const probe = probeQuery.data
 
   return (
-    <div className="mt-3 border-t border-border pt-3">
+    <div className="mt-3 border-t border-admin pt-3">
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-card-muted"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-admin px-2.5 py-1.5 text-xs font-medium text-admin transition hover:bg-admin-surface-muted"
           disabled={probeQuery.isFetching}
           onClick={() => void probeQuery.refetch()}
         >
@@ -73,7 +73,7 @@ function McpReadyProbe({ agentId }: { agentId: number }) {
         <ul className="mt-2 space-y-1.5">
           {probe.probe.servers.map((server) => (
             <li key={server.name} className="flex justify-between gap-2 text-xs">
-              <span className="truncate font-mono text-foreground">{server.name}</span>
+              <span className="truncate font-mono text-admin">{server.name}</span>
               <span className={server.ok ? 'text-success-emphasis' : 'text-danger-emphasis'}>
                 {server.ok
                   ? t('aiWorkspace.runtime.mcpReady.tools', { count: server.toolCount ?? 0 })
@@ -93,12 +93,12 @@ function LimitBar({ label, value, unlimitedLabel }: { label: string; value: numb
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="font-mono font-medium tabular-nums text-foreground">
+        <span className="text-admin-muted">{label}</span>
+        <span className="font-mono font-medium tabular-nums text-admin">
           {value ?? unlimitedLabel}
         </span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-card-muted">
+      <div className="h-1.5 overflow-hidden rounded-full bg-admin-surface-muted">
         <div
           className={cn('h-full rounded-full', capped ? 'bg-primary' : 'bg-success')}
           style={{ width: `${percent}%` }}
@@ -221,7 +221,7 @@ function McpSelectionSection({
       </div>
 
       {selectionQuery.isPending ? (
-        <p className="text-xs text-muted-foreground">{t('aiWorkspace.loading')}</p>
+        <p className="text-xs text-admin-muted">{t('aiWorkspace.loading')}</p>
       ) : selectionQuery.isError ? (
         <div className="text-xs text-danger-emphasis">
           <p>{t('aiWorkspace.runtime.mcpSelection.loadError')}</p>
@@ -238,8 +238,8 @@ function McpSelectionSection({
                 className={cn(
                   'flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs',
                   mode === item.value
-                    ? 'border-primary/50 bg-primary/10 font-medium text-foreground'
-                    : 'border-border bg-card text-muted-foreground',
+                    ? 'border-primary/50 bg-primary/10 font-medium text-admin'
+                    : 'border-admin bg-admin-surface text-admin-muted',
                 )}
               >
                 <input
@@ -251,7 +251,7 @@ function McpSelectionSection({
                 />
                 <span>
                   {item.label}
-                  <span className="block font-normal text-muted-foreground">{item.hint}</span>
+                  <span className="block font-normal text-admin-muted">{item.hint}</span>
                 </span>
               </label>
             ))}
@@ -319,10 +319,10 @@ function McpSelectionSection({
             </p>
           ) : null}
 
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-admin-muted">
             {t('aiWorkspace.runtime.mcpSelection.effective')}：
             {effective.length > 0 ? (
-              <span className="font-mono text-foreground">{effective.join(', ')}</span>
+              <span className="font-mono text-admin">{effective.join(', ')}</span>
             ) : (
               t('aiWorkspace.runtime.mcpSelection.effectiveEmpty')
             )}
@@ -424,7 +424,7 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
   })
 
   if (runtimeQuery.isPending) {
-    return <p className="text-sm text-muted-foreground">{t('aiWorkspace.loading')}</p>
+    return <p className="text-sm text-admin-muted">{t('aiWorkspace.loading')}</p>
   }
   if (runtimeQuery.isError) {
     return (
@@ -444,11 +444,11 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
         <span className="inline-flex rounded-full bg-admin-surface-muted px-2 py-0.5 text-xs font-medium text-admin-muted">
           {t('aiWorkspace.runtime.readonlyBadge')}
         </span>
-        <p className="text-sm text-muted-foreground">{t('aiWorkspace.runtime.hint')}</p>
+        <p className="text-sm text-admin-muted">{t('aiWorkspace.runtime.hint')}</p>
       </div>
       <button
         type="button"
-        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-card-muted disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-admin px-2.5 py-1.5 text-xs font-medium text-admin transition hover:bg-admin-surface-muted disabled:opacity-50"
         disabled={runtimeQuery.isFetching}
         onClick={() => void runtimeQuery.refetch()}
       >
@@ -486,7 +486,7 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
             </span>
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-admin">{t('aiWorkspace.runtime.provider')}</h3>
-              <p className="truncate font-mono text-xs text-muted-foreground">
+              <p className="truncate font-mono text-xs text-admin-muted">
                 {status.provider ? modelIdFromSpec(status.provider) : '—'}
               </p>
             </div>
@@ -497,13 +497,13 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
               label={status.providerStatus ?? t('aiWorkspace.runtime.statusUnknown')}
             />
           </div>
-          <p className="text-xs leading-5 text-muted-foreground">
+          <p className="text-xs leading-5 text-admin-muted">
             {t('aiWorkspace.runtime.fallbacks', {
               ids: status.fallbackProviders.length ? status.fallbackProviders.map(modelIdFromSpec).join(', ') : '—',
             })}
           </p>
-          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2">
-            <span className="text-xs text-muted-foreground">{t('aiWorkspace.runtime.retrieval')}</span>
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-admin bg-admin-surface px-3 py-2">
+            <span className="text-xs text-admin-muted">{t('aiWorkspace.runtime.retrieval')}</span>
             <StatusTag
               status={status.retrievalStatus ?? 'UNKNOWN'}
               tone={runtimeStatusTone(status.retrievalStatus)}
@@ -531,22 +531,22 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
             />
           </div>
           {status.mcpServers.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t('aiWorkspace.runtime.noMcp')}</p>
+            <p className="text-xs text-admin-muted">{t('aiWorkspace.runtime.noMcp')}</p>
           ) : (
             <ul className="space-y-1.5">
               {status.mcpServers.map((server) => (
                 <li
                   key={server.name}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs"
+                  className="flex items-center justify-between gap-2 rounded-lg border border-admin bg-admin-surface px-3 py-2 text-xs"
                 >
                   <span className="flex min-w-0 items-center gap-2">
                     <span
-                      className={cn('h-1.5 w-1.5 shrink-0 rounded-full', server.enabled ? 'bg-success' : 'bg-muted-foreground')}
+                      className={cn('h-1.5 w-1.5 shrink-0 rounded-full', server.enabled ? 'bg-admin-success' : 'bg-admin-muted-foreground')}
                       aria-hidden
                     />
-                    <span className="truncate font-mono text-foreground">{server.name}</span>
+                    <span className="truncate font-mono text-admin">{server.name}</span>
                   </span>
-                  <span className={server.enabled ? 'text-success-emphasis' : 'text-muted-foreground'}>
+                  <span className={server.enabled ? 'text-success-emphasis' : 'text-admin-muted'}>
                     {t(server.enabled ? 'aiWorkspace.runtime.enabled' : 'aiWorkspace.runtime.disabled')}
                   </span>
                 </li>
@@ -582,23 +582,23 @@ export function AgentAiRuntimePanel({ agentId }: { agentId: number }) {
             </span>
             <h3 className="text-sm font-semibold text-admin">{t('aiWorkspace.preview.skills.title')}</h3>
             {skillsQuery.data ? (
-              <span className="ml-auto rounded-md bg-card px-2 py-0.5 font-mono text-xs text-muted-foreground">
+              <span className="ml-auto rounded-md bg-admin-surface px-2 py-0.5 font-mono text-xs text-admin-muted">
                 {skillsQuery.data.length}
               </span>
             ) : null}
           </div>
           {skillsQuery.isPending ? (
-            <p className="text-xs text-muted-foreground">{t('aiWorkspace.loading')}</p>
+            <p className="text-xs text-admin-muted">{t('aiWorkspace.loading')}</p>
           ) : skillsQuery.isError ? (
             <p className="text-xs text-danger-emphasis" role="alert">
               {t('aiWorkspace.preview.skills.error')}
             </p>
           ) : skillsQuery.data.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.skills.empty')}</p>
+            <p className="text-xs text-admin-muted">{t('aiWorkspace.preview.skills.empty')}</p>
           ) : (
             <ul className="space-y-2">
               {skillsQuery.data.map((skill) => (
-                <li key={skill.id} className="rounded-lg border border-border bg-card px-3 py-2">
+                <li key={skill.id} className="rounded-lg border border-admin bg-admin-surface px-3 py-2">
                   <SkillCatalogItem id={skill.id} version={skill.version} description={skill.description} />
                 </li>
               ))}

@@ -66,23 +66,23 @@ export function AgentBasicPage() {
 
   return (
     <section className="w-full space-y-3">
-      <article className="rounded-xl border border-border bg-card p-5">
-        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-border pb-3">
+      <article className="rounded-xl border border-admin bg-admin-surface p-5">
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-admin pb-3">
           <StatusTag status={site.status} label={t(`status.${site.status}`, { defaultValue: site.status })} />
-          <span className="font-mono text-xs text-muted-foreground">#{site.id}</span>
-          <span className="text-xs text-muted-foreground">·</span>
-          <span className="text-xs text-muted-foreground">
+          <span className="font-mono text-xs text-admin-muted">#{site.id}</span>
+          <span className="text-xs text-admin-muted">·</span>
+          <span className="text-xs text-admin-muted">
             {t('list.columns.updatedAt')} {formatDateTime(site.updatedAt)}
           </span>
-          <span className="text-xs text-muted-foreground">·</span>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-admin-muted">·</span>
+          <span className="text-xs text-admin-muted">
             {t('basic.versionLabel')} {site.version}
           </span>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-1.5 text-sm">
-            <span className="text-xs font-medium text-muted-foreground">{t('list.columns.agentName')}</span>
+            <span className="text-xs font-medium text-admin-muted">{t('list.columns.agentName')}</span>
             <input
               value={agentName}
               onChange={(event) => setAgentName(event.target.value)}
@@ -92,12 +92,12 @@ export function AgentBasicPage() {
           </label>
 
           <label className="space-y-1.5 text-sm">
-            <span className="text-xs font-medium text-muted-foreground">{t('create.fields.agentCode')}</span>
+            <span className="text-xs font-medium text-admin-muted">{t('create.fields.agentCode')}</span>
             <input value={site.agentCode} disabled className={adminFieldClass} />
           </label>
 
           <label className="space-y-1.5 text-sm md:col-span-2">
-            <span className="text-xs font-medium text-muted-foreground">{t('create.fields.defaultDomain')}</span>
+            <span className="text-xs font-medium text-admin-muted">{t('create.fields.defaultDomain')}</span>
             <input
               value={defaultDomain}
               onChange={(event) => setDefaultDomain(event.target.value)}
@@ -108,7 +108,7 @@ export function AgentBasicPage() {
           </label>
 
           <label className="space-y-1.5 text-sm md:col-span-2">
-            <span className="text-xs font-medium text-muted-foreground">{t('create.fields.agentDescription')}</span>
+            <span className="text-xs font-medium text-admin-muted">{t('create.fields.agentDescription')}</span>
             <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
@@ -119,8 +119,8 @@ export function AgentBasicPage() {
           </label>
         </div>
 
-        <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
-          <p className="text-xs text-muted-foreground">
+        <div className="mt-5 flex items-center justify-between gap-3 border-t border-admin pt-4">
+          <p className="text-xs text-admin-muted">
             {t('basic.info.createdAt')} {formatDateTime(site.createdAt)}
           </p>
           {canUpdate ? (
@@ -134,7 +134,7 @@ export function AgentBasicPage() {
               {updateMutation.isPending ? t('basic.actions.saving') : t('basic.actions.save')}
             </button>
           ) : (
-            <p className="text-xs text-muted-foreground">{t('basic.noPermission')}</p>
+            <p className="text-xs text-admin-muted">{t('basic.noPermission')}</p>
           )}
         </div>
       </article>

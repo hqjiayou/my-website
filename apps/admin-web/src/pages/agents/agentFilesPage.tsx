@@ -149,13 +149,13 @@ export function AgentFilesPage() {
         header: t('filesManagement.columns.filename'),
         cell: (item) => (
           <div>
-            <p className="font-medium text-foreground">{item.originalFilename}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="font-medium text-admin">{item.originalFilename}</p>
+            <p className="mt-1 text-xs text-admin-muted">
               #{item.id}
               {item.scope === MEDIA_SCOPE.PLATFORM ? ` · ${t('filesManagement.scope.platform')}` : ''}
             </p>
             {item.agentId !== site.id ? (
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-admin-muted">
                 {t('filesManagement.source.fromAgent', { agentId: item.agentId })}
               </p>
             ) : null}
@@ -276,8 +276,8 @@ export function AgentFilesPage() {
     <section className="w-full">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">{t('filesManagement.description')}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="text-sm text-admin-muted">{t('filesManagement.description')}</p>
+          <p className="mt-1 text-xs text-admin-muted">
             {t('filesManagement.hints.whitelist')}
             {canUpload ? null : ` ${t('filesManagement.hints.uploadPermission')}`}
           </p>
@@ -318,7 +318,7 @@ export function AgentFilesPage() {
               'rounded-md border px-3 py-1.5 text-xs font-medium transition',
               view === v
                 ? 'border-primary/40 bg-primary/10 text-primary'
-                : 'border-border bg-background text-muted-foreground hover:bg-muted',
+                : 'border-admin bg-admin-page text-admin-muted hover:bg-admin-surface-muted',
             )}
           >
             {t(`filesManagement.views.${v}`)}

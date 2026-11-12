@@ -1,5 +1,5 @@
 import { ChevronDown, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings2, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -11,6 +11,7 @@ import {
   adminSecondaryButtonClass,
 } from '@/components/admin/controls'
 import { FormDialog } from '@/components/admin/formDialog'
+import { focusInitialInPanel, registerModalLayer } from '@/components/admin/modalLayer'
 import type { FontSize, PageDensity, PrimaryColor, ThemeMode } from '@/config/preferences'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/i18n/constants'
 import { cn } from '@/lib/cn'
@@ -194,6 +195,37 @@ function AppearanceDrawer({ open, onClose }: { open: boolean; onClose: () => voi
     resetPreferences,
   } = useAdminPreferencesStore()
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
+  const titleId = useId()
+  const panelRef = useRef<HTMLElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const previouslyFocused = useRef<HTMLElement | null>(null)
+  // Header 自身订阅了偏好 store，抽屉内改密度/折叠会触发其重渲染并换掉 onClose 引用；
+  // 用 ref 持有最新回调，避免弹层因回调换引用而反复注销/重登记（重登记会重置焦点）。
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  // 接入统一弹层栈：Esc 关闭、滚动锁、Tab 约束与关闭后焦点还原（与 FormDialog 同范式）。
+  useEffect(() => {
+    if (!open) return
+    previouslyFocused.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const panel = panelRef.current
+    const release = registerModalLayer({
+      panel,
+      onEscape: () => onCloseRef.current(),
+    })
+    const focusTimer = window.setTimeout(() => {
+      if (panel) focusInitialInPanel(panel, titleRef.current)
+    }, 0)
+    return () => {
+      window.clearTimeout(focusTimer)
+      release()
+      previouslyFocused.current?.focus?.()
+    }
+  }, [open])
 
   if (!open) return null
 
@@ -217,17 +249,20 @@ function AppearanceDrawer({ open, onClose }: { open: boolean; onClose: () => voi
         type="button"
         className="admin-overlay fixed inset-0 z-40"
         aria-label={t('preferences.close')}
+        tabIndex={-1}
         onClick={onClose}
       />
       <aside
-        className="shadow-admin-overlay fixed inset-y-0 right-0 z-50 flex w-full max-w-[560px] flex-col border-l border-admin bg-admin-surface"
+        ref={panelRef}
+        className="shadow-admin-overlay fixed inset-y-0 right-0 z-50 flex w-full max-w-[560px] flex-col border-l border-admin bg-admin-surface outline-none"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="appearance-settings-title"
+        aria-labelledby={titleId}
+        tabIndex={-1}
       >
         <div className="flex items-center justify-between border-b border-admin px-5 py-4">
           <div>
-            <h2 id="appearance-settings-title" className="text-lg font-semibold text-admin">
+            <h2 id={titleId} ref={titleRef} tabIndex={-1} className="text-lg font-semibold text-admin outline-none">
               {t('preferences.title')}
             </h2>
             <p className="mt-0.5 text-sm text-admin-muted">{t('preferences.description')}</p>

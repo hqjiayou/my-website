@@ -48,14 +48,14 @@ function PlatformEntryCard({
   const { t } = useTranslation('sites')
   const isCli = mode === 'CLI'
   return (
-    <article className="flex h-full flex-col rounded-xl border border-border bg-card p-5">
-      <div className="mb-3 flex items-start justify-between gap-3 border-b border-border pb-3">
+    <article className="flex h-full flex-col rounded-xl border border-admin bg-admin-surface p-5">
+      <div className="mb-3 flex items-start justify-between gap-3 border-b border-admin pb-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">
+          <h3 className="text-sm font-semibold text-admin">
             {t(isCli ? 'access.cliTitle' : 'access.keyTitle')}
             <span className="ml-2 text-xs font-medium text-admin-muted">{t('access.referenceBadge')}</span>
           </h3>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          <p className="mt-1 text-xs leading-5 text-admin-muted">
             {t(isCli ? 'access.cliDescription' : 'access.keyDescription')}
           </p>
         </div>
@@ -74,7 +74,7 @@ function PlatformEntryCard({
       </div>
       {entry ? (
         <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">{entry.displayName}</p>
+          <p className="text-sm font-medium text-admin">{entry.displayName}</p>
           <p className="font-mono text-xs text-admin-muted break-all">{entry.modelSpec}</p>
           <div className="flex flex-wrap gap-1.5">
             <StatusTag status="ACTIVE" label={t('aiWorkspace.runtime.enabled')} />
@@ -104,10 +104,10 @@ function AgentChainSummaryCard({
 }) {
   const { t } = useTranslation('sites')
   return (
-    <article className="rounded-xl border border-border bg-card p-5">
-      <div className="mb-3 border-b border-border pb-3">
-        <h3 className="text-sm font-semibold text-foreground">{t('aiWorkspace.chainPreset.title')}</h3>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t('access.chainHint')}</p>
+    <article className="rounded-xl border border-admin bg-admin-surface p-5">
+      <div className="mb-3 border-b border-admin pb-3">
+        <h3 className="text-sm font-semibold text-admin">{t('aiWorkspace.chainPreset.title')}</h3>
+        <p className="mt-1 text-xs leading-5 text-admin-muted">{t('access.chainHint')}</p>
       </div>
       <ul className="space-y-2">
         {CHAIN_ROWS.map((mode) => {
@@ -123,7 +123,7 @@ function AgentChainSummaryCard({
               ) : (
                 <>
                   <span className="text-admin-muted">{t('access.chainMembers', { count: ids.length })}</span>
-                  <span className="text-foreground">
+                  <span className="text-admin">
                     {t('aiWorkspace.chainPreset.primaryMark')}：
                     {primary ? primary.displayName || primary.modelSpec : `#${primaryId}`}
                   </span>

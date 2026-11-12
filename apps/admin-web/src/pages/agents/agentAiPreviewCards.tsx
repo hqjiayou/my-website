@@ -70,31 +70,31 @@ function WeatherCard({ payload, title }: { payload: AiWeatherCardPayload; title?
   const hourlySpan = hourlyTemps.length ? Math.max(...hourlyTemps) - hourlyMin || 1 : 1
 
   return (
-    <div className="my-2 w-full max-w-md rounded-xl border border-border bg-card p-3.5 text-foreground">
-      {title ? <p className="mb-2 text-xs font-medium text-muted-foreground">{title}</p> : null}
+    <div className="my-2 w-full max-w-md rounded-xl border border-admin bg-admin-surface p-3.5 text-admin">
+      {title ? <p className="mb-2 text-xs font-medium text-admin-muted">{title}</p> : null}
       <div className="flex items-start gap-2">
         <span className="text-3xl font-semibold leading-none">
           {current.temperatureC != null ? formatValue(current.temperatureC) : '—'}
         </span>
-        <span className="text-sm leading-5 text-muted-foreground">°C</span>
+        <span className="text-sm leading-5 text-admin-muted">°C</span>
         <div className="min-w-0">
           {current.weatherText ? <p className="truncate text-sm leading-5">{current.weatherText}</p> : null}
-          <p className="font-mono text-xs leading-5 text-muted-foreground">{clockOf(current.time)}</p>
+          <p className="font-mono text-xs leading-5 text-admin-muted">{clockOf(current.time)}</p>
         </div>
       </div>
       {facts.length ? (
         <dl className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
           {facts.map((fact) => (
             <div key={fact.label} className="flex items-baseline gap-1 text-xs">
-              <dt className="text-muted-foreground">{fact.label}</dt>
+              <dt className="text-admin-muted">{fact.label}</dt>
               <dd className="font-medium">{fact.value}</dd>
             </div>
           ))}
         </dl>
       ) : null}
       {hourly.length ? (
-        <div className="mt-3 border-t border-border pt-2.5">
-          <p className="text-xs text-muted-foreground">{t('aiWorkspace.preview.cards.weather.hourly')}</p>
+        <div className="mt-3 border-t border-admin pt-2.5">
+          <p className="text-xs text-admin-muted">{t('aiWorkspace.preview.cards.weather.hourly')}</p>
           <div className="mt-1.5 flex items-stretch gap-[3px]">
             {hourly.map((point, index) => {
               const heightPercent = 22 + ((point.temperatureC - hourlyMin) / hourlySpan) * 78
@@ -105,7 +105,7 @@ function WeatherCard({ payload, title }: { payload: AiWeatherCardPayload; title?
                   : '')
               return (
                 <div key={`${point.time}-${index}`} className="flex min-w-0 flex-1 flex-col items-center" title={tooltip}>
-                  <span className="mb-1 h-4 text-xs leading-4 text-muted-foreground">
+                  <span className="mb-1 h-4 text-xs leading-4 text-admin-muted">
                     {index % 6 === 0 ? formatValue(point.temperatureC) : ''}
                   </span>
                   <div className="flex h-12 w-full items-end">
@@ -114,7 +114,7 @@ function WeatherCard({ payload, title }: { payload: AiWeatherCardPayload; title?
                       style={{ height: `${heightPercent}%` }}
                     />
                   </div>
-                  <span className="mt-1 h-4 font-mono text-xs leading-4 text-muted-foreground">
+                  <span className="mt-1 h-4 font-mono text-xs leading-4 text-admin-muted">
                     {index % 6 === 0 ? hourOf(point.time) : ''}
                   </span>
                 </div>
@@ -124,10 +124,10 @@ function WeatherCard({ payload, title }: { payload: AiWeatherCardPayload; title?
         </div>
       ) : null}
       {daily.length ? (
-        <ul className="mt-3 space-y-1.5 border-t border-border pt-2.5">
+        <ul className="mt-3 space-y-1.5 border-t border-admin pt-2.5">
           {daily.map((day) => (
             <li key={day.date} className="flex items-center gap-2 text-xs">
-              <span className="w-11 shrink-0 font-mono text-muted-foreground">{dayOf(day.date)}</span>
+              <span className="w-11 shrink-0 font-mono text-admin-muted">{dayOf(day.date)}</span>
               <span className="min-w-0 flex-1 truncate">{day.weatherText ?? ''}</span>
               {day.precipitationProbabilityMaxPercent != null ? (
                 <span className="flex shrink-0 items-center gap-0.5 text-info-emphasis">
@@ -150,8 +150,8 @@ function WeatherCard({ payload, title }: { payload: AiWeatherCardPayload; title?
 function ChartCard({ title, payload }: { title?: string; payload: AiChartCardPayload }) {
   if (!payload || !Array.isArray(payload.series) || payload.series.length === 0) return null
   return (
-    <div className="my-2 w-full max-w-lg rounded-xl border border-border bg-card p-3.5">
-      {title ? <p className="mb-2 text-sm font-medium text-foreground">{title}</p> : null}
+    <div className="my-2 w-full max-w-lg rounded-xl border border-admin bg-admin-surface p-3.5">
+      {title ? <p className="mb-2 text-sm font-medium text-admin">{title}</p> : null}
       <Suspense fallback={null}>
         <ChartCardBody payload={payload} />
       </Suspense>
